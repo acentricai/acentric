@@ -1,0 +1,40 @@
+// Layer 1: state. Everything the agent knows when it handles a message.
+//
+// It has three parts with different owners:
+//   - snapshot: the agent's current memory, replaced by every step.
+//   - log: the agent's history, only ever appended to.
+//   - config: settings owned by whoever created the agent.
+//
+// State is readonly. A step never changes the state it is given; it returns
+// what should change, and the runner applies it. Mutating in place would
+// let a failed step leave half its changes behind, so a retry would apply
+// them twice.
+
+import type { Json, JsonObject } from './json.js';
+
+/** One record of the agent's history, as stored by the runner. */
+export type LogEntry = {
+  /** Position in the log: 1, 2, 3... Assigned by the runner. */
+  readonly seq: number;
+  /** When it was added: the `now` of the step that added it. */
+  readonly at: number;
+  /** The agent's own label, such as 'user_said' or 'reply'. */
+  readonly kind: string;
+  readonly body: Json;
+};
+
+/** A log record as the agent writes it. The runner adds `seq` and `at`. */
+export type LogAppend = {
+  readonly kind: string;
+  readonly body: Json;
+};
+
+/**
+ * What a step sees. S is the agent's snapshot type, C its config type.
+ * The whole log is loaded for now.
+ */
+export type State<S extends JsonObject, C extends JsonObject> = {
+  readonly snapshot: S;
+  readonly log: readonly LogEntry[];
+  readonly config: C;
+};
