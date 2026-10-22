@@ -26,6 +26,6 @@ export type Agent<S extends JsonObject, C extends JsonObject = NoConfig> = {
   step: Step<S, C>;
   /** Left out by an agent that does no I/O: no effects. */
   effects?: Effects<S, C>;
-  /** Left out by an agent with no handler kinds, such as one using only timers. */
+  /** Left out by an agent with no handlers of its own, such as one using only runner kinds. */
   handlers?: Handlers;
 };

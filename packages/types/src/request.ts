@@ -8,6 +8,9 @@
 //
 // Keys are chosen by the agent and are single-use: once a key's result has
 // been delivered, that key is never run again. New work needs a new key.
+//
+// A runner may provide built-in kinds of its own, such as a timer. They are
+// requested and answered like any other kind.
 
 import type { Json } from './json.js';
 
@@ -22,27 +25,16 @@ import type { Json } from './json.js';
 export type Mode = 'reissue' | 'once';
 
 /** Run a handler. Its result arrives as an `effect` message with this key. */
-export type HandlerRequest = {
-  type: 'handler';
+export type EffectRequest = {
   key: string;
-  /** Which handler runs it. */
+  /** Which handler runs it: one of the agent's, or one the runner provides. */
   kind: string;
-  /** Input for the handler. Fixed for the life of the key. */
+  /**
+   * Input for the handler. Fixed for the life of the key. A time in it
+   * should be absolute, in the same units as a step's `now`, so it means
+   * the same thing when the handler runs again after a crash.
+   */
   args: Json;
   /** Overrides the handler's default mode for this request. */
   mode?: Mode;
 };
-
-/** Wake the agent at a time. It arrives as a `timer` message with this key. */
-export type TimerRequest = {
-  type: 'timer';
-  key: string;
-  /**
-   * When to fire: an absolute time, in the same units as a step's `now`.
-   * Absolute, so a runner restarting after a crash still knows when it is
-   * due, and fires it at once if that time has already passed.
-   */
-  at: number;
-};
-
-export type EffectRequest = HandlerRequest | TimerRequest;

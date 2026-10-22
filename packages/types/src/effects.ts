@@ -11,9 +11,10 @@
 //   - ignores keys that already finished, since keys are single-use,
 //   - treats the same key twice in one list as a bug.
 //
-// It takes no `now`. It runs after every step, so a time computed here would
-// move on every call and a timer would never fire. A step computes times
-// once and stores them in the snapshot; this function copies them out.
+// It takes no `now`. The list must depend on the state alone, so the runner
+// gets the same answer whenever it asks, including after a restart. A step
+// computes any time once and stores it in the snapshot; this function
+// copies it out.
 //
 // An agent that does no I/O may leave it out, which means no effects.
 

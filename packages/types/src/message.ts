@@ -2,8 +2,8 @@
 // `step` receives exactly one at a time.
 //
 // Every message is identified by whoever created the thing it is about:
-// an input by the caller's `id`, an effect result or timer by the `key`
-// the agent chose when it asked. The runner never invents identities.
+// an input by the caller's `id`, an effect result by the `key` the agent
+// chose when it asked. The runner never invents identities.
 
 import type { Json, JsonObject } from './json.js';
 
@@ -55,17 +55,10 @@ export type FailureCode =
   /** A 'reissue' handler was cut off by crashes too many times. */
   | 'attempts_exhausted';
 
-/** A wake-up time the agent asked for has arrived. */
-export type TimerMessage = {
-  type: 'timer';
-  /** The key the agent used when it asked for this timer. */
-  key: string;
-};
-
 /** The agent's configuration changed. The new config is also in the state. */
 export type ConfigMessage = {
   type: 'config';
   config: JsonObject;
 };
 
-export type Message = InputMessage | EffectMessage | TimerMessage | ConfigMessage;
+export type Message = InputMessage | EffectMessage | ConfigMessage;

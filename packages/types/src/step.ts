@@ -15,9 +15,8 @@ import type { LogAppend, State } from './state.js';
  *
  * A rejection is only meaningful for messages a caller sent, `input` and
  * `config`: the caller is told, and the state stays as it was. An `effect`
- * or `timer` message has no caller to tell, and rejecting an effect result
- * would lose it for good, so the runner treats a rejection of either as a
- * bug, like a thrown error.
+ * message has no caller to tell, and rejecting it would lose the result for
+ * good, so the runner treats that rejection as a bug, like a thrown error.
  */
 export type StepResult<S extends JsonObject> =
   | {
