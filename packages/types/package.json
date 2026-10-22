@@ -1,5 +1,5 @@
 {
-  "name": "@agent-framework/types",
+  "name": "@acentric/types",
   "version": "0.1.0",
   "description": "The types an agent is made of: messages, state, effect requests, init, step, effects and handlers.",
   "type": "module",

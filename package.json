@@ -1,5 +1,5 @@
 {
-  "name": "agent-framework",
+  "name": "acentric",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.3.4",
