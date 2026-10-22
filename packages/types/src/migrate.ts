@@ -15,6 +15,10 @@
 //
 // Upgrades are requested by trusted callers, so migrate may change config,
 // which a step never can.
+//
+// If it fails the way a step can, by throwing, returning something that is
+// not Json or going over a runner limit, the upgrade does not happen and the
+// instance stays on its old version, as with a rejection.
 
 import type { JsonObject } from './json.js';
 import type { Rejection } from './rejection.js';

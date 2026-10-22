@@ -3,6 +3,10 @@
 // Called once, when the agent is created. Pure, like step. It does not
 // return effects: the runner calls `effects` on the first state, as it does
 // after every step.
+//
+// If it fails the way a step can, by throwing, returning something that is
+// not Json or going over a runner limit, the agent is not created and the
+// creator receives the error, as with a rejection.
 
 import type { JsonObject } from './json.js';
 import type { Rejection } from './rejection.js';
