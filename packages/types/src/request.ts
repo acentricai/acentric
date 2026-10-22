@@ -58,7 +58,8 @@ export type EffectRequest<K extends Kinds = Kinds> = {
     /**
      * Input for the handler. Fixed for the life of the key. A time in it
      * should be absolute, in the same units as a step's `now`, so it means
-     * the same thing when the handler runs again after a crash.
+     * the same thing when the handler runs again after a crash. Args larger
+     * than the runner allows fail the effect with 'limit_exceeded'.
      */
     args: K[N]['args'];
     /** Overrides the handler's default mode for this request. */

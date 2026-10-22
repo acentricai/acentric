@@ -66,7 +66,13 @@ export type FailureCode =
   /** A 'reissue' handler was cut off by crashes too many times. */
   | 'attempts_exhausted'
   /** The agent asked it to stop with `abort`, and it stopped without returning a result. */
-  | 'aborted';
+  | 'aborted'
+  /**
+   * It went over one of the runner's limits, such as too many effects
+   * declared at once, or args or a result too large. `error` says which
+   * limit and its maximum.
+   */
+  | 'limit_exceeded';
 
 /** The agent's configuration changed. The new config is also in the state. */
 export type ConfigMessage = {

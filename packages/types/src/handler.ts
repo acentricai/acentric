@@ -84,12 +84,16 @@ export type HandlerContext<A extends Json = Json> = {
  *   - throws: { failed: { code: 'threw', error } }, or code 'aborted' when
  *     it throws after the agent asked it to stop
  *   - returns something that is not Json: { failed: { code: 'invalid_result', error } }
+ *   - returns a result larger than the runner allows: { failed: { code: 'limit_exceeded', error } }
  */
 export type HandlerDef<A extends Json = Json, R extends Json = Json> = {
   /** Required, so every handler states whether it is safe to repeat. */
   mode: Mode;
   run(ctx: HandlerContext<A>): Promise<R>;
-  /** Overrides the runner's time limit for one run, in milliseconds. */
+  /**
+   * Overrides the runner's time limit for one run, in milliseconds,
+   * counted from when the run starts, not from when it was requested.
+   */
   timeoutMs?: number;
   /** Overrides the runner's limit on runs of one key. Applies to 'reissue' only. */
   maxAttempts?: number;

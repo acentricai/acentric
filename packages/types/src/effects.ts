@@ -12,6 +12,14 @@
 //   - ignores keys that already finished, since keys are single-use,
 //   - treats the same key twice in one list as a bug.
 //
+// A runner sets its own limits; the framework fixes only what the agent
+// experiences. An effect over a limit on effects declared at once, or on
+// the size of its args or result, fails on its own with 'limit_exceeded',
+// and the step is applied as usual. Over the limit on declared effects, the
+// ones at the end of the list are refused. An effect over a limit on how
+// many run at once, overall or per kind, waits its turn; the agent sees
+// nothing, and its time limit starts only when it starts running.
+//
 // It takes no `now`. The list must depend on the state alone, so the runner
 // gets the same answer whenever it asks, including after a restart. A step
 // computes any time once and stores it in the snapshot; this function
