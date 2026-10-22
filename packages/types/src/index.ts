@@ -9,4 +9,5 @@ export type * from './init.js';
 export type * from './step.js';
 export type * from './effects.js';
 export type * from './handler.js';
+export type * from './migrate.js';
 export type * from './agent.js';

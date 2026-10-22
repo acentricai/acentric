@@ -3,7 +3,8 @@
 // It has three parts with different owners:
 //   - snapshot: the agent's current memory, replaced by every step.
 //   - log: the agent's history, only ever appended to.
-//   - config: settings owned by whoever created the agent.
+//   - config: settings owned by whoever created the agent. Only a `config`
+//     message or an upgrade's migrate changes it, never a step.
 //
 // State is readonly. A step never changes the state it is given; it returns
 // what should change, and the runner applies it. Mutating in place would

@@ -61,4 +61,14 @@ export type ConfigMessage = {
   config: JsonObject;
 };
 
-export type Message = InputMessage | EffectMessage | ConfigMessage;
+/**
+ * The instance was just upgraded to this version of the agent's code. It is
+ * the first message the new version's step receives, after migrate.
+ */
+export type MigratedMessage = {
+  type: 'migrated';
+  /** The version the instance was upgraded from. */
+  from: string;
+};
+
+export type Message = InputMessage | EffectMessage | ConfigMessage | MigratedMessage;
