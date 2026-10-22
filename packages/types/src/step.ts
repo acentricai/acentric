@@ -14,11 +14,11 @@ import type { LogAppend, State } from './state.js';
 /**
  * What step returns: the next state, or a rejection.
  *
- * A rejection is only meaningful for messages a caller sent, `input` and
- * `config`: the caller is told, and the state stays as it was. An `effect`
- * or `migrated` message has no caller to tell, and rejecting an effect
- * would lose its result for good, so the runner treats a rejection of
- * either as a bug, like a thrown error.
+ * A rejection is only meaningful for messages a caller sent, `input`,
+ * `config`, `pause` and `resume`: the caller is told, and the state stays
+ * as it was. An `effect` or `migrated` message has no caller to tell, and
+ * rejecting an effect would lose its result for good, so the runner treats
+ * a rejection of either as a bug, like a thrown error.
  */
 export type StepResult<S extends JsonObject> =
   | {

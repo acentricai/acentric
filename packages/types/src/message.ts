@@ -71,4 +71,25 @@ export type MigratedMessage = {
   from: string;
 };
 
-export type Message = InputMessage | EffectMessage | ConfigMessage | MigratedMessage;
+/**
+ * A caller asks the agent to pause. The runner only delivers it: step
+ * decides what pausing means, such as finishing what is running and
+ * starting nothing new, or cancelling everything now. Messages keep
+ * arriving while paused, and step decides what to do with them.
+ */
+export type PauseMessage = {
+  type: 'pause';
+  reason?: Json;
+};
+
+/**
+ * A caller asks the agent to carry on. As with pause, step decides what
+ * that means, from what its own snapshot says it was doing.
+ */
+export type ResumeMessage = {
+  type: 'resume';
+  reason?: Json;
+};
+
+export type Message =
+  InputMessage | EffectMessage | ConfigMessage | MigratedMessage | PauseMessage | ResumeMessage;
