@@ -2,8 +2,9 @@
 // what a runner takes.
 //
 // The pure half decides: init creates the first state, step handles one
-// message at a time, effects lists the I/O that should be running. The
-// impure half acts: handlers do that I/O. A runner connects them.
+// message at a time, effects lists the I/O that should be running, view
+// shows the state to callers. The impure half acts: handlers do that I/O.
+// A runner connects them.
 
 import type { Effects } from './effects.js';
 import type { HandlersFor } from './handler.js';
@@ -12,6 +13,7 @@ import type { JsonObject } from './json.js';
 import type { Migrate } from './migrate.js';
 import type { Kinds } from './request.js';
 import type { Step } from './step.js';
+import type { View } from './view.js';
 
 /** The config of an agent that takes none: an object with no fields. */
 export type NoConfig = Record<string, never>;
@@ -49,4 +51,6 @@ export type Agent<
   handlers?: HandlersFor<K>;
   /** Left out by an agent whose snapshot and config keep their shapes across upgrades. */
   migrate?: Migrate<S, C>;
+  /** Left out by an agent that leaves to the runner what callers see. */
+  view?: View<S, C>;
 };
