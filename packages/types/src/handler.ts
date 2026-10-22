@@ -29,7 +29,12 @@ export type HandlerContext<A extends Json = Json> = {
   args: A;
   /** 1 on the first run; higher when a 'reissue' handler runs again after a crash. */
   attempt: number;
-  /** Fires when the effect is cancelled or times out. Pass it to whatever does the I/O. */
+  /**
+   * Fires when the effect is cancelled, aborted or times out. Pass it to
+   * whatever does the I/O. When it fires, returning what the handler has so
+   * far is always safe: an aborted effect delivers it, and a cancelled one
+   * discards it.
+   */
   signal: AbortSignal;
   /** Sends live progress, such as streamed tokens. Best effort; never saved. */
   emit(delta: Json): void;
@@ -42,7 +47,8 @@ export type HandlerContext<A extends Json = Json> = {
  *
  * The runner turns what `run` does into the outcome `step` receives:
  *   - returns a Json value: { ok: value }
- *   - throws: { failed: { code: 'threw', error } }
+ *   - throws: { failed: { code: 'threw', error } }, or code 'aborted' when
+ *     it throws after the agent asked it to stop
  *   - returns something that is not Json: { failed: { code: 'invalid_result', error } }
  */
 export type HandlerDef<A extends Json = Json, R extends Json = Json> = {

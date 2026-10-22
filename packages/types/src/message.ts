@@ -57,7 +57,9 @@ export type FailureCode =
   /** No handler exists for the requested kind. */
   | 'unknown_kind'
   /** A 'reissue' handler was cut off by crashes too many times. */
-  | 'attempts_exhausted';
+  | 'attempts_exhausted'
+  /** The agent asked it to stop with `abort`, and it stopped without returning a result. */
+  | 'aborted';
 
 /** The agent's configuration changed. The new config is also in the state. */
 export type ConfigMessage = {

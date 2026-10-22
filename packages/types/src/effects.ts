@@ -8,6 +8,7 @@
 //   - starts every key it is not already running,
 //   - cancels every running key that is missing, with no message back,
 //   - keeps running keys as they are, ignoring any change to their args,
+//   - aborts a running key newly marked `abort`, and delivers its result,
 //   - ignores keys that already finished, since keys are single-use,
 //   - treats the same key twice in one list as a bug.
 //

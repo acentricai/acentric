@@ -6,6 +6,10 @@
 // runner compares that list with what is running: a new key starts, a key
 // that disappears is cancelled and never sends a result.
 //
+// To stop a running effect but still receive what it has so far, such as
+// the partial text of a streaming reply, the agent keeps its key and marks
+// it `abort`.
+//
 // Keys are chosen by the agent and are single-use: once a key's result has
 // been delivered, that key is never run again. New work needs a new key.
 //
@@ -37,4 +41,10 @@ export type EffectRequest = {
   args: Json;
   /** Overrides the handler's default mode for this request. */
   mode?: Mode;
+  /**
+   * Stop the running handler, but still deliver what it returns. The one
+   * field the runner acts on when it changes on a running key. It cannot be
+   * undone: once set, the handler's signal has fired.
+   */
+  abort?: boolean;
 };
