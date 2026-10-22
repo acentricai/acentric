@@ -2,7 +2,9 @@
 //
 // It has three parts with different owners:
 //   - snapshot: the agent's current memory, replaced by every step.
-//   - log: the agent's history, only ever appended to.
+//   - log: the agent's history, only ever appended to. A step sees only
+//     the window of it the agent asked for with `window`, since a long
+//     history would be slow to load for every step.
 //   - config: settings owned by whoever created the agent. Only a `config`
 //     message or an upgrade's migrate changes it, never a step.
 //
@@ -31,11 +33,23 @@ export type LogAppend = {
 };
 
 /**
- * What a step sees. S is the agent's snapshot type, C its config type.
- * The whole log is loaded for now.
+ * The part of the log loaded for a step: every entry from `start` up to the
+ * newest. `next` is known even when `entries` is empty, so a step can tell
+ * which seq its own appends will receive, for example to make a summary it
+ * appends the start of its next window.
  */
+export type LogWindow = {
+  /** The first seq in `entries`: what `window` last returned. Equals `next` when empty. */
+  readonly start: number;
+  /** The seq the next appended entry will receive. */
+  readonly next: number;
+  /** Every entry from `start` to `next - 1`, oldest first. */
+  readonly entries: readonly LogEntry[];
+};
+
+/** What a step sees. S is the agent's snapshot type, C its config type. */
 export type State<S extends JsonObject, C extends JsonObject> = {
   readonly snapshot: S;
-  readonly log: readonly LogEntry[];
+  readonly log: LogWindow;
   readonly config: C;
 };

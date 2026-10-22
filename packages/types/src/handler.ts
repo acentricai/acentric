@@ -7,16 +7,49 @@
 // nothing tied to one environment: no fetch, no file system.
 //
 // A handler depends only on its args. Anything it needs from the agent's
-// config or state is copied into args by `effects`. Secrets are the
-// exception: they must never be in args, state or the log, where they would
-// be stored, so the handler asks for them by name.
+// config or state is copied into args by `effects`. There are two
+// exceptions. Secrets must never be in args, state or the log, where they
+// would be stored, so the handler asks for them by name. And the log can be
+// far larger than args or a step's window allow, so a handler can read any
+// part of it, which is how a step gets at entries below its window.
 
 import type { Json } from './json.js';
 import type { Kinds, Mode } from './request.js';
+import type { LogEntry } from './state.js';
 
 /** Reads secrets by name. Each runner decides where the values come from. */
 export type Secrets = {
   get(name: string): Promise<string>;
+};
+
+/** Which log entries to read. Every field narrows the result. */
+export type LogQuery = {
+  /** Only entries with a seq greater than this. */
+  after?: number;
+  /** Only entries with a seq less than this. */
+  before?: number;
+  /** Only entries of these kinds. */
+  kinds?: string[];
+  /** At most this many entries. The runner may return fewer and caps the most. */
+  limit?: number;
+  /** Continues from a previous page's `cursor`. */
+  cursor?: string;
+};
+
+/** One page of log entries, oldest first. */
+export type LogPage = {
+  readonly entries: readonly LogEntry[];
+  /** Present when more entries match: pass it as the next query's `cursor`. */
+  readonly cursor?: string;
+};
+
+/**
+ * Reads the agent's log, anywhere in it. Read-only: only steps append. How
+ * entries are stored and paged is the runner's; a runner that deletes old
+ * entries says so, and reading them then finds nothing.
+ */
+export type LogReader = {
+  list(query?: LogQuery): Promise<LogPage>;
 };
 
 /** What a handler receives. A is the handler's args type. */
@@ -39,6 +72,7 @@ export type HandlerContext<A extends Json = Json> = {
   /** Sends live progress, such as streamed tokens. Best effort; never saved. */
   emit(delta: Json): void;
   secrets: Secrets;
+  log: LogReader;
 };
 
 /**

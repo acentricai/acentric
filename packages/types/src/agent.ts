@@ -14,6 +14,7 @@ import type { Migrate } from './migrate.js';
 import type { Kinds } from './request.js';
 import type { Step } from './step.js';
 import type { View } from './view.js';
+import type { Window } from './window.js';
 
 /** The config of an agent that takes none: an object with no fields. */
 export type NoConfig = Record<string, never>;
@@ -53,4 +54,6 @@ export type Agent<
   migrate?: Migrate<S, C>;
   /** Left out by an agent that leaves to the runner what callers see. */
   view?: View<S, C>;
+  /** Left out by an agent whose steps see the whole log. */
+  window?: Window<S>;
 };
