@@ -9,6 +9,7 @@
 import type { JsonObject } from './json.js';
 import type { Message } from './message.js';
 import type { Rejection } from './rejection.js';
+import type { Kinds } from './request.js';
 import type { LogAppend, State } from './state.js';
 
 /**
@@ -29,9 +30,12 @@ export type StepResult<S extends JsonObject> =
     }
   | Rejection;
 
-/** S is the agent's snapshot type, C its config type. */
-export type Step<S extends JsonObject, C extends JsonObject> = (
+/**
+ * S is the agent's snapshot type, C its config type and K its map of kinds,
+ * which types the results in effect messages.
+ */
+export type Step<S extends JsonObject, C extends JsonObject, K extends Kinds = Kinds> = (
   state: State<S, C>,
-  msg: Message,
+  msg: Message<K>,
   now: number,
 ) => StepResult<S>;

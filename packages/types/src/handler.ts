@@ -12,7 +12,7 @@
 // be stored, so the handler asks for them by name.
 
 import type { Json } from './json.js';
-import type { Mode } from './request.js';
+import type { Kinds, Mode } from './request.js';
 
 /** Reads secrets by name. Each runner decides where the values come from. */
 export type Secrets = {
@@ -67,3 +67,22 @@ export type HandlerDef<A extends Json = Json, R extends Json = Json> = {
  * TypeScript checks in both directions.
  */
 export type Handlers = Record<string, HandlerDef>;
+
+/**
+ * The map of kinds a set of handlers serves, read from their args and
+ * result types. An agent adds its runner's built-in kinds to it:
+ *
+ *   type MyKinds = KindsOf<typeof handlers> & SomeRunnerKinds;
+ */
+export type KindsOf<H extends Handlers> = {
+  [N in keyof H]: H[N] extends HandlerDef<infer A, infer R> ? { args: A; result: R } : never;
+};
+
+/**
+ * The handlers an agent may provide for a map of kinds. Each is optional,
+ * since some kinds are the runner's built-ins, and each must take and
+ * return what its kind says.
+ */
+export type HandlersFor<K extends Kinds> = {
+  [N in keyof K]?: HandlerDef<K[N]['args'], K[N]['result']>;
+};

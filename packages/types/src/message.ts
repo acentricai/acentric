@@ -9,6 +9,7 @@
 // again after a failed step, so a step must not change the one it is given.
 
 import type { Json, JsonObject } from './json.js';
+import type { Kinds } from './request.js';
 
 /** The outside world sent something, such as a user's chat message. */
 export type InputMessage = {
@@ -20,25 +21,31 @@ export type InputMessage = {
   readonly payload: JsonObject;
 };
 
-/** A handler the agent asked for has finished. */
-export type EffectMessage = {
-  readonly type: 'effect';
-  /** The key the agent used when it asked for this effect. */
-  readonly key: string;
-  /** Which handler ran. */
-  readonly kind: string;
-  readonly outcome: Outcome;
-};
+/**
+ * A handler the agent asked for has finished. K is the agent's map of
+ * kinds; there is one variant per kind, so checking `kind` gives `outcome`
+ * that kind's result type.
+ */
+export type EffectMessage<K extends Kinds = Kinds> = {
+  [N in keyof K & string]: {
+    readonly type: 'effect';
+    /** The key the agent used when it asked for this effect. */
+    readonly key: string;
+    /** Which handler ran. */
+    readonly kind: N;
+    readonly outcome: Outcome<K[N]['result']>;
+  };
+}[keyof K & string];
 
 /**
- * What a handler produced.
+ * What a handler produced. R is the handler's result type.
  *   - ok: it returned a value.
  *   - failed: it did not succeed.
  *   - interrupted: a 'once' handler was cut off by a crash. It may or may
  *     not have done its work, and it will not be run again.
  */
-export type Outcome =
-  { readonly ok: Json } | { readonly failed: Failure } | { readonly interrupted: true };
+export type Outcome<R extends Json = Json> =
+  { readonly ok: R } | { readonly failed: Failure } | { readonly interrupted: true };
 
 export type Failure = {
   /** Set by the runner, so `step` can branch on what went wrong. */
@@ -97,5 +104,6 @@ export type ResumeMessage = {
   readonly reason?: Json;
 };
 
-export type Message =
-  InputMessage | EffectMessage | ConfigMessage | MigratedMessage | PauseMessage | ResumeMessage;
+/** Every message a step can receive. K is the agent's map of kinds. */
+export type Message<K extends Kinds = Kinds> =
+  InputMessage | EffectMessage<K> | ConfigMessage | MigratedMessage | PauseMessage | ResumeMessage;

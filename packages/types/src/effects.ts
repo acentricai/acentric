@@ -19,11 +19,14 @@
 //
 // An agent that does no I/O may leave it out, which means no effects.
 
-import type { EffectRequest } from './request.js';
+import type { EffectRequest, Kinds } from './request.js';
 import type { JsonObject } from './json.js';
 import type { State } from './state.js';
 
-/** S is the agent's snapshot type, C its config type. */
-export type Effects<S extends JsonObject, C extends JsonObject> = (
+/**
+ * S is the agent's snapshot type, C its config type and K its map of kinds,
+ * which decides the kinds and args it may request.
+ */
+export type Effects<S extends JsonObject, C extends JsonObject, K extends Kinds = Kinds> = (
   state: State<S, C>,
-) => EffectRequest[];
+) => EffectRequest<K>[];

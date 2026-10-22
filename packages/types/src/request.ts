@@ -15,8 +15,25 @@
 //
 // A runner may provide built-in kinds of its own, such as a timer. They are
 // requested and answered like any other kind.
+//
+// Requests are typed by a map of kinds: for each kind name, the args it
+// takes and the result it returns. With the default, any kind name and any
+// Json args are accepted; with a precise map, TypeScript checks both.
 
 import type { Json } from './json.js';
+
+/** What one kind takes and returns. Used for types only. */
+export type Kind = {
+  args: Json;
+  result: Json;
+};
+
+/**
+ * Every kind an agent may request, by name: its own handlers' kinds, and
+ * any built-in kinds of the runner it uses. A runner describes its
+ * built-ins with this type, so an agent can add them to its own.
+ */
+export type Kinds = Record<string, Kind>;
 
 /**
  * Whether a handler may run again after the runner crashed mid-run.
@@ -28,23 +45,29 @@ import type { Json } from './json.js';
  */
 export type Mode = 'reissue' | 'once';
 
-/** Run a handler. Its result arrives as an `effect` message with this key. */
-export type EffectRequest = {
-  key: string;
-  /** Which handler runs it: one of the agent's, or one the runner provides. */
-  kind: string;
-  /**
-   * Input for the handler. Fixed for the life of the key. A time in it
-   * should be absolute, in the same units as a step's `now`, so it means
-   * the same thing when the handler runs again after a crash.
-   */
-  args: Json;
-  /** Overrides the handler's default mode for this request. */
-  mode?: Mode;
-  /**
-   * Stop the running handler, but still deliver what it returns. The one
-   * field the runner acts on when it changes on a running key. It cannot be
-   * undone: once set, the handler's signal has fired.
-   */
-  abort?: boolean;
-};
+/**
+ * Run a handler. Its result arrives as an `effect` message with this key.
+ * K is the map of kinds that may be requested; there is one variant per
+ * kind, so `args` must match the kind named.
+ */
+export type EffectRequest<K extends Kinds = Kinds> = {
+  [N in keyof K & string]: {
+    key: string;
+    /** Which handler runs it: one of the agent's, or one the runner provides. */
+    kind: N;
+    /**
+     * Input for the handler. Fixed for the life of the key. A time in it
+     * should be absolute, in the same units as a step's `now`, so it means
+     * the same thing when the handler runs again after a crash.
+     */
+    args: K[N]['args'];
+    /** Overrides the handler's default mode for this request. */
+    mode?: Mode;
+    /**
+     * Stop the running handler, but still deliver what it returns. The one
+     * field the runner acts on when it changes on a running key. It cannot
+     * be undone: once set, the handler's signal has fired.
+     */
+    abort?: boolean;
+  };
+}[keyof K & string];
