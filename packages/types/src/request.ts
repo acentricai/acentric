@@ -14,7 +14,10 @@
 // been delivered, that key is never run again. New work needs a new key.
 //
 // A runner may provide built-in kinds of its own, such as a timer. They are
-// requested and answered like any other kind.
+// requested and answered like any other kind. Their names start with `@`,
+// such as '@timer', and an agent's own kinds never do, so the two cannot
+// clash. Runners that offer the same built-in under the same name and shape
+// let an agent move between them unchanged.
 //
 // Requests are typed by a map of kinds: for each kind name, the args it
 // takes and the result it returns. With the default, any kind name and any
@@ -34,6 +37,9 @@ export type Kind = {
  * built-ins with this type, so an agent can add them to its own.
  */
 export type Kinds = Record<string, Kind>;
+
+/** The name of a runner's built-in kind, such as '@timer'. */
+export type RunnerKindName = `@${string}`;
 
 /**
  * Whether a handler may run again after the runner crashed mid-run.

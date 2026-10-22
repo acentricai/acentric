@@ -14,7 +14,7 @@
 // part of it, which is how a step gets at entries below its window.
 
 import type { Json } from './json.js';
-import type { Kinds, Mode } from './request.js';
+import type { Kinds, Mode, RunnerKindName } from './request.js';
 import type { LogEntry } from './state.js';
 
 /** Reads secrets by name. Each runner decides where the values come from. */
@@ -103,8 +103,12 @@ export type HandlerDef<A extends Json = Json, R extends Json = Json> = {
  * An agent's handlers, by kind name. A handler with its own args and result
  * types fits here because `run` is declared as a method, whose parameter
  * TypeScript checks in both directions.
+ *
+ * Names starting with `@` belong to runner built-ins, so a handler may not
+ * use one. TypeScript refuses it here, and a runner refuses to load an agent
+ * that has one.
  */
-export type Handlers = Record<string, HandlerDef>;
+export type Handlers = Record<string, HandlerDef> & Record<RunnerKindName, never>;
 
 /**
  * The map of kinds a set of handlers serves, read from their args and
@@ -117,10 +121,10 @@ export type KindsOf<H extends Handlers> = {
 };
 
 /**
- * The handlers an agent may provide for a map of kinds. Each is optional,
- * since some kinds are the runner's built-ins, and each must take and
- * return what its kind says.
+ * The handlers an agent may provide for a map of kinds: one for each of its
+ * own kinds, never for a runner's `@` kinds. Each is optional, since a kind
+ * may have no handler, and each must take and return what its kind says.
  */
 export type HandlersFor<K extends Kinds> = {
-  [N in keyof K]?: HandlerDef<K[N]['args'], K[N]['result']>;
-};
+  [N in keyof K as N extends RunnerKindName ? never : N]?: HandlerDef<K[N]['args'], K[N]['result']>;
+} & Partial<Record<RunnerKindName, never>>;
