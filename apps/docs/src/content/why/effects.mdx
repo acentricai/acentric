@@ -1,0 +1,19 @@
+<Callout type="note" title="Draft">
+  This page is an outline: each section lists what it will cover.
+</Callout>
+
+## The claim
+
+- `effects(state)` says what should be running, and why; cancelling is not declaring.
+
+## In a loop
+
+- Cancelling means threading an `AbortController` through every `await`, and nothing says what is in flight.
+
+## As a reducer
+
+- The declared list, matched by key; abort keeps partial work.
+
+## The proof
+
+- A run example, and the conformance scenarios for cancel, abort and keys.

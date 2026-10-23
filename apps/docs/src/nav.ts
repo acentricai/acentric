@@ -69,6 +69,53 @@ export const sections: readonly Section[] = [
       },
     ],
   },
+  {
+    title: 'Why reducers',
+    pages: [
+      {
+        slug: 'why',
+        title: 'Why an agent is a reducer',
+        label: 'Overview',
+        description: "A loop keeps its state in a paused function; a reducer's state is data.",
+      },
+      {
+        slug: 'why/testing',
+        title: 'Testing without mocks',
+        description: 'Feed step messages and check what it returns: no model, network or clock.',
+      },
+      {
+        slug: 'why/effects',
+        title: 'Effects you can see and cancel',
+        description:
+          'What should be running follows from the state, and cancelling is not declaring.',
+      },
+      {
+        slug: 'why/one-at-a-time',
+        title: 'One message at a time',
+        description: 'A stop or a steer that arrives mid-reply is just the next message.',
+      },
+      {
+        slug: 'why/upgrades',
+        title: 'Upgrading live sessions',
+        description: 'New code takes over a running session between two steps.',
+      },
+      {
+        slug: 'why/portability',
+        title: 'Same agent, any runner',
+        description: 'One bundle runs unchanged on every runner that passes the same tests.',
+      },
+      {
+        slug: 'why/replay',
+        title: 'Replaying a session',
+        description: 'Re-run what a session received, and get the same results.',
+      },
+      {
+        slug: 'why/costs',
+        title: 'What it costs',
+        description: 'What the model asks of you, and when a plain loop is the better choice.',
+      },
+    ],
+  },
 ];
 
 export const pages: readonly Page[] = sections.flatMap((section) => section.pages);
