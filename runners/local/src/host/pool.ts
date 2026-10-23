@@ -124,18 +124,27 @@ export class HostPool {
       process: child,
       running: new Map(),
       idle: null,
-      peer: new RpcPeer((message) => child.send(message), {
-        request: (method, params) => this.#answer(method, params),
-        notify: (method, params) => {
-          if (method !== 'effect/emit' || !isObject(params)) return;
-          const { instance, key, delta } = params;
-          if (typeof instance === 'string' && typeof key === 'string' && delta !== undefined) {
-            this.#options.emitted(instance, key, delta);
-          }
+      // A host can exit at any moment, even by a handler's own hand: a send
+      // to one that has gone is dropped, and its exit reports its effects.
+      peer: new RpcPeer(
+        (message) => {
+          if (child.connected) child.send(message, undefined, {}, () => undefined);
         },
-      }),
+        {
+          request: (method, params) => this.#answer(method, params),
+          notify: (method, params) => {
+            if (method !== 'effect/emit' || !isObject(params)) return;
+            const { instance, key, delta } = params;
+            if (typeof instance === 'string' && typeof key === 'string' && delta !== undefined) {
+              this.#options.emitted(instance, key, delta);
+            }
+          },
+        },
+      ),
     };
     child.on('message', (message) => host.peer.receive(message));
+    // A failed send or a host that could not start: its exit reports its effects.
+    child.on('error', () => undefined);
     child.once('exit', (code, signal) => {
       host.peer.close(new Error(`handler host ${name} exited (${signal ?? code ?? 'unknown'})`));
     });
