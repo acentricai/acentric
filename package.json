@@ -16,7 +16,7 @@
     "lint:fix": "oxlint --type-aware --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck:tests && pnpm test"
+    "check": "pnpm format:check && pnpm build && pnpm lint && pnpm typecheck:tests && pnpm test"
   },
   "devDependencies": {
     "oxlint": "^1.89.0",
