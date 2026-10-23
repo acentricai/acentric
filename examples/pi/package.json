@@ -1,0 +1,25 @@
+{
+  "name": "@acentric/example-pi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "pi's original coding agent, rebuilt as an acentric agent.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@acentric/types": "workspace:*",
+    "typebox": "1.3.27"
+  },
+  "devDependencies": {
+    "@acentric/testing": "workspace:*"
+  }
+}

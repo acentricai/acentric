@@ -11,8 +11,14 @@
     "typescript/consistent-type-definitions": ["error", "type"],
     "typescript/no-explicit-any": "error",
     "typescript/no-empty-object-type": "error",
-    "typescript/array-type": ["error", { "default": "array" }],
-    "import/no-cycle": "error"
+    "typescript/array-type": [
+      "error",
+      {
+        "default": "array"
+      }
+    ],
+    "import/no-cycle": "error",
+    "typescript/consistent-return": "off"
   },
   "ignorePatterns": ["**/dist/**"]
 }
