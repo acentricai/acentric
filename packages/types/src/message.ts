@@ -1,6 +1,11 @@
 // Layer 1: messages. A message is something that happened to the agent.
 // `step` receives exactly one at a time.
 //
+// A message type exists only for something the runner itself does: delivers
+// a caller's input, reports an effect, changes the config, upgrades the
+// agent. Anything else an agent understands, such as a request to pause, is
+// an input with a kind of the agent's choosing.
+//
 // Every message is identified by whoever created the thing it is about:
 // an input by the caller's `id`, an effect result by the `key` the agent
 // chose when it asked. The runner never invents identities.
@@ -90,26 +95,6 @@ export type MigratedMessage = {
   readonly from: string;
 };
 
-/**
- * A caller asks the agent to pause. The runner only delivers it: step
- * decides what pausing means, such as finishing what is running and
- * starting nothing new, or cancelling everything now. Messages keep
- * arriving while paused, and step decides what to do with them.
- */
-export type PauseMessage = {
-  readonly type: 'pause';
-  readonly reason?: Json;
-};
-
-/**
- * A caller asks the agent to carry on. As with pause, step decides what
- * that means, from what its own snapshot says it was doing.
- */
-export type ResumeMessage = {
-  readonly type: 'resume';
-  readonly reason?: Json;
-};
-
 /** Every message a step can receive. K is the agent's map of kinds. */
 export type Message<K extends Kinds = Kinds> =
-  InputMessage | EffectMessage<K> | ConfigMessage | MigratedMessage | PauseMessage | ResumeMessage;
+  InputMessage | EffectMessage<K> | ConfigMessage | MigratedMessage;

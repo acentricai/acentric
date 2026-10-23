@@ -47,7 +47,6 @@ on, or what follows once everything being stopped has reported.
 | `set_thinking`     | apply            | apply                       | apply                       | apply                                | apply                                  |
 | `config`           | resolve settings | resolve settings            | resolve settings            | resolve settings                     | resolve settings                       |
 | `migrated`         | nothing          | nothing                     | nothing                     | nothing                              | nothing                                |
-| `pause`, `resume`  | reject           | reject                      | reject                      | reject                               | reject                                 |
 | any other input    | reject           | reject                      | reject                      | reject                               | reject                                 |
 | `llm` result       | ignore           | the reply                   | ignore                      | ignore                               | ignore                                 |
 | a tool's result    | ignore           | ignore                      | the tool's result           | ignore                               | ignore                                 |

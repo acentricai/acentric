@@ -14,12 +14,11 @@ describe('inputs', () => {
     );
   });
 
-  it('rejects unknown kinds, bad payloads, pause and resume', () => {
+  it('rejects unknown kinds, such as pause, and bad payloads', () => {
     const sim = start();
     expect(sim.input('dance', {}).rejected).toBe('unknown input kind dance');
+    expect(sim.input('pause', {}).rejected).toBe('unknown input kind pause');
     expect(sim.input('prompt', { text: 3 }).rejected).toBe('text must be a string');
-    expect(sim.send({ type: 'pause' }).rejected).toBe('pause is not supported by this agent');
-    expect(sim.send({ type: 'resume' }).rejected).toBe('resume is not supported by this agent');
     expect(sim.log).toHaveLength(2);
   });
 

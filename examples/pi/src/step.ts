@@ -55,9 +55,6 @@ export const step: Step<PiSnapshot, PiConfig, PiKinds> = (state, msg, now) => {
     }
     case 'migrated':
       return turn.result();
-    case 'pause':
-    case 'resume':
-      return { error: `${msg.type} is not supported by this agent` };
   }
 };
 

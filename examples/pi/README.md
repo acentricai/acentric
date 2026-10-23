@@ -25,7 +25,7 @@ Out, for now:
 - branching sessions (`/tree`, `/fork`)
 - extensions and hooks, skills, prompt templates, `!` bash shortcuts
 - the terminal UI
-- `pause` and `resume`, which this agent rejects
+- pausing and resuming a run
 
 ## How pi maps onto the framework
 
