@@ -1,0 +1,477 @@
+/* The article: type, code, tables and the components pages use. */
+
+.prose {
+  color: var(--ink-secondary);
+  font-size: 15.5px;
+  line-height: 1.72;
+}
+
+.prose > :first-child {
+  margin-top: 0;
+}
+
+.prose p,
+.prose ul,
+.prose ol {
+  margin: 0 0 var(--space-4);
+}
+
+.prose strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.prose h2,
+.prose h3,
+.prose h4 {
+  position: relative;
+  color: var(--ink);
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.prose h2 {
+  margin: var(--space-7) 0 var(--space-3);
+  font-size: 23px;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+.prose h3 {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: 18px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.prose h4 {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: 15.5px;
+}
+
+.heading-anchor {
+  margin-left: 8px;
+  color: var(--ink-muted);
+  font-weight: 400;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.prose h2:hover .heading-anchor,
+.prose h3:hover .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 1;
+}
+
+.prose a {
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--line-control);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 120ms;
+}
+
+.prose a:hover {
+  text-decoration-color: var(--ink);
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+}
+
+.prose li {
+  margin: 0 0 6px;
+  padding-left: 2px;
+}
+
+.prose li > ul,
+.prose li > ol {
+  margin: 6px 0 0;
+}
+
+.prose li::marker {
+  color: var(--ink-muted);
+}
+
+.prose hr {
+  margin: var(--space-7) 0;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.prose blockquote {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--hairline);
+}
+
+/* ---------- Inline code ---------- */
+
+.prose :not(pre) > code {
+  padding: 0.12em 0.38em;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: var(--wash);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  overflow-wrap: anywhere;
+}
+
+.prose a code {
+  color: inherit;
+}
+
+/* ---------- Code blocks ---------- */
+
+.code {
+  margin: 0 0 var(--space-5);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 6px 0 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.code-language,
+.code-title {
+  color: var(--ink-muted);
+  font-size: 12.5px;
+}
+
+.code-title {
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.code-copy {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.code-copy:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.code pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  background: none !important;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  tab-size: 2;
+  scrollbar-width: thin;
+}
+
+.code pre code {
+  font-family: inherit;
+}
+
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .shiki,
+  :root:not([data-theme='light']) .shiki span {
+    color: var(--shiki-dark);
+  }
+}
+
+:root[data-theme='dark'] .shiki,
+:root[data-theme='dark'] .shiki span {
+  color: var(--shiki-dark);
+}
+
+/* Inside a list or a step, a block sits a little tighter. */
+.prose li .code,
+.steps .code {
+  margin-bottom: var(--space-4);
+}
+
+/* ---------- Tables ---------- */
+
+.table-scroll {
+  margin: 0 0 var(--space-5);
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.prose th {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.prose td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+}
+
+.prose tr:last-child td {
+  border-bottom: 0;
+}
+
+.prose td:first-child {
+  color: var(--ink);
+}
+
+.prose td code {
+  white-space: nowrap;
+}
+
+/* ---------- Callouts ---------- */
+
+.callout {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 var(--space-5);
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.callout-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ink-secondary);
+}
+
+.callout-body {
+  min-width: 0;
+}
+
+.callout-body > :last-child {
+  margin-bottom: 0;
+}
+
+.callout-title {
+  margin: 0 0 2px !important;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.callout-warning {
+  border-color: color-mix(in srgb, var(--warn) 28%, var(--hairline));
+  background: var(--warn-wash);
+}
+
+.callout-warning .callout-icon {
+  color: var(--warn);
+}
+
+.callout-tip .callout-icon {
+  color: var(--ok);
+}
+
+/* ---------- Steps ---------- */
+
+.steps {
+  margin: var(--space-5) 0 var(--space-6);
+  padding-left: 44px;
+  counter-reset: step;
+  border-left: 1px solid var(--hairline);
+  margin-left: 14px;
+}
+
+.steps > h3 {
+  margin-top: var(--space-6);
+  counter-increment: step;
+}
+
+.steps > h3:first-child {
+  margin-top: 0;
+}
+
+.steps > h3::before {
+  content: counter(step);
+  position: absolute;
+  left: -59px;
+  top: -1px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* ---------- Cards ---------- */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 0 0 var(--space-6);
+}
+
+.prose .card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  color: inherit;
+  font-weight: 400;
+  text-decoration: none;
+  transition:
+    border-color 150ms,
+    background-color 150ms;
+}
+
+.prose .card:hover {
+  border-color: var(--line-field-hover);
+  background: var(--panel);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.card-title svg {
+  flex: none;
+  color: var(--ink-muted);
+  transition: transform 150ms var(--ease-out);
+}
+
+.card:hover .card-title svg {
+  transform: translateX(2px);
+}
+
+.card-text {
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  margin: 0 0 var(--space-5);
+}
+
+.tab-list {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.tab {
+  margin-bottom: -1px;
+  padding: 6px 12px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+}
+
+.tab-panel > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- Diagrams ---------- */
+
+.diagram {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-5);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow-x: auto;
+}
+
+.diagram svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+}
+
+.diagram figcaption {
+  margin-top: var(--space-3);
+  color: var(--ink-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .prose {
+    font-size: 15px;
+  }
+
+  .prose h2 {
+    font-size: 21px;
+  }
+
+  .steps {
+    padding-left: 32px;
+  }
+
+  .steps > h3::before {
+    left: -47px;
+  }
+}

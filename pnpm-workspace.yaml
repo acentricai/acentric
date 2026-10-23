@@ -2,6 +2,7 @@ packages:
   - packages/*
   - runners/*
   - examples/*
+  - apps/*
 # Install scripts of dependencies that do not need them to work.
 allowBuilds:
   '@google/genai': false
