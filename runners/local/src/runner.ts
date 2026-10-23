@@ -73,6 +73,8 @@ export type InstanceInfo = {
   running: RunningEffect[];
   /** Whether a job is running or waiting in the instance's mailbox. */
   working: boolean;
+  /** The agent's snapshot, when asked for. */
+  snapshot?: JsonObject;
 };
 
 export type InstanceListing = InstanceSummary & { status: Status };
@@ -92,7 +94,37 @@ export type SubscribeOptions = {
 };
 
 /** An agent's code to deploy: two ES modules, the pure half and the handlers. */
-export type DeployBundle = AgentRef & { agent: string; handlers: string };
+export type DeployBundle = AgentRef & {
+  agent: string;
+  handlers: string;
+  /** Kinds an application will provide, with their settings. */
+  provides?: Record<string, Omit<KindInfo, 'provided'>>;
+};
+
+/** One effect for a provider to run. */
+export type ProvidedEffect = {
+  instance: string;
+  key: string;
+  kind: string;
+  args: Json;
+  attempt: number;
+};
+
+/**
+ * Something outside the runner that runs effects of some kinds, such as an
+ * application connected over the protocol. `run` answers `crashed` if the
+ * provider went away before the effect ended.
+ */
+export type Provider = {
+  run(effect: ProvidedEffect): Promise<HostOutcome>;
+  cancel(instance: string, key: string): void;
+};
+
+/** A provider's registration: how it reports emitted deltas, and how it leaves. */
+export type Provision = {
+  emitted(instance: string, key: string, delta: Json): void;
+  release(): void;
+};
 
 /** The built-in kinds this runner provides, for an agent's map of kinds. */
 export type LocalRunnerKinds = {
@@ -134,7 +166,8 @@ export type RunnerErrorCode =
   | 'bundle_conflict'
   | 'invalid_bundle'
   | 'missing_kinds'
-  | 'request_conflict';
+  | 'request_conflict'
+  | 'kind_taken';
 
 export class RunnerError extends Error {
   readonly code: RunnerErrorCode;
@@ -179,13 +212,14 @@ type Live = {
 type Flight = {
   key: string;
   kind: string;
-  hash: string;
   done: boolean;
   cancelled: boolean;
   aborted: boolean;
   timer: ReturnType<typeof setTimeout> | null;
-  /** Whether a handler is executing it, as opposed to a timer waiting. */
+  /** Whether a handler is executing it, as opposed to waiting for a timer or a provider. */
   active: boolean;
+  /** Fires the signal of whatever runs it. */
+  stop: (() => void) | null;
 };
 
 type Reply = { resolve: (answer: Answer) => void; reject: (error: Error) => void };
@@ -246,6 +280,10 @@ export class LocalRunner {
   readonly #queued = new Map<string, Set<number>>();
   readonly #subscribers = new Map<string, Set<Subscriber>>();
   readonly #statuses = new Map<string, Status>();
+  /** Providers by the kind they provide. */
+  readonly #providers = new Map<string, Provider>();
+  /** Effects of provided kinds waiting for a provider, by kind. */
+  readonly #awaiting = new Map<string, (() => void)[]>();
   #unloader: ReturnType<typeof setInterval> | null = null;
   #closing = false;
   #closed = false;
@@ -349,7 +387,8 @@ export class LocalRunner {
    */
   async deploy(bundle: DeployBundle): Promise<{ hash: string; deployed: boolean }> {
     this.#open();
-    const hash = digest([bundle.name, bundle.version, bundle.agent, bundle.handlers]);
+    const provides = bundle.provides ?? {};
+    const hash = digest([bundle.name, bundle.version, bundle.agent, bundle.handlers, provides]);
     const existing = await this.#store.getBundle(bundle);
     if (existing !== null) {
       if (existing.hash === hash) return { hash, deployed: false };
@@ -370,6 +409,15 @@ export class LocalRunner {
         error instanceof Error ? error.message : String(error),
       );
     }
+    for (const [kind, info] of Object.entries(provides)) {
+      if (kind.startsWith('@') || kind in kinds) {
+        throw new RunnerError(
+          'invalid_bundle',
+          `${kind} cannot be provided: it is the bundle's or the runner's`,
+        );
+      }
+      kinds[kind] = { ...info, provided: true };
+    }
     const missing = (agent.kinds ?? []).filter(
       (kind) => !(kind in kinds) && !RUNNER_KINDS.has(kind),
     );
@@ -377,13 +425,52 @@ export class LocalRunner {
       throw new RunnerError('missing_kinds', `no handler for ${missing.join(', ')}`);
     }
     try {
-      const stored = await this.#store.putBundle({ ...bundle, hash, kinds });
+      const stored = await this.#store.putBundle({
+        name: bundle.name,
+        version: bundle.version,
+        agent: bundle.agent,
+        handlers: bundle.handlers,
+        hash,
+        kinds,
+      });
       return { hash, deployed: stored === 'stored' };
     } catch (error) {
       throw error instanceof StoreError && error.code === 'bundle_conflict'
         ? new RunnerError('bundle_conflict', error.message)
         : error;
     }
+  }
+
+  /**
+   * Registers a provider for kinds an application provides. Effects of those
+   * kinds waiting for a provider start now. Refuses a kind another provider
+   * already has.
+   */
+  provide(kinds: readonly string[], provider: Provider): Provision {
+    this.#open();
+    const taken = kinds.filter((kind) => this.#providers.has(kind));
+    if (taken.length > 0) {
+      throw new RunnerError('kind_taken', `another provider has ${taken.join(', ')}`);
+    }
+    for (const kind of kinds) this.#providers.set(kind, provider);
+    for (const kind of kinds) {
+      const waiting = this.#awaiting.get(kind) ?? [];
+      this.#awaiting.delete(kind);
+      for (const start of waiting) start();
+    }
+    return {
+      emitted: (instance, key, delta) => this.#emitted(instance, key, delta),
+      release: () => {
+        for (const kind of kinds) {
+          if (this.#providers.get(kind) === provider) this.#providers.delete(kind);
+        }
+      },
+    };
+  }
+
+  /** Sets a secret for handlers. It is kept in memory only, never stored. */
+  setSecret(name: string, value: string): void {
+    this.#secrets[name] = value;
   }
 
   listAgents(): Promise<(AgentRef & { hash: string; instances: number })[]> {
@@ -517,7 +604,7 @@ export class LocalRunner {
     );
   }
 
-  async get(id: string): Promise<InstanceInfo> {
+  async get(id: string, options: { snapshot?: boolean } = {}): Promise<InstanceInfo> {
     const live = await this.#live(id);
     if (live === null) throw new RunnerError('no_instance', `no instance ${id}`);
     return {
@@ -529,6 +616,7 @@ export class LocalRunner {
       nextSeq: live.nextSeq,
       running: this.#running(live),
       working: this.#working(id),
+      ...(options.snapshot === true ? { snapshot: live.snapshot } : {}),
     };
   }
 
@@ -986,13 +1074,13 @@ export class LocalRunner {
       flights.delete(key);
       this.#scheduler.remove(timerId(live.id, key));
       if (flight.timer !== null) clearTimeout(flight.timer);
-      this.#hosts.cancel(flight.hash, live.id, key);
+      flight.stop?.();
     }
     for (const key of prepared.aborted) {
       const flight = flights.get(key);
       if (flight === undefined) continue;
       flight.aborted = true;
-      this.#hosts.cancel(flight.hash, live.id, key);
+      flight.stop?.();
     }
     for (const effect of prepared.started) this.#start(live.id, live.code, effect);
   }
@@ -1004,12 +1092,12 @@ export class LocalRunner {
     const flight: Flight = {
       key,
       kind,
-      hash: code.hash,
       done: false,
       cancelled: false,
       aborted: effect.request.abort === true,
       timer: null,
       active: false,
+      stop: null,
     };
     this.#flightsOf(id).set(key, flight);
     if (kind === '@timer') {
@@ -1031,16 +1119,13 @@ export class LocalRunner {
       this.#background(this.#finish(id, flight, { failed: { code: 'unknown_kind', error: kind } }));
       return;
     }
-    flight.active = true;
-    const timeoutMs = info.timeoutMs ?? this.#timeoutMs;
-    if (timeoutMs !== undefined) {
-      flight.timer = setTimeout(() => {
-        this.#hosts.cancel(code.hash, id, key);
-        this.#background(
-          this.#finish(id, flight, { failed: { code: 'timeout', error: { timeoutMs } } }),
-        );
-      }, timeoutMs);
+    if (info.provided === true) {
+      this.#provided(id, code, effect, flight, info);
+      return;
     }
+    flight.active = true;
+    flight.stop = () => this.#hosts.cancel(code.hash, id, key);
+    this.#limit(id, flight, info);
     this.#background(
       this.#hosts
         .run(code.hash, code.handlersPath, {
@@ -1052,6 +1137,42 @@ export class LocalRunner {
         })
         .then((outcome) => this.#ran(id, code, effect, flight, outcome)),
     );
+  }
+
+  /** Runs a provided kind through its provider, or waits for one to connect. */
+  #provided(id: string, code: Code, effect: StoredEffect, flight: Flight, info: KindInfo): void {
+    const { key, kind, args } = effect.request;
+    const provider = this.#providers.get(kind);
+    if (provider === undefined) {
+      const waiting = this.#awaiting.get(kind) ?? [];
+      waiting.push(() => {
+        if (!flight.done && !flight.cancelled && !this.#closed)
+          this.#provided(id, code, effect, flight, info);
+      });
+      this.#awaiting.set(kind, waiting);
+      return;
+    }
+    flight.active = true;
+    flight.stop = () => provider.cancel(id, key);
+    this.#limit(id, flight, info);
+    this.#background(
+      provider
+        .run({ instance: id, key, kind, args, attempt: effect.attempt })
+        .then((outcome) => this.#ran(id, code, effect, flight, outcome)),
+    );
+  }
+
+  /** Arms an effect's time limit: its kind's, or the runner's default. */
+  #limit(id: string, flight: Flight, info: KindInfo): void {
+    const timeoutMs = info.timeoutMs ?? this.#timeoutMs;
+    if (timeoutMs !== undefined) {
+      flight.timer = setTimeout(() => {
+        flight.stop?.();
+        this.#background(
+          this.#finish(id, flight, { failed: { code: 'timeout', error: { timeoutMs } } }),
+        );
+      }, timeoutMs);
+    }
   }
 
   async #ran(
@@ -1174,7 +1295,7 @@ export class LocalRunner {
       flight.cancelled = true;
       this.#scheduler.remove(timerId(id, key));
       if (flight.timer !== null) clearTimeout(flight.timer);
-      this.#hosts.cancel(flight.hash, id, key);
+      flight.stop?.();
     }
     this.#flights.delete(id);
     await this.#store.delete(id);

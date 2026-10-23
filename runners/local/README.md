@@ -24,6 +24,29 @@ await runner.close(); // lets running handlers finish, then stops
 await store.close();
 ```
 
+## As a process
+
+`acentric-runner` serves the [protocol](../../packages/protocol) over stdio
+or WebSocket, for applications in any language; in TypeScript,
+[@acentric/client](../../packages/client) starts and speaks to it.
+
+```sh
+acentric-runner --store sqlite:./agents.db                       # stdio, until stdin closes
+acentric-runner --store sqlite:./agents.db --listen ws://127.0.0.1:7420
+```
+
+| Flag                                                        | Means                                                     |
+| ----------------------------------------------------------- | --------------------------------------------------------- |
+| `--store sqlite:PATH`                                       | the store                                                 |
+| `--listen`                                                  | `stdio` (the default) or `ws://HOST:PORT`                 |
+| `--code-dir DIR`                                            | where deployed modules are written                        |
+| `--secret NAME`                                             | takes a secret from the environment variable of that name |
+| `--host-import MODULE`                                      | a module handler hosts load before the handlers           |
+| `--grace-ms`, `--idle-ms`, `--timeout-ms`, `--max-attempts` | as the options below                                      |
+
+Stdout carries only the protocol: console output, the runner's and its
+handlers', goes to stderr.
+
 ## Code
 
 A deployed agent is two self-contained ES modules: the pure half, whose

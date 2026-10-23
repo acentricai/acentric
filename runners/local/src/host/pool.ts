@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { Json, JsonObject, LogQuery } from '@acentric/types';
 
-import { RpcError, RpcPeer } from '../rpc.js';
+import { RpcError, RpcPeer } from '@acentric/protocol';
 import type { KindInfo } from '../store/types.js';
 
 /** What a host answered for one effect. */

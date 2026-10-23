@@ -12,8 +12,17 @@ import type { EffectRequest, Json, JsonObject, LogEntry, Mode, Outcome } from '@
 /** Names an agent's code. */
 export type AgentRef = { name: string; version: string };
 
-/** A handler kind's settings, read from the bundle's handlers when it is deployed. */
-export type KindInfo = { mode: Mode; timeoutMs?: number; maxAttempts?: number };
+/**
+ * A kind's settings: read from the bundle's handlers when it is deployed, or
+ * given at deploy time for a kind an application provides.
+ */
+export type KindInfo = {
+  mode: Mode;
+  timeoutMs?: number;
+  maxAttempts?: number;
+  /** Set for a kind an application provides rather than the bundle's handlers. */
+  provided?: true;
+};
 
 /** An agent's code, as deployed. Code under a name and version never changes. */
 export type Bundle = AgentRef & {

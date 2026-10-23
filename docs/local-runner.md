@@ -72,23 +72,26 @@ bounding them would save little and risk applying an input twice.
 
 JSON-RPC 2.0, one message per line on stdio, the same messages over
 WebSocket. A rejection or a failed step is a normal result; JSON-RPC errors
-are only for protocol problems, such as an unknown instance or bad params.
+are only for protocol problems, such as an unknown instance or bad params,
+and their `data.code` names the problem. The messages are typed in
+`@acentric/protocol`; `@acentric/client` speaks them.
 
 **Requests from the app:**
 
-| Method                                     | Does                                                                          |
-| ------------------------------------------ | ----------------------------------------------------------------------------- |
-| `initialize`                               | Agrees on the protocol version, names the client, declares kinds it provides  |
-| `agents/deploy`                            | Installs a bundle under a name and version; the same bundle again is a no-op  |
-| `agents/list`                              | Installed agents and how many instances use each                              |
-| `instances/create`                         | Runs init and returns the instance id; a caller-chosen id makes it idempotent |
-| `instances/input`                          | Sends an input; answered after its step is saved                              |
-| `instances/configure`, `instances/upgrade` | Changes the config, or moves the instance to another installed version        |
-| `instances/get`                            | Agent, status (idle, busy, faulted), view and running effects, now            |
-| `instances/list`                           | Instances by agent or status, paged                                           |
-| `instances/log`                            | A range of the log                                                            |
-| `instances/delete`                         | Cancels running effects and removes the instance                              |
-| `instances/subscribe`, `unsubscribe`       | Starts or stops notifications for an instance                                 |
+| Method                                     | Does                                                                              |
+| ------------------------------------------ | --------------------------------------------------------------------------------- |
+| `initialize`                               | Agrees on the protocol version, names the client, declares kinds it provides      |
+| `agents/deploy`                            | Installs a bundle under a name and version; the same bundle again is a no-op      |
+| `agents/list`                              | Installed agents and how many instances use each                                  |
+| `instances/create`                         | Runs init and returns the instance id; a caller-chosen id makes it idempotent     |
+| `instances/input`                          | Sends an input; answered after its step is saved                                  |
+| `instances/configure`, `instances/upgrade` | Changes the config, or moves the instance to another installed version            |
+| `instances/get`                            | Agent, status, view and running effects now; the snapshot if asked, for debugging |
+| `instances/list`                           | Instances by agent or status, paged                                               |
+| `instances/log`                            | A range of the log                                                                |
+| `instances/delete`                         | Cancels running effects and removes the instance                                  |
+| `instances/subscribe`, `unsubscribe`       | Starts or stops notifications, under a subscription id the client chooses         |
+| `secrets/set`                              | Sets a secret in memory only                                                      |
 
 **Notifications from the runner,** while subscribed:
 
@@ -99,14 +102,28 @@ are only for protocol problems, such as an unknown instance or bad params.
 | `emit`       | A handler streamed a delta. Live only, never stored or replayed   |
 | `status`     | The instance became idle, busy or faulted                         |
 
-**App-provided handlers.** An app declares kinds it provides at `initialize`.
-The runner sends it `effect/run`; the app streams `effect/emit` and answers
-with the result; the runner sends `effect/cancel` as the signal. The runner
-keeps timeouts, attempts, the inbox and recovery, so the agent cannot tell an
-app-provided effect from any other.
+A subscription's id is the client's, so notifications that arrive before
+the answer to `instances/subscribe`, such as the replayed history, already
+say where they belong.
+
+**App-provided handlers.** A bundle names the kinds an app will provide, with
+their mode and limits, when it is deployed (`provides`). An app that provides
+them says so at `initialize`. The runner sends it `effect/run`; the app
+streams `effect/emit` and answers `{ ok }` or `{ error }`; the runner sends
+`effect/cancel` as the signal. The runner keeps timeouts, attempts, the inbox
+and recovery, so the agent cannot tell an app-provided effect from any other.
+An effect waits while no provider is connected. If the provider disconnects
+mid-effect, that is a crash for its effects: reissue effects run again when a
+provider connects, once effects are reported interrupted.
 
 **Deploying:** a bundle is passed by path for local use, or inline for apps
 that ship it themselves.
+
+**The process:** `acentric-runner --store sqlite:PATH --listen stdio` (the
+default) or `--listen ws://HOST:PORT`, with `--secret NAME` to take a secret
+from the environment and `--host-import MODULE` for a module handler hosts
+load first. Over stdio it stops gracefully when stdin closes; over WebSocket,
+on SIGINT or SIGTERM.
 
 ## Agent code
 
@@ -244,13 +261,13 @@ Versions come from `package.json`, or per agent in the config.
 
 Each milestone ends in something runnable and tested.
 
-1. **Core runner, SQLite store and handler hosts.** The optional `kinds`
+1. **Core runner, SQLite store and handler hosts.** Done. The optional `kinds`
    list on `Agent`; the `Store` interface, the SQLite store and the store
    conformance suite; the engine with its inbox, input ids, finished-key
    lookups, on-demand loading, timers, recovery and shutdown; handler hosts
    as child processes. Verified by every conformance scenario, crashing by
    abandoning the runner, killing its hosts and reopening the store.
-2. **Protocol server and TypeScript client.** JSON-RPC over stdio and
+2. **Protocol server and TypeScript client.** Done. JSON-RPC over stdio and
    WebSocket with every method and notification, app-provided handlers, and
    `@acentric/client`. Verified by the scenarios through the protocol, where a
    crash kills the runner process, and by pi on a real model over stdio.

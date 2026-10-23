@@ -24,14 +24,19 @@ import type {
 } from '@acentric/types';
 
 import { isJson, thrownToJson } from '../json.js';
-import { RpcError, RpcPeer } from '../rpc.js';
-import type { RpcMessage } from '../rpc.js';
+import { RpcError, RpcPeer } from '@acentric/protocol';
+import type { RpcMessage } from '@acentric/protocol';
 
 const path = process.argv[2];
 if (path === undefined) throw new Error('the handler host needs the handlers module path');
 
+// The runner may be gone, such as after it was killed: a send that fails
+// means there is no one left to answer, so the host exits.
 const send = (message: RpcMessage): void => {
-  process.send?.(message);
+  if (!process.connected) return;
+  process.send?.(message, undefined, {}, (error) => {
+    if (error !== null) process.exit(0);
+  });
 };
 
 const running = new Map<string, AbortController>();

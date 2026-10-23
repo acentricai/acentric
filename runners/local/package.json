@@ -4,6 +4,9 @@
   "description": "A runner for your own machine: keeps instances in a store across restarts and runs handlers in child processes.",
   "type": "module",
   "sideEffects": false,
+  "bin": {
+    "acentric-runner": "./dist/server/bin.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -19,11 +22,15 @@
     "clean": "tsc --build --clean"
   },
   "dependencies": {
-    "@acentric/types": "workspace:*"
+    "@acentric/protocol": "workspace:*",
+    "@acentric/types": "workspace:*",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@acentric/conformance": "workspace:*",
     "@types/node": "^26.6.5",
-    "esbuild": "^0.28.2"
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "@acentric/client": "workspace:*"
   }
 }
