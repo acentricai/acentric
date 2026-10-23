@@ -147,10 +147,29 @@ The pure half is in [src](src): `agent.ts` puts it together from `step.ts`,
 (`tokens.ts`), the compaction cut (`cut.ts`), error rules (`errors.ts`), the
 tools' schemas and argument checks (`tools.ts`), the system prompt
 (`prompt.ts`) and the model catalog (`catalog.ts`). It imports nothing but
-typebox. Handlers come next.
+typebox.
+
+The handlers are in [src/handlers](src/handlers), behind their own entry
+point, `@acentric/example-pi/handlers`, so loading the pure half never loads
+Node or network code:
+
+| Handler     | Wraps                                                                |
+| ----------- | -------------------------------------------------------------------- |
+| `llm`       | pi-ai's `streamSimple`, emitting text, thinking and tool call deltas |
+| `summarize` | pi's `generateSummaryWithUsage`, with its compaction prompt          |
+| `read`      | pi's read tool                                                       |
+| `bash`      | pi's bash tool, emitting output as it arrives                        |
+| `edit`      | pi's edit tool                                                       |
+| `write`     | pi's write tool                                                      |
+
+`createPiAgent()` returns the agent with its handlers, calling models through
+pi-ai's built-in providers; pass `models` to use others. API keys come from the
+secrets `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GEMINI_API_KEY`.
 
 The tests in [test](test) drive the pure half through `@acentric/testing`'s
-simulator, playing the model and the tools by hand.
+simulator, playing the model and the tools by hand, and run the handlers on
+their own: model calls against pi-ai's faux provider, tools in a temporary
+directory.
 
 ```bash
 pnpm test

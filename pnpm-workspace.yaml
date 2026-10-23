@@ -1,3 +1,7 @@
 packages:
   - packages/*
   - examples/*
+# Install scripts of dependencies that do not need them to work.
+allowBuilds:
+  '@google/genai': false
+  protobufjs: false
