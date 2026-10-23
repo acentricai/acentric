@@ -19,6 +19,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@acentric/client": "workspace:*",
     "@acentric/runner-memory": "workspace:*",
     "@acentric/testing": "workspace:*",
     "@acentric/types": "workspace:*",
