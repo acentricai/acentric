@@ -174,3 +174,17 @@ directory.
 ```bash
 pnpm test
 ```
+
+## Running it
+
+[acentric.config.ts](acentric.config.ts) names the bundle's two entry
+modules in [src/entry](src/entry). From this folder, with an API key in the
+environment or a `.env` file:
+
+```bash
+acentric build
+acentric start
+acentric create pi@0.1.0 '{"cwd": "/path/to/work", "model": {"provider": "openai", "id": "gpt-5.4-mini"}}'
+acentric send <id> prompt '{"text": "add a README"}'
+acentric log <id> -f --emits
+```
