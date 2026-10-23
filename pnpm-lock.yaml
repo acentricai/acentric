@@ -198,6 +198,21 @@ importers:
         specifier: ^26.6.5
         version: 26.6.5
 
+  packages/create-acentric:
+    devDependencies:
+      '@acentric/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@acentric/testing':
+        specifier: workspace:*
+        version: link:../testing
+      '@acentric/types':
+        specifier: workspace:*
+        version: link:../types
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
   packages/protocol:
     dependencies:
       '@acentric/types':

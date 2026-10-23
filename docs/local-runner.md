@@ -289,7 +289,8 @@ Each milestone ends in something runnable and tested.
    through upgrades, faults cleared on save. Verified by editing an agent
    while an instance is mid-conversation.
 5. **The filesystem store,** passing the same suite and scenarios. Done.
-6. **`npm create acentric` and templates.**
+6. **`npm create acentric` and templates.** Done, with the `minimal` template;
+   more templates, and helpers that make agents easier to write, are next.
 
 ## Open
 

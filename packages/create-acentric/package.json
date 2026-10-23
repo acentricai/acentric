@@ -1,0 +1,33 @@
+{
+  "name": "create-acentric",
+  "version": "0.1.0",
+  "description": "Create an acentric agent project: npm create acentric.",
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "create-acentric": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@acentric/cli": "workspace:*",
+    "@acentric/testing": "workspace:*",
+    "@acentric/types": "workspace:*",
+    "@types/node": "^26.6.5"
+  }
+}
