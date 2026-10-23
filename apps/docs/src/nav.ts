@@ -33,6 +33,42 @@ export const sections: readonly Section[] = [
       },
     ],
   },
+  {
+    title: 'Concepts',
+    pages: [
+      {
+        slug: 'concepts',
+        title: 'How an agent works',
+        label: 'Overview',
+        description: 'An agent describes how it behaves; a runner runs it.',
+      },
+      {
+        slug: 'concepts/state',
+        title: 'State',
+        description: 'What a session keeps: a small snapshot, a log written once, and its config.',
+      },
+      {
+        slug: 'concepts/messages',
+        title: 'Messages',
+        description: 'Everything that happens to a session reaches step as one of four messages.',
+      },
+      {
+        slug: 'concepts/effects',
+        title: 'Effects and handlers',
+        description: 'An agent declares the effects it wants running; handlers do the I/O.',
+      },
+      {
+        slug: 'concepts/view',
+        title: 'The view',
+        description: 'What callers see of a session, apart from what the agent keeps.',
+      },
+      {
+        slug: 'concepts/runners',
+        title: 'Runners',
+        description: 'What every runner promises, and what each one chooses.',
+      },
+    ],
+  },
 ];
 
 export const pages: readonly Page[] = sections.flatMap((section) => section.pages);

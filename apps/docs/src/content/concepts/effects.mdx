@@ -1,0 +1,35 @@
+<Callout type="note" title="Draft">
+  This page is an outline: each section lists what it will cover.
+</Callout>
+
+## Declaring effects
+
+- `effects(state)` returns the list the agent wants running now.
+
+## Keys
+
+- A new key starts an effect; keys are used once.
+
+## Cancelling
+
+- A key that disappears from the list is cancelled.
+
+## Aborting
+
+- `abort: true` stops an effect and still delivers its result.
+
+## Reissue and once
+
+- What each means when a runner stops mid-effect.
+
+## Handlers
+
+- The only place I/O happens: one handler per kind.
+
+## Runner kinds
+
+- Kinds every runner provides, such as `@timer`.
+
+## When a handler fails
+
+- The failure codes, and what a step can do with them.

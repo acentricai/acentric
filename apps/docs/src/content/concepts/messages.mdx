@@ -1,0 +1,27 @@
+<Callout type="note" title="Draft">
+  This page is an outline: each section lists what it will cover.
+</Callout>
+
+## Inputs
+
+- What callers send: a kind of the agent's choosing and a payload.
+
+## Effect results
+
+- How an effect ended: `ok`, `failed` with a code, or `interrupted`.
+
+## Config changes
+
+- A caller changing the session's config.
+
+## After an upgrade
+
+- `migrated`, the first message new code sees.
+
+## Rejecting a message
+
+- A step can reject an input or a config change: nothing changes, and the caller is told why.
+
+## Time
+
+- The `now` each step is given, and why it never goes backwards.
