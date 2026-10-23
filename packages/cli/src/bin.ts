@@ -8,11 +8,13 @@ import type { JsonObject } from '@acentric/types';
 
 import { buildProject } from './build.js';
 import { loadProject } from './config.js';
+import { devProject } from './dev.js';
 import * as inspect from './inspect.js';
 import { startProject } from './start.js';
 
 const USAGE = `usage: acentric <command> [options]
 
+  dev [--port N]                 a dev runner: rebuilds and hot-reloads on save, with the dev UI
   build                          bundle the project's agents into .acentric/build
   start [--stdio]                run a runner with the built agents
   agents                         deployed agents
@@ -28,7 +30,8 @@ options:
   --url URL           the runner to talk to (default: the project's listen, or ws://127.0.0.1:7420)
   --no-typecheck      build without type-checking
   --listen URL        where start listens
-  --store SPEC        start's store, such as sqlite:./agents.db
+  --store SPEC        the store for start or dev, such as sqlite:./agents.db
+  --port N            dev: the port for the dev UI and the protocol
   --id ID             create: the instance id
   --input-id ID       send: the input id, so a retry is answered as the first time
   --after N           log: start after this seq
@@ -59,6 +62,7 @@ async function main(argv: string[]): Promise<number> {
       json: { type: 'boolean', default: false },
       after: { type: 'string', default: '0' },
       snapshot: { type: 'boolean', default: false },
+      port: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -80,6 +84,25 @@ async function main(argv: string[]): Promise<number> {
         `${agent.manifest.name}@${agent.manifest.version}  ${agent.manifest.hash.slice(0, 12)}  ${agent.dir}`,
       );
     }
+    return 0;
+  }
+
+  if (command === 'dev') {
+    const project = await loadProject(values.dir);
+    const dev = await devProject(project, {
+      ...(values.port === undefined ? {} : { port: Number(values.port) }),
+      ...(values.store === undefined ? {} : { store: values.store }),
+      log: err,
+    });
+    out(`acentric dev: open ${dev.url}`);
+    const stop = async (): Promise<void> => {
+      err('stopping');
+      await dev.close();
+      process.exit(0);
+    };
+    process.once('SIGINT', () => void stop());
+    process.once('SIGTERM', () => void stop());
+    await new Promise(() => undefined);
     return 0;
   }
 

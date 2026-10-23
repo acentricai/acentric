@@ -247,7 +247,11 @@ Versions come from `package.json`, or per agent in the config.
   retried.
 - **The dev UI** is a web page served by `acentric dev`, built only on the
   protocol: instances, creating one, sending inputs as Json, the log, the
-  view, live emits, running effects and faults.
+  view, live emits, running effects and faults. The same port serves the
+  protocol over WebSocket and a stream of dev events: builds, deploys and
+  upgrades. Dev keeps its own store, apart from the one `start` uses. A dev
+  version is named by a hash of its code, so saving code back to an earlier
+  state brings back that version's name.
 - **Start** deploys the built bundles on boot, a no-op when unchanged, and
   listens on WebSocket, or stdio when an app starts it as a child process.
 
@@ -279,13 +283,17 @@ Each milestone ends in something runnable and tested.
 3. **`acentric build` and `acentric start`.** Done. Bundling, the purity check,
    manifests, kind coverage, deploying on boot. Verified by building pi and
    driving it with `acentric send` and `acentric log -f`.
-4. **`acentric dev` and the dev UI.** Watching, dev versions, hot reload
+4. **`acentric dev` and the dev UI.** Done. Watching, dev versions, hot reload
    through upgrades, faults cleared on save. Verified by editing an agent
    while an instance is mid-conversation.
 5. **The filesystem store,** passing the same suite and scenarios.
 6. **`npm create acentric` and templates.**
 
 ## Open
+
+- Node does not unload modules, so every dev version's pure half stays in
+  the dev runner's memory until it restarts. Loading pure halves in worker
+  threads would let old ones go.
 
 - Grouping several commits into one fsync, for throughput.
 - Templates that make writing an agent easier than the initial pure half and

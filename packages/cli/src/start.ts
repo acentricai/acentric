@@ -48,14 +48,7 @@ export class StartError extends Error {
 
 export async function startProject(project: Project, options: StartOptions = {}): Promise<Started> {
   const log = options.log ?? (() => undefined);
-  const env = join(project.dir, '.env');
-  if (existsSync(env)) process.loadEnvFile(env);
-  const secrets: Record<string, string> = {};
-  for (const name of project.secrets) {
-    const value = process.env[name];
-    if (value === undefined) log(`warning: secret ${name} is not set in the environment or .env`);
-    else secrets[name] = value;
-  }
+  const secrets = loadSecrets(project, log);
 
   const bundles = await Promise.all(project.agents.map((agent) => readBuilt(project, agent)));
   const store = await openStore(options.store ?? project.store);
@@ -100,6 +93,19 @@ export async function startProject(project: Project, options: StartOptions = {})
     done: new Promise(() => undefined),
     close: () => stop(() => listener.close()),
   };
+}
+
+/** Reads the project's .env, then takes the config's secrets from the environment. */
+export function loadSecrets(project: Project, log: (line: string) => void): Record<string, string> {
+  const env = join(project.dir, '.env');
+  if (existsSync(env)) process.loadEnvFile(env);
+  const secrets: Record<string, string> = {};
+  for (const name of project.secrets) {
+    const value = process.env[name];
+    if (value === undefined) log(`warning: secret ${name} is not set in the environment or .env`);
+    else secrets[name] = value;
+  }
+  return secrets;
 }
 
 type Built = { manifest: Manifest; agent: string; handlers: string };

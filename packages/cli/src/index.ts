@@ -1,7 +1,9 @@
 // The acentric CLI's commands, for use from code: load a project, build its
 // agents, start a runner with them.
 
-export { BuildError, buildProject } from './build.js';
+export { BuildError, buildAgent, buildProject } from './build.js';
+export { devProject } from './dev.js';
+export type { DevEvent, DevOptions, DevServer } from './dev.js';
 export type { BuildOptions, BuiltAgent, KindSettings, Manifest } from './build.js';
 export { ConfigError, loadProject } from './config.js';
 export type { Project } from './config.js';

@@ -107,7 +107,11 @@ export async function buildProject(
   return built;
 }
 
-async function buildAgent(project: Project, agent: Project['agents'][number]): Promise<BuiltAgent> {
+/** Builds one agent into <project.outDir>/<name>/. */
+export async function buildAgent(
+  project: Project,
+  agent: Project['agents'][number],
+): Promise<BuiltAgent> {
   const label = `${agent.name}@${agent.version}`;
   const warnings: string[] = [];
   const agentSource = await bundle(agent.agent, 'neutral', `${label}'s pure half`);
