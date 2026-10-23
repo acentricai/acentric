@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // AbortController and setTimeout come from the DOM library.
+    "lib": ["ES2023", "DOM"],
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [{ "path": "../../packages/types" }]
+}

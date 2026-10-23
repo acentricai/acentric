@@ -168,6 +168,16 @@ importers:
 
   packages/types: {}
 
+  runners/memory:
+    dependencies:
+      '@acentric/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+    devDependencies:
+      '@acentric/conformance':
+        specifier: workspace:*
+        version: link:../../packages/conformance
+
 packages:
 
   '@anthropic-ai/sdk@0.129.0':

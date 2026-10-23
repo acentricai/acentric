@@ -11,6 +11,9 @@
       "path": "packages/conformance"
     },
     {
+      "path": "runners/memory"
+    },
+    {
       "path": "examples/pi"
     }
   ]

@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - runners/*
   - examples/*
 # Install scripts of dependencies that do not need them to work.
 allowBuilds:
