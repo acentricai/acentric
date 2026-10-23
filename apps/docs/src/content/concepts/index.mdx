@@ -30,8 +30,11 @@ const agent: Agent<Snapshot, NoConfig, Kinds> = {
     if (message.type === 'effect') {
       const reminder = snapshot.reminders.find((r) => r.key === message.key);
       return {
-        snapshot: { reminders: snapshot.reminders.filter((r) => r.key !== message.key) },
-        append: reminder === undefined ? [] : [{ kind: 'reminder', body: reminder.text }],
+        snapshot: {
+          reminders: snapshot.reminders.filter((r) => r.key !== message.key),
+        },
+        append:
+          reminder === undefined ? [] : [{ kind: 'reminder', body: reminder.text }],
       };
     }
     return { snapshot };

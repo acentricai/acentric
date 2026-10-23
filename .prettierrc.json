@@ -1,5 +1,11 @@
 {
   "singleQuote": true,
   "trailingComma": "all",
-  "printWidth": 100
+  "printWidth": 100,
+  "overrides": [
+    {
+      "files": "apps/docs/src/content/**/*.mdx",
+      "options": { "printWidth": 88 }
+    }
+  ]
 }
