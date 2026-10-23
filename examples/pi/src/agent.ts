@@ -73,4 +73,5 @@ export const piAgent: Agent<PiSnapshot, PiConfig, PiKinds> = {
   effects,
   window,
   view,
+  kinds: ['llm', 'read', 'bash', 'edit', 'write', 'summarize', '@timer'],
 };

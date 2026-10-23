@@ -50,6 +50,14 @@ export type Agent<
   effects?: Effects<S, C, K>;
   /** Left out by an agent with no handlers of its own, such as one using only runner kinds. */
   handlers?: HandlersFor<K>;
+  /**
+   * Every kind the agent's effects may request, so a runner can check when
+   * it loads the agent that each one has a handler. Types are gone at
+   * runtime, so this repeats K's kind names, and TypeScript checks each
+   * name against K. Left out, a missing handler shows up only as an
+   * 'unknown_kind' failure.
+   */
+  kinds?: readonly (keyof K & string)[];
   /** Left out by an agent whose snapshot and config keep their shapes across upgrades. */
   migrate?: Migrate<S, C>;
   /** Left out by an agent that leaves to the runner what callers see. */
