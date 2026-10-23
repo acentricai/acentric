@@ -152,6 +152,9 @@ importers:
       '@acentric/client':
         specifier: workspace:*
         version: link:../../packages/client
+      '@acentric/conformance':
+        specifier: workspace:*
+        version: link:../../packages/conformance
       '@acentric/runner-memory':
         specifier: workspace:*
         version: link:../../runners/memory

@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@acentric/client": "workspace:*",
+    "@acentric/conformance": "workspace:*",
     "@acentric/runner-memory": "workspace:*",
     "@acentric/testing": "workspace:*",
     "@acentric/types": "workspace:*",
