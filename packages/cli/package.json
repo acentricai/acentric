@@ -1,0 +1,38 @@
+{
+  "name": "@acentric/cli",
+  "version": "0.1.0",
+  "description": "The acentric command: build agents into bundles, start a runner with them, and inspect and drive it.",
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "acentric": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config-types.d.ts",
+      "default": "./dist/config-types.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@acentric/client": "workspace:*",
+    "@acentric/protocol": "workspace:*",
+    "@acentric/runner-local": "workspace:*",
+    "@acentric/types": "workspace:*",
+    "esbuild": "^0.28.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5"
+  }
+}

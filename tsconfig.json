@@ -23,6 +23,9 @@
       "path": "runners/local"
     },
     {
+      "path": "packages/cli"
+    },
+    {
       "path": "examples/pi"
     }
   ]

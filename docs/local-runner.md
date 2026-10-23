@@ -206,8 +206,8 @@ start, as after a crash.
 
 ## Developer tooling
 
-One package, `acentric`, gives the `acentric` command; `npm create acentric`
-scaffolds a project.
+One package, `@acentric/cli`, gives the `acentric` command; `npm create
+acentric` scaffolds a project.
 
 | Command                                    | Does                                                                          |
 | ------------------------------------------ | ----------------------------------------------------------------------------- |
@@ -232,9 +232,14 @@ Versions come from `package.json`, or per agent in the config.
 
 - **Build** bundles each agent with esbuild. `agent.js` may import nothing and
   use no forbidden globals such as `fetch`, timers or `process`; `handlers.js`
-  bundles its dependencies and may use Node built-ins. The manifest lists the
-  kinds the agent uses, from an optional `kinds` array on `Agent` that
-  `satisfies` its map of kinds, so the list cannot drift from the types.
+  bundles its dependencies and may use Node built-ins. The globals are found
+  by bundling the pure half again with each one defined as a marker: esbuild
+  replaces only free references, so a local variable of the same name is not
+  mistaken for the global. `Date.now` and `Math.random` give warnings. The
+  manifest lists the kinds the agent uses, from the optional `kinds` list on
+  `Agent`, and the kinds the handlers cover; a listed kind that nothing
+  handles or provides fails the build. The project is type-checked first with
+  its own TypeScript.
 - **Dev** deploys `<version>-dev.<hash>` on every save and upgrades the
   agent's instances, keeping their state through `migrate`. If the upgrade
   fails, instances stay on the previous code and the error is shown. A fault
@@ -271,7 +276,7 @@ Each milestone ends in something runnable and tested.
    WebSocket with every method and notification, app-provided handlers, and
    `@acentric/client`. Verified by the scenarios through the protocol, where a
    crash kills the runner process, and by pi on a real model over stdio.
-3. **`acentric build` and `acentric start`.** Bundling, the purity check,
+3. **`acentric build` and `acentric start`.** Done. Bundling, the purity check,
    manifests, kind coverage, deploying on boot. Verified by building pi and
    driving it with `acentric send` and `acentric log -f`.
 4. **`acentric dev` and the dev UI.** Watching, dev versions, hot reload

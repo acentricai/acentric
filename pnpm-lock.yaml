@@ -140,9 +140,34 @@ importers:
         specifier: 1.3.27
         version: 1.3.27
     devDependencies:
+      '@acentric/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
       '@acentric/testing':
         specifier: workspace:*
         version: link:../../packages/testing
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+  packages/cli:
+    dependencies:
+      '@acentric/client':
+        specifier: workspace:*
+        version: link:../client
+      '@acentric/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@acentric/runner-local':
+        specifier: workspace:*
+        version: link:../../runners/local
+      '@acentric/types':
+        specifier: workspace:*
+        version: link:../types
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+    devDependencies:
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
