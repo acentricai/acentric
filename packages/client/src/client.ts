@@ -331,6 +331,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set([
   'missing_kinds',
   'request_conflict',
   'kind_taken',
+  'agent_in_use',
   'not_initialized',
   'protocol_version',
   'invalid_params',

@@ -155,6 +155,14 @@ class SqliteStore implements Store {
     });
   }
 
+  deleteBundle(ref: AgentRef): Promise<void> {
+    return this.#run(() => {
+      this.#db
+        .prepare('DELETE FROM bundles WHERE name = ? AND version = ?')
+        .run(ref.name, ref.version);
+    });
+  }
+
   listBundles(): Promise<(AgentRef & { hash: string; instances: number })[]> {
     return this.#run(() =>
       this.#db

@@ -165,6 +165,7 @@ export type ErrorCode =
   | 'missing_kinds'
   | 'request_conflict'
   | 'kind_taken'
+  | 'agent_in_use'
   | 'not_initialized'
   | 'protocol_version'
   | 'invalid_params'

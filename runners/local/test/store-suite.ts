@@ -94,6 +94,9 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
         { name: 'echo', version: '1', hash: 'h1', instances: 0 },
         { name: 'echo', version: '2', hash: 'h2', instances: 0 },
       ]);
+      await again.deleteBundle({ name: 'echo', version: '2' });
+      expect(await again.getBundle({ name: 'echo', version: '2' })).toBeNull();
+      expect((await again.listBundles()).map((b) => b.version)).toEqual(['1']);
     });
 
     it('creates an instance with its init step, once', async () => {

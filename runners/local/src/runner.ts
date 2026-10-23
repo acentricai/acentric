@@ -167,7 +167,8 @@ export type RunnerErrorCode =
   | 'invalid_bundle'
   | 'missing_kinds'
   | 'request_conflict'
-  | 'kind_taken';
+  | 'kind_taken'
+  | 'agent_in_use';
 
 export class RunnerError extends Error {
   readonly code: RunnerErrorCode;
@@ -475,6 +476,24 @@ export class LocalRunner {
 
   listAgents(): Promise<(AgentRef & { hash: string; instances: number })[]> {
     return this.#store.listBundles();
+  }
+
+  /** Removes a deployed version no instance uses, such as an old dev version. */
+  async undeploy(ref: AgentRef): Promise<void> {
+    this.#open();
+    const deployed = (await this.#store.listBundles()).find(
+      (bundle) => bundle.name === ref.name && bundle.version === ref.version,
+    );
+    if (deployed === undefined)
+      throw new RunnerError('no_agent', `agent ${ref.name}@${ref.version} is not deployed`);
+    if (deployed.instances > 0) {
+      throw new RunnerError(
+        'agent_in_use',
+        `${deployed.instances} instances still use ${ref.name}@${ref.version}`,
+      );
+    }
+    await this.#store.deleteBundle(ref);
+    this.#codes.delete(`${ref.name}@${ref.version}`);
   }
 
   // ---- instances ------------------------------------------------------------

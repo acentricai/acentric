@@ -140,6 +140,8 @@ export type Store = {
   putBundle(bundle: Bundle): Promise<'stored' | 'exists'>;
   getBundle(ref: AgentRef): Promise<Bundle | null>;
   listBundles(): Promise<(AgentRef & { hash: string; instances: number })[]>;
+  /** Removes a bundle. The runner removes only bundles no instance uses. */
+  deleteBundle(ref: AgentRef): Promise<void>;
 
   /** Saves a new instance with its init step, atomically. Refuses an id already used. */
   create(

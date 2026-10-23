@@ -1,6 +1,7 @@
 // The protocol's transports: one JSON message per line on a pair of
 // streams, such as stdin and stdout, or one per WebSocket frame.
 
+import type { Server as HttpServer } from 'node:http';
 import type { Readable, Writable } from 'node:stream';
 
 import { WebSocketServer } from 'ws';
@@ -43,12 +44,18 @@ export type WebSocketListener = {
   close(): Promise<void>;
 };
 
-/** Serves connections over WebSocket. */
+/**
+ * Serves connections over WebSocket: on its own port, or on an HTTP server
+ * that also serves other things, such as a page that talks to the runner.
+ */
 export async function serveWebSocket(
   runner: LocalRunner,
-  options: { host: string; port: number },
+  options: { host: string; port: number } | { server: HttpServer },
 ): Promise<WebSocketListener> {
-  const server = new WebSocketServer({ host: options.host, port: options.port });
+  const server =
+    'server' in options
+      ? new WebSocketServer({ server: options.server })
+      : new WebSocketServer({ host: options.host, port: options.port });
   server.on('connection', (socket) => {
     const connection = connect(runner, {
       send: (message) => {
@@ -64,14 +71,17 @@ export async function serveWebSocket(
     socket.on('close', () => connection.closed());
     socket.on('error', () => socket.terminate());
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once('listening', resolve);
-    server.once('error', reject);
-  });
-  const address = server.address();
-  const port = typeof address === 'object' && address !== null ? address.port : options.port;
+  if (!('server' in options)) {
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve);
+      server.once('error', reject);
+    });
+  }
+  const address = 'server' in options ? options.server.address() : server.address();
+  const bound = typeof address === 'object' && address !== null ? address : null;
+  const host = 'server' in options ? (bound?.address ?? '127.0.0.1') : options.host;
   return {
-    url: `ws://${options.host}:${port}`,
+    url: `ws://${host}:${bound?.port ?? 0}`,
     close: () =>
       new Promise((resolve) => {
         for (const client of server.clients) client.terminate();
