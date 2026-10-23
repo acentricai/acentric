@@ -1,10 +1,9 @@
 // A JSON-RPC 2.0 peer over any channel that carries Json messages: both
-// sides can send requests and notifications. The runner uses it to talk to
-// its handler hosts over their IPC channel.
+// sides can send requests and notifications. Applications and runners use it
+// over stdio and WebSocket, and the local runner over its handler hosts' IPC
+// channels.
 
 import type { Json, JsonObject } from '@acentric/types';
-
-import { isJson } from './json.js';
 
 export type RpcMessage = JsonObject;
 
@@ -16,11 +15,13 @@ export type RpcHandlers = {
 
 export class RpcError extends Error {
   readonly code: number;
+  readonly data: Json | undefined;
 
-  constructor(code: number, message: string) {
+  constructor(code: number, message: string, data?: Json) {
     super(message);
     this.name = 'RpcError';
     this.code = code;
+    this.data = data;
   }
 }
 
@@ -71,7 +72,14 @@ export class RpcPeer {
     if (typeof error === 'object' && error !== null) {
       const code: unknown = Reflect.get(error, 'code');
       const text: unknown = Reflect.get(error, 'message');
-      pending.reject(new RpcError(typeof code === 'number' ? code : -32603, String(text)));
+      const data: unknown = Reflect.get(error, 'data');
+      pending.reject(
+        new RpcError(
+          typeof code === 'number' ? code : -32603,
+          typeof text === 'string' ? text : 'unknown error',
+          isJson(data) ? data : undefined,
+        ),
+      );
     } else {
       const result: unknown = Reflect.get(message, 'result');
       pending.resolve(isJson(result) ? result : null);
@@ -94,8 +102,52 @@ export class RpcPeer {
         if (this.#closed !== null) return;
         const code = error instanceof RpcError ? error.code : -32603;
         const message = error instanceof Error ? error.message : String(error);
-        this.#send({ jsonrpc: '2.0', id, error: { code, message } });
+        const data = error instanceof RpcError ? error.data : undefined;
+        this.#send({
+          jsonrpc: '2.0',
+          id,
+          error: { code, message, ...(data === undefined ? {} : { data }) },
+        });
       },
     );
   }
+}
+
+/**
+ * Splits a stream of text into lines, for one JSON message per line.
+ * Returns a function to feed it chunks as they arrive.
+ */
+export function lineSplitter(line: (text: string) => void): (chunk: string) => void {
+  let buffer = '';
+  return (chunk) => {
+    buffer += chunk;
+    for (let end = buffer.indexOf('\n'); end !== -1; end = buffer.indexOf('\n')) {
+      const text = buffer.slice(0, end).trim();
+      buffer = buffer.slice(end + 1);
+      if (text.length > 0) line(text);
+    }
+  };
+}
+
+/** Parses one message, or returns null for text that is not Json. */
+export function parseMessage(text: string): Json | null {
+  try {
+    const value: unknown = JSON.parse(text);
+    return isJson(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a value is plain Json. */
+export function isJson(value: unknown): value is Json {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJson);
+  if (typeof value !== 'object') return false;
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return (
+    (prototype === Object.prototype || prototype === null) &&
+    Object.values(value).every((item) => item !== undefined && isJson(item))
+  );
 }
