@@ -71,7 +71,7 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
   readonly #log: LogEntry[] = [];
   #now: number;
   #running = new Map<string, EffectRequest<K>>();
-  readonly #finished = new Set<string>();
+  #finished = new Set<string>();
   #inputs = 0;
 
   constructor(agent: Agent<S, C, K>, config: C, now: number) {
@@ -83,10 +83,9 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
     if ('error' in result) {
       throw new SimulationError(`init rejected the config: ${JSON.stringify(result.error)}`);
     }
-    assertJson(result.snapshot, 'init snapshot');
-    this.#snapshot = deepFreeze(result.snapshot);
-    this.#append(result.append ?? [], 'init append');
-    this.#reconcile(null);
+    const prepared = this.#prepare(result.snapshot, result.append ?? [], null, 'init');
+    this.#snapshot = prepared.snapshot;
+    this.#apply(prepared);
   }
 
   get snapshot(): S {
@@ -127,14 +126,7 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
 
   /** The state a step would see now, with the log window the agent asks for. */
   state(): State<S, C> {
-    const next = this.#log.length + 1;
-    const asked = this.#agent.window?.(this.#snapshot) ?? 1;
-    const start = Math.min(Math.max(Math.floor(asked), 1), next);
-    return {
-      snapshot: this.#snapshot,
-      log: { start, next, entries: this.#log.slice(start - 1) },
-      config: this.#config,
-    };
+    return this.#stateOf(this.#snapshot, this.#log);
   }
 
   /** Moves the clock forward. */
@@ -151,8 +143,6 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
   /** Delivers a running effect's outcome. */
   report(key: string, outcome: Outcome): Delivery<K> {
     const request = this.effect(key);
-    this.#running.delete(key);
-    this.#finished.add(key);
     // The union variant for this request's kind is chosen at runtime.
     const message = { type: 'effect', key, kind: request.kind, outcome } as EffectMessage<K>;
     return this.send(message, key);
@@ -180,7 +170,11 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
     return delivery;
   }
 
-  /** Delivers any message to step. Use `configure` for a config change, so the config is kept. */
+  /**
+   * Delivers any message to step. Use `configure` for a config change, so
+   * the config is kept. A step that throws, returns something that is not
+   * Json, or names an effect key twice changes nothing.
+   */
   send(message: Message<K>, reported: string | null = null): Delivery<K> {
     assertJson(message, 'message');
     const frozen = deepFreeze(structuredClone(message));
@@ -192,25 +186,46 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
       assertJson(result.error, 'rejection');
       return { rejected: result.error, appended: [], started: [], cancelled: [], aborted: [] };
     }
-    assertJson(result.snapshot, 'step snapshot');
-    this.#snapshot = deepFreeze(result.snapshot);
-    const appended = this.#append(result.append ?? [], 'step append');
-    return { rejected: null, appended, ...this.#reconcile(reported) };
+    const prepared = this.#prepare(result.snapshot, result.append ?? [], reported, 'step');
+    this.#apply(prepared);
+    const { entries, started, cancelled, aborted } = prepared;
+    return { rejected: null, appended: entries, started, cancelled, aborted };
   }
 
-  #append(entries: readonly { kind: string; body: Json }[], where: string): LogEntry[] {
-    const appended: LogEntry[] = [];
-    for (const { kind, body } of entries) {
-      assertJson(body, `${where} ${kind}`);
-      const entry = deepFreeze({ seq: this.#log.length + 1, at: this.#now, kind, body });
-      this.#log.push(entry);
-      appended.push(entry);
+  /** The state a step would see with this snapshot and log. */
+  #stateOf(snapshot: S, log: readonly LogEntry[]): State<S, C> {
+    const next = log.length + 1;
+    const asked = this.#agent.window?.(snapshot) ?? 1;
+    const start = Math.min(Math.max(Math.floor(asked), 1), next);
+    return { snapshot, log: { start, next, entries: log.slice(start - 1) }, config: this.#config };
+  }
+
+  /**
+   * Checks everything a step's result leads to, changing nothing: the
+   * snapshot, the appended entries, and the effects that should then exist,
+   * matched against those running.
+   */
+  #prepare(
+    snapshot: S,
+    append: readonly { kind: string; body: Json }[],
+    reported: string | null,
+    where: string,
+  ): Prepared<S, K> {
+    assertJson(snapshot, `${where} snapshot`);
+    const entries = append.map(({ kind, body }, index) => {
+      assertJson(body, `${where} append ${kind}`);
+      return deepFreeze({ seq: this.#log.length + 1 + index, at: this.#now, kind, body });
+    });
+    const state = this.#stateOf(snapshot, [...this.#log, ...entries]);
+    if (this.#agent.view) assertJson(this.#agent.view(state), `${where} view`);
+    const list = this.#agent.effects?.(state) ?? [];
+
+    const finished = new Set(this.#finished);
+    const previous = new Map(this.#running);
+    if (reported !== null) {
+      previous.delete(reported);
+      finished.add(reported);
     }
-    return appended;
-  }
-
-  #reconcile(reported: string | null): Omit<Delivery<K>, 'rejected' | 'appended'> {
-    const list = this.#agent.effects?.(this.state()) ?? [];
     const seen = new Set<string>();
     const running = new Map<string, EffectRequest<K>>();
     const started: EffectRequest<K>[] = [];
@@ -219,12 +234,12 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
       if (seen.has(request.key))
         throw new SimulationError(`effect ${request.key} is declared twice`);
       seen.add(request.key);
-      if (this.#finished.has(request.key)) continue;
-      const previous = this.#running.get(request.key);
-      if (previous) {
-        const abort = request.abort === true && previous.abort !== true;
+      if (finished.has(request.key)) continue;
+      const before = previous.get(request.key);
+      if (before) {
+        const abort = request.abort === true && before.abort !== true;
         if (abort) aborted.push(request.key);
-        running.set(request.key, abort ? { ...previous, abort: true } : previous);
+        running.set(request.key, abort ? { ...before, abort: true } : before);
       } else {
         assertJson(request, `effect ${request.key}`);
         const frozen = deepFreeze(structuredClone(request));
@@ -232,14 +247,34 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
         started.push(frozen);
       }
     }
-    const cancelled: string[] = [];
-    for (const key of this.#running.keys()) {
-      if (!running.has(key) && key !== reported) {
-        cancelled.push(key);
-        this.#finished.add(key);
-      }
-    }
-    this.#running = running;
-    return { started, cancelled, aborted };
+    const cancelled = [...previous.keys()].filter((key) => !running.has(key));
+    for (const key of cancelled) finished.add(key);
+    return {
+      snapshot: deepFreeze(snapshot),
+      entries,
+      running,
+      finished,
+      started,
+      cancelled,
+      aborted,
+    };
+  }
+
+  #apply(prepared: Prepared<S, K>): void {
+    this.#snapshot = prepared.snapshot;
+    this.#log.push(...prepared.entries);
+    this.#running = prepared.running;
+    this.#finished = prepared.finished;
   }
 }
+
+/** A step's result, checked and ready to apply. */
+type Prepared<S extends JsonObject, K extends Kinds> = {
+  snapshot: S;
+  entries: LogEntry[];
+  running: Map<string, EffectRequest<K>>;
+  finished: Set<string>;
+  started: EffectRequest<K>[];
+  cancelled: string[];
+  aborted: string[];
+};
