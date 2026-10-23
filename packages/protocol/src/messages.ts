@@ -3,7 +3,7 @@
 // JSON-RPC 2.0, one message per line on stdio or one per WebSocket frame.
 //
 // A rejection or a failed step is a normal result, an `Answer`. JSON-RPC
-// errors are for problems with the request itself: an unknown instance, bad
+// errors are for problems with the request itself: an unknown session, bad
 // params, an agent that is not deployed. Their `data.code` names the problem.
 
 import type { Json, JsonObject, LogEntry, Mode } from '@acentric/types';
@@ -27,7 +27,7 @@ export type RunningEffect = {
   active: boolean;
 };
 
-export type InstanceInfo = {
+export type SessionInfo = {
   id: string;
   agent: AgentRef;
   status: Status;
@@ -35,13 +35,13 @@ export type InstanceInfo = {
   view: Json;
   nextSeq: number;
   running: RunningEffect[];
-  /** Whether a job is running or waiting in the instance's mailbox. */
+  /** Whether a job is running or waiting in the session's mailbox. */
   working: boolean;
   /** The agent's snapshot, when asked for: for debugging, since callers otherwise see the view. */
   snapshot?: JsonObject;
 };
 
-export type InstanceListing = {
+export type SessionListing = {
   id: string;
   agent: AgentRef;
   status: Status;
@@ -89,37 +89,37 @@ export type RunnerMethods = {
   'agents/deploy': { params: DeployParams; result: { hash: string; deployed: boolean } };
   'agents/list': {
     params: Empty;
-    result: { agents: (AgentRef & { hash: string; instances: number })[] };
+    result: { agents: (AgentRef & { hash: string; sessions: number })[] };
   };
-  'instances/create': {
+  'sessions/create': {
     params: { agent: AgentRef; config: JsonObject; id?: string };
     result: Answer & { id?: string };
   };
-  'instances/input': {
+  'sessions/input': {
     params: { id: string; input: { id?: string; kind: string; payload: JsonObject } };
     result: Answer;
   };
-  'instances/configure': {
+  'sessions/configure': {
     params: { id: string; config: JsonObject; requestId?: string };
     result: Answer;
   };
-  'instances/upgrade': { params: { id: string; to: string }; result: Answer };
-  'instances/get': { params: { id: string; snapshot?: boolean }; result: InstanceInfo };
-  'instances/list': {
+  'sessions/upgrade': { params: { id: string; to: string }; result: Answer };
+  'sessions/get': { params: { id: string; snapshot?: boolean }; result: SessionInfo };
+  'sessions/list': {
     params: { agent?: string; faulted?: boolean; after?: string; limit?: number };
-    result: { instances: InstanceListing[] };
+    result: { sessions: SessionListing[] };
   };
-  'instances/log': { params: LogParams; result: LogPageResult };
-  'instances/delete': { params: { id: string }; result: Empty };
+  'sessions/log': { params: LogParams; result: LogPageResult };
+  'sessions/delete': { params: { id: string }; result: Empty };
   /**
-   * Starts notifications for an instance under a subscription id the client
+   * Starts notifications for a session under a subscription id the client
    * chooses: first the log after `after`, from the store, then each step.
    */
-  'instances/subscribe': {
+  'sessions/subscribe': {
     params: { id: string; subscription: string; after?: number; emits?: boolean };
     result: Empty;
   };
-  'instances/unsubscribe': { params: { subscription: string }; result: Empty };
+  'sessions/unsubscribe': { params: { subscription: string }; result: Empty };
 };
 
 /** Notifications the runner sends an application. */
@@ -129,12 +129,12 @@ export type RunnerNotifications = {
   status: { subscription: string; id: string; status: Status; fault: string | null };
   emit: { subscription: string; id: string; key: string; delta: Json };
   /** Fires the signal of an effect an application is running. */
-  'effect/cancel': { instance: string; key: string };
+  'effect/cancel': { session: string; key: string };
 };
 
 /** One effect for an application to run. */
 export type EffectRun = {
-  instance: string;
+  session: string;
   key: string;
   kind: string;
   args: Json;
@@ -151,15 +151,15 @@ export type ProviderMethods = {
 
 /** Notifications an application that provides kinds sends the runner. */
 export type ProviderNotifications = {
-  'effect/emit': { instance: string; key: string; delta: Json };
+  'effect/emit': { session: string; key: string; delta: Json };
 };
 
 /** What a JSON-RPC error's `data.code` can say. */
 export type ErrorCode =
   | 'closed'
   | 'no_agent'
-  | 'no_instance'
-  | 'instance_exists'
+  | 'no_session'
+  | 'session_exists'
   | 'bundle_conflict'
   | 'invalid_bundle'
   | 'missing_kinds'

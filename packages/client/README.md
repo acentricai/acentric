@@ -50,4 +50,4 @@ A handler's result becomes the effect's `ok` outcome and a thrown error its
 failure. While no client provides a kind, its effects wait.
 
 Requests the runner refuses throw `RunnerRequestError`, whose `code` names
-the problem, such as `no_instance`.
+the problem, such as `no_session`.

@@ -26,7 +26,7 @@ export type RunningEffect = {
 export type Adapter = {
   /** The features this runner offers. */
   supports: readonly Feature[];
-  /** Creates the scenario's instance from a probe bundle. */
+  /** Creates the scenario's session from a probe bundle. */
   create(bundle: Bundle, config: JsonObject): Promise<Answer>;
   input(kind: string, payload: JsonObject): Promise<Answer>;
   configure(config: JsonObject): Promise<Answer>;
@@ -45,7 +45,7 @@ export type Adapter = {
   emitted(key: string): Promise<Json[]>;
   /** Stops the runner abruptly and starts it again. Needed for 'durable'. */
   crash?(): Promise<void>;
-  /** Upgrades the instance to version 2 of the probe. Needed for 'upgrade'. */
+  /** Upgrades the session to version 2 of the probe. Needed for 'upgrade'. */
   upgrade?(): Promise<Answer>;
   close(): Promise<void>;
 };

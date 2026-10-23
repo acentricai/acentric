@@ -17,7 +17,7 @@ export type HostOutcome =
   { value: Json } | { invalid: true } | { thrown: Json } | { crashed: true };
 
 export type EffectRun = {
-  instance: string;
+  session: string;
   key: string;
   kind: string;
   args: Json;
@@ -32,8 +32,8 @@ export type PoolOptions = {
   /** How long a host with nothing to run stays up. */
   idleMs: number;
   secret(name: string): string | undefined;
-  readLog(instance: string, query: LogQuery): Promise<Json>;
-  emitted(instance: string, key: string, delta: Json): void;
+  readLog(session: string, query: LogQuery): Promise<Json>;
+  emitted(session: string, key: string, delta: Json): void;
 };
 
 const CHILD = fileURLToPath(new URL('./child.js', import.meta.url));
@@ -76,7 +76,7 @@ export class HostPool {
       clearTimeout(host.idle);
       host.idle = null;
     }
-    const id = `${effect.instance}\u0000${effect.key}`;
+    const id = `${effect.session}\u0000${effect.key}`;
     return new Promise((resolve) => {
       host.running.set(id, resolve);
       host.peer.request('effect/run', effect).then(
@@ -87,8 +87,8 @@ export class HostPool {
   }
 
   /** Fires an effect's signal, if it is running. */
-  cancel(hash: string, instance: string, key: string): void {
-    this.#hosts.get(hash)?.peer.notify('effect/cancel', { instance, key });
+  cancel(hash: string, session: string, key: string): void {
+    this.#hosts.get(hash)?.peer.notify('effect/cancel', { session, key });
   }
 
   /** Stops every host. Effects still running report crashed. */
@@ -134,9 +134,9 @@ export class HostPool {
           request: (method, params) => this.#answer(method, params),
           notify: (method, params) => {
             if (method !== 'effect/emit' || !isObject(params)) return;
-            const { instance, key, delta } = params;
-            if (typeof instance === 'string' && typeof key === 'string' && delta !== undefined) {
-              this.#options.emitted(instance, key, delta);
+            const { session, key, delta } = params;
+            if (typeof session === 'string' && typeof key === 'string' && delta !== undefined) {
+              this.#options.emitted(session, key, delta);
             }
           },
         },
@@ -160,10 +160,10 @@ export class HostPool {
       return value;
     }
     if (method === 'log/list') {
-      const instance = params['instance'];
-      if (typeof instance !== 'string') throw new RpcError(-32602, 'log/list needs an instance');
+      const session = params['session'];
+      if (typeof session !== 'string') throw new RpcError(-32602, 'log/list needs a session');
       const query = isObject(params['query']) ? toQuery(params['query']) : {};
-      return this.#options.readLog(instance, query);
+      return this.#options.readLog(session, query);
     }
     throw new RpcError(-32601, `unknown method ${method}`);
   }

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { connectWebSocket, RunnerRequestError } from '@acentric/client';
-import type { InstanceEvent, RunnerClient } from '@acentric/client';
+import type { SessionEvent, RunnerClient } from '@acentric/client';
 import { spawnRunner } from '@acentric/client/node';
 import type { ProvidedHandler, SpawnedRunner } from '@acentric/client/node';
 import type { Json } from '@acentric/types';
@@ -161,7 +161,7 @@ describe('the protocol', () => {
     });
     await client.deploy(bundle);
     const id = await created(client);
-    const events: InstanceEvent[] = [];
+    const events: SessionEvent[] = [];
     await client.subscribe(id, { emits: true }, (event) => events.push(event));
     await client.input(id, {
       kind: 'ask',
@@ -231,7 +231,7 @@ describe('the protocol', () => {
     const id = await created(client);
     await client.input(id, { kind: 'ask', payload: { key: 'w1', kind: 'work' } });
     await until('the first result', async () => (await results(client, id)).length === 1);
-    const events: InstanceEvent[] = [];
+    const events: SessionEvent[] = [];
     const subscription = await client.subscribe(id, { emits: true }, (event) => events.push(event));
     await client.input(id, { kind: 'ask', payload: { key: 'w2', kind: 'work', args: { ms: 30 } } });
     await until('the second result', async () => (await results(client, id)).length === 2);
@@ -263,7 +263,7 @@ describe('the protocol', () => {
   it('refuses bad requests with a code', async () => {
     const dir = await workspace();
     const { client } = await runner(dir);
-    await expect(client.get('nope')).rejects.toMatchObject({ code: 'no_instance' });
+    await expect(client.get('nope')).rejects.toMatchObject({ code: 'no_session' });
     await expect(client.create('missing@1', {})).rejects.toMatchObject({ code: 'no_agent' });
     await expect(client.deploy({ name: 'x', version: '1' })).rejects.toBeInstanceOf(
       RunnerRequestError,

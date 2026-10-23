@@ -20,13 +20,13 @@ runner.view(id);
 
 ## How it runs
 
-Each instance has a mailbox. Messages are taken one at a time: the step
+Each session has a mailbox. Messages are taken one at a time: the step
 runs, its whole result is checked (Json, view, window, duplicate keys),
 and then the snapshot, log entries, config and effects are applied
 together. Only then do cancelled and aborted handlers get their signal, new
 handlers start, and the caller get its answer. A step that fails applies
 nothing. A failed input or config change is answered `failed`; a failed
-effect or `migrated` step stops the instance, and `fault(id)` says why.
+effect or `migrated` step stops the session, and `fault(id)` says why.
 
 Handlers run in this process, concurrently. Their results join the mailbox
 in the order they finish. A result for a key that was cancelled meanwhile
@@ -57,7 +57,7 @@ attempt (or fail `attempts_exhausted`), once effects are reported
 `interrupted`, timers are scheduled again and effects no longer declared
 are cancelled. Nothing outlives the process.
 
-`upgrade(id, agent)` moves an instance to another loaded version of its
+`upgrade(id, agent)` moves a session to another loaded version of its
 agent between steps: `migrate` runs, and `migrated` is the first message
-the new version sees. If `migrate` rejects or throws, the instance stays
+the new version sees. If `migrate` rejects or throws, the session stays
 where it was.

@@ -14,7 +14,7 @@ import type { Json, JsonObject, LogQuery, Mode } from '@acentric/types';
 
 import type { HostOutcome } from '../host/pool.js';
 import { RunnerError } from '../runner.js';
-import type { InstanceEvent, LocalRunner, Provider, Provision } from '../runner.js';
+import type { SessionEvent, LocalRunner, Provider, Provision } from '../runner.js';
 
 /** Where the connection's messages go, and how to end it. */
 export type Channel = { send(message: RpcMessage): void };
@@ -44,9 +44,9 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
     },
     notify: (method, params) => {
       if (method !== 'effect/emit' || provision === null || !isObject(params)) return;
-      const { instance, key, delta } = params;
-      if (typeof instance === 'string' && typeof key === 'string' && delta !== undefined) {
-        provision.emitted(instance, key, delta);
+      const { session, key, delta } = params;
+      if (typeof session === 'string' && typeof key === 'string' && delta !== undefined) {
+        provision.emitted(session, key, delta);
       }
     },
   });
@@ -63,7 +63,7 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
         return { thrown: error instanceof Error ? error.message : String(error) };
       }
     },
-    cancel: (instance, key) => peer.notify('effect/cancel', { instance, key }),
+    cancel: (session, key) => peer.notify('effect/cancel', { session, key }),
   };
 
   async function answer(method: string, params: Json): Promise<Json> {
@@ -78,7 +78,7 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
         return deploy(p);
       case 'agents/list':
         return { agents: await runner.listAgents() };
-      case 'instances/create': {
+      case 'sessions/create': {
         const agent = object(p, 'agent');
         const id = optionalText(p, 'id');
         return runner.create(
@@ -87,7 +87,7 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
           id === undefined ? {} : { id },
         );
       }
-      case 'instances/input': {
+      case 'sessions/input': {
         const input = object(p, 'input');
         const inputId = optionalText(input, 'id');
         return runner.input(text(p, 'id'), {
@@ -96,19 +96,19 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
           payload: object(input, 'payload'),
         });
       }
-      case 'instances/configure':
+      case 'sessions/configure':
         return runner.configure(text(p, 'id'), object(p, 'config'), optionalText(p, 'requestId'));
-      case 'instances/upgrade':
+      case 'sessions/upgrade':
         return runner.upgrade(text(p, 'id'), text(p, 'to'));
-      case 'instances/get':
+      case 'sessions/get':
         return runner.get(text(p, 'id'), { snapshot: p['snapshot'] === true });
-      case 'instances/list': {
+      case 'sessions/list': {
         const agent = optionalText(p, 'agent');
         const after = optionalText(p, 'after');
         const faulted = p['faulted'];
         const limit = p['limit'];
         return {
-          instances: await runner.list({
+          sessions: await runner.list({
             ...(agent === undefined ? {} : { agent }),
             ...(after === undefined ? {} : { after }),
             ...(typeof faulted === 'boolean' ? { faulted } : {}),
@@ -116,19 +116,19 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
           }),
         };
       }
-      case 'instances/log': {
+      case 'sessions/log': {
         const page = await runner.log(text(p, 'id'), logQuery(p));
         return {
           entries: [...page.entries],
           ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
         };
       }
-      case 'instances/delete':
+      case 'sessions/delete':
         await runner.delete(text(p, 'id'));
         return {};
-      case 'instances/subscribe':
+      case 'sessions/subscribe':
         return subscribe(p);
-      case 'instances/unsubscribe': {
+      case 'sessions/unsubscribe': {
         const subscription = text(p, 'subscription');
         subscriptions.get(subscription)?.();
         subscriptions.delete(subscription);
@@ -230,7 +230,7 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
   };
 }
 
-function notification(subscription: string, id: string, event: InstanceEvent): Json {
+function notification(subscription: string, id: string, event: SessionEvent): Json {
   switch (event.type) {
     case 'log':
       return { subscription, id, entries: event.entries };

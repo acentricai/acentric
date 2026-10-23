@@ -1,5 +1,5 @@
-// acentric dev on a small project, editing its files while an instance is
-// mid-conversation: saves hot-reload the instance, keeping its log; saving
+// acentric dev on a small project, editing its files while a session is
+// mid-conversation: saves hot-reload the session, keeping its log; saving
 // a fix clears a fault; a build that fails leaves the code as it was.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -101,7 +101,7 @@ async function save(
   text: string,
   id: string,
 ): Promise<Extract<DevEvent, { type: 'upgraded' }>> {
-  const upgraded = s.dev.next((event) => event.type === 'upgraded' && event.instance === id);
+  const upgraded = s.dev.next((event) => event.type === 'upgraded' && event.session === id);
   await writeFile(join(s.dir, 'src', 'shared.ts'), text);
   const event = await upgraded;
   if (event.type !== 'upgraded') throw new Error('not an upgrade');
@@ -123,7 +123,7 @@ const bodies = async (s: Setup, id: string): Promise<Json[]> =>
   (await s.client.log(id)).entries.map((entry) => entry.body);
 
 describe('acentric dev', () => {
-  it('hot-reloads an instance mid-conversation, keeping its log', async () => {
+  it('hot-reloads a session mid-conversation, keeping its log', async () => {
     const s = await setup();
     const first = s.dev.versions()['notes'];
     expect(first).toMatch(/^1\.0\.0-dev\.[0-9a-f]{12}$/);
@@ -170,7 +170,7 @@ describe('acentric dev', () => {
     expect((await s.client.get(id)).status).toBe('idle');
   });
 
-  it('keeps instances on their code when a build fails', async () => {
+  it('keeps sessions on their code when a build fails', async () => {
     const s = await setup();
     const version = s.dev.versions()['notes'];
     const id = await created(s);

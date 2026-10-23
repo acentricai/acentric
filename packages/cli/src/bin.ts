@@ -18,12 +18,12 @@ const USAGE = `usage: acentric <command> [options]
   build                          bundle the project's agents into .acentric/build
   start [--stdio]                run a runner with the built agents
   agents                         deployed agents
-  ls                             instances
-  create <agent@version> [json]  create an instance with a config
+  ls                             sessions
+  create <agent@version> [json]  create a session with a config
   send <id> <kind> [json]        send an input
-  get <id> [--snapshot]          an instance's status, view and running effects
+  get <id> [--snapshot]          a session's status, view and running effects
   log <id> [-f] [--emits]        the log; -f follows it, --emits shows streamed text
-  upgrade <id> <version>         move an instance to another deployed version
+  upgrade <id> <version>         move a session to another deployed version
 
 options:
   -C, --dir DIR       the project (default: the current directory)
@@ -32,7 +32,7 @@ options:
   --listen URL        where start listens
   --store SPEC        the store for start or dev: sqlite:./agents.db or fs:./agents
   --port N            dev: the port for the dev UI and the protocol
-  --id ID             create: the instance id
+  --id ID             create: the session id
   --input-id ID       send: the input id, so a retry is answered as the first time
   --after N           log: start after this seq
   --json              log: one JSON entry per line`;

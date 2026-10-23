@@ -1,9 +1,9 @@
-// Layer 2: migrate. Moves an existing agent instance onto a new version of
+// Layer 2: migrate. Moves an existing agent session onto a new version of
 // the agent's code.
 //
-// When and whether instances are upgraded is the runner's policy. The
+// When and whether sessions are upgraded is the runner's policy. The
 // framework defines only the agent's part. At a step boundary the runner
-// calls the new version's migrate with the instance's stored snapshot and
+// calls the new version's migrate with the session's stored snapshot and
 // config, saves what it returns, and then delivers a `migrated` message to
 // the new version's step. From then on the new version's step, effects and
 // handlers are used.
@@ -18,14 +18,14 @@
 //
 // If it fails the way a step can, by throwing, returning something that is
 // not Json or going over a runner limit, the upgrade does not happen and the
-// instance stays on its old version, as with a rejection.
+// session stays on its old version, as with a rejection.
 
 import type { JsonObject } from './json.js';
 import type { Rejection } from './rejection.js';
 
 /**
  * What migrate returns: the converted state, or a rejection. On a rejection
- * the instance stays on its old version and no `migrated` message is sent.
+ * the session stays on its old version and no `migrated` message is sent.
  */
 export type MigrateResult<S extends JsonObject, C extends JsonObject> =
   | {

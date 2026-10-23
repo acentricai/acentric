@@ -1,4 +1,4 @@
-// The local runner: instances kept in a store across restarts, handlers run
+// The local runner: sessions kept in a store across restarts, handlers run
 // in child processes. It follows RUNNERS.md; docs/local-runner.md has the
 // design.
 
@@ -11,11 +11,11 @@ export type {
   AgentRef,
   Bundle,
   InboxItem,
-  InstanceFilter,
-  InstanceRecord,
-  InstanceSummary,
+  SessionFilter,
+  SessionRecord,
+  SessionSummary,
   KindInfo,
-  LoadedInstance,
+  LoadedSession,
   LogRange,
   RequestRecord,
   StepCommit,
@@ -28,9 +28,9 @@ export { createLocalRunner, LocalRunner, RunnerError } from './runner.js';
 export type {
   Answer,
   DeployBundle,
-  InstanceEvent,
-  InstanceInfo,
-  InstanceListing,
+  SessionEvent,
+  SessionInfo,
+  SessionListing,
   LocalRunnerKinds,
   LocalRunnerOptions,
   ProvidedEffect,

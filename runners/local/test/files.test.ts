@@ -39,7 +39,7 @@ const step = (seq: number, n: number): StepCommit => ({
 });
 
 describe('the filesystem store after a crash', () => {
-  const instance = {
+  const session = {
     id: 'i1',
     agent: { name: 'echo', version: '1' },
     config: {},
@@ -58,11 +58,11 @@ describe('the filesystem store after a crash', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  const journal = (): string => join(dir, 'store', 'instances', 'i1', 'journal.jsonl');
+  const journal = (): string => join(dir, 'store', 'sessions', 'i1', 'journal.jsonl');
 
   it('cuts off a last line a crash left half written', async () => {
     const store = await openFileStore(join(dir, 'store'));
-    await store.create(instance, { append: [entry(1)], started: [] });
+    await store.create(session, { append: [entry(1)], started: [] });
     await store.commit('i1', step(2, 1));
     await store.close();
     const before = await readFile(journal(), 'utf8');
@@ -78,7 +78,7 @@ describe('the filesystem store after a crash', () => {
 
   it('refuses a journal damaged before its last line', async () => {
     const store = await openFileStore(join(dir, 'store'));
-    await store.create(instance, { append: [entry(1)], started: [] });
+    await store.create(session, { append: [entry(1)], started: [] });
     await store.commit('i1', step(2, 1));
     await store.close();
     const lines = (await readFile(journal(), 'utf8')).split('\n');
@@ -102,7 +102,7 @@ describe('the filesystem store after a crash', () => {
 
   it('replays the journal after its latest checkpoint', async () => {
     const store = await openFileStore(join(dir, 'store'), { checkpointEvery: 3 });
-    await store.create(instance, { append: [entry(1)], started: [] });
+    await store.create(session, { append: [entry(1)], started: [] });
     for (let seq = 2; seq <= 8; seq += 1) {
       // Each commit follows the one before.
       // oxlint-disable-next-line no-await-in-loop
@@ -110,7 +110,7 @@ describe('the filesystem store after a crash', () => {
     }
     await store.close();
     const checkpoint: unknown = JSON.parse(
-      await readFile(join(dir, 'store', 'instances', 'i1', 'checkpoint.json'), 'utf8'),
+      await readFile(join(dir, 'store', 'sessions', 'i1', 'checkpoint.json'), 'utf8'),
     );
     expect(checkpoint).toMatchObject({ record: { nextSeq: 8 } });
     const again = await openFileStore(join(dir, 'store'), { checkpointEvery: 3 });
@@ -121,9 +121,9 @@ describe('the filesystem store after a crash', () => {
 
   it('writes journals a person can read', async () => {
     const store = await openFileStore(join(dir, 'store'));
-    await store.create(instance, { append: [entry(1)], started: [] });
+    await store.create(session, { append: [entry(1)], started: [] });
     await store.close();
     const [line] = (await readFile(journal(), 'utf8')).trim().split('\n');
-    expect(line).toMatch(/^[0-9a-f]{16} \{"t":"create","instance":\{"id":"i1"/);
+    expect(line).toMatch(/^[0-9a-f]{16} \{"t":"create","session":\{"id":"i1"/);
   });
 });

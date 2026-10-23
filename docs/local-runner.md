@@ -2,7 +2,7 @@
 
 Design decisions for `@acentric/runner-local`, the runner people use on their
 own machine or a single server. It follows [RUNNERS.md](../RUNNERS.md). The
-memory runner is for tests; this one keeps instances across restarts. This
+memory runner is for tests; this one keeps sessions across restarts. This
 file records what was decided and why; open topics are listed at the end.
 
 ## Shape
@@ -36,19 +36,19 @@ app chooses its store when it starts the runner; a Node app can pass its own
 implementation. Opening a store takes it for one runner; a second fails with
 `locked`.
 
-| Group     | Operations                                                                        |
-| --------- | --------------------------------------------------------------------------------- |
-| Code      | `putBundle`, `getBundle`, `listBundles`, `deleteBundle`                           |
-| Instances | `create` (the init step, atomic like commit), `load`, `list`, `pending`, `delete` |
-| Steps     | `commit`, the one atomic operation; `readLog` by range; `findFinished`            |
-| Requests  | `findRequest`, `putRequest` for answers given without a step                      |
-| Between   | `putResult`, `inbox`, `dropResult`, `recordAttempt`, `setFault`                   |
+| Group    | Operations                                                                        |
+| -------- | --------------------------------------------------------------------------------- |
+| Code     | `putBundle`, `getBundle`, `listBundles`, `deleteBundle`                           |
+| Sessions | `create` (the init step, atomic like commit), `load`, `list`, `pending`, `delete` |
+| Steps    | `commit`, the one atomic operation; `readLog` by range; `findFinished`            |
+| Requests | `findRequest`, `putRequest` for answers given without a step                      |
+| Between  | `putResult`, `inbox`, `dropResult`, `recordAttempt`, `setFault`                   |
 
 Two stores come with the runner:
 
 - **SQLite** (`sqlite:PATH`), through Node's built-in `node:sqlite`: each
   commit is one transaction, and exclusive locking takes the file.
-- **Plain files** (`fs:DIR`): a journal per instance, where each commit is one
+- **Plain files** (`fs:DIR`): a journal per session, where each commit is one
   appended, synced line with a checksum, and a checkpoint every 500 lines.
   A last line half written by a crash is cut off on the next open; any other
   damaged line is refused. A lock file holds the owner's pid, and a lock
@@ -63,7 +63,7 @@ accepted. When `commit` resolves, all of it is durable, or none of it is.
 | Effect results | A durable inbox: a result is saved as soon as its handler returns, so a crash before the step does not lose it      |
 | Input ids      | Kept forever with their answer and a payload hash. The same id gets the same answer; a different payload is refused |
 | Finished keys  | Kept forever, looked up by index for newly declared keys, never loaded whole                                        |
-| History        | Never deleted by default; only a whole instance is deleted                                                          |
+| History        | Never deleted by default; only a whole session is deleted                                                           |
 | Code           | Bundles live in the store by hash, so a store is self-contained                                                     |
 | Trust          | A store conformance suite, plus the durable runner scenarios over each store                                        |
 
@@ -74,26 +74,26 @@ bounding them would save little and risk applying an input twice.
 
 JSON-RPC 2.0, one message per line on stdio, the same messages over
 WebSocket. A rejection or a failed step is a normal result; JSON-RPC errors
-are only for protocol problems, such as an unknown instance or bad params,
+are only for protocol problems, such as an unknown session or bad params,
 and their `data.code` names the problem. The messages are typed in
 `@acentric/protocol`; `@acentric/client` speaks them.
 
 **Requests from the app:**
 
-| Method                                     | Does                                                                              |
-| ------------------------------------------ | --------------------------------------------------------------------------------- |
-| `initialize`                               | Agrees on the protocol version, names the client, declares kinds it provides      |
-| `agents/deploy`                            | Installs a bundle under a name and version; the same bundle again is a no-op      |
-| `agents/list`                              | Installed agents and how many instances use each                                  |
-| `instances/create`                         | Runs init and returns the instance id; a caller-chosen id makes it idempotent     |
-| `instances/input`                          | Sends an input; answered after its step is saved                                  |
-| `instances/configure`, `instances/upgrade` | Changes the config, or moves the instance to another installed version            |
-| `instances/get`                            | Agent, status, view and running effects now; the snapshot if asked, for debugging |
-| `instances/list`                           | Instances by agent or status, paged                                               |
-| `instances/log`                            | A range of the log                                                                |
-| `instances/delete`                         | Cancels running effects and removes the instance                                  |
-| `instances/subscribe`, `unsubscribe`       | Starts or stops notifications, under a subscription id the client chooses         |
-| `secrets/set`                              | Sets a secret in memory only                                                      |
+| Method                                   | Does                                                                              |
+| ---------------------------------------- | --------------------------------------------------------------------------------- |
+| `initialize`                             | Agrees on the protocol version, names the client, declares kinds it provides      |
+| `agents/deploy`                          | Installs a bundle under a name and version; the same bundle again is a no-op      |
+| `agents/list`                            | Installed agents and how many sessions use each                                   |
+| `sessions/create`                        | Runs init and returns the session id; a caller-chosen id makes it idempotent      |
+| `sessions/input`                         | Sends an input; answered after its step is saved                                  |
+| `sessions/configure`, `sessions/upgrade` | Changes the config, or moves the session to another installed version             |
+| `sessions/get`                           | Agent, status, view and running effects now; the snapshot if asked, for debugging |
+| `sessions/list`                          | Sessions by agent or status, paged                                                |
+| `sessions/log`                           | A range of the log                                                                |
+| `sessions/delete`                        | Cancels running effects and removes the session                                   |
+| `sessions/subscribe`, `unsubscribe`      | Starts or stops notifications, under a subscription id the client chooses         |
+| `secrets/set`                            | Sets a secret in memory only                                                      |
 
 **Notifications from the runner,** while subscribed:
 
@@ -102,10 +102,10 @@ and their `data.code` names the problem. The messages are typed in
 | `log`        | A step appended entries. Gapless from `after`: history, then live |
 | `view`       | A step changed the view                                           |
 | `emit`       | A handler streamed a delta. Live only, never stored or replayed   |
-| `status`     | The instance became idle, busy or faulted                         |
+| `status`     | The session became idle, busy or faulted                          |
 
 A subscription's id is the client's, so notifications that arrive before
-the answer to `instances/subscribe`, such as the replayed history, already
+the answer to `sessions/subscribe`, such as the replayed history, already
 say where they belong.
 
 **App-provided handlers.** A bundle names the kinds an app will provide, with
@@ -150,17 +150,17 @@ manifest.json  { name, version, hash, kinds, sdkVersion }
   handler takes down only its host, and dropping an old version means ending
   its host, which also frees its modules.
 - **Faults** are cleared by deploying a fixed version and upgrading the
-  instance; the message that failed is then retried on the new code.
+  session; the message that failed is then retried on the new code.
 
 ## Internals
 
-**One step at a time per instance,** as in the memory runner, with the store
+**One step at a time per session,** as in the memory runner, with the store
 awaited in between:
 
 1. Take the next message: an input, or a result from the durable inbox.
    Results are taken in the order they were saved.
 2. Load the state: the snapshot and the window's entries, from memory if the
-   instance is loaded, from the store if not.
+   session is loaded, from the store if not.
 3. Run step, synchronously, on frozen inputs.
 4. Check the result: Json, view, the effects to start, cancel and abort.
    Newly declared keys are looked up among finished keys in one batch.
@@ -168,16 +168,16 @@ awaited in between:
 6. Act: answer the caller, cancel, abort and start effects through their
    hosts, notify subscribers. Nothing outside sees a step before its commit.
 
-**Loaded on demand.** Only active instances are kept in memory: the snapshot,
-the tail of the log and the effects. An instance is loaded when an input, an
-inbox result or a timer needs it, and unloaded after a while idle. An instance
+**Loaded on demand.** Only active sessions are kept in memory: the snapshot,
+the tail of the log and the effects. A session is loaded when an input, an
+inbox result or a timer needs it, and unloaded after a while idle. A session
 waiting for a person needs nothing in memory.
 
 **Timers.** One scheduler holds the due times of every running `@timer`,
 filled from the store on start. Overdue timers fire at once; timers past
 `setTimeout`'s limit of about 24.8 days are armed again in chunks.
 
-**Recovery on start,** for every instance with running effects or inbox
+**Recovery on start,** for every session with running effects or inbox
 results:
 
 1. Inbox results are stepped first. A `once` effect whose result reached the
@@ -190,13 +190,13 @@ results:
    kinds are sent again when their provider connects.
 
 **Handler hosts** start on the first effect for their agent version and stop
-when no instance uses it. The runner enforces time limits, so a frozen host
+when no session uses it. The runner enforces time limits, so a frozen host
 cannot hold an effect forever. A host that crashes counts as a crash for its
 own running effects only: `reissue` effects run again with the next attempt,
 `once` effects are interrupted, and the host restarts with backoff.
 
-**Many instances.** Steps of different instances interleave; each is short
-and synchronous, so a slow step delays every instance. SQLite serializes
+**Many sessions.** Steps of different sessions interleave; each is short
+and synchronous, so a slow step delays every session. SQLite serializes
 commits. A slow subscriber has its `emit`s dropped or merged rather than
 buffered without limit; `log` notifications are never dropped, since a
 subscriber can catch up from the store.
@@ -211,12 +211,12 @@ start, as after a crash.
 One package, `@acentric/cli`, gives the `acentric` command; `npm create
 acentric` scaffolds a project.
 
-| Command                                    | Does                                                                          |
-| ------------------------------------------ | ----------------------------------------------------------------------------- |
-| `acentric dev`                             | Runs a dev runner, rebuilds on save, hot-reloads instances, serves the dev UI |
-| `acentric build`                           | Type-checks, bundles, checks purity, writes manifests                         |
-| `acentric start [--stdio]`                 | Runs the runner on built bundles, over WebSocket or stdio                     |
-| `acentric ls`, `log -f`, `send`, `upgrade` | Inspects and drives a running runner over its WebSocket                       |
+| Command                                    | Does                                                                         |
+| ------------------------------------------ | ---------------------------------------------------------------------------- |
+| `acentric dev`                             | Runs a dev runner, rebuilds on save, hot-reloads sessions, serves the dev UI |
+| `acentric build`                           | Type-checks, bundles, checks purity, writes manifests                        |
+| `acentric start [--stdio]`                 | Runs the runner on built bundles, over WebSocket or stdio                    |
+| `acentric ls`, `log -f`, `send`, `upgrade` | Inspects and drives a running runner over its WebSocket                      |
 
 **A project** holds one or more agents:
 
@@ -243,12 +243,12 @@ Versions come from `package.json`, or per agent in the config.
   handles or provides fails the build. The project is type-checked first with
   its own TypeScript.
 - **Dev** deploys `<version>-dev.<hash>` on every save and upgrades the
-  agent's instances, keeping their state through `migrate`. If the upgrade
-  fails, instances stay on the previous code and the error is shown. A fault
+  agent's sessions, keeping their state through `migrate`. If the upgrade
+  fails, sessions stay on the previous code and the error is shown. A fault
   is fixed by saving the fix: the upgrade clears it and the failed message is
   retried.
 - **The dev UI** is a web page served by `acentric dev`, built only on the
-  protocol: instances, creating one, sending inputs as Json, the log, the
+  protocol: sessions, creating one, sending inputs as Json, the log, the
   view, live emits, running effects and faults. The same port serves the
   protocol over WebSocket and a stream of dev events: builds, deploys and
   upgrades. Dev keeps its own store, apart from the one `start` uses. A dev
@@ -287,7 +287,7 @@ Each milestone ends in something runnable and tested.
    driving it with `acentric send` and `acentric log -f`.
 4. **`acentric dev` and the dev UI.** Done. Watching, dev versions, hot reload
    through upgrades, faults cleared on save. Verified by editing an agent
-   while an instance is mid-conversation.
+   while a session is mid-conversation.
 5. **The filesystem store,** passing the same suite and scenarios. Done.
 6. **`npm create acentric` and templates.** Done, with the `minimal` template;
    more templates, and helpers that make agents easier to write, are next.

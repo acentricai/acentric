@@ -44,26 +44,26 @@ export type StoredEffect = {
   attempt: number;
 };
 
-export type InstanceRecord = {
+export type SessionRecord = {
   id: string;
   agent: AgentRef;
   config: JsonObject;
   snapshot: JsonObject;
   /** The seq the next log entry gets. */
   nextSeq: number;
-  /** Why the instance stopped taking messages, or null. */
+  /** Why the session stopped taking messages, or null. */
   fault: string | null;
-  /** Identifies what created the instance, so creating it again can be recognised. */
+  /** Identifies what created the session, so creating it again can be recognised. */
   createHash: string;
   createdAt: number;
 };
 
-export type LoadedInstance = InstanceRecord & {
+export type LoadedSession = SessionRecord & {
   /** Declared, unfinished effects, in the order they started. */
   running: StoredEffect[];
 };
 
-export type InstanceSummary = {
+export type SessionSummary = {
   id: string;
   agent: AgentRef;
   nextSeq: number;
@@ -72,10 +72,10 @@ export type InstanceSummary = {
   createdAt: number;
 };
 
-export type InstanceFilter = {
+export type SessionFilter = {
   agent?: string;
   faulted?: boolean;
-  /** Only instances whose id sorts after this one, for paging. */
+  /** Only sessions whose id sorts after this one, for paging. */
   after?: string;
   limit?: number;
 };
@@ -100,14 +100,14 @@ export type LogRange = {
 
 /** Everything one step changes, saved together. */
 export type StepCommit = {
-  /** The instance's nextSeq the step was computed from; the commit fails if it moved. */
+  /** The session's nextSeq the step was computed from; the commit fails if it moved. */
   expectedSeq: number;
   snapshot: JsonObject;
   /** The new config, for a config change or an upgrade. */
   config?: JsonObject;
   /** The new agent, for an upgrade. */
   agent?: AgentRef;
-  /** Clears the instance's fault, for an upgrade. */
+  /** Clears the session's fault, for an upgrade. */
   clearFault?: true;
   /** Entries numbered from expectedSeq with no gaps. */
   append: LogEntry[];
@@ -123,7 +123,7 @@ export type StepCommit = {
 };
 
 export type StoreErrorCode =
-  'locked' | 'bundle_conflict' | 'instance_exists' | 'no_instance' | 'stale_commit' | 'invalid';
+  'locked' | 'bundle_conflict' | 'session_exists' | 'no_session' | 'stale_commit' | 'invalid';
 
 export class StoreError extends Error {
   readonly code: StoreErrorCode;
@@ -139,18 +139,18 @@ export type Store = {
   /** Saves a bundle; 'exists' if the same bundle is already saved. Refuses a different one under the same name and version. */
   putBundle(bundle: Bundle): Promise<'stored' | 'exists'>;
   getBundle(ref: AgentRef): Promise<Bundle | null>;
-  listBundles(): Promise<(AgentRef & { hash: string; instances: number })[]>;
-  /** Removes a bundle. The runner removes only bundles no instance uses. */
+  listBundles(): Promise<(AgentRef & { hash: string; sessions: number })[]>;
+  /** Removes a bundle. The runner removes only bundles no session uses. */
   deleteBundle(ref: AgentRef): Promise<void>;
 
-  /** Saves a new instance with its init step, atomically. Refuses an id already used. */
+  /** Saves a new session with its init step, atomically. Refuses an id already used. */
   create(
-    instance: InstanceRecord,
+    session: SessionRecord,
     init: { append: LogEntry[]; started: StoredEffect[]; request?: RequestRecord },
   ): Promise<void>;
-  load(id: string): Promise<LoadedInstance | null>;
-  list(filter?: InstanceFilter): Promise<InstanceSummary[]>;
-  /** Ids of instances with running effects or inbox items: what recovery looks at. */
+  load(id: string): Promise<LoadedSession | null>;
+  list(filter?: SessionFilter): Promise<SessionSummary[]>;
+  /** Ids of sessions with running effects or inbox items: what recovery looks at. */
   pending(): Promise<string[]>;
 
   /** Saves a step, atomically. */

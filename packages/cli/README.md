@@ -42,22 +42,22 @@ to the project's `package.json` version.
 
 Builds every agent, deploys each as `<version>-dev.<hash>`, where the hash
 names the code, and watches the project. On every save it builds again,
-deploys the new code and upgrades the agent's instances to it, so they keep
+deploys the new code and upgrades the agent's sessions to it, so they keep
 their state, through `migrate` if the agent has one. Because hot reload is
 an upgrade:
 
 - An effect running during a save keeps running, and the new code steps its
   result.
-- An instance faulted by a bug is fixed by saving the fix: the upgrade clears
+- A session faulted by a bug is fixed by saving the fix: the upgrade clears
   the fault, and the message that failed is stepped again on the new code.
-- A build that fails is reported, and instances keep the code they had.
+- A build that fails is reported, and sessions keep the code they had.
 
-Old dev versions no instance uses are removed. Dev keeps its own store,
+Old dev versions no session uses are removed. Dev keeps its own store,
 `.acentric/dev.db`, apart from the one `start` uses, and does not type-check:
 run `acentric build` for that.
 
 One port serves the dev UI, the protocol over WebSocket, and the dev events
-the UI shows. The UI is built only on the protocol: instances and creating
+the UI shows. The UI is built only on the protocol: sessions and creating
 one, sending inputs, the log with each entry expandable, the view, streamed
 emits as they arrive, running effects, faults, and each build, deploy and
 upgrade.
@@ -94,10 +94,10 @@ These talk to the runner at `--url`, or the project's `listen`.
 
 | Command                                   | Does                                                   |
 | ----------------------------------------- | ------------------------------------------------------ |
-| `agents`                                  | deployed agents and their instance counts              |
-| `ls`                                      | instances, with status and entry counts                |
-| `create <agent@version> [config] [--id]`  | creates an instance and prints its id                  |
+| `agents`                                  | deployed agents and their session counts               |
+| `ls`                                      | sessions, with status and entry counts                 |
+| `create <agent@version> [config] [--id]`  | creates a session and prints its id                    |
 | `send <id> <kind> [payload] [--input-id]` | sends an input and prints the answer                   |
 | `get <id> [--snapshot]`                   | status, view and running effects as JSON               |
 | `log <id> [-f] [--emits] [--json]`        | the log; `-f` follows it, `--emits` adds streamed text |
-| `upgrade <id> <version>`                  | moves an instance to another deployed version          |
+| `upgrade <id> <version>`                  | moves a session to another deployed version            |

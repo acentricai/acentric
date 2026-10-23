@@ -75,8 +75,8 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
     );
   };
 
-  const instance = (): string => {
-    if (id === null) throw new Error('no instance has been created');
+  const session = (): string => {
+    if (id === null) throw new Error('no session has been created');
     return id;
   };
 
@@ -90,7 +90,7 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
   };
 
   const readLog = async (after = 0): Promise<LogEntry[]> => {
-    const page = await client().log(instance(), { after });
+    const page = await client().log(session(), { after });
     const last = page.entries.at(-1);
     if (page.cursor === undefined || last === undefined) return page.entries;
     return [...page.entries, ...(await readLog(last.seq))];
@@ -118,8 +118,8 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
       }
       return answer;
     },
-    input: (kind, payload) => answerOf(() => client().input(instance(), { kind, payload })),
-    configure: (config) => answerOf(() => client().configure(instance(), config)),
+    input: (kind, payload) => answerOf(() => client().input(session(), { kind, payload })),
+    configure: (config) => answerOf(() => client().configure(session(), config)),
     release: (key, outcome) => {
       gates.release(key, outcome);
       return Promise.resolve();
@@ -156,7 +156,7 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
       runner = await start();
       await listen();
     },
-    upgrade: () => answerOf(() => client().upgrade(instance(), '2')),
+    upgrade: () => answerOf(() => client().upgrade(session(), '2')),
     close: async () => {
       await subscription?.close().catch(() => undefined);
       runner.process.kill('SIGKILL');

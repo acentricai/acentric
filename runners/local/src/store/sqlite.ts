@@ -19,11 +19,11 @@ import type {
   AgentRef,
   Bundle,
   InboxItem,
-  InstanceFilter,
-  InstanceRecord,
-  InstanceSummary,
+  SessionFilter,
+  SessionRecord,
+  SessionSummary,
   KindInfo,
-  LoadedInstance,
+  LoadedSession,
   LogRange,
   RequestRecord,
   StepCommit,
@@ -38,34 +38,34 @@ CREATE TABLE IF NOT EXISTS bundles (
   agent TEXT NOT NULL, handlers TEXT NOT NULL, kinds TEXT NOT NULL,
   PRIMARY KEY (name, version)
 );
-CREATE TABLE IF NOT EXISTS instances (
+CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, agent_name TEXT NOT NULL, agent_version TEXT NOT NULL,
   config TEXT NOT NULL, snapshot TEXT NOT NULL, next_seq INTEGER NOT NULL,
   fault TEXT, create_hash TEXT NOT NULL, created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS log (
-  instance TEXT NOT NULL, seq INTEGER NOT NULL, at INTEGER NOT NULL,
+  session TEXT NOT NULL, seq INTEGER NOT NULL, at INTEGER NOT NULL,
   kind TEXT NOT NULL, body TEXT NOT NULL,
-  PRIMARY KEY (instance, seq)
+  PRIMARY KEY (session, seq)
 ) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS effects (
-  instance TEXT NOT NULL, key TEXT NOT NULL, status TEXT NOT NULL,
+  session TEXT NOT NULL, key TEXT NOT NULL, status TEXT NOT NULL,
   request TEXT, mode TEXT, attempt INTEGER,
-  UNIQUE (instance, key)
+  UNIQUE (session, key)
 );
-CREATE INDEX IF NOT EXISTS effects_running ON effects (instance) WHERE status = 'running';
+CREATE INDEX IF NOT EXISTS effects_running ON effects (session) WHERE status = 'running';
 CREATE TABLE IF NOT EXISTS inbox (
-  ord INTEGER PRIMARY KEY AUTOINCREMENT, instance TEXT NOT NULL,
+  ord INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL,
   key TEXT NOT NULL, outcome TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS inbox_instance ON inbox (instance, ord);
+CREATE INDEX IF NOT EXISTS inbox_session ON inbox (session, ord);
 CREATE TABLE IF NOT EXISTS requests (
-  instance TEXT NOT NULL, id TEXT NOT NULL, hash TEXT NOT NULL, answer TEXT NOT NULL,
-  PRIMARY KEY (instance, id)
+  session TEXT NOT NULL, id TEXT NOT NULL, hash TEXT NOT NULL, answer TEXT NOT NULL,
+  PRIMARY KEY (session, id)
 ) WITHOUT ROWID;
 `;
 
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 
 /** Opens, or creates, the store in the SQLite file at `path`. */
 export function openSqliteStore(path: string): Promise<Store> {
@@ -163,12 +163,12 @@ class SqliteStore implements Store {
     });
   }
 
-  listBundles(): Promise<(AgentRef & { hash: string; instances: number })[]> {
+  listBundles(): Promise<(AgentRef & { hash: string; sessions: number })[]> {
     return this.#run(() =>
       this.#db
         .prepare(
           `SELECT b.name, b.version, b.hash,
-             (SELECT count(*) FROM instances i WHERE i.agent_name = b.name AND i.agent_version = b.version) AS instances
+             (SELECT count(*) FROM sessions i WHERE i.agent_name = b.name AND i.agent_version = b.version) AS sessions
            FROM bundles b ORDER BY b.name, b.version`,
         )
         .all()
@@ -176,56 +176,54 @@ class SqliteStore implements Store {
           name: text(row, 'name'),
           version: text(row, 'version'),
           hash: text(row, 'hash'),
-          instances: int(row, 'instances'),
+          sessions: int(row, 'sessions'),
         })),
     );
   }
 
-  // ---- instances ------------------------------------------------------------
+  // ---- sessions ------------------------------------------------------------
 
   create(
-    instance: InstanceRecord,
+    session: SessionRecord,
     init: { append: LogEntry[]; started: StoredEffect[]; request?: RequestRecord },
   ): Promise<void> {
     return this.#run(() =>
       this.#transaction(() => {
-        if (
-          this.#db.prepare('SELECT 1 FROM instances WHERE id = ?').get(instance.id) !== undefined
-        ) {
-          throw new StoreError('instance_exists', `instance ${instance.id} already exists`);
+        if (this.#db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(session.id) !== undefined) {
+          throw new StoreError('session_exists', `session ${session.id} already exists`);
         }
-        const nextSeq = instance.nextSeq + init.append.length;
-        checkDense(init.append, instance.nextSeq);
+        const nextSeq = session.nextSeq + init.append.length;
+        checkDense(init.append, session.nextSeq);
         this.#db
           .prepare(
-            `INSERT INTO instances (id, agent_name, agent_version, config, snapshot, next_seq, fault, create_hash, created_at)
+            `INSERT INTO sessions (id, agent_name, agent_version, config, snapshot, next_seq, fault, create_hash, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
-            instance.id,
-            instance.agent.name,
-            instance.agent.version,
-            JSON.stringify(instance.config),
-            JSON.stringify(instance.snapshot),
+            session.id,
+            session.agent.name,
+            session.agent.version,
+            JSON.stringify(session.config),
+            JSON.stringify(session.snapshot),
             nextSeq,
-            instance.fault,
-            instance.createHash,
-            instance.createdAt,
+            session.fault,
+            session.createHash,
+            session.createdAt,
           );
-        this.#append(instance.id, init.append);
-        this.#start(instance.id, init.started);
-        if (init.request !== undefined) this.#putRequest(instance.id, init.request);
+        this.#append(session.id, init.append);
+        this.#start(session.id, init.started);
+        if (init.request !== undefined) this.#putRequest(session.id, init.request);
       }),
     );
   }
 
-  load(id: string): Promise<LoadedInstance | null> {
+  load(id: string): Promise<LoadedSession | null> {
     return this.#run(() => {
-      const row = this.#db.prepare('SELECT * FROM instances WHERE id = ?').get(id);
+      const row = this.#db.prepare('SELECT * FROM sessions WHERE id = ?').get(id);
       if (row === undefined) return null;
       const running = this.#db
         .prepare(
-          "SELECT request, mode, attempt FROM effects WHERE instance = ? AND status = 'running' ORDER BY rowid",
+          "SELECT request, mode, attempt FROM effects WHERE session = ? AND status = 'running' ORDER BY rowid",
         )
         .all(id)
         .map((effect) => ({
@@ -237,7 +235,7 @@ class SqliteStore implements Store {
     });
   }
 
-  list(filter: InstanceFilter = {}): Promise<InstanceSummary[]> {
+  list(filter: SessionFilter = {}): Promise<SessionSummary[]> {
     return this.#run(() => {
       const where: string[] = [];
       const params: SQLInputValue[] = [];
@@ -255,8 +253,8 @@ class SqliteStore implements Store {
       return this.#db
         .prepare(
           `SELECT id, agent_name, agent_version, next_seq, fault, created_at,
-             (SELECT count(*) FROM effects e WHERE e.instance = instances.id AND e.status = 'running') AS running
-           FROM instances ${where.length === 0 ? '' : `WHERE ${where.join(' AND ')}`}
+             (SELECT count(*) FROM effects e WHERE e.session = sessions.id AND e.status = 'running') AS running
+           FROM sessions ${where.length === 0 ? '' : `WHERE ${where.join(' AND ')}`}
            ORDER BY id LIMIT ?`,
         )
         .all(...params)
@@ -275,11 +273,11 @@ class SqliteStore implements Store {
     return this.#run(() =>
       this.#db
         .prepare(
-          `SELECT DISTINCT instance FROM effects WHERE status = 'running'
-           UNION SELECT DISTINCT instance FROM inbox ORDER BY instance`,
+          `SELECT DISTINCT session FROM effects WHERE status = 'running'
+           UNION SELECT DISTINCT session FROM inbox ORDER BY session`,
         )
         .all()
-        .map((row) => text(row, 'instance')),
+        .map((row) => text(row, 'session')),
     );
   }
 
@@ -304,27 +302,27 @@ class SqliteStore implements Store {
         }
         if (step.clearFault === true) sets.push('fault = NULL');
         const updated = this.#db
-          .prepare(`UPDATE instances SET ${sets.join(', ')} WHERE id = ? AND next_seq = ?`)
+          .prepare(`UPDATE sessions SET ${sets.join(', ')} WHERE id = ? AND next_seq = ?`)
           .run(...params, id, step.expectedSeq);
         if (Number(updated.changes) !== 1) {
-          if (this.#db.prepare('SELECT 1 FROM instances WHERE id = ?').get(id) === undefined) {
-            throw new StoreError('no_instance', `no instance ${id}`);
+          if (this.#db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(id) === undefined) {
+            throw new StoreError('no_session', `no session ${id}`);
           }
           throw new StoreError(
             'stale_commit',
-            `instance ${id} has moved past seq ${step.expectedSeq}`,
+            `session ${id} has moved past seq ${step.expectedSeq}`,
           );
         }
         this.#append(id, step.append);
         this.#finish(id, step.finished);
         const abort = this.#db.prepare(
-          "UPDATE effects SET request = json_set(request, '$.abort', json('true')) WHERE instance = ? AND key = ? AND status = 'running'",
+          "UPDATE effects SET request = json_set(request, '$.abort', json('true')) WHERE session = ? AND key = ? AND status = 'running'",
         );
         for (const key of step.aborted) abort.run(id, key);
         this.#start(id, step.started);
         if (step.consumed !== undefined) {
           const removed = this.#db
-            .prepare('DELETE FROM inbox WHERE ord = ? AND instance = ?')
+            .prepare('DELETE FROM inbox WHERE ord = ? AND session = ?')
             .run(step.consumed, id);
           if (Number(removed.changes) !== 1) {
             throw new StoreError('invalid', `inbox item ${step.consumed} of ${id} does not exist`);
@@ -337,7 +335,7 @@ class SqliteStore implements Store {
 
   readLog(id: string, range: LogRange = {}): Promise<LogEntry[]> {
     return this.#run(() => {
-      const where = ['instance = ?'];
+      const where = ['session = ?'];
       const params: SQLInputValue[] = [id];
       if (range.after !== undefined) {
         where.push('seq > ?');
@@ -374,7 +372,7 @@ class SqliteStore implements Store {
         const chunk = keys.slice(start, start + 500);
         const rows = this.#db
           .prepare(
-            `SELECT key FROM effects WHERE instance = ? AND status = 'finished' AND key IN (${chunk.map(() => '?').join(', ')})`,
+            `SELECT key FROM effects WHERE session = ? AND status = 'finished' AND key IN (${chunk.map(() => '?').join(', ')})`,
           )
           .all(id, ...chunk);
         for (const row of rows) found.add(text(row, 'key'));
@@ -388,7 +386,7 @@ class SqliteStore implements Store {
   findRequest(id: string, requestId: string): Promise<RequestRecord | null> {
     return this.#run(() => {
       const row = this.#db
-        .prepare('SELECT hash, answer FROM requests WHERE instance = ? AND id = ?')
+        .prepare('SELECT hash, answer FROM requests WHERE session = ? AND id = ?')
         .get(id, requestId);
       return row === undefined
         ? null
@@ -405,7 +403,7 @@ class SqliteStore implements Store {
   putResult(id: string, key: string, outcome: Outcome): Promise<number> {
     return this.#run(() => {
       const inserted = this.#db
-        .prepare('INSERT INTO inbox (instance, key, outcome) VALUES (?, ?, ?)')
+        .prepare('INSERT INTO inbox (session, key, outcome) VALUES (?, ?, ?)')
         .run(id, key, JSON.stringify(outcome));
       return Number(inserted.lastInsertRowid);
     });
@@ -414,7 +412,7 @@ class SqliteStore implements Store {
   inbox(id: string): Promise<InboxItem[]> {
     return this.#run(() =>
       this.#db
-        .prepare('SELECT ord, key, outcome FROM inbox WHERE instance = ? ORDER BY ord')
+        .prepare('SELECT ord, key, outcome FROM inbox WHERE session = ? ORDER BY ord')
         .all(id)
         .map((row) => ({
           ord: int(row, 'ord'),
@@ -426,7 +424,7 @@ class SqliteStore implements Store {
 
   dropResult(id: string, ord: number): Promise<void> {
     return this.#run(() => {
-      this.#db.prepare('DELETE FROM inbox WHERE ord = ? AND instance = ?').run(ord, id);
+      this.#db.prepare('DELETE FROM inbox WHERE ord = ? AND session = ?').run(ord, id);
     });
   }
 
@@ -434,7 +432,7 @@ class SqliteStore implements Store {
     return this.#run(() => {
       this.#db
         .prepare(
-          "UPDATE effects SET attempt = ? WHERE instance = ? AND key = ? AND status = 'running'",
+          "UPDATE effects SET attempt = ? WHERE session = ? AND key = ? AND status = 'running'",
         )
         .run(attempt, id, key);
     });
@@ -442,7 +440,7 @@ class SqliteStore implements Store {
 
   setFault(id: string, fault: string): Promise<void> {
     return this.#run(() => {
-      this.#db.prepare('UPDATE instances SET fault = ? WHERE id = ?').run(fault, id);
+      this.#db.prepare('UPDATE sessions SET fault = ? WHERE id = ?').run(fault, id);
     });
   }
 
@@ -450,9 +448,9 @@ class SqliteStore implements Store {
     return this.#run(() =>
       this.#transaction(() => {
         for (const table of ['log', 'effects', 'inbox', 'requests']) {
-          this.#db.prepare(`DELETE FROM ${table} WHERE instance = ?`).run(id);
+          this.#db.prepare(`DELETE FROM ${table} WHERE session = ?`).run(id);
         }
-        this.#db.prepare('DELETE FROM instances WHERE id = ?').run(id);
+        this.#db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
       }),
     );
   }
@@ -469,7 +467,7 @@ class SqliteStore implements Store {
 
   #append(id: string, entries: readonly LogEntry[]): void {
     const insert = this.#db.prepare(
-      'INSERT INTO log (instance, seq, at, kind, body) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO log (session, seq, at, kind, body) VALUES (?, ?, ?, ?, ?)',
     );
     for (const entry of entries)
       insert.run(id, entry.seq, entry.at, entry.kind, JSON.stringify(entry.body));
@@ -477,7 +475,7 @@ class SqliteStore implements Store {
 
   #start(id: string, effects: readonly StoredEffect[]): void {
     const insert = this.#db.prepare(
-      "INSERT INTO effects (instance, key, status, request, mode, attempt) VALUES (?, ?, 'running', ?, ?, ?)",
+      "INSERT INTO effects (session, key, status, request, mode, attempt) VALUES (?, ?, 'running', ?, ?, ?)",
     );
     for (const effect of effects) {
       insert.run(
@@ -492,7 +490,7 @@ class SqliteStore implements Store {
 
   #finish(id: string, keys: readonly string[]): void {
     const update = this.#db.prepare(
-      "UPDATE effects SET status = 'finished', request = NULL, mode = NULL, attempt = NULL WHERE instance = ? AND key = ?",
+      "UPDATE effects SET status = 'finished', request = NULL, mode = NULL, attempt = NULL WHERE session = ? AND key = ?",
     );
     for (const key of keys) {
       if (Number(update.run(id, key).changes) !== 1) {
@@ -503,7 +501,7 @@ class SqliteStore implements Store {
 
   #putRequest(id: string, request: RequestRecord): void {
     this.#db
-      .prepare('INSERT INTO requests (instance, id, hash, answer) VALUES (?, ?, ?, ?)')
+      .prepare('INSERT INTO requests (session, id, hash, answer) VALUES (?, ?, ?, ?)')
       .run(id, request.id, request.hash, JSON.stringify(request.answer));
   }
 
@@ -541,7 +539,7 @@ function checkDense(entries: readonly LogEntry[], from: number): void {
   }
 }
 
-function record(row: Row): InstanceRecord {
+function record(row: Row): SessionRecord {
   return {
     id: text(row, 'id'),
     agent: { name: text(row, 'agent_name'), version: text(row, 'agent_version') },

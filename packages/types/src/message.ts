@@ -86,12 +86,12 @@ export type ConfigMessage = {
 };
 
 /**
- * The instance was just upgraded to this version of the agent's code. It is
+ * The session was just upgraded to this version of the agent's code. It is
  * the first message the new version's step receives, after migrate.
  */
 export type MigratedMessage = {
   readonly type: 'migrated';
-  /** The version the instance was upgraded from. */
+  /** The version the session was upgraded from. */
   readonly from: string;
 };
 

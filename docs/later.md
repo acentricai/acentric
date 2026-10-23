@@ -26,7 +26,7 @@ dropped.
 - **Runtime freezing.** Deep-freezing the state and message given to a step.
 - **Send and wait.** A way for a caller to send an input and wait for the
   agent's answer to it.
-- **`@send`.** Sending an input to another agent instance: reissue, deduplicated
+- **`@send`.** Sending an input to another agent session: reissue, deduplicated
   by key, with runner-defined addressing.
 - **Purity checks.** Optionally checking that the pure half does no I/O.
 - **`@timer`.** A timer kind, stored natively rather than held by a sleeping
@@ -35,14 +35,14 @@ dropped.
   suspend cancels running handlers or lets them finish, whether inputs that
   arrive while suspended are queued or refused. A suspend should not count
   toward a handler's attempts.
-- **Upgrade policy.** Pinning instances to a version or upgrading them, and
+- **Upgrade policy.** Pinning sessions to a version or upgrading them, and
   what happens to effects running during an upgrade.
-- **Faulted instances.** What happens after a step fails deterministically,
+- **Faulted sessions.** What happens after a step fails deterministically,
   retrying infrastructure errors, and how an operator recovers.
 - **Limits and defaults.** Effect counts, sizes, the log window, timeouts and
   attempts.
 - **Log storage.** Paging, and whether old entries are ever deleted.
-- **Effect status.** Showing an instance's effects as queued, running or
+- **Effect status.** Showing a session's effects as queued, running or
   finished, with attempts and timings.
 - **Callers.** How long a caller waits for an input to be accepted or
   rejected, and stating the runner's durability.

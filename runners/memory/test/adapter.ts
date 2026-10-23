@@ -34,8 +34,8 @@ export function memoryAdapter(): Adapter {
     });
   }
 
-  function instance(): string {
-    if (id === null) throw new Error('no instance has been created');
+  function session(): string {
+    if (id === null) throw new Error('no session has been created');
     return id;
   }
 
@@ -65,8 +65,8 @@ export function memoryAdapter(): Adapter {
       }
       return Promise.resolve(answer);
     },
-    input: (kind, payload) => runner.input(instance(), kind, payload),
-    configure: (config) => runner.configure(instance(), config),
+    input: (kind, payload) => runner.input(session(), kind, payload),
+    configure: (config) => runner.configure(session(), config),
     release: (key, outcome) => {
       control.release(key, outcome);
       return Promise.resolve();
@@ -93,7 +93,7 @@ export function memoryAdapter(): Adapter {
             })),
       ),
     signalled: () => Promise.resolve(control.signalled()),
-    // With no instance, as after a rejected create, there is nothing to show.
+    // With no session, as after a rejected create, there is nothing to show.
     log: () => Promise.resolve(id === null ? [] : [...runner.log(id)]),
     snapshot: () => Promise.resolve(id === null ? {} : runner.snapshot(id)),
     emitted: (key) => Promise.resolve(emitted.get(key) ?? []),
@@ -104,7 +104,7 @@ export function memoryAdapter(): Adapter {
       runner.start();
       return Promise.resolve();
     },
-    upgrade: (): Promise<Answer> => runner.upgrade(instance(), probeV2),
+    upgrade: (): Promise<Answer> => runner.upgrade(session(), probeV2),
     close: () => {
       runner.close();
       Reflect.deleteProperty(globalThis, 'conformance');

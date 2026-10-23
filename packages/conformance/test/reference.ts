@@ -30,7 +30,7 @@ export function referenceAdapter(): Adapter {
   const flights = new Map<string, Flight>();
 
   const current = (): Simulation<ProbeSnapshot, JsonObject, Kinds> => {
-    if (sim === null) throw new Error('no instance has been created');
+    if (sim === null) throw new Error('no session has been created');
     return sim;
   };
 
@@ -152,7 +152,7 @@ export function referenceAdapter(): Adapter {
         })),
       ),
     signalled: () => Promise.resolve(control.signalled()),
-    // With no instance, as after a rejected create, there is nothing to show.
+    // With no session, as after a rejected create, there is nothing to show.
     log: () => Promise.resolve([...(sim?.log ?? [])]),
     snapshot: () => Promise.resolve(sim?.snapshot ?? {}),
     emitted: (key) => Promise.resolve(flights.get(key)?.emitted ?? []),

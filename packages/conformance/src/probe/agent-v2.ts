@@ -1,5 +1,5 @@
 // The probe's agent module, version 2: version 1 plus migrate, for upgrade
-// scenarios. Migrating rejects when the instance's config holds
+// scenarios. Migrating rejects when the session's config holds
 // `rejectMigrate: true`; otherwise it records the version it came from.
 
 import type { Agent, JsonObject } from '@acentric/types';

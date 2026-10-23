@@ -1,4 +1,4 @@
-// Every instance's `@timer` effects in one scheduler: due times kept in
+// Every session's `@timer` effects in one scheduler: due times kept in
 // order, with one Node timer armed for the earliest. Node timers wait at
 // most about 24.8 days, so a later due time is reached in steps.
 

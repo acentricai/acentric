@@ -9,15 +9,15 @@ the probe agent they drive, and a player for runners written in TypeScript.
 of RUNNERS.md it checks. A scenario is a list of steps: actions, after each of
 which the runner settles, and expectations about what must then be true.
 
-| Action      | Does                                                              |
-| ----------- | ----------------------------------------------------------------- |
-| `create`    | creates the instance from a probe bundle with a config            |
-| `input`     | sends an input                                                    |
-| `configure` | sends a config change                                             |
-| `release`   | finishes a gate, returning a value or throwing                    |
-| `wait`      | lets a few milliseconds of real time pass                         |
-| `crash`     | stops the runner abruptly and starts it again (needs `durable`)   |
-| `upgrade`   | upgrades the instance to version 2 of the probe (needs `upgrade`) |
+| Action      | Does                                                             |
+| ----------- | ---------------------------------------------------------------- |
+| `create`    | creates the session from a probe bundle with a config            |
+| `input`     | sends an input                                                   |
+| `configure` | sends a config change                                            |
+| `release`   | finishes a gate, returning a value or throwing                   |
+| `wait`      | lets a few milliseconds of real time pass                        |
+| `crash`     | stops the runner abruptly and starts it again (needs `durable`)  |
+| `upgrade`   | upgrades the session to version 2 of the probe (needs `upgrade`) |
 
 | Expectation                      | Checks                                                                      |
 | -------------------------------- | --------------------------------------------------------------------------- |

@@ -1,7 +1,7 @@
-// The memory runner: runs agents' instances in this process, following
+// The memory runner: runs agents' sessions in this process, following
 // RUNNERS.md, and keeps their state in a memory store.
 //
-// Each instance has a mailbox. Messages are taken one at a time: the step
+// Each session has a mailbox. Messages are taken one at a time: the step
 // runs, its result is checked, and then everything it changes is applied at
 // once. Only after that do new handlers start, cancelled and aborted ones
 // get their signal, and the caller get its answer. Handlers run in this
@@ -27,7 +27,7 @@ import type {
 
 import { deepFreeze, frozenCopy, isJson, requireJson, thrownToJson } from './json.js';
 import { createMemoryStore } from './store.js';
-import type { MemoryStore, StoredEffect, StoredInstance } from './store.js';
+import type { MemoryStore, StoredEffect, StoredSession } from './store.js';
 
 /** What a caller is told about a create, input, config change or upgrade. */
 export type Answer = { accepted: true } | { rejected: Json } | { failed: Json };
@@ -148,9 +148,9 @@ export class MemoryRunner {
     return { name: agent.name, version: agent.version };
   }
 
-  // ---- instances ------------------------------------------------------------
+  // ---- sessions ------------------------------------------------------------
 
-  /** Creates an instance, running init. Its id defaults to 'instance-1', 'instance-2', ... */
+  /** Creates a session, running init. Its id defaults to 'session-1', 'session-2', ... */
   create(agent: LoadedAgent, config: JsonObject, id?: string): Answer & { id?: string } {
     const registered = this.#registered(agent);
     if (!isJson(config)) return { failed: 'the config is not plain Json' };
@@ -164,8 +164,8 @@ export class MemoryRunner {
     if ('error' in result) return { rejected: requireJson(result.error, 'the rejection') };
 
     this.store.created += 1;
-    const instance: StoredInstance = {
-      id: id ?? `instance-${this.store.created}`,
+    const session: StoredSession = {
+      id: id ?? `session-${this.store.created}`,
       agent: { name: agent.name, version: agent.version },
       config: frozenCopy(config),
       snapshot: {},
@@ -177,7 +177,7 @@ export class MemoryRunner {
     let prepared;
     try {
       prepared = this.#prepare(
-        instance,
+        session,
         registered,
         result.snapshot,
         result.append ?? [],
@@ -188,59 +188,59 @@ export class MemoryRunner {
     } catch (error) {
       return { failed: thrownToJson(error) };
     }
-    this.store.instances.set(instance.id, instance);
-    this.#apply(instance, prepared);
-    this.#act(instance, registered, prepared);
-    return { accepted: true, id: instance.id };
+    this.store.sessions.set(session.id, session);
+    this.#apply(session, prepared);
+    this.#act(session, registered, prepared);
+    return { accepted: true, id: session.id };
   }
 
   /** Sends an input, answering once its step is saved. The id defaults to a new one. */
-  input(instanceId: string, kind: string, payload: JsonObject, inputId?: string): Promise<Answer> {
+  input(sessionId: string, kind: string, payload: JsonObject, inputId?: string): Promise<Answer> {
     const id = inputId ?? globalThis.crypto.randomUUID();
-    return this.#send(instanceId, { type: 'input', id, kind, payload });
+    return this.#send(sessionId, { type: 'input', id, kind, payload });
   }
 
-  /** Changes an instance's config, answering once its step is saved. */
-  configure(instanceId: string, config: JsonObject): Promise<Answer> {
-    return this.#send(instanceId, { type: 'config', config });
+  /** Changes a session's config, answering once its step is saved. */
+  configure(sessionId: string, config: JsonObject): Promise<Answer> {
+    return this.#send(sessionId, { type: 'config', config });
   }
 
-  /** Moves an instance onto another loaded version of its agent, between steps. */
-  upgrade(instanceId: string, agent: LoadedAgent): Promise<Answer> {
+  /** Moves a session onto another loaded version of its agent, between steps. */
+  upgrade(sessionId: string, agent: LoadedAgent): Promise<Answer> {
     return new Promise((answer) => {
-      this.#enqueue(instanceId, { kind: 'upgrade', agent, answer });
+      this.#enqueue(sessionId, { kind: 'upgrade', agent, answer });
     });
   }
 
-  snapshot(instanceId: string): JsonObject {
-    return this.#instance(instanceId).snapshot;
+  snapshot(sessionId: string): JsonObject {
+    return this.#session(sessionId).snapshot;
   }
 
-  config(instanceId: string): JsonObject {
-    return this.#instance(instanceId).config;
+  config(sessionId: string): JsonObject {
+    return this.#session(sessionId).config;
   }
 
   /** The whole log, oldest first. */
-  log(instanceId: string): readonly LogEntry[] {
-    return this.#instance(instanceId).log;
+  log(sessionId: string): readonly LogEntry[] {
+    return this.#session(sessionId).log;
   }
 
   /** What the agent's view shows, or null if it has none. */
-  view(instanceId: string): Json {
-    const instance = this.#instance(instanceId);
-    const registered = this.#registered(instance.agent);
+  view(sessionId: string): Json {
+    const session = this.#session(sessionId);
+    const registered = this.#registered(session.agent);
     return (
       registered.agent.view?.(
-        this.#state(registered, instance.snapshot, instance.log, instance.config),
+        this.#state(registered, session.snapshot, session.log, session.config),
       ) ?? null
     );
   }
 
-  /** The instance's declared, unfinished effects, in the order they started. */
-  running(instanceId: string): RunningEffect[] {
-    const instance = this.#instance(instanceId);
-    const flights = this.#flights.get(instanceId);
-    return [...instance.effects.values()].map(({ request, attempt }) => {
+  /** The session's declared, unfinished effects, in the order they started. */
+  running(sessionId: string): RunningEffect[] {
+    const session = this.#session(sessionId);
+    const flights = this.#flights.get(sessionId);
+    return [...session.effects.values()].map(({ request, attempt }) => {
       const flight = flights?.get(request.key);
       return {
         key: request.key,
@@ -253,31 +253,31 @@ export class MemoryRunner {
     });
   }
 
-  /** Why the instance stopped taking messages, or null if it has not. */
-  fault(instanceId: string): string | null {
-    return this.#instance(instanceId).fault;
+  /** Why the session stopped taking messages, or null if it has not. */
+  fault(sessionId: string): string | null {
+    return this.#session(sessionId).fault;
   }
 
-  /** Listens to what the instance's handlers emit. Returns a function that stops listening. */
-  onEmit(instanceId: string, listener: EmitListener): () => void {
-    const listeners = this.#listeners.get(instanceId) ?? new Set();
+  /** Listens to what the session's handlers emit. Returns a function that stops listening. */
+  onEmit(sessionId: string, listener: EmitListener): () => void {
+    const listeners = this.#listeners.get(sessionId) ?? new Set();
     listeners.add(listener);
-    this.#listeners.set(instanceId, listeners);
+    this.#listeners.set(sessionId, listeners);
     return () => listeners.delete(listener);
   }
 
   // ---- lifecycle ------------------------------------------------------------
 
   /**
-   * Recovers every stored instance whose agent is loaded, as after a crash:
+   * Recovers every stored session whose agent is loaded, as after a crash:
    * effects are matched again, reissue effects that were running run again
    * with the next attempt, once effects that were running are reported
    * interrupted, and timers are scheduled again.
    */
   start(): void {
-    for (const instance of this.store.instances.values()) {
-      const registered = this.#agents.get(`${instance.agent.name}@${instance.agent.version}`);
-      if (registered !== undefined && instance.fault === null) this.#recover(instance, registered);
+    for (const session of this.store.sessions.values()) {
+      const registered = this.#agents.get(`${session.agent.name}@${session.agent.version}`);
+      if (registered !== undefined && session.fault === null) this.#recover(session, registered);
     }
   }
 
@@ -297,76 +297,76 @@ export class MemoryRunner {
 
   // ---- delivering messages --------------------------------------------------
 
-  #send(instanceId: string, message: Message): Promise<Answer> {
+  #send(sessionId: string, message: Message): Promise<Answer> {
     return new Promise((answer) => {
-      this.#enqueue(instanceId, { kind: 'message', message, reported: null, answer });
+      this.#enqueue(sessionId, { kind: 'message', message, reported: null, answer });
     });
   }
 
-  #enqueue(instanceId: string, job: Job): void {
+  #enqueue(sessionId: string, job: Job): void {
     if (this.#closed) {
       job.answer({ failed: 'the runner is closed' });
       return;
     }
-    const mailbox = this.#mailboxes.get(instanceId) ?? [];
+    const mailbox = this.#mailboxes.get(sessionId) ?? [];
     mailbox.push(job);
-    this.#mailboxes.set(instanceId, mailbox);
-    this.#drain(instanceId);
+    this.#mailboxes.set(sessionId, mailbox);
+    this.#drain(sessionId);
   }
 
   /** Takes jobs one at a time. A job started while draining waits its turn. */
-  #drain(instanceId: string): void {
-    if (this.#draining.has(instanceId)) return;
-    this.#draining.add(instanceId);
+  #drain(sessionId: string): void {
+    if (this.#draining.has(sessionId)) return;
+    this.#draining.add(sessionId);
     try {
-      const mailbox = this.#mailboxes.get(instanceId) ?? [];
+      const mailbox = this.#mailboxes.get(sessionId) ?? [];
       for (let job = mailbox.shift(); job !== undefined; job = mailbox.shift()) {
-        job.answer(this.#run(instanceId, job));
+        job.answer(this.#run(sessionId, job));
       }
     } finally {
-      this.#draining.delete(instanceId);
+      this.#draining.delete(sessionId);
     }
   }
 
-  #run(instanceId: string, job: Job): Answer {
+  #run(sessionId: string, job: Job): Answer {
     if (this.#closed) return { failed: 'the runner is closed' };
-    const instance = this.store.instances.get(instanceId);
-    if (instance === undefined) return { failed: `no instance ${instanceId}` };
-    if (instance.fault !== null) return { failed: `the instance has stopped: ${instance.fault}` };
-    if (job.kind === 'upgrade') return this.#upgrade(instance, job.agent);
+    const session = this.store.sessions.get(sessionId);
+    if (session === undefined) return { failed: `no session ${sessionId}` };
+    if (session.fault !== null) return { failed: `the session has stopped: ${session.fault}` };
+    if (job.kind === 'upgrade') return this.#upgrade(session, job.agent);
     // A result can wait in the mailbox while a step before it cancels its
     // key. The result is then discarded, like any cancelled effect's.
-    if (job.reported !== null && !instance.effects.has(job.reported)) return { accepted: true };
-    return this.#deliver(instance, this.#registered(instance.agent), job.message, job.reported);
+    if (job.reported !== null && !session.effects.has(job.reported)) return { accepted: true };
+    return this.#deliver(session, this.#registered(session.agent), job.message, job.reported);
   }
 
   #deliver(
-    instance: StoredInstance,
+    session: StoredSession,
     registered: Registered,
     message: Message,
     reported: string | null,
   ): Answer {
-    const now = this.#now(instance);
-    const state = this.#state(registered, instance.snapshot, instance.log, instance.config);
+    const now = this.#now(session);
+    const state = this.#state(registered, session.snapshot, session.log, session.config);
     let result;
     try {
       result = registered.agent.step(state, frozenCopy(message), now);
     } catch (error) {
-      return this.#stepFailed(instance, message, thrownToJson(error));
+      return this.#stepFailed(session, message, thrownToJson(error));
     }
     if ('error' in result) {
       if (message.type === 'input' || message.type === 'config') {
         return isJson(result.error)
           ? { rejected: result.error }
-          : this.#stepFailed(instance, message, 'the rejection is not plain Json');
+          : this.#stepFailed(session, message, 'the rejection is not plain Json');
       }
-      return this.#stepFailed(instance, message, `step rejected a ${message.type} message`);
+      return this.#stepFailed(session, message, `step rejected a ${message.type} message`);
     }
-    const config = message.type === 'config' ? message.config : instance.config;
+    const config = message.type === 'config' ? message.config : session.config;
     let prepared;
     try {
       prepared = this.#prepare(
-        instance,
+        session,
         registered,
         result.snapshot,
         result.append ?? [],
@@ -375,35 +375,35 @@ export class MemoryRunner {
         now,
       );
     } catch (error) {
-      return this.#stepFailed(instance, message, thrownToJson(error));
+      return this.#stepFailed(session, message, thrownToJson(error));
     }
-    this.#apply(instance, prepared);
-    this.#act(instance, registered, prepared);
+    this.#apply(session, prepared);
+    this.#act(session, registered, prepared);
     return { accepted: true };
   }
 
   /**
    * A failed step applies nothing. A caller's input or config change is
    * answered with the failure and dropped; any other message stops the
-   * instance, since a pure step would fail the same way again.
+   * session, since a pure step would fail the same way again.
    */
-  #stepFailed(instance: StoredInstance, message: Message, error: Json): Answer {
+  #stepFailed(session: StoredSession, message: Message, error: Json): Answer {
     if (message.type !== 'input' && message.type !== 'config') {
-      instance.fault = `a ${message.type} message's step failed: ${JSON.stringify(error)}`;
+      session.fault = `a ${message.type} message's step failed: ${JSON.stringify(error)}`;
     }
     return { failed: error };
   }
 
-  #upgrade(instance: StoredInstance, agent: LoadedAgent): Answer {
+  #upgrade(session: StoredSession, agent: LoadedAgent): Answer {
     const registered = this.#registered(agent);
-    const from = instance.agent.version;
-    let snapshot = instance.snapshot;
-    let config = instance.config;
+    const from = session.agent.version;
+    let snapshot = session.snapshot;
+    let config = session.config;
     const migrate = registered.agent.migrate;
     if (migrate !== undefined) {
       let result;
       try {
-        result = migrate(instance.snapshot, instance.config, from);
+        result = migrate(session.snapshot, session.config, from);
       } catch (error) {
         return { failed: thrownToJson(error) };
       }
@@ -413,30 +413,22 @@ export class MemoryRunner {
     }
     let prepared;
     try {
-      prepared = this.#prepare(
-        instance,
-        registered,
-        snapshot,
-        [],
-        config,
-        null,
-        this.#now(instance),
-      );
+      prepared = this.#prepare(session, registered, snapshot, [], config, null, this.#now(session));
     } catch (error) {
       return { failed: thrownToJson(error) };
     }
-    instance.agent = { name: agent.name, version: agent.version };
-    this.#apply(instance, prepared);
-    this.#act(instance, registered, prepared);
-    this.#deliver(instance, registered, { type: 'migrated', from }, null);
+    session.agent = { name: agent.name, version: agent.version };
+    this.#apply(session, prepared);
+    this.#act(session, registered, prepared);
+    this.#deliver(session, registered, { type: 'migrated', from }, null);
     return { accepted: true };
   }
 
   // ---- checking and applying a step -----------------------------------------
 
-  /** `now` for a step: the clock, but never earlier than the instance's newest entry. */
-  #now(instance: StoredInstance): number {
-    return Math.max(this.#clock(), instance.log.at(-1)?.at ?? 0);
+  /** `now` for a step: the clock, but never earlier than the session's newest entry. */
+  #now(session: StoredSession): number {
+    return Math.max(this.#clock(), session.log.at(-1)?.at ?? 0);
   }
 
   #state(
@@ -461,7 +453,7 @@ export class MemoryRunner {
    * first problem.
    */
   #prepare(
-    instance: StoredInstance,
+    session: StoredSession,
     registered: Registered,
     snapshotValue: unknown,
     append: readonly { kind: string; body: Json }[],
@@ -476,19 +468,19 @@ export class MemoryRunner {
     const entries = append.map(({ kind, body }, index) => {
       if (typeof kind !== 'string') throw new TypeError('a log entry kind is not a string');
       return deepFreeze({
-        seq: instance.log.length + 1 + index,
+        seq: session.log.length + 1 + index,
         at: now,
         kind,
         body: structuredClone(requireJson(body, `the body of a ${kind} entry`)),
       });
     });
     const frozenSnapshot = frozenCopy(snapshot);
-    const state = this.#state(registered, frozenSnapshot, [...instance.log, ...entries], config);
+    const state = this.#state(registered, frozenSnapshot, [...session.log, ...entries], config);
     if (registered.agent.view !== undefined) requireJson(registered.agent.view(state), 'the view');
     const list = registered.agent.effects?.(state) ?? [];
 
-    const finished = new Set(instance.finished);
-    const previous = new Map(instance.effects);
+    const finished = new Set(session.finished);
+    const previous = new Map(session.effects);
     if (reported !== null) {
       previous.delete(reported);
       finished.add(reported);
@@ -533,17 +525,17 @@ export class MemoryRunner {
     };
   }
 
-  #apply(instance: StoredInstance, prepared: Prepared): void {
-    instance.snapshot = prepared.snapshot;
-    instance.config = prepared.config;
-    instance.log.push(...prepared.entries);
-    instance.effects = prepared.effects;
-    instance.finished = prepared.finished;
+  #apply(session: StoredSession, prepared: Prepared): void {
+    session.snapshot = prepared.snapshot;
+    session.config = prepared.config;
+    session.log.push(...prepared.entries);
+    session.effects = prepared.effects;
+    session.finished = prepared.finished;
   }
 
   /** After a step is applied: cancel, abort and start effects. */
-  #act(instance: StoredInstance, registered: Registered, prepared: Prepared): void {
-    const flights = this.#flightsOf(instance.id);
+  #act(session: StoredSession, registered: Registered, prepared: Prepared): void {
+    const flights = this.#flightsOf(session.id);
     for (const key of prepared.cancelled) {
       const flight = flights.get(key);
       if (flight === undefined) continue;
@@ -557,7 +549,7 @@ export class MemoryRunner {
       flight.aborted = true;
       flight.controller.abort();
     }
-    for (const key of prepared.started) this.#start(instance, registered, key);
+    for (const key of prepared.started) this.#start(session, registered, key);
   }
 
   #mode(registered: Registered, kind: string): Mode {
@@ -566,17 +558,17 @@ export class MemoryRunner {
 
   // ---- running effects ------------------------------------------------------
 
-  #start(instance: StoredInstance, registered: Registered, key: string): void {
-    const effect = instance.effects.get(key);
+  #start(session: StoredSession, registered: Registered, key: string): void {
+    const effect = session.effects.get(key);
     if (effect === undefined) return;
     const { request } = effect;
     if (request.kind === '@timer') {
-      this.#startTimer(instance, key, request.args);
+      this.#startTimer(session, key, request.args);
       return;
     }
     const handler = request.kind.startsWith('@') ? undefined : registered.handlers[request.kind];
     if (handler === undefined) {
-      this.#report(instance.id, key, request.kind, {
+      this.#report(session.id, key, request.kind, {
         failed: { code: 'unknown_kind', error: request.kind },
       });
       return;
@@ -591,8 +583,8 @@ export class MemoryRunner {
       timer: null,
       active: true,
     };
-    this.#flightsOf(instance.id).set(key, flight);
-    const listeners = (): Set<EmitListener> => this.#listeners.get(instance.id) ?? new Set();
+    this.#flightsOf(session.id).set(key, flight);
+    const listeners = (): Set<EmitListener> => this.#listeners.get(session.id) ?? new Set();
     const ctx: HandlerContext = {
       key,
       kind: request.kind,
@@ -611,14 +603,14 @@ export class MemoryRunner {
             : Promise.resolve(value);
         },
       },
-      log: { list: (query) => Promise.resolve(this.#list(instance.id, query ?? {})) },
+      log: { list: (query) => Promise.resolve(this.#list(session.id, query ?? {})) },
     };
 
     const timeoutMs = handler.timeoutMs ?? this.#timeoutMs;
     if (timeoutMs !== undefined) {
       flight.timer = setTimeout(() => {
         controller.abort();
-        this.#finish(instance.id, key, request.kind, flight, {
+        this.#finish(session.id, key, request.kind, flight, {
           failed: { code: 'timeout', error: { timeoutMs } },
         });
       }, timeoutMs);
@@ -628,7 +620,7 @@ export class MemoryRunner {
       .then(
         (value: unknown) =>
           this.#finish(
-            instance.id,
+            session.id,
             key,
             request.kind,
             flight,
@@ -637,17 +629,17 @@ export class MemoryRunner {
               : { failed: { code: 'invalid_result', error: 'the result is not plain Json' } },
           ),
         (error: unknown) =>
-          this.#finish(instance.id, key, request.kind, flight, {
+          this.#finish(session.id, key, request.kind, flight, {
             failed: { code: flight.aborted ? 'aborted' : 'threw', error: thrownToJson(error) },
           }),
       );
   }
 
-  #startTimer(instance: StoredInstance, key: string, args: Json): void {
+  #startTimer(session: StoredSession, key: string, args: Json): void {
     const at =
       typeof args === 'object' && args !== null && !Array.isArray(args) ? args['at'] : undefined;
     if (typeof at !== 'number') {
-      this.#report(instance.id, key, '@timer', {
+      this.#report(session.id, key, '@timer', {
         failed: { code: 'threw', error: '@timer needs { at }' },
       });
       return;
@@ -660,50 +652,50 @@ export class MemoryRunner {
       timer: null,
       active: false,
     };
-    this.#flightsOf(instance.id).set(key, flight);
+    this.#flightsOf(session.id).set(key, flight);
     flight.timer = setTimeout(
-      () => this.#finish(instance.id, key, '@timer', flight, { ok: null }),
+      () => this.#finish(session.id, key, '@timer', flight, { ok: null }),
       Math.max(0, at - this.#clock()),
     );
   }
 
   /** A run ended: report its outcome, unless it was cancelled or the runner closed. */
-  #finish(instanceId: string, key: string, kind: string, flight: Flight, outcome: Outcome): void {
+  #finish(sessionId: string, key: string, kind: string, flight: Flight, outcome: Outcome): void {
     if (flight.done || this.#closed) return;
     flight.done = true;
     if (flight.timer !== null) clearTimeout(flight.timer);
     if (flight.cancelled) return;
-    this.#report(instanceId, key, kind, outcome);
+    this.#report(sessionId, key, kind, outcome);
   }
 
-  #report(instanceId: string, key: string, kind: string, outcome: Outcome): void {
+  #report(sessionId: string, key: string, kind: string, outcome: Outcome): void {
     // The union variant for the effect's kind is chosen at runtime.
     const message = { type: 'effect', key, kind, outcome } as EffectMessage;
-    this.#enqueue(instanceId, { kind: 'message', message, reported: key, answer: () => undefined });
+    this.#enqueue(sessionId, { kind: 'message', message, reported: key, answer: () => undefined });
   }
 
   // ---- recovery -------------------------------------------------------------
 
-  #recover(instance: StoredInstance, registered: Registered): void {
+  #recover(session: StoredSession, registered: Registered): void {
     let list;
     try {
       list =
         registered.agent.effects?.(
-          this.#state(registered, instance.snapshot, instance.log, instance.config),
+          this.#state(registered, session.snapshot, session.log, session.config),
         ) ?? [];
     } catch (error) {
-      instance.fault = `effects failed during recovery: ${JSON.stringify(thrownToJson(error))}`;
+      session.fault = `effects failed during recovery: ${JSON.stringify(thrownToJson(error))}`;
       return;
     }
     const declared = new Set(list.map((request) => request.key));
     const reports: { key: string; kind: string; outcome: Outcome }[] = [];
-    for (const [key, effect] of instance.effects) {
+    for (const [key, effect] of session.effects) {
       const { kind } = effect.request;
       if (!declared.has(key)) {
-        instance.effects.delete(key);
-        instance.finished.add(key);
+        session.effects.delete(key);
+        session.finished.add(key);
       } else if (kind === '@timer') {
-        this.#startTimer(instance, key, effect.request.args);
+        this.#startTimer(session, key, effect.request.args);
       } else if (effect.mode === 'once') {
         reports.push({ key, kind, outcome: { interrupted: true } });
       } else if (
@@ -716,20 +708,20 @@ export class MemoryRunner {
           outcome: { failed: { code: 'attempts_exhausted', error: { attempts: effect.attempt } } },
         });
       } else {
-        instance.effects.set(key, { ...effect, attempt: effect.attempt + 1 });
-        this.#start(instance, registered, key);
+        session.effects.set(key, { ...effect, attempt: effect.attempt + 1 });
+        this.#start(session, registered, key);
       }
     }
     // Reports go last: each one's step may change which effects are declared.
-    for (const { key, kind, outcome } of reports) this.#report(instance.id, key, kind, outcome);
+    for (const { key, kind, outcome } of reports) this.#report(session.id, key, kind, outcome);
   }
 
   // ---- helpers --------------------------------------------------------------
 
-  #instance(instanceId: string): StoredInstance {
-    const instance = this.store.instances.get(instanceId);
-    if (instance === undefined) throw new Error(`no instance ${instanceId}`);
-    return instance;
+  #session(sessionId: string): StoredSession {
+    const session = this.store.sessions.get(sessionId);
+    if (session === undefined) throw new Error(`no session ${sessionId}`);
+    return session;
   }
 
   #registered(agent: LoadedAgent): Registered {
@@ -739,15 +731,15 @@ export class MemoryRunner {
     return registered;
   }
 
-  #flightsOf(instanceId: string): Map<string, Flight> {
-    const flights = this.#flights.get(instanceId) ?? new Map<string, Flight>();
-    this.#flights.set(instanceId, flights);
+  #flightsOf(sessionId: string): Map<string, Flight> {
+    const flights = this.#flights.get(sessionId) ?? new Map<string, Flight>();
+    this.#flights.set(sessionId, flights);
     return flights;
   }
 
-  #list(instanceId: string, query: LogQuery): LogPage {
+  #list(sessionId: string, query: LogQuery): LogPage {
     const offset = query.cursor === undefined ? 0 : Number(query.cursor);
-    const matching = this.#instance(instanceId).log.filter(
+    const matching = this.#session(sessionId).log.filter(
       (entry) =>
         (query.after === undefined || entry.seq > query.after) &&
         (query.before === undefined || entry.seq < query.before) &&

@@ -10,7 +10,7 @@ import type { Json, LogEntry } from '@acentric/types';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createLocalRunner, RunnerError } from '../dist/index.js';
-import type { InstanceEvent, LocalRunner, LocalRunnerOptions, Store } from '../dist/index.js';
+import type { SessionEvent, LocalRunner, LocalRunnerOptions, Store } from '../dist/index.js';
 import { SQLITE, STORES } from './stores.js';
 import type { StoreKind } from './stores.js';
 
@@ -208,7 +208,7 @@ describe.each(STORES)('the local runner over $name', (kind) => {
     expect(await s.runner.input(id, rejection)).toEqual({ rejected: 'unknown input nope' });
   });
 
-  it('creates an instance once under a caller-chosen id', async () => {
+  it('creates a session once under a caller-chosen id', async () => {
     const s = await setup();
     await s.runner.deploy(v1);
     const ref = { name: 'tester', version: '1' };
@@ -299,7 +299,7 @@ describe.each(STORES)('the local runner over $name', (kind) => {
     await s.runner.deploy(v1);
     const id = await created(s.runner);
     await s.runner.input(id, { kind: 'note', payload: { n: 1 } });
-    const events: InstanceEvent[] = [];
+    const events: SessionEvent[] = [];
     const stop = await s.runner.subscribe(id, { emits: true }, (event) => events.push(event));
     await s.runner.input(id, { kind: 'note', payload: { n: 2 } });
     await s.runner.input(id, {
@@ -321,7 +321,7 @@ describe.each(STORES)('the local runner over $name', (kind) => {
     expect(events).toContainEqual({ type: 'status', status: 'busy', fault: null });
   });
 
-  it('unloads idle instances and loads them again when needed', async () => {
+  it('unloads idle sessions and loads them again when needed', async () => {
     const s = await setup({ idleMs: 50 });
     await s.runner.deploy(v1);
     const id = await created(s.runner);

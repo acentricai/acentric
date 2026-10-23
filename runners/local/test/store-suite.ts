@@ -5,7 +5,7 @@ import type { LogEntry } from '@acentric/types';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { StoreError } from '../dist/index.js';
-import type { Bundle, InstanceRecord, Store, StoredEffect } from '../dist/index.js';
+import type { Bundle, SessionRecord, Store, StoredEffect } from '../dist/index.js';
 
 /** A place a store lives: each `open` opens the same store again. */
 export type StoreLocation = { open(): Promise<Store>; remove(): Promise<void> };
@@ -19,7 +19,7 @@ const bundle: Bundle = {
   kinds: { echo: { mode: 'reissue' }, send: { mode: 'once', timeoutMs: 50, maxAttempts: 2 } },
 };
 
-const instance = (id = 'i1'): InstanceRecord => ({
+const session = (id = 'i1'): SessionRecord => ({
   id,
   agent: { name: 'echo', version: '1' },
   config: { a: 1 },
@@ -91,24 +91,24 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
       expect(await again.getBundle({ name: 'echo', version: '1' })).toEqual(bundle);
       expect(await again.getBundle({ name: 'echo', version: '3' })).toBeNull();
       expect(await again.listBundles()).toEqual([
-        { name: 'echo', version: '1', hash: 'h1', instances: 0 },
-        { name: 'echo', version: '2', hash: 'h2', instances: 0 },
+        { name: 'echo', version: '1', hash: 'h1', sessions: 0 },
+        { name: 'echo', version: '2', hash: 'h2', sessions: 0 },
       ]);
       await again.deleteBundle({ name: 'echo', version: '2' });
       expect(await again.getBundle({ name: 'echo', version: '2' })).toBeNull();
       expect((await again.listBundles()).map((b) => b.version)).toEqual(['1']);
     });
 
-    it('creates an instance with its init step, once', async () => {
+    it('creates a session with its init step, once', async () => {
       const store = await open();
-      await store.create(instance(), {
+      await store.create(session(), {
         append: [entry(1), entry(2)],
         started: [effect('a')],
         request: { id: 'create', hash: 'c1', answer: { accepted: true } },
       });
-      await rejects(store.create(instance(), { append: [], started: [] }), 'instance_exists');
+      await rejects(store.create(session(), { append: [], started: [] }), 'session_exists');
       const again = await reopen(store);
-      expect(await again.load('i1')).toEqual({ ...instance(), nextSeq: 3, running: [effect('a')] });
+      expect(await again.load('i1')).toEqual({ ...session(), nextSeq: 3, running: [effect('a')] });
       expect(await again.readLog('i1')).toEqual([entry(1), entry(2)]);
       expect(await again.findRequest('i1', 'create')).toEqual({
         id: 'create',
@@ -120,7 +120,7 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('saves a step whole', async () => {
       const store = await open();
-      await store.create(instance(), { append: [entry(1)], started: [effect('a'), effect('b')] });
+      await store.create(session(), { append: [entry(1)], started: [effect('a'), effect('b')] });
       const ord = await store.putResult('i1', 'a', { ok: 5 });
       await store.commit('i1', {
         expectedSeq: 2,
@@ -147,7 +147,7 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('applies nothing of a step that fails', async () => {
       const store = await open();
-      await store.create(instance(), { append: [entry(1)], started: [effect('a')] });
+      await store.create(session(), { append: [entry(1)], started: [effect('a')] });
       // The last change is invalid: finishing a key that is not running.
       await rejects(
         store.commit('i1', {
@@ -161,13 +161,13 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
         'invalid',
       );
       const again = await reopen(store);
-      expect(await again.load('i1')).toEqual({ ...instance(), nextSeq: 2, running: [effect('a')] });
+      expect(await again.load('i1')).toEqual({ ...session(), nextSeq: 2, running: [effect('a')] });
       expect(await again.readLog('i1')).toEqual([entry(1)]);
     });
 
     it('refuses a stale step, and entries out of sequence', async () => {
       const store = await open();
-      await store.create(instance(), { append: [entry(1)], started: [] });
+      await store.create(session(), { append: [entry(1)], started: [] });
       const step = { snapshot: {}, started: [], finished: [], aborted: [] };
       await rejects(
         store.commit('i1', { ...step, expectedSeq: 1, append: [entry(1)] }),
@@ -178,14 +178,14 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
         store.commit('i1', { ...step, expectedSeq: 2, append: [entry(2), entry(4)] }),
         'invalid',
       );
-      await rejects(store.commit('nope', { ...step, expectedSeq: 1, append: [] }), 'no_instance');
+      await rejects(store.commit('nope', { ...step, expectedSeq: 1, append: [] }), 'no_session');
       await store.commit('i1', { ...step, expectedSeq: 2, append: [entry(2)] });
       expect((await store.readLog('i1')).map((e) => e.seq)).toEqual([1, 2]);
     });
 
     it('keeps the inbox in order across a restart', async () => {
       const store = await open();
-      await store.create(instance(), { append: [], started: [effect('a'), effect('b')] });
+      await store.create(session(), { append: [], started: [effect('a'), effect('b')] });
       await store.putResult('i1', 'b', { ok: 'b' });
       await store.putResult('i1', 'a', { interrupted: true });
       expect(await store.pending()).toEqual(['i1']);
@@ -200,7 +200,7 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('reads log ranges', async () => {
       const store = await open();
-      await store.create(instance(), {
+      await store.create(session(), {
         append: [entry(1, 'a'), entry(2, 'b'), entry(3, 'a'), entry(4, 'b'), entry(5, 'a')],
         started: [],
       });
@@ -215,7 +215,7 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('records attempts, faults and answers given without a step', async () => {
       const store = await open();
-      await store.create(instance(), { append: [], started: [effect('a')] });
+      await store.create(session(), { append: [], started: [effect('a')] });
       await store.recordAttempt('i1', 'a', 2);
       await store.setFault('i1', 'broken');
       await store.putRequest('i1', { id: 'r', hash: 'h', answer: { rejected: 'no' } });
@@ -239,10 +239,10 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
       expect(await again.load('i1')).toMatchObject({ fault: null, agent: { version: '2' } });
     });
 
-    it('lists and deletes instances', async () => {
+    it('lists and deletes sessions', async () => {
       const store = await open();
-      await store.create(instance('i1'), { append: [], started: [effect('a')] });
-      await store.create(instance('i2'), { append: [], started: [] });
+      await store.create(session('i1'), { append: [], started: [effect('a')] });
+      await store.create(session('i2'), { append: [], started: [] });
       await store.setFault('i2', 'broken');
       expect((await store.list()).map((i) => [i.id, i.running, i.fault])).toEqual([
         ['i1', 1, null],

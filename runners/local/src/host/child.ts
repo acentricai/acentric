@@ -89,9 +89,9 @@ function describe(loaded: Record<string, HandlerDef>): Json {
 
 async function run(loaded: Record<string, HandlerDef>, params: Json): Promise<Json> {
   if (!isObject(params)) throw new RpcError(-32602, 'effect/run needs params');
-  const { instance, key, kind, args, attempt } = params;
-  if (typeof instance !== 'string' || typeof key !== 'string' || typeof kind !== 'string') {
-    throw new RpcError(-32602, 'effect/run needs instance, key and kind');
+  const { session, key, kind, args, attempt } = params;
+  if (typeof session !== 'string' || typeof key !== 'string' || typeof kind !== 'string') {
+    throw new RpcError(-32602, 'effect/run needs session, key and kind');
   }
   const handler = loaded[kind];
   if (handler === undefined) throw new RpcError(1, `no handler for ${kind}`);
@@ -105,7 +105,7 @@ async function run(loaded: Record<string, HandlerDef>, params: Json): Promise<Js
     attempt: typeof attempt === 'number' ? attempt : 1,
     signal: controller.signal,
     emit: (delta) => {
-      if (isJson(delta)) peer.notify('effect/emit', { instance, key, delta });
+      if (isJson(delta)) peer.notify('effect/emit', { session, key, delta });
     },
     secrets: {
       get: async (name) => {
@@ -116,7 +116,7 @@ async function run(loaded: Record<string, HandlerDef>, params: Json): Promise<Js
     },
     log: {
       list: async (query?: LogQuery) =>
-        toPage(await peer.request('log/list', { instance, query: query ?? {} })),
+        toPage(await peer.request('log/list', { session, query: query ?? {} })),
     },
   };
   try {
@@ -130,7 +130,7 @@ async function run(loaded: Record<string, HandlerDef>, params: Json): Promise<Js
 }
 
 function runKey(params: JsonObject): string {
-  return JSON.stringify([params['instance'] ?? null, params['key'] ?? null]);
+  return JSON.stringify([params['session'] ?? null, params['key'] ?? null]);
 }
 
 function toPage(value: Json): LogPage {

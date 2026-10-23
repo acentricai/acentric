@@ -11,7 +11,7 @@
 // runner limit, such as a snapshot or appends larger than allowed; and when
 // `effects`, `view` or `window` does any of these on the state it returns.
 // Being pure, it would fail the same way on the same message again, so what
-// happens next, such as stopping the instance until someone fixes it, is
+// happens next, such as stopping the session until someone fixes it, is
 // the runner's policy.
 
 import type { JsonObject } from './json.js';

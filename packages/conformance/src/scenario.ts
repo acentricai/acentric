@@ -10,7 +10,7 @@ import type { GateOutcome } from './hook.js';
 /** Features some scenarios need, which a runner may not offer. */
 export type Feature = 'durable' | 'upgrade';
 
-/** The probe bundles a scenario can create an instance from. */
+/** The probe bundles a scenario can create a session from. */
 export type Bundle = 'probe' | 'probe-bad-handler-name';
 
 export type Scenario = {
@@ -23,7 +23,7 @@ export type Scenario = {
 };
 
 export type ScenarioStep =
-  /** Create the instance from a probe bundle, version 1, with this config. */
+  /** Create the session from a probe bundle, version 1, with this config. */
   | { create: JsonObject; bundle?: Bundle }
   /** Send an input. */
   | { input: string; payload?: JsonObject }
@@ -35,7 +35,7 @@ export type ScenarioStep =
   | { wait: number }
   /** Stop the runner abruptly and start it again from what it kept. */
   | { crash: true }
-  /** Upgrade the instance to version 2 of the probe. */
+  /** Upgrade the session to version 2 of the probe. */
   | { upgrade: '2' }
   | { expect: Expectation };
 

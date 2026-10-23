@@ -10,7 +10,7 @@ import type { ClientOptions, Transport } from './client.js';
 export { RunnerClient, RunnerRequestError } from './client.js';
 export type {
   ClientOptions,
-  InstanceEvent,
+  SessionEvent,
   ProvidedContext,
   ProvidedHandler,
   Subscription,

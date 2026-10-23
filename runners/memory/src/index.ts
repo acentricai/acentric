@@ -11,4 +11,4 @@ export type {
   RunningEffect,
 } from './runner.js';
 export { createMemoryStore } from './store.js';
-export type { MemoryStore, StoredEffect, StoredInstance } from './store.js';
+export type { MemoryStore, StoredEffect, StoredSession } from './store.js';

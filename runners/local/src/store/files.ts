@@ -3,22 +3,22 @@
 //
 //   lock                                   the pid of the runner that has the store open
 //   agents/<name>/<version>/               bundle.json (hash and kinds), agent.js, handlers.js
-//   instances/<id>/journal.jsonl           one line per write, oldest first
-//   instances/<id>/checkpoint.json         the instance as of a place in its journal
+//   sessions/<id>/journal.jsonl           one line per write, oldest first
+//   sessions/<id>/checkpoint.json         the session as of a place in its journal
 //
-// Every change to an instance is one line appended to its journal, then
+// Every change to a session is one line appended to its journal, then
 // synced to disk: a whole commit is one line, so it is saved entirely or
 // not at all. A line starts with a checksum of its record. A crash can leave
-// a last line half written; opening the instance again cuts it off. Any
+// a last line half written; opening the session again cuts it off. Any
 // other bad line means the journal was damaged, and the store refuses it.
 //
-// An instance's state is rebuilt from its latest checkpoint and the journal
+// A session's state is rebuilt from its latest checkpoint and the journal
 // lines after it, and kept in memory while the store is open. Log entries
 // stay on disk: an index of which journal lines hold which seqs lets a range
 // be read without the rest. A checkpoint is written every so many lines, so
-// opening an instance does not replay its whole history.
+// opening a session does not replay its whole history.
 //
-// New instances and bundles are written to a temporary folder and renamed
+// New sessions and bundles are written to a temporary folder and renamed
 // into place, so they appear whole. The lock file holds the pid of the
 // runner that has the store open; a lock left by a process that is gone is
 // taken over.
@@ -49,11 +49,11 @@ import type {
   AgentRef,
   Bundle,
   InboxItem,
-  InstanceFilter,
-  InstanceRecord,
-  InstanceSummary,
+  SessionFilter,
+  SessionRecord,
+  SessionSummary,
   KindInfo,
-  LoadedInstance,
+  LoadedSession,
   LogRange,
   RequestRecord,
   StepCommit,
@@ -81,7 +81,7 @@ export function openFileStore(dir: string, options: FileStoreOptions = {}): Prom
 type JournalRecord =
   | {
       t: 'create';
-      instance: InstanceRecord;
+      session: SessionRecord;
       append: LogEntry[];
       started: StoredEffect[];
       request?: RequestRecord;
@@ -96,9 +96,9 @@ type JournalRecord =
 /** Where a journal line with log entries is, and which seqs it holds. */
 type LineIndex = { offset: number; length: number; firstSeq: number; count: number };
 
-/** An instance as its journal says it is now. */
-type InstanceState = {
-  record: InstanceRecord;
+/** A session as its journal says it is now. */
+type SessionState = {
+  record: SessionRecord;
   running: Map<string, StoredEffect>;
   finished: Set<string>;
   requests: Map<string, RequestRecord>;
@@ -113,7 +113,7 @@ type InstanceState = {
 
 type Checkpoint = {
   offset: number;
-  record: InstanceRecord;
+  record: SessionRecord;
   running: StoredEffect[];
   finished: string[];
   requests: RequestRecord[];
@@ -125,7 +125,7 @@ type Checkpoint = {
 class FileStore implements Store {
   readonly #dir: string;
   readonly #checkpointEvery: number;
-  readonly #states = new Map<string, InstanceState>();
+  readonly #states = new Map<string, SessionState>();
   readonly #journals = new Map<string, number>();
   #scanned = false;
   #open = true;
@@ -134,7 +134,7 @@ class FileStore implements Store {
     this.#dir = dir;
     this.#checkpointEvery = checkpointEvery;
     mkdirSync(join(dir, 'agents'), { recursive: true });
-    mkdirSync(join(dir, 'instances'), { recursive: true });
+    mkdirSync(join(dir, 'sessions'), { recursive: true });
     this.#lock();
   }
 
@@ -169,14 +169,14 @@ class FileStore implements Store {
     return this.#run(() => this.#readBundle(ref));
   }
 
-  listBundles(): Promise<(AgentRef & { hash: string; instances: number })[]> {
+  listBundles(): Promise<(AgentRef & { hash: string; sessions: number })[]> {
     return this.#run(() => {
       const counts = new Map<string, number>();
       for (const state of this.#all()) {
         const id = `${state.record.agent.name}@${state.record.agent.version}`;
         counts.set(id, (counts.get(id) ?? 0) + 1);
       }
-      const bundles: (AgentRef & { hash: string; instances: number })[] = [];
+      const bundles: (AgentRef & { hash: string; sessions: number })[] = [];
       for (const nameDir of names(join(this.#dir, 'agents'))) {
         for (const versionDir of names(join(this.#dir, 'agents', nameDir))) {
           const ref = { name: unsafe(nameDir), version: unsafe(versionDir) };
@@ -185,7 +185,7 @@ class FileStore implements Store {
             bundles.push({
               ...ref,
               hash: bundle.hash,
-              instances: counts.get(`${ref.name}@${ref.version}`) ?? 0,
+              sessions: counts.get(`${ref.name}@${ref.version}`) ?? 0,
             });
           }
         }
@@ -204,38 +204,38 @@ class FileStore implements Store {
     });
   }
 
-  // ---- instances ------------------------------------------------------------
+  // ---- sessions ------------------------------------------------------------
 
   create(
-    instance: InstanceRecord,
+    session: SessionRecord,
     init: { append: LogEntry[]; started: StoredEffect[]; request?: RequestRecord },
   ): Promise<void> {
     return this.#run(() => {
-      const dir = this.#instanceDir(instance.id);
+      const dir = this.#sessionDir(session.id);
       if (existsSync(dir))
-        throw new StoreError('instance_exists', `instance ${instance.id} already exists`);
-      checkDense(init.append, instance.nextSeq);
-      const record: JournalRecord = { t: 'create', instance, ...init };
+        throw new StoreError('session_exists', `session ${session.id} already exists`);
+      checkDense(init.append, session.nextSeq);
+      const record: JournalRecord = { t: 'create', session, ...init };
       const line = encode(record);
-      const temporary = join(this.#dir, 'instances', `.tmp-${randomUUID()}`);
+      const temporary = join(this.#dir, 'sessions', `.tmp-${randomUUID()}`);
       mkdirSync(temporary);
       writeDurably(join(temporary, 'journal.jsonl'), line);
       renameSync(temporary, dir);
-      syncDir(join(this.#dir, 'instances'));
-      const state = emptyState(instance);
+      syncDir(join(this.#dir, 'sessions'));
+      const state = emptyState(session);
       apply(state, record, 0, Buffer.byteLength(line));
-      this.#states.set(instance.id, state);
+      this.#states.set(session.id, state);
     });
   }
 
-  load(id: string): Promise<LoadedInstance | null> {
+  load(id: string): Promise<LoadedSession | null> {
     return this.#run(() => {
       const state = this.#state(id);
       return state === null ? null : { ...state.record, running: [...state.running.values()] };
     });
   }
 
-  list(filter: InstanceFilter = {}): Promise<InstanceSummary[]> {
+  list(filter: SessionFilter = {}): Promise<SessionSummary[]> {
     return this.#run(() => {
       const after = filter.after;
       const matching = this.#all()
@@ -275,7 +275,7 @@ class FileStore implements Store {
       if (state.record.nextSeq !== step.expectedSeq) {
         throw new StoreError(
           'stale_commit',
-          `instance ${id} has moved past seq ${step.expectedSeq}`,
+          `session ${id} has moved past seq ${step.expectedSeq}`,
         );
       }
       checkDense(step.append, step.expectedSeq);
@@ -386,11 +386,11 @@ class FileStore implements Store {
 
   delete(id: string): Promise<void> {
     return this.#run(() => {
-      const dir = this.#instanceDir(id);
+      const dir = this.#sessionDir(id);
       this.#closeJournal(id);
       this.#states.delete(id);
       if (!existsSync(dir)) return;
-      const doomed = join(this.#dir, 'instances', `.tmp-${randomUUID()}`);
+      const doomed = join(this.#dir, 'sessions', `.tmp-${randomUUID()}`);
       renameSync(dir, doomed);
       rmSync(doomed, { recursive: true, force: true });
     });
@@ -409,8 +409,8 @@ class FileStore implements Store {
 
   // ---- journals -------------------------------------------------------------
 
-  /** Appends one record to an instance's journal, syncs it, then applies it. */
-  #append(id: string, state: InstanceState, record: JournalRecord): void {
+  /** Appends one record to a session's journal, syncs it, then applies it. */
+  #append(id: string, state: SessionState, record: JournalRecord): void {
     const fd = this.#journal(id);
     const line = encode(record);
     const bytes = Buffer.from(line);
@@ -423,7 +423,7 @@ class FileStore implements Store {
     if (state.sinceCheckpoint >= this.#checkpointEvery) this.#checkpoint(id, state);
   }
 
-  #checkpoint(id: string, state: InstanceState): void {
+  #checkpoint(id: string, state: SessionState): void {
     const checkpoint: Checkpoint = {
       offset: state.size,
       record: state.record,
@@ -434,28 +434,28 @@ class FileStore implements Store {
       nextOrd: state.nextOrd,
       lines: state.lines,
     };
-    const path = join(this.#instanceDir(id), 'checkpoint.json');
+    const path = join(this.#sessionDir(id), 'checkpoint.json');
     const temporary = `${path}.tmp`;
     writeDurably(temporary, JSON.stringify(checkpoint));
     renameSync(temporary, path);
-    syncDir(this.#instanceDir(id));
+    syncDir(this.#sessionDir(id));
     state.sinceCheckpoint = 0;
   }
 
-  /** An instance's state, rebuilt from its checkpoint and journal the first time it is needed. */
-  #state(id: string): InstanceState | null {
+  /** A session's state, rebuilt from its checkpoint and journal the first time it is needed. */
+  #state(id: string): SessionState | null {
     const cached = this.#states.get(id);
     if (cached !== undefined) return cached;
-    const dir = this.#instanceDir(id);
+    const dir = this.#sessionDir(id);
     if (!existsSync(join(dir, 'journal.jsonl'))) return null;
     const state = this.#rebuild(id, dir);
     this.#states.set(id, state);
     return state;
   }
 
-  #rebuild(id: string, dir: string): InstanceState {
+  #rebuild(id: string, dir: string): SessionState {
     const journal = readFileSync(join(dir, 'journal.jsonl'));
-    let state: InstanceState | null = null;
+    let state: SessionState | null = null;
     let offset = 0;
     const checkpointPath = join(dir, 'checkpoint.json');
     if (existsSync(checkpointPath)) {
@@ -491,7 +491,7 @@ class FileStore implements Store {
       if (state === null) {
         if (record.t !== 'create')
           throw new StoreError('invalid', `the journal of ${id} does not start with its creation`);
-        state = emptyState(record.instance);
+        state = emptyState(record.session);
       }
       apply(state, record, offset, end + 1 - offset);
       state.sinceCheckpoint += 1;
@@ -501,25 +501,25 @@ class FileStore implements Store {
     return state;
   }
 
-  /** Every instance's state, loading the ones not yet loaded. */
-  #all(): InstanceState[] {
+  /** Every session's state, loading the ones not yet loaded. */
+  #all(): SessionState[] {
     if (!this.#scanned) {
-      for (const name of names(join(this.#dir, 'instances'))) this.#state(unsafe(name));
+      for (const name of names(join(this.#dir, 'sessions'))) this.#state(unsafe(name));
       this.#scanned = true;
     }
     return [...this.#states.values()];
   }
 
-  #require(id: string): InstanceState {
+  #require(id: string): SessionState {
     const state = this.#state(id);
-    if (state === null) throw new StoreError('no_instance', `no instance ${id}`);
+    if (state === null) throw new StoreError('no_session', `no session ${id}`);
     return state;
   }
 
   #journal(id: string): number {
     const open = this.#journals.get(id);
     if (open !== undefined) return open;
-    const fd = openSync(join(this.#instanceDir(id), 'journal.jsonl'), 'r+');
+    const fd = openSync(join(this.#sessionDir(id), 'journal.jsonl'), 'r+');
     this.#journals.set(id, fd);
     return fd;
   }
@@ -570,8 +570,8 @@ class FileStore implements Store {
     return join(this.#dir, 'agents', safe(ref.name), safe(ref.version));
   }
 
-  #instanceDir(id: string): string {
-    return join(this.#dir, 'instances', safe(id));
+  #sessionDir(id: string): string {
+    return join(this.#dir, 'sessions', safe(id));
   }
 
   #run<T>(body: () => T): Promise<T> {
@@ -588,7 +588,7 @@ class FileStore implements Store {
 
 // ---- records --------------------------------------------------------------
 
-function emptyState(record: InstanceRecord): InstanceState {
+function emptyState(record: SessionRecord): SessionState {
   return {
     record: { ...record },
     running: new Map(),
@@ -602,14 +602,14 @@ function emptyState(record: InstanceRecord): InstanceState {
   };
 }
 
-/** Applies one journal record to an instance's state. */
-function apply(state: InstanceState, record: JournalRecord, offset: number, length: number): void {
+/** Applies one journal record to a session's state. */
+function apply(state: SessionState, record: JournalRecord, offset: number, length: number): void {
   state.size = offset + length;
   switch (record.t) {
     case 'create':
       state.record = {
-        ...record.instance,
-        nextSeq: record.instance.nextSeq + record.append.length,
+        ...record.session,
+        nextSeq: record.session.nextSeq + record.append.length,
       };
       index(state, record.append, offset, length);
       for (const effect of record.started) state.running.set(effect.request.key, effect);
@@ -663,7 +663,7 @@ function apply(state: InstanceState, record: JournalRecord, offset: number, leng
 }
 
 function index(
-  state: InstanceState,
+  state: SessionState,
   append: readonly LogEntry[],
   offset: number,
   length: number,

@@ -1,5 +1,5 @@
 // A connection to a runner, over any transport: typed methods for the
-// protocol's requests, subscriptions that deliver an instance's
+// protocol's requests, subscriptions that deliver a session's
 // notifications, and handlers for the kinds this application provides.
 
 import { PROTOCOL_VERSION, RpcError, RpcPeer } from '@acentric/protocol';
@@ -8,8 +8,8 @@ import type {
   Answer,
   DeployParams,
   ErrorCode,
-  InstanceInfo,
-  InstanceListing,
+  SessionInfo,
+  SessionListing,
   LogPageResult,
   RpcMessage,
   RunnerMethods,
@@ -29,7 +29,7 @@ export type Transport = {
 
 /** What a handler the application provides receives. */
 export type ProvidedContext = {
-  instance: string;
+  session: string;
   key: string;
   kind: string;
   args: Json;
@@ -50,8 +50,8 @@ export type ClientOptions = {
   provides?: Record<string, ProvidedHandler>;
 };
 
-/** What a subscriber hears about an instance. */
-export type InstanceEvent =
+/** What a subscriber hears about a session. */
+export type SessionEvent =
   | { type: 'log'; entries: LogEntry[] }
   | { type: 'view'; view: Json }
   | { type: 'status'; status: Status; fault: string | null }
@@ -59,7 +59,7 @@ export type InstanceEvent =
 
 export type Subscription = { close(): Promise<void> };
 
-/** A request the runner refused, such as for an unknown instance. `code` names the problem. */
+/** A request the runner refused, such as for an unknown session. `code` names the problem. */
 export class RunnerRequestError extends Error {
   readonly code: ErrorCode | 'protocol';
 
@@ -76,7 +76,7 @@ export class RunnerClient {
   readonly #transport: Transport;
   readonly #peer: RpcPeer;
   readonly #provides: Record<string, ProvidedHandler>;
-  readonly #listeners = new Map<string, (event: InstanceEvent) => void>();
+  readonly #listeners = new Map<string, (event: SessionEvent) => void>();
   readonly #running = new Map<string, AbortController>();
   #subscriptions = 0;
 
@@ -117,7 +117,7 @@ export class RunnerClient {
     return this.#call('agents/deploy', params);
   }
 
-  async listAgents(): Promise<(AgentRef & { hash: string; instances: number })[]> {
+  async listAgents(): Promise<(AgentRef & { hash: string; sessions: number })[]> {
     return (await this.#call('agents/list', {})).agents;
   }
 
@@ -125,19 +125,19 @@ export class RunnerClient {
     return this.#call('secrets/set', { name, value }).then(() => undefined);
   }
 
-  // ---- instances ------------------------------------------------------------
+  // ---- sessions ------------------------------------------------------------
 
-  /** Creates an instance; `agent` is a ref or 'name@version'. */
+  /** Creates a session; `agent` is a ref or 'name@version'. */
   create(
     agent: AgentRef | string,
     config: JsonObject,
     options: { id?: string } = {},
   ): Promise<Answer & { id?: string }> {
-    return this.#call('instances/create', { agent: toRef(agent), config, ...options });
+    return this.#call('sessions/create', { agent: toRef(agent), config, ...options });
   }
 
   input(id: string, input: { id?: string; kind: string; payload?: JsonObject }): Promise<Answer> {
-    return this.#call('instances/input', {
+    return this.#call('sessions/input', {
       id,
       input: {
         ...(input.id === undefined ? {} : { id: input.id }),
@@ -148,7 +148,7 @@ export class RunnerClient {
   }
 
   configure(id: string, config: JsonObject, requestId?: string): Promise<Answer> {
-    return this.#call('instances/configure', {
+    return this.#call('sessions/configure', {
       id,
       config,
       ...(requestId === undefined ? {} : { requestId }),
@@ -156,41 +156,41 @@ export class RunnerClient {
   }
 
   upgrade(id: string, to: string): Promise<Answer> {
-    return this.#call('instances/upgrade', { id, to });
+    return this.#call('sessions/upgrade', { id, to });
   }
 
-  /** The instance now; with `snapshot`, its snapshot too, for debugging. */
-  get(id: string, options: { snapshot?: boolean } = {}): Promise<InstanceInfo> {
-    return this.#call('instances/get', { id, ...options });
+  /** The session now; with `snapshot`, its snapshot too, for debugging. */
+  get(id: string, options: { snapshot?: boolean } = {}): Promise<SessionInfo> {
+    return this.#call('sessions/get', { id, ...options });
   }
 
-  async list(filter: RunnerMethods['instances/list']['params'] = {}): Promise<InstanceListing[]> {
-    return (await this.#call('instances/list', filter)).instances;
+  async list(filter: RunnerMethods['sessions/list']['params'] = {}): Promise<SessionListing[]> {
+    return (await this.#call('sessions/list', filter)).sessions;
   }
 
   /** A page of the log. */
   log(id: string, query: LogQuery = {}): Promise<LogPageResult> {
-    return this.#call('instances/log', { id, ...query });
+    return this.#call('sessions/log', { id, ...query });
   }
 
   delete(id: string): Promise<void> {
-    return this.#call('instances/delete', { id }).then(() => undefined);
+    return this.#call('sessions/delete', { id }).then(() => undefined);
   }
 
   /**
-   * Hears what happens to an instance: the log after `after` first, then
+   * Hears what happens to a session: the log after `after` first, then
    * each step as it is saved, with no gap, and emits if asked for.
    */
   async subscribe(
     id: string,
     options: { after?: number; emits?: boolean },
-    listener: (event: InstanceEvent) => void,
+    listener: (event: SessionEvent) => void,
   ): Promise<Subscription> {
     this.#subscriptions += 1;
     const subscription = `s${this.#subscriptions}`;
     this.#listeners.set(subscription, listener);
     try {
-      await this.#call('instances/subscribe', { id, subscription, ...options });
+      await this.#call('sessions/subscribe', { id, subscription, ...options });
     } catch (error) {
       this.#listeners.delete(subscription);
       throw error;
@@ -198,7 +198,7 @@ export class RunnerClient {
     return {
       close: async () => {
         this.#listeners.delete(subscription);
-        await this.#call('instances/unsubscribe', { subscription });
+        await this.#call('sessions/unsubscribe', { subscription });
       },
     };
   }
@@ -236,7 +236,7 @@ export class RunnerClient {
   #notified(method: string, params: Json): void {
     if (!isObject(params)) return;
     if (method === 'effect/cancel') {
-      this.#running.get(runKey(params['instance'], params['key']))?.abort();
+      this.#running.get(runKey(params['session'], params['key']))?.abort();
       return;
     }
     const subscription = params['subscription'];
@@ -251,27 +251,27 @@ export class RunnerClient {
   async #answer(method: string, params: Json): Promise<Json> {
     if (method !== 'effect/run' || !isObject(params))
       throw new RpcError(-32601, `unknown method ${method}`);
-    const { instance, key, kind, args, attempt } = params;
-    if (typeof instance !== 'string' || typeof key !== 'string' || typeof kind !== 'string') {
-      throw new RpcError(-32602, 'effect/run needs instance, key and kind');
+    const { session, key, kind, args, attempt } = params;
+    if (typeof session !== 'string' || typeof key !== 'string' || typeof kind !== 'string') {
+      throw new RpcError(-32602, 'effect/run needs session, key and kind');
     }
     const handler = this.#provides[kind];
     if (handler === undefined) return { error: `this client does not provide ${kind}` };
     const controller = new AbortController();
-    const id = runKey(instance, key);
+    const id = runKey(session, key);
     this.#running.set(id, controller);
     try {
       const result = await handler({
-        instance,
+        session,
         key,
         kind,
         args: args ?? null,
         attempt: typeof attempt === 'number' ? attempt : 1,
         signal: controller.signal,
-        emit: (delta) => this.#peer.notify('effect/emit', { instance, key, delta }),
+        emit: (delta) => this.#peer.notify('effect/emit', { session, key, delta }),
         log: {
           list: async (query = {}) => {
-            const page = await this.log(instance, query);
+            const page = await this.log(session, query);
             return page.cursor === undefined ? { entries: page.entries } : page;
           },
         },
@@ -288,7 +288,7 @@ export class RunnerClient {
   }
 }
 
-function toEvent(method: string, params: JsonObject): InstanceEvent | null {
+function toEvent(method: string, params: JsonObject): SessionEvent | null {
   switch (method) {
     case 'log':
       return Array.isArray(params['entries'])
@@ -324,8 +324,8 @@ function isEntry(value: Json): value is LogEntry {
 const ERROR_CODES: ReadonlySet<string> = new Set([
   'closed',
   'no_agent',
-  'no_instance',
-  'instance_exists',
+  'no_session',
+  'session_exists',
   'bundle_conflict',
   'invalid_bundle',
   'missing_kinds',
@@ -349,8 +349,8 @@ function toRef(agent: AgentRef | string): AgentRef {
   return { name: agent.slice(0, at), version: agent.slice(at + 1) };
 }
 
-function runKey(instance: unknown, key: unknown): string {
-  return JSON.stringify([instance ?? null, key ?? null]);
+function runKey(session: unknown, key: unknown): string {
+  return JSON.stringify([session ?? null, key ?? null]);
 }
 
 function isObject(value: unknown): value is JsonObject {

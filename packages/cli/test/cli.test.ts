@@ -189,7 +189,7 @@ describe('acentric start', () => {
     await again.close();
   });
 
-  it('keeps instances in a folder of plain files with an fs: store', async () => {
+  it('keeps sessions in a folder of plain files with an fs: store', async () => {
     const dir = await project(files(AGENT, HANDLERS, ''));
     await writeFile(
       join(dir, 'acentric.config.ts'),
@@ -202,7 +202,7 @@ describe('acentric start', () => {
     await client.input(id ?? '', { kind: 'note', payload: { text: 'on disk' } });
     await client.close();
     const journal = await readFile(
-      join(dir, '.acentric', 'files', 'instances', id ?? '', 'journal.jsonl'),
+      join(dir, '.acentric', 'files', 'sessions', id ?? '', 'journal.jsonl'),
       'utf8',
     );
     expect(journal).toContain('note: on disk');
@@ -238,7 +238,7 @@ describe('the acentric command', () => {
     const runner = await started(dir);
     const url = ['--url', runner.url ?? ''];
     expect((await run(['agents', ...url])).stdout).toMatch(
-      /^notes@1\.0\.0 {2}[0-9a-f]{12} {2}0 instances/,
+      /^notes@1\.0\.0 {2}[0-9a-f]{12} {2}0 sessions/,
     );
     const id = (await run(['create', 'notes@1.0.0', '{}', ...url])).stdout.trim();
     expect(id).toMatch(/^[0-9a-f-]{36}$/);

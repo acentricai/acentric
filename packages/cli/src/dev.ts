@@ -1,11 +1,11 @@
 // acentric dev: a runner for working on a project's agents. It builds each
 // agent and deploys it as <version>-dev.<hash>, then watches the project:
 // on every save it builds again, deploys the new code under a new dev
-// version and upgrades the agent's instances to it, keeping their state
-// through migrate. Hot reload is an upgrade, so an instance faulted by a bug
+// version and upgrades the agent's sessions to it, keeping their state
+// through migrate. Hot reload is an upgrade, so a session faulted by a bug
 // is fixed by saving the fix: the upgrade clears the fault and the message
 // that failed is stepped again on the new code. A build that fails leaves
-// instances on the code they had.
+// sessions on the code they had.
 //
 // One port serves the protocol over WebSocket, the dev UI, and the dev
 // events the UI shows: builds, deploys and upgrades.
@@ -47,7 +47,7 @@ export type DevEvent =
       type: 'upgraded';
       at: number;
       agent: string;
-      instance: string;
+      session: string;
       from: string;
       to: string;
       answer: Answer;
@@ -153,19 +153,19 @@ export async function devProject(project: Project, options: DevOptions = {}): Pr
     }
     versions[agent.name] = version;
     emit({ type: 'built', at: Date.now(), agent: agent.name, version, deployed, warnings });
-    for (const instance of await runner.list({ agent: agent.name })) {
-      if (instance.agent.version === version) continue;
-      // Upgrading one instance at a time keeps their events in order.
+    for (const session of await runner.list({ agent: agent.name })) {
+      if (session.agent.version === version) continue;
+      // Upgrading one session at a time keeps their events in order.
       // oxlint-disable-next-line no-await-in-loop
-      const answer = await runner.upgrade(instance.id, version).catch((error: unknown): Answer => ({
+      const answer = await runner.upgrade(session.id, version).catch((error: unknown): Answer => ({
         failed: error instanceof Error ? error.message : String(error),
       }));
       emit({
         type: 'upgraded',
         at: Date.now(),
         agent: agent.name,
-        instance: instance.id,
-        from: instance.agent.version,
+        session: session.id,
+        from: session.agent.version,
         to: version,
         answer,
       });
@@ -175,9 +175,9 @@ export async function devProject(project: Project, options: DevOptions = {}): Pr
         bundle.name === agent.name &&
         bundle.version !== version &&
         bundle.version.includes('-dev.') &&
-        bundle.instances === 0
+        bundle.sessions === 0
       ) {
-        // Old dev versions no instance uses are removed one by one.
+        // Old dev versions no session uses are removed one by one.
         // oxlint-disable-next-line no-await-in-loop
         await runner.undeploy(bundle).catch(() => undefined);
       }
@@ -300,11 +300,11 @@ function describe(event: DevEvent): string {
     case 'built':
       return `${event.deployed ? 'deployed' : 'unchanged:'} ${event.agent}@${event.version}${event.warnings.map((warning) => `\n  warning: ${warning}`).join('')}`;
     case 'build_failed':
-      return `build of ${event.agent} failed, instances keep the code they had:\n${event.error}`;
+      return `build of ${event.agent} failed, sessions keep the code they had:\n${event.error}`;
     case 'upgraded':
       return 'accepted' in event.answer
-        ? `upgraded ${event.instance} to ${event.to}`
-        : `could not upgrade ${event.instance} to ${event.to}, it stays on ${event.from}: ${JSON.stringify(event.answer)}`;
+        ? `upgraded ${event.session} to ${event.to}`
+        : `could not upgrade ${event.session} to ${event.to}, it stays on ${event.from}: ${JSON.stringify(event.answer)}`;
   }
 }
 

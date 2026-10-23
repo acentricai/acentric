@@ -122,7 +122,7 @@ describe('the memory runner', () => {
     runner.close();
   });
 
-  it('stops an instance whose step fails on a result', async () => {
+  it('stops a session whose step fails on a result', async () => {
     const runner = createMemoryRunner({ secrets: { token: 'abc' } });
     const { id } = runner.create(runner.load(agent), {});
     if (id === undefined) throw new Error('not created');

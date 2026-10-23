@@ -36,7 +36,7 @@ export type Agent<
 > = {
   /**
    * Identifies the agent's code, like a package name, such as
-   * 'support-bot'. Every instance created from this code shares it.
+   * 'support-bot'. Every session created from this code shares it.
    */
   name: string;
   /**

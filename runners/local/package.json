@@ -1,7 +1,7 @@
 {
   "name": "@acentric/runner-local",
   "version": "0.1.0",
-  "description": "A runner for your own machine: keeps instances in a store across restarts and runs handlers in child processes.",
+  "description": "A runner for your own machine: keeps sessions in a store across restarts and runs handlers in child processes.",
   "type": "module",
   "sideEffects": false,
   "bin": {

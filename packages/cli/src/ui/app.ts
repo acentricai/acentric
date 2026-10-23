@@ -1,13 +1,13 @@
-// The dev UI, in the browser. Everything about instances comes over the
+// The dev UI, in the browser. Everything about sessions comes over the
 // protocol through @acentric/client; builds, deploys and upgrades come from
 // the dev server's event stream.
 
 import { connectWebSocket } from '@acentric/client';
 import type {
   Answer,
-  InstanceEvent,
-  InstanceInfo,
-  InstanceListing,
+  SessionEvent,
+  SessionInfo,
+  SessionListing,
   RunnerClient,
   Subscription,
 } from '@acentric/client';
@@ -28,7 +28,7 @@ type DevEvent =
       type: 'upgraded';
       at: number;
       agent: string;
-      instance: string;
+      session: string;
       from: string;
       to: string;
       answer: Answer;
@@ -39,9 +39,9 @@ const state = {
   connected: false,
   versions: {} as Record<string, string>,
   devEvents: [] as DevEvent[],
-  instances: [] as InstanceListing[],
+  sessions: [] as SessionListing[],
   selected: null as string | null,
-  info: null as InstanceInfo | null,
+  info: null as SessionInfo | null,
   entries: [] as LogEntry[],
   streams: new Map<string, string>(),
   expanded: new Set<number>(),
@@ -73,7 +73,7 @@ async function connect(): Promise<void> {
       render();
       setTimeout(() => void connect(), 1000);
     });
-    await refreshInstances();
+    await refreshSessions();
     if (state.selected !== null) await select(state.selected);
   } catch {
     setTimeout(() => void connect(), 1000);
@@ -97,16 +97,16 @@ async function loadDevState(): Promise<void> {
     if (event.type === 'built')
       state.versions = { ...state.versions, [event.agent]: event.version };
     if (event.type === 'upgraded') {
-      void refreshInstances();
-      if (event.instance === state.selected) void refreshInfo();
+      void refreshSessions();
+      if (event.session === state.selected) void refreshInfo();
     }
     render();
   });
 }
 
-async function refreshInstances(): Promise<void> {
+async function refreshSessions(): Promise<void> {
   if (state.client === null) return;
-  state.instances = await state.client.list();
+  state.sessions = await state.client.list();
   render();
 }
 
@@ -129,14 +129,14 @@ async function select(id: string): Promise<void> {
   state.answer = { text: '', bad: false };
   state.info = await client.get(id);
   state.subscription = await client.subscribe(id, { emits: true }, (event) =>
-    onInstanceEvent(id, event),
+    onSessionEvent(id, event),
   );
   render();
 }
 
 let refreshing: ReturnType<typeof setTimeout> | null = null;
 
-function onInstanceEvent(id: string, event: InstanceEvent): void {
+function onSessionEvent(id: string, event: SessionEvent): void {
   if (id !== state.selected) return;
   if (event.type === 'log') {
     state.entries.push(...event.entries);
@@ -146,7 +146,7 @@ function onInstanceEvent(id: string, event: InstanceEvent): void {
     state.info = { ...state.info, view: event.view };
   } else if (event.type === 'status' && state.info !== null) {
     state.info = { ...state.info, status: event.status, fault: event.fault };
-    void refreshInstances();
+    void refreshSessions();
   }
   // Running effects come from get, at most every 150 ms.
   if (event.type !== 'emit' && refreshing === null) {
@@ -188,7 +188,7 @@ async function create(agent: string, configText: string): Promise<string | null>
   remember(`config:${agent}`, configText);
   const answer = await client.create({ name: agent, version }, config);
   if (!('accepted' in answer) || answer.id === undefined) throw new Error(describeAnswer(answer));
-  await refreshInstances();
+  await refreshSessions();
   await select(answer.id);
   return answer.id;
 }
@@ -218,15 +218,15 @@ function draw(): void {
   const scrollTop = previous?.scrollTop ?? 0;
   const info = state.info;
   if (info === null) {
-    headView.replaceChildren(element('b', {}, ['No instance selected']));
+    headView.replaceChildren(element('b', {}, ['No session selected']));
     bodyView.replaceChildren(
-      element('div', { class: 'empty' }, ['Create an instance, or pick one on the left.']),
+      element('div', { class: 'empty' }, ['Create a session, or pick one on the left.']),
     );
     composerView.style.display = 'none';
     return;
   }
   headView.replaceChildren(
-    element('span', { class: 'id', title: 'instance id' }, [info.id]),
+    element('span', { class: 'id', title: 'session id' }, [info.id]),
     element('span', { class: 'chip' }, [`${info.agent.name}@${info.agent.version}`]),
     element('span', { class: 'badge' }, [
       element('span', { class: `dot ${info.status}` }),
@@ -264,27 +264,27 @@ function sidebar(): HTMLElement[] {
       element(
         'button',
         { class: 'primary', style: 'margin-top:10px;width:100%', onclick: () => openCreate() },
-        ['New instance'],
+        ['New session'],
       ),
     ]),
     element('div', { class: 'section' }, [
-      element('h3', {}, ['Instances']),
-      ...(state.instances.length === 0
+      element('h3', {}, ['Sessions']),
+      ...(state.sessions.length === 0
         ? [element('div', { class: 'meta' }, ['none yet'])]
-        : state.instances.map((instance) =>
+        : state.sessions.map((session) =>
             element(
               'div',
               {
-                class: `instance${instance.id === state.selected ? ' selected' : ''}`,
-                onclick: () => void select(instance.id),
-                title: instance.fault ?? instance.id,
+                class: `session${session.id === state.selected ? ' selected' : ''}`,
+                onclick: () => void select(session.id),
+                title: session.fault ?? session.id,
               },
               [
-                element('span', { class: `dot ${instance.status}` }),
+                element('span', { class: `dot ${session.status}` }),
                 element('div', {}, [
-                  element('div', { class: 'mono' }, [instance.id.slice(0, 8)]),
+                  element('div', { class: 'mono' }, [session.id.slice(0, 8)]),
                   element('div', { class: 'meta' }, [
-                    `${instance.agent.name} · ${instance.nextSeq - 1} entries`,
+                    `${session.agent.name} · ${session.nextSeq - 1} entries`,
                   ]),
                 ]),
               ],
@@ -294,7 +294,7 @@ function sidebar(): HTMLElement[] {
   ];
 }
 
-function logView(info: InstanceInfo): HTMLElement {
+function logView(info: SessionInfo): HTMLElement {
   const children: (Node | string)[] = [];
   if (info.fault !== null) {
     children.push(
@@ -344,7 +344,7 @@ function entryView(entry: LogEntry): HTMLElement {
   );
 }
 
-function sideView(info: InstanceInfo): HTMLElement {
+function sideView(info: SessionInfo): HTMLElement {
   const recent = state.devEvents
     .filter((event) => event.type !== 'building')
     .slice(-12)
@@ -390,7 +390,7 @@ function devEventView(event: DevEvent): HTMLElement {
       ]);
     case 'upgraded':
       return element('div', { class: `event ${'accepted' in event.answer ? 'ok' : 'bad'}` }, [
-        `${time} ${'accepted' in event.answer ? 'upgraded' : 'could not upgrade'} ${event.instance.slice(0, 8)} to ${event.to}`,
+        `${time} ${'accepted' in event.answer ? 'upgraded' : 'could not upgrade'} ${event.session.slice(0, 8)} to ${event.to}`,
       ]);
     case 'building':
       return element('div', { class: 'event' }, [`${time} building ${event.agent}`]);
@@ -451,7 +451,7 @@ function openCreate(): void {
   });
   const error = element('div', { class: 'answer bad' });
   const dialog: HTMLDialogElement = element('dialog', {}, [
-    element('h2', {}, ['New instance']),
+    element('h2', {}, ['New session']),
     element('label', {}, ['Agent']),
     agentSelect,
     element('label', {}, ['Config (JSON)']),

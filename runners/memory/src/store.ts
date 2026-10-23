@@ -1,4 +1,4 @@
-// What the memory runner keeps: every instance's state, in plain objects.
+// What the memory runner keeps: every session's state, in plain objects.
 //
 // The store is separate from the runner. A runner can be closed abruptly
 // and a new one started over the same store, which is how the runner
@@ -15,7 +15,7 @@ export type StoredEffect = {
   attempt: number;
 };
 
-export type StoredInstance = {
+export type StoredSession = {
   id: string;
   agent: { name: string; version: string };
   config: JsonObject;
@@ -25,16 +25,16 @@ export type StoredInstance = {
   effects: Map<string, StoredEffect>;
   /** Keys that finished or were cancelled; they never run again. */
   finished: Set<string>;
-  /** Set when a step the runner could not drop failed; the instance then takes no messages. */
+  /** Set when a step the runner could not drop failed; the session then takes no messages. */
   fault: string | null;
 };
 
 export type MemoryStore = {
-  instances: Map<string, StoredInstance>;
-  /** Counts up to name new instances. */
+  sessions: Map<string, StoredSession>;
+  /** Counts up to name new sessions. */
   created: number;
 };
 
 export function createMemoryStore(): MemoryStore {
-  return { instances: new Map(), created: 0 };
+  return { sessions: new Map(), created: 0 };
 }

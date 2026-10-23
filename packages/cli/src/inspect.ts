@@ -29,18 +29,18 @@ export async function agents(client: RunnerClient, out: Output): Promise<void> {
   if (list.length === 0) out('no agents deployed');
   for (const agent of list) {
     out(
-      `${agent.name}@${agent.version}  ${agent.hash.slice(0, 12)}  ${agent.instances} instance${agent.instances === 1 ? '' : 's'}`,
+      `${agent.name}@${agent.version}  ${agent.hash.slice(0, 12)}  ${agent.sessions} session${agent.sessions === 1 ? '' : 's'}`,
     );
   }
 }
 
 export async function ls(client: RunnerClient, out: Output): Promise<void> {
-  const instances = await client.list();
-  if (instances.length === 0) out('no instances');
-  for (const instance of instances) {
-    const fault = instance.fault === null ? '' : `  ${instance.fault}`;
+  const sessions = await client.list();
+  if (sessions.length === 0) out('no sessions');
+  for (const session of sessions) {
+    const fault = session.fault === null ? '' : `  ${session.fault}`;
     out(
-      `${instance.id}  ${instance.agent.name}@${instance.agent.version}  ${instance.status}  ${instance.nextSeq - 1} entries  ${instance.running} running${fault}`,
+      `${session.id}  ${session.agent.name}@${session.agent.version}  ${session.status}  ${session.nextSeq - 1} entries  ${session.running} running${fault}`,
     );
   }
 }

@@ -1,6 +1,6 @@
-// The local runner: runs instances kept in a store, following RUNNERS.md.
+// The local runner: runs sessions kept in a store, following RUNNERS.md.
 //
-// Each instance has a mailbox, and its jobs run one at a time: a caller's
+// Each session has a mailbox, and its jobs run one at a time: a caller's
 // input or config change, an effect's result from the durable inbox, an
 // upgrade, recovery. A step's whole result is checked, then committed to the
 // store in one write; only after the commit do handlers start or get their
@@ -9,9 +9,9 @@
 // outcome is saved to the inbox before its step runs, so a crash in between
 // loses nothing.
 //
-// Instances are loaded when a job needs them and unloaded after a while
-// idle. Effects and timers are tracked apart from loaded instances, so an
-// instance can be unloaded while its effects run.
+// Sessions are loaded when a job needs them and unloaded after a while
+// idle. Effects and timers are tracked apart from loaded sessions, so an
+// session can be unloaded while its effects run.
 
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, rename, stat, writeFile } from 'node:fs/promises';
@@ -40,8 +40,8 @@ import { deepFreeze, frozenCopy, isJson, requireJson, thrownToJson } from './jso
 import { StoreError } from './store/types.js';
 import type {
   AgentRef,
-  InstanceFilter,
-  InstanceSummary,
+  SessionFilter,
+  SessionSummary,
   KindInfo,
   Store,
   StoredEffect,
@@ -63,7 +63,7 @@ export type RunningEffect = {
   active: boolean;
 };
 
-export type InstanceInfo = {
+export type SessionInfo = {
   id: string;
   agent: AgentRef;
   status: Status;
@@ -71,16 +71,16 @@ export type InstanceInfo = {
   view: Json;
   nextSeq: number;
   running: RunningEffect[];
-  /** Whether a job is running or waiting in the instance's mailbox. */
+  /** Whether a job is running or waiting in the session's mailbox. */
   working: boolean;
   /** The agent's snapshot, when asked for. */
   snapshot?: JsonObject;
 };
 
-export type InstanceListing = InstanceSummary & { status: Status };
+export type SessionListing = SessionSummary & { status: Status };
 
-/** What a subscriber hears about an instance. */
-export type InstanceEvent =
+/** What a subscriber hears about a session. */
+export type SessionEvent =
   | { type: 'log'; entries: LogEntry[] }
   | { type: 'view'; view: Json }
   | { type: 'status'; status: Status; fault: string | null }
@@ -103,7 +103,7 @@ export type DeployBundle = AgentRef & {
 
 /** One effect for a provider to run. */
 export type ProvidedEffect = {
-  instance: string;
+  session: string;
   key: string;
   kind: string;
   args: Json;
@@ -117,12 +117,12 @@ export type ProvidedEffect = {
  */
 export type Provider = {
   run(effect: ProvidedEffect): Promise<HostOutcome>;
-  cancel(instance: string, key: string): void;
+  cancel(session: string, key: string): void;
 };
 
 /** A provider's registration: how it reports emitted deltas, and how it leaves. */
 export type Provision = {
-  emitted(instance: string, key: string, delta: Json): void;
+  emitted(session: string, key: string, delta: Json): void;
   release(): void;
 };
 
@@ -146,7 +146,7 @@ export type LocalRunnerOptions = {
   maxAttempts?: number;
   /** How long close waits for running handlers. Defaults to 5000 ms. */
   graceMs?: number;
-  /** How long an instance stays loaded with nothing to do. Defaults to 5 minutes. */
+  /** How long a session stays loaded with nothing to do. Defaults to 5 minutes. */
   idleMs?: number;
   host?: {
     /** Node options for handler hosts, such as `--import` of a module to load first. */
@@ -161,8 +161,8 @@ export type LocalRunnerOptions = {
 export type RunnerErrorCode =
   | 'closed'
   | 'no_agent'
-  | 'no_instance'
-  | 'instance_exists'
+  | 'no_session'
+  | 'session_exists'
   | 'bundle_conflict'
   | 'invalid_bundle'
   | 'missing_kinds'
@@ -191,7 +191,7 @@ type Code = {
   handlersPath: string;
 };
 
-/** A loaded instance. */
+/** A loaded session. */
 type Live = {
   id: string;
   code: Code;
@@ -252,7 +252,7 @@ type Prepared = {
 };
 
 type Subscriber = {
-  listener: (event: InstanceEvent) => void;
+  listener: (event: SessionEvent) => void;
   emits: boolean;
   /** Entries held back while the history is replayed; null once live. */
   held: LogEntry[] | null;
@@ -277,7 +277,7 @@ export class LocalRunner {
   readonly #lives = new Map<string, Promise<Live | null>>();
   readonly #mailboxes = new Map<string, Mailbox>();
   readonly #flights = new Map<string, Map<string, Flight>>();
-  /** Inbox items already in a mailbox, by instance. */
+  /** Inbox items already in a mailbox, by session. */
   readonly #queued = new Map<string, Set<number>>();
   readonly #subscribers = new Map<string, Set<Subscriber>>();
   readonly #statuses = new Map<string, Status>();
@@ -304,14 +304,14 @@ export class LocalRunner {
       ...(options.host?.env === undefined ? {} : { env: options.host.env }),
       idleMs: options.host?.idleMs ?? 30_000,
       secret: (name) => this.#secrets[name],
-      readLog: async (instance, query) => {
-        const page = await this.log(instance, query);
+      readLog: async (session, query) => {
+        const page = await this.log(session, query);
         return {
           entries: [...page.entries],
           ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
         };
       },
-      emitted: (instance, key, delta) => this.#emitted(instance, key, delta),
+      emitted: (session, key, delta) => this.#emitted(session, key, delta),
     });
   }
 
@@ -460,7 +460,7 @@ export class LocalRunner {
       for (const start of waiting) start();
     }
     return {
-      emitted: (instance, key, delta) => this.#emitted(instance, key, delta),
+      emitted: (session, key, delta) => this.#emitted(session, key, delta),
       release: () => {
         for (const kind of kinds) {
           if (this.#providers.get(kind) === provider) this.#providers.delete(kind);
@@ -474,11 +474,11 @@ export class LocalRunner {
     this.#secrets[name] = value;
   }
 
-  listAgents(): Promise<(AgentRef & { hash: string; instances: number })[]> {
+  listAgents(): Promise<(AgentRef & { hash: string; sessions: number })[]> {
     return this.#store.listBundles();
   }
 
-  /** Removes a deployed version no instance uses, such as an old dev version. */
+  /** Removes a deployed version no session uses, such as an old dev version. */
   async undeploy(ref: AgentRef): Promise<void> {
     this.#open();
     const deployed = (await this.#store.listBundles()).find(
@@ -486,20 +486,20 @@ export class LocalRunner {
     );
     if (deployed === undefined)
       throw new RunnerError('no_agent', `agent ${ref.name}@${ref.version} is not deployed`);
-    if (deployed.instances > 0) {
+    if (deployed.sessions > 0) {
       throw new RunnerError(
         'agent_in_use',
-        `${deployed.instances} instances still use ${ref.name}@${ref.version}`,
+        `${deployed.sessions} sessions still use ${ref.name}@${ref.version}`,
       );
     }
     await this.#store.deleteBundle(ref);
     this.#codes.delete(`${ref.name}@${ref.version}`);
   }
 
-  // ---- instances ------------------------------------------------------------
+  // ---- sessions ------------------------------------------------------------
 
   /**
-   * Creates an instance, running init. With an id, creating the same agent
+   * Creates a session, running init. With an id, creating the same agent
    * and config again answers as the first time did.
    */
   async create(
@@ -516,7 +516,7 @@ export class LocalRunner {
       const existing = await this.#store.load(id);
       if (existing !== null) {
         if (existing.createHash === creation) return { accepted: true, id };
-        throw new RunnerError('instance_exists', `instance ${id} already exists`);
+        throw new RunnerError('session_exists', `session ${id} already exists`);
       }
     }
     const now = this.#clock();
@@ -570,8 +570,8 @@ export class LocalRunner {
         { append: prepared.entries, started: prepared.started },
       );
     } catch (error) {
-      if (error instanceof StoreError && error.code === 'instance_exists') {
-        throw new RunnerError('instance_exists', error.message);
+      if (error instanceof StoreError && error.code === 'session_exists') {
+        throw new RunnerError('session_exists', error.message);
       }
       throw error;
     }
@@ -596,7 +596,7 @@ export class LocalRunner {
     );
   }
 
-  /** Changes an instance's config, answering once its step is saved. A request id makes a retry safe. */
+  /** Changes a session's config, answering once its step is saved. A request id makes a retry safe. */
   configure(id: string, config: JsonObject, requestId?: string): Promise<Answer> {
     return new Promise((resolve, reject) =>
       this.#enqueue(id, {
@@ -609,23 +609,23 @@ export class LocalRunner {
     );
   }
 
-  /** Moves an instance onto another deployed version of its agent. Clears a fault. */
+  /** Moves a session onto another deployed version of its agent. Clears a fault. */
   upgrade(id: string, version: string): Promise<Answer> {
     return new Promise((resolve, reject) =>
       this.#enqueue(id, { type: 'upgrade', version, resolve, reject }),
     );
   }
 
-  /** Cancels an instance's effects and removes it from the store. */
+  /** Cancels a session's effects and removes it from the store. */
   delete(id: string): Promise<void> {
     return new Promise((resolve, reject) =>
       this.#enqueue(id, { type: 'delete', done: { resolve: () => resolve(), reject } }),
     );
   }
 
-  async get(id: string, options: { snapshot?: boolean } = {}): Promise<InstanceInfo> {
+  async get(id: string, options: { snapshot?: boolean } = {}): Promise<SessionInfo> {
     const live = await this.#live(id);
-    if (live === null) throw new RunnerError('no_instance', `no instance ${id}`);
+    if (live === null) throw new RunnerError('no_session', `no session ${id}`);
     return {
       id,
       agent: live.code.ref,
@@ -639,10 +639,10 @@ export class LocalRunner {
     };
   }
 
-  async list(filter?: InstanceFilter): Promise<InstanceListing[]> {
-    const instances = await this.#store.list(filter);
-    return instances.map((instance) =>
-      Object.assign(instance, { status: this.#status(instance.id, instance.fault) }),
+  async list(filter?: SessionFilter): Promise<SessionListing[]> {
+    const sessions = await this.#store.list(filter);
+    return sessions.map((session) =>
+      Object.assign(session, { status: this.#status(session.id, session.fault) }),
     );
   }
 
@@ -662,17 +662,17 @@ export class LocalRunner {
   }
 
   /**
-   * Tells `listener` what happens to an instance: first the log after
+   * Tells `listener` what happens to a session: first the log after
    * `after`, from the store, then each commit's entries as it is saved, with
    * no gap between the two. Returns a function that stops it.
    */
   async subscribe(
     id: string,
     options: SubscribeOptions,
-    listener: (event: InstanceEvent) => void,
+    listener: (event: SessionEvent) => void,
   ): Promise<() => void> {
     const live = await this.#live(id);
-    if (live === null) throw new RunnerError('no_instance', `no instance ${id}`);
+    if (live === null) throw new RunnerError('no_session', `no session ${id}`);
     const subscriber: Subscriber = { listener, emits: options.emits === true, held: [] };
     const subscribers = this.#subscribers.get(id) ?? new Set();
     subscribers.add(subscriber);
@@ -728,7 +728,7 @@ export class LocalRunner {
         continue;
       }
       try {
-        // Jobs of one instance run one at a time, in order.
+        // Jobs of one session run one at a time, in order.
         // oxlint-disable-next-line no-await-in-loop
         await this.#run(id, job);
       } catch (error) {
@@ -738,7 +738,7 @@ export class LocalRunner {
         refuse(job, error instanceof Error ? error : new Error(String(error)));
         this.#lives.delete(id);
         if (!this.#closed && !(error instanceof RunnerError)) {
-          process.stderr.write(`acentric: a job of instance ${id} failed: ${String(error)}\n`);
+          process.stderr.write(`acentric: a job of session ${id} failed: ${String(error)}\n`);
         }
       }
     }
@@ -751,7 +751,7 @@ export class LocalRunner {
       return;
     }
     const live = await this.#live(id);
-    if (live === null) throw new RunnerError('no_instance', `no instance ${id}`);
+    if (live === null) throw new RunnerError('no_session', `no session ${id}`);
     live.usedAt = Date.now();
     switch (job.type) {
       case 'input':
@@ -800,7 +800,7 @@ export class LocalRunner {
         return toAnswer(prior.answer);
       }
     }
-    if (live.fault !== null) return { failed: `the instance has stopped: ${live.fault}` };
+    if (live.fault !== null) return { failed: `the session has stopped: ${live.fault}` };
     const answer = await this.#deliver(
       live,
       message,
@@ -898,7 +898,7 @@ export class LocalRunner {
 
   /**
    * A failed step applies nothing. A caller's input or config change is
-   * answered with the failure; any other message stops the instance, since
+   * answered with the failure; any other message stops the session, since
    * the same step would fail again, until an upgrade brings fixed code.
    */
   async #stepFailed(live: Live, message: Message, error: Json): Promise<Answer> {
@@ -1060,7 +1060,7 @@ export class LocalRunner {
     };
   }
 
-  /** The instance's entries from `start` on, reading older ones from the store if the window moved back. */
+  /** The session's entries from `start` on, reading older ones from the store if the window moved back. */
   async #entriesFrom(live: Live, start: number): Promise<LogEntry[]> {
     if (start >= live.windowStart) return live.entries.filter((entry) => entry.seq >= start);
     const older = await this.#store.readLog(live.id, {
@@ -1148,7 +1148,7 @@ export class LocalRunner {
     this.#background(
       this.#hosts
         .run(code.hash, code.handlersPath, {
-          instance: id,
+          session: id,
           key,
           kind,
           args,
@@ -1176,7 +1176,7 @@ export class LocalRunner {
     this.#limit(id, flight, info);
     this.#background(
       provider
-        .run({ instance: id, key, kind, args, attempt: effect.attempt })
+        .run({ session: id, key, kind, args, attempt: effect.attempt })
         .then((outcome) => this.#ran(id, code, effect, flight, outcome)),
     );
   }
@@ -1265,7 +1265,7 @@ export class LocalRunner {
   // ---- recovery -------------------------------------------------------------
 
   /**
-   * Picks up an instance's effects that no handler in this runner is
+   * Picks up a session's effects that no handler in this runner is
    * running: inbox results are stepped first, then running effects are
    * reported interrupted, run again or scheduled again. The effects in the
    * store are what the last step declared, from the same code, so they are
@@ -1520,7 +1520,7 @@ export class LocalRunner {
   }
 }
 
-/** Where an instance's window starts: what `window` asks for, kept within the log. */
+/** Where a session's window starts: what `window` asks for, kept within the log. */
 function startOf(code: Code, snapshot: JsonObject, next: number): number {
   const asked = code.agent.window?.(snapshot) ?? 1;
   if (typeof asked !== 'number' || Number.isNaN(asked)) {

@@ -42,10 +42,10 @@ aside { border-right: 1px solid var(--line); background: var(--panel); overflow:
 .section h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
 .agent { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
 .chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--sunken); border-radius: 4px; padding: 1px 6px; }
-.instance { display: flex; gap: 8px; align-items: center; padding: 7px 8px; margin: 0 -8px; border-radius: 6px; cursor: pointer; }
-.instance:hover { background: var(--sunken); }
-.instance.selected { background: var(--accent-soft); }
-.instance .meta { font-size: 12px; color: var(--muted); }
+.session { display: flex; gap: 8px; align-items: center; padding: 7px 8px; margin: 0 -8px; border-radius: 6px; cursor: pointer; }
+.session:hover { background: var(--sunken); }
+.session.selected { background: var(--accent-soft); }
+.session .meta { font-size: 12px; color: var(--muted); }
 main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; height: 100vh; }
 .head { padding: 12px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .head .id { font-family: var(--mono); font-size: 13px; }

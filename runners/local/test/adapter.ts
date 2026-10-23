@@ -67,12 +67,12 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
     );
   };
 
-  const instance = (): string => {
-    if (id === null) throw new Error('no instance has been created');
+  const session = (): string => {
+    if (id === null) throw new Error('no session has been created');
     return id;
   };
 
-  /** Whether the instance has work, other than gates waiting to be released. */
+  /** Whether the session has work, other than gates waiting to be released. */
   const busy = async (): Promise<boolean> => {
     if (id === null) return false;
     const info = await runner.get(id);
@@ -107,8 +107,8 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
       }
       return answer;
     },
-    input: (kind, payload) => answerOf(() => runner.input(instance(), { kind, payload })),
-    configure: (config) => answerOf(() => runner.configure(instance(), config)),
+    input: (kind, payload) => answerOf(() => runner.input(session(), { kind, payload })),
+    configure: (config) => answerOf(() => runner.configure(session(), config)),
     release: (key, outcome) => {
       gates.release(key, outcome);
       return Promise.resolve();
@@ -148,7 +148,7 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
       runner = await open(store);
       await listen();
     },
-    upgrade: () => answerOf(() => runner.upgrade(instance(), '2')),
+    upgrade: () => answerOf(() => runner.upgrade(session(), '2')),
     close: async () => {
       stopListening?.();
       runner.kill();

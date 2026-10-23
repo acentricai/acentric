@@ -1,6 +1,6 @@
 # Runners
 
-A runner is a program that takes an agent and runs instances of it. Runners
+A runner is a program that takes an agent and runs sessions of it. Runners
 can be very different: in memory for tests, on a laptop with a local
 database, on a fleet of servers, in Cloudflare Durable Objects. This
 document is the contract they share, so that an agent written against the
@@ -23,10 +23,10 @@ messages, effect requests and results. A runner treats an agent's snapshot,
 config, args and results as opaque JSON; their types matter only to the
 agent's author.
 
-A runner's work, per instance, is one loop:
+A runner's work, per session, is one loop:
 
 1. Take the next message.
-2. Give it to `step` with the instance's state.
+2. Give it to `step` with the session's state.
 3. Save what `step` returned, all at once.
 4. Match the effects that should exist to the effects that are running.
 5. Run handlers, and turn what they produce into new messages.
@@ -54,13 +54,13 @@ pure half in a restricted sandbox and the handlers where they can do I/O.
 - `(name, version)` identifies an agent's code. A runner MUST NOT load two
   different bundles under the same name and version.
 
-## 3. Instances
+## 3. Sessions
 
-- Creating an instance MUST run `init(config, now)`. If init rejects or
-  fails, the instance is not created and the creator receives the error.
-- For each instance, a runner keeps its snapshot, its log, its config, its
+- Creating a session MUST run `init(config, now)`. If init rejects or
+  fails, the session is not created and the creator receives the error.
+- For each session, a runner keeps its snapshot, its log, its config, its
   effects (declared, running, finished) and the messages waiting for it.
-- How instances are named and addressed is the runner's choice.
+- How sessions are named and addressed is the runner's choice.
 
 ## 4. Messages
 
@@ -70,10 +70,10 @@ A runner MUST deliver exactly four types of message, all readonly:
 | ---------- | ----------------------------------------- |
 | `input`    | a caller                                  |
 | `effect`   | a finished effect, reported by the runner |
-| `config`   | a caller changing the instance's config   |
-| `migrated` | the runner, after upgrading the instance  |
+| `config`   | a caller changing the session's config    |
+| `migrated` | the runner, after upgrading the session   |
 
-**One at a time.** A runner MUST NOT run two steps of one instance at
+**One at a time.** A runner MUST NOT run two steps of one session at
 once, or start a step before the previous one is saved.
 
 **Order.**
@@ -100,7 +100,7 @@ again if it delivers it at all, unchanged.
 To run a step, the runner builds the state, `{ snapshot, log, config }`
 with the log window (section 6), and calls `step(state, message, now)`.
 
-**Time.** `now` is milliseconds since the Unix epoch. For an instance it
+**Time.** `now` is milliseconds since the Unix epoch. For a session it
 MUST never go backwards: never earlier than the `at` of its latest log
 entry. A runner spread across machines keeps it so whatever their clocks
 say.
@@ -129,7 +129,7 @@ accepts it.
 JSON, goes over a limit, or if `effects`, `window` or `view` does so on the
 state it returns. A failed step MUST apply nothing. Being pure, it would
 fail the same way again on the same message, so what happens next is the
-runner's policy, such as stopping the instance until someone acts. A runner
+runner's policy, such as stopping the session until someone acts. A runner
 that drops the message instead MUST make that visible.
 
 A runner MUST NOT change a state or message it gave to `step`, and an
@@ -191,7 +191,7 @@ A runner runs a handler with a context:
 | `signal`  | an `AbortSignal` that fires on cancel, abort and timeout                     |
 | `emit`    | a function for live progress; best effort, never saved                       |
 | `secrets` | `get(name)`, from wherever the runner keeps them                             |
-| `log`     | `list(query)`, reading the instance's log                                    |
+| `log`     | `list(query)`, reading the session's log                                     |
 
 **Outcomes.** What the handler does becomes the `outcome` of an `effect`
 message:
@@ -257,22 +257,22 @@ Within what it keeps, a crash MUST look the same as on every other runner:
 - a `reissue` effect that was running runs again, with `attempt` one higher;
 - a `once` effect that was running is reported `interrupted`.
 
-A runner MAY offer operator controls such as suspending an instance. If a
+A runner MAY offer operator controls such as suspending a session. If a
 suspend stops running handlers, resuming MUST look like recovering from a
 crash.
 
 ## 11. Upgrades
 
-A runner MAY upgrade instances to a new version of their agent. If it does:
+A runner MAY upgrade sessions to a new version of their agent. If it does:
 
 - it upgrades between steps, never during one;
 - it calls the new version's `migrate(snapshot, config, from)` if it has
   one, and otherwise keeps the snapshot and config;
-- if `migrate` rejects or fails, the instance stays on its old version;
+- if `migrate` rejects or fails, the session stays on its old version;
 - otherwise it saves the new snapshot and config, and delivers `migrated`
   as the new version's first message.
 
-Whether instances are pinned to their version or upgraded, and what happens
+Whether sessions are pinned to their version or upgraded, and what happens
 to effects running during an upgrade, are the runner's choice. If results
 of effects the old version started are delivered, they go to the new
 version's `step`.
@@ -282,7 +282,7 @@ version's `step`.
 | Area                     | For example                                                                   |
 | ------------------------ | ----------------------------------------------------------------------------- |
 | Storage and durability   | memory, files, SQLite, Postgres, Durable Object storage                       |
-| Topology                 | one process, many processes, many machines, one Durable Object per instance   |
+| Topology                 | one process, many processes, many machines, one Durable Object per session    |
 | Where the pure half runs | the same process, an isolate, a sandbox with purity checks                    |
 | Where handlers run       | the same process, worker threads, child processes, containers, remote workers |
 | Handler environment      | full Node, fetch only, browser APIs                                           |

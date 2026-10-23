@@ -1,6 +1,6 @@
 # @acentric/runner-local
 
-A runner for your own machine or a single server. It keeps instances in a
+A runner for your own machine or a single server. It keeps sessions in a
 store, so they survive restarts, and runs handlers in child processes, so a
 handler that crashes or hangs takes down only its host. It follows
 [RUNNERS.md](../../RUNNERS.md) and passes every
@@ -58,7 +58,7 @@ kinds, and refuses an agent that lists a kind in `kinds` with no handler.
 
 ## How it runs
 
-Each instance has a mailbox, and its jobs run one at a time. A step's whole
+Each session has a mailbox, and its jobs run one at a time. A step's whole
 result is checked and committed in one write; only after the commit do
 handlers start or get their signal, callers get their answer and
 subscribers hear of it. When a handler finishes, its outcome is saved to a
@@ -70,8 +70,8 @@ durable inbox before its step runs, so a crash in between loses nothing.
 | `configure` with an id     | the same                                          |
 | `create` with an `id`      | the same, if the agent and config are the same    |
 
-Instances are loaded when needed and unloaded after `idleMs`. A faulted
-instance takes no more messages until it is upgraded to a version that fixes
+Sessions are loaded when needed and unloaded after `idleMs`. A faulted
+session takes no more messages until it is upgraded to a version that fixes
 it; the result whose step failed is then stepped again.
 
 | Option        | Default       | Means                                                   |
@@ -83,12 +83,12 @@ it; the result whose step failed is then stepped again.
 | `timeoutMs`   | none          | a handler's time limit when it sets none                |
 | `maxAttempts` | 5             | runs of a reissue key when its handler sets no limit    |
 | `graceMs`     | 5000          | how long `close` waits for running handlers             |
-| `idleMs`      | 5 minutes     | how long an idle instance stays loaded                  |
+| `idleMs`      | 5 minutes     | how long an idle session stays loaded                   |
 | `host`        | none          | Node options, environment and idle time for hosts       |
 
 ## Recovery
 
-`start` recovers every instance with running effects or inbox results:
+`start` recovers every session with running effects or inbox results:
 inbox results are stepped first, reissue effects that were running run
 again with the next attempt (or fail `attempts_exhausted`), once effects
 that were running are reported `interrupted`, and timers are scheduled
@@ -115,16 +115,16 @@ back up.
 ```
 lock                              the pid of the runner that has it open
 agents/<name>/<version>/          bundle.json, agent.js, handlers.js
-instances/<id>/journal.jsonl      one line per write: a checksum, then the record
-instances/<id>/checkpoint.json    the instance as of a place in its journal
+sessions/<id>/journal.jsonl      one line per write: a checksum, then the record
+sessions/<id>/checkpoint.json    the session as of a place in its journal
 ```
 
 Each commit is one journal line, appended and synced, so it is saved whole
 or not at all. A last line half written by a crash is cut off when the
-instance is next opened; a damaged line before it is refused. Log entries
+session is next opened; a damaged line before it is refused. Log entries
 stay on disk and are read by range through an index of which lines hold
-which seqs. A checkpoint every 500 lines keeps opening an instance from
-replaying its whole history. New instances and bundles are written to a
+which seqs. A checkpoint every 500 lines keeps opening a session from
+replaying its whole history. New sessions and bundles are written to a
 temporary folder and renamed into place. A lock left by a process that is
 gone is taken over.
 
