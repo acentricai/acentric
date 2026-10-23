@@ -90,6 +90,7 @@ function fromPiBlock(
         ...(block.thoughtSignature === undefined
           ? {}
           : { thoughtSignature: block.thoughtSignature }),
+        ...(block.namespace === undefined ? {} : { namespace: block.namespace }),
       };
     }
   }
@@ -166,6 +167,7 @@ function toPiAssistantBlock(
         ...(block.thoughtSignature === undefined
           ? {}
           : { thoughtSignature: block.thoughtSignature }),
+        ...(block.namespace === undefined ? {} : { namespace: block.namespace }),
       };
   }
 }

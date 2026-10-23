@@ -37,6 +37,8 @@ export type ToolCallBlock = {
   argumentsError?: string;
   /** A provider's signature for the reasoning behind the call, sent back with it. */
   thoughtSignature?: string;
+  /** The tool's namespace, as OpenAI's Responses API names it; sent back with the call. */
+  namespace?: string;
 };
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';

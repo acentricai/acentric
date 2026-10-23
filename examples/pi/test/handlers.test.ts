@@ -12,6 +12,7 @@ import { createModels, fauxAssistantMessage, fauxProvider, fauxText } from '@ear
 import type { Context } from '@earendil-works/pi-ai';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { fromPiAssistant, toPiMessages } from '../src/handlers/convert.js';
 import { llmHandler, summarizeHandler } from '../src/handlers/llm.js';
 import { toolHandler } from '../src/handlers/tools.js';
 import type { AssistantMessage, LlmArgs, ToolCallRef } from '../src/index.js';
@@ -179,5 +180,38 @@ describe('tool handlers', () => {
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('started');
     expect(JSON.stringify(result.content)).toContain('aborted');
+  });
+});
+
+describe('converting messages', () => {
+  it('keeps what a provider needs to accept its earlier replies', () => {
+    const block = {
+      type: 'toolCall' as const,
+      id: 'call_1|fc_1',
+      name: 'bash',
+      arguments: { command: 'ls' },
+      thoughtSignature: 'sig',
+      namespace: 'functions',
+    };
+    const message = fromPiAssistant({
+      role: 'assistant',
+      content: [block],
+      api: 'openai-responses',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      usage: {
+        input: 1,
+        output: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 2,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'toolUse',
+      timestamp: 0,
+    });
+    expect(message.content).toEqual([block]);
+    const [replayed] = toPiMessages([{ role: 'assistant', thinkingLevel: 'low', ...message }]);
+    expect(replayed).toMatchObject({ content: [block] });
   });
 });
