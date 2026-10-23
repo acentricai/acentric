@@ -19,8 +19,7 @@ await client.deploy({
 await client.setSecret('OPENAI_API_KEY', key);
 
 const { id } = await client.create('pi@0.1.0', { cwd, model });
-await client.subscribe(id, { emits: true }, (event) => {
-  if (event.type === 'emit') process.stdout.write(String(event.delta));
+await client.subscribe(id, {}, (event) => {
   if (event.type === 'log') render(event.entries);
 });
 await client.input(id, { kind: 'prompt', payload: { text: 'fix the tests' } });

@@ -7,7 +7,6 @@
 //   sleep      waits args.ms, or returns { aborted: true } when signalled
 //   slow       sleep with a 50 ms time limit
 //   gate       waits until the scenario releases it; at most 2 attempts
-//   emit       emits each of args.deltas, then returns null
 //   read_log   returns a page of ctx.log.list(args.query)
 //   attempt    returns ctx.attempt
 
@@ -70,14 +69,6 @@ const handlers: Handlers = {
       const outcome = await hook.gate(ctx.key, ctx.signal);
       if ('throw' in outcome) throw new Error(outcome.throw);
       return outcome.return;
-    },
-  },
-  emit: {
-    mode: 'reissue',
-    run: (ctx) => {
-      const deltas = arg(ctx.args, 'deltas');
-      for (const delta of Array.isArray(deltas) ? deltas : []) ctx.emit(delta);
-      return Promise.resolve(null);
     },
   },
   read_log: {

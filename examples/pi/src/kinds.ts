@@ -48,11 +48,11 @@ export type Summary = {
 };
 
 export type PiKinds = {
-  /** Calls the model, streaming its output with emit. Reissue. */
+  /** Calls the model. Reissue. */
   llm: { args: LlmArgs; result: AssistantMessage };
   /** Reads a file or image. Reissue. */
   read: { args: ToolCallRef; result: ToolResult };
-  /** Runs a shell command, streaming its output with emit. Once. */
+  /** Runs a shell command. Once. */
   bash: { args: ToolCallRef; result: ToolResult };
   /** Replaces exact text in a file. Once. */
   edit: { args: ToolCallRef; result: ToolResult };

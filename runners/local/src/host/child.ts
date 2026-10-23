@@ -5,7 +5,6 @@
 //   runner -> host   describe            the kinds the module provides
 //   runner -> host   effect/run          runs one effect, answering with its outcome
 //   runner -> host   effect/cancel       fires the effect's signal (notification)
-//   host -> runner   effect/emit         a delta the handler emitted (notification)
 //   host -> runner   secrets/get, log/list
 //
 // The host exits when the IPC channel closes. Its stdout goes to the
@@ -104,9 +103,6 @@ async function run(loaded: Record<string, HandlerDef>, params: Json): Promise<Js
     args: args ?? null,
     attempt: typeof attempt === 'number' ? attempt : 1,
     signal: controller.signal,
-    emit: (delta) => {
-      if (isJson(delta)) peer.notify('effect/emit', { session, key, delta });
-    },
     secrets: {
       get: async (name) => {
         const value = await peer.request('secrets/get', { name });

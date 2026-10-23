@@ -17,7 +17,7 @@ await runner.start(); // recovers what the store holds
 await runner.deploy({ name: 'pi', version: '0.1.0', agent: agentSource, handlers: handlersSource });
 const { id } = await runner.create({ name: 'pi', version: '0.1.0' }, { cwd, model });
 
-const stop = await runner.subscribe(id, { emits: true }, (event) => console.log(event));
+const stop = await runner.subscribe(id, {}, (event) => console.log(event));
 await runner.input(id, { id: 'u1', kind: 'prompt', payload: { text: 'hello' } });
 
 await runner.close(); // lets running handlers finish, then stops

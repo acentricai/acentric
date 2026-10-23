@@ -9,7 +9,7 @@ acentric build                     # bundle, type-check, check purity, write man
 acentric start                     # a runner on ws://127.0.0.1:7420 with the built agents
 acentric create pi@0.1.0 '{"cwd": "/work", "model": {"provider": "openai", "id": "gpt-5.4-mini"}}'
 acentric send <id> prompt '{"text": "fix the tests"}'
-acentric log <id> -f --emits       # the log, then each step live, with streamed text
+acentric log <id> -f               # the log, then each step live
 ```
 
 ## The project
@@ -58,9 +58,8 @@ run `acentric build` for that.
 
 One port serves the dev UI, the protocol over WebSocket, and the dev events
 the UI shows. The UI is built only on the protocol: sessions and creating
-one, sending inputs, the log with each entry expandable, the view, streamed
-emits as they arrive, running effects, faults, and each build, deploy and
-upgrade.
+one, sending inputs, the log with each entry expandable, the view, running
+effects, faults, and each build, deploy and upgrade.
 
 ## build
 
@@ -92,12 +91,12 @@ WebSocket until Ctrl-C, then stops gracefully.
 
 These talk to the runner at `--url`, or the project's `listen`.
 
-| Command                                   | Does                                                   |
-| ----------------------------------------- | ------------------------------------------------------ |
-| `agents`                                  | deployed agents and their session counts               |
-| `ls`                                      | sessions, with status and entry counts                 |
-| `create <agent@version> [config] [--id]`  | creates a session and prints its id                    |
-| `send <id> <kind> [payload] [--input-id]` | sends an input and prints the answer                   |
-| `get <id> [--snapshot]`                   | status, view and running effects as JSON               |
-| `log <id> [-f] [--emits] [--json]`        | the log; `-f` follows it, `--emits` adds streamed text |
-| `upgrade <id> <version>`                  | moves a session to another deployed version            |
+| Command                                   | Does                                        |
+| ----------------------------------------- | ------------------------------------------- |
+| `agents`                                  | deployed agents and their session counts    |
+| `ls`                                      | sessions, with status and entry counts      |
+| `create <agent@version> [config] [--id]`  | creates a session and prints its id         |
+| `send <id> <kind> [payload] [--input-id]` | sends an input and prints the answer        |
+| `get <id> [--snapshot]`                   | status, view and running effects as JSON    |
+| `log <id> [-f] [--json]`                  | the log; `-f` follows it                    |
+| `upgrade <id> <version>`                  | moves a session to another deployed version |

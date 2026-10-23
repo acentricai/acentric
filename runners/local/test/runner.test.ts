@@ -51,7 +51,6 @@ const sleep = (ms, signal) => new Promise((resolve) => {
 });
 export default {
   work: { mode: 'reissue', run: async (ctx) => {
-    ctx.emit('started');
     await sleep(ctx.args?.ms ?? 0, ctx.signal);
     return { attempt: ctx.attempt };
   } },
@@ -294,13 +293,13 @@ describe.each(STORES)('the local runner over $name', (kind) => {
     expect(await results(s.store, id)).toEqual([{ key: 's', outcome: { ok: 'abc' } }]);
   });
 
-  it('tells a subscriber the history, then each step, emits and status', async () => {
+  it('tells a subscriber the history, then each step, view and status', async () => {
     const s = await setup();
     await s.runner.deploy(v1);
     const id = await created(s.runner);
     await s.runner.input(id, { kind: 'note', payload: { n: 1 } });
     const events: SessionEvent[] = [];
-    const stop = await s.runner.subscribe(id, { emits: true }, (event) => events.push(event));
+    const stop = await s.runner.subscribe(id, {}, (event) => events.push(event));
     await s.runner.input(id, { kind: 'note', payload: { n: 2 } });
     await s.runner.input(id, {
       kind: 'ask',
@@ -316,7 +315,6 @@ describe.each(STORES)('the local runner over $name', (kind) => {
       event.type === 'log' ? event.entries.map((entry) => entry.seq) : [],
     );
     expect(seqs).toEqual([1, 2, 3]);
-    expect(events).toContainEqual({ type: 'emit', key: 'w', delta: 'started' });
     expect(events).toContainEqual({ type: 'view', view: { asks: 1 } });
     expect(events).toContainEqual({ type: 'status', status: 'busy', fault: null });
   });

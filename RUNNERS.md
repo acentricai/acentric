@@ -189,7 +189,6 @@ A runner runs a handler with a context:
 | `args`    | the request's args                                                           |
 | `attempt` | 1 on the first run, then one more on every run of the same key after a crash |
 | `signal`  | an `AbortSignal` that fires on cancel, abort and timeout                     |
-| `emit`    | a function for live progress; best effort, never saved                       |
 | `secrets` | `get(name)`, from wherever the runner keeps them                             |
 | `log`     | `list(query)`, reading the session's log                                     |
 
@@ -292,7 +291,7 @@ version's `step`.
 | Identity                 | counters, UUIDs, names                                                        |
 | Limits and defaults      | effect counts, sizes, the window, time limits, attempts                       |
 | Policies                 | failed steps, upgrades, log retention                                         |
-| `view` and `emit`        | when views are computed and served; where deltas go                           |
+| `view`                   | when views are computed and served                                            |
 | Secrets                  | environment variables, a vault, per-tenant stores                             |
 | Security                 | authentication, which callers may send which inputs, sandboxes, approvals     |
 | Operator controls        | suspend, resume, terminate                                                    |

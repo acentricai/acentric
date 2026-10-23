@@ -101,7 +101,6 @@ and their `data.code` names the problem. The messages are typed in
 | ------------ | ----------------------------------------------------------------- |
 | `log`        | A step appended entries. Gapless from `after`: history, then live |
 | `view`       | A step changed the view                                           |
-| `emit`       | A handler streamed a delta. Live only, never stored or replayed   |
 | `status`     | The session became idle, busy or faulted                          |
 
 A subscription's id is the client's, so notifications that arrive before
@@ -111,8 +110,8 @@ say where they belong.
 **App-provided handlers.** A bundle names the kinds an app will provide, with
 their mode and limits, when it is deployed (`provides`). An app that provides
 them says so at `initialize`. The runner sends it `effect/run`; the app
-streams `effect/emit` and answers `{ ok }` or `{ error }`; the runner sends
-`effect/cancel` as the signal. The runner keeps timeouts, attempts, the inbox
+answers `{ ok }` or `{ error }`; the runner sends `effect/cancel` as the
+signal. The runner keeps timeouts, attempts, the inbox
 and recovery, so the agent cannot tell an app-provided effect from any other.
 An effect waits while no provider is connected. If the provider disconnects
 mid-effect, that is a crash for its effects: reissue effects run again when a
@@ -145,8 +144,8 @@ manifest.json  { name, version, hash, kinds, sdkVersion }
 - **Step** runs in the runner's main thread on frozen inputs. Purity is
   checked at build time.
 - **Handlers** run in handler hosts: a child process per agent version that
-  loads `handlers.js` and speaks the same `effect/run`, `effect/emit` and
-  `effect/cancel` messages as app-provided handlers. A crashing or hanging
+  loads `handlers.js` and speaks the same `effect/run` and `effect/cancel`
+  messages as app-provided handlers. A crashing or hanging
   handler takes down only its host, and dropping an old version means ending
   its host, which also frees its modules.
 - **Faults** are cleared by deploying a fixed version and upgrading the
@@ -197,8 +196,7 @@ own running effects only: `reissue` effects run again with the next attempt,
 
 **Many sessions.** Steps of different sessions interleave; each is short
 and synchronous, so a slow step delays every session. SQLite serializes
-commits. A slow subscriber has its `emit`s dropped or merged rather than
-buffered without limit; `log` notifications are never dropped, since a
+commits. `log` notifications to a slow subscriber are never dropped, since a
 subscriber can catch up from the store.
 
 **Shutdown.** Stop taking requests, finish commits in progress, give running
@@ -249,7 +247,7 @@ Versions come from `package.json`, or per agent in the config.
   retried.
 - **The dev UI** is a web page served by `acentric dev`, built only on the
   protocol: sessions, creating one, sending inputs as Json, the log, the
-  view, live emits, running effects and faults. The same port serves the
+  view, running effects and faults. The same port serves the
   protocol over WebSocket and a stream of dev events: builds, deploys and
   upgrades. Dev keeps its own store, apart from the one `start` uses. A dev
   version is named by a hash of its code, so saving code back to an earlier

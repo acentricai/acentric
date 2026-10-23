@@ -83,14 +83,11 @@ export type SessionListing = SessionSummary & { status: Status };
 export type SessionEvent =
   | { type: 'log'; entries: LogEntry[] }
   | { type: 'view'; view: Json }
-  | { type: 'status'; status: Status; fault: string | null }
-  | { type: 'emit'; key: string; delta: Json };
+  | { type: 'status'; status: Status; fault: string | null };
 
 export type SubscribeOptions = {
   /** Replays entries after this seq first. Defaults to 0: the whole log. */
   after?: number;
-  /** Whether to hear what handlers emit. */
-  emits?: boolean;
 };
 
 /** An agent's code to deploy: two ES modules, the pure half and the handlers. */
@@ -120,9 +117,8 @@ export type Provider = {
   cancel(session: string, key: string): void;
 };
 
-/** A provider's registration: how it reports emitted deltas, and how it leaves. */
+/** A provider's registration: how it leaves. */
 export type Provision = {
-  emitted(session: string, key: string, delta: Json): void;
   release(): void;
 };
 
@@ -253,7 +249,6 @@ type Prepared = {
 
 type Subscriber = {
   listener: (event: SessionEvent) => void;
-  emits: boolean;
   /** Entries held back while the history is replayed; null once live. */
   held: LogEntry[] | null;
 };
@@ -311,7 +306,6 @@ export class LocalRunner {
           ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
         };
       },
-      emitted: (session, key, delta) => this.#emitted(session, key, delta),
     });
   }
 
@@ -460,7 +454,6 @@ export class LocalRunner {
       for (const start of waiting) start();
     }
     return {
-      emitted: (session, key, delta) => this.#emitted(session, key, delta),
       release: () => {
         for (const kind of kinds) {
           if (this.#providers.get(kind) === provider) this.#providers.delete(kind);
@@ -673,7 +666,7 @@ export class LocalRunner {
   ): Promise<() => void> {
     const live = await this.#live(id);
     if (live === null) throw new RunnerError('no_session', `no session ${id}`);
-    const subscriber: Subscriber = { listener, emits: options.emits === true, held: [] };
+    const subscriber: Subscriber = { listener, held: [] };
     const subscribers = this.#subscribers.get(id) ?? new Set();
     subscribers.add(subscriber);
     this.#subscribers.set(id, subscribers);
@@ -1252,14 +1245,6 @@ export class LocalRunner {
     this.#queuedOf(id).add(ord);
     this.#enqueue(id, { type: 'result', ord, key: flight.key, outcome });
     flight.active = false;
-  }
-
-  #emitted(id: string, key: string, delta: Json): void {
-    const flight = this.#flights.get(id)?.get(key);
-    if (flight === undefined || flight.done) return;
-    for (const subscriber of this.#subscribers.get(id) ?? []) {
-      if (subscriber.emits) subscriber.listener({ type: 'emit', key, delta });
-    }
   }
 
   // ---- recovery -------------------------------------------------------------

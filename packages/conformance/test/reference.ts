@@ -6,7 +6,7 @@
 import { handlerContext, simulate } from '@acentric/testing';
 import type { Simulation } from '@acentric/testing';
 import type { Delivery } from '@acentric/testing';
-import type { EffectRequest, HandlerDef, Json, JsonObject, Kinds, Outcome } from '@acentric/types';
+import type { EffectRequest, HandlerDef, JsonObject, Kinds, Outcome } from '@acentric/types';
 
 import { createGateHook, isJson } from '../src/index.js';
 import type { Adapter, Answer } from '../src/index.js';
@@ -17,7 +17,6 @@ import probeHandlers from '../src/probe/handlers.js';
 
 type Flight = {
   controller: AbortController;
-  emitted: Json[];
   done: boolean;
   aborted: boolean;
 };
@@ -54,13 +53,13 @@ export function referenceAdapter(): Adapter {
       );
       return;
     }
-    const { ctx, controller, emitted } = handlerContext({
+    const { ctx, controller } = handlerContext({
       args: request.args,
       key: request.key,
       kind: request.kind,
       log: current().log,
     });
-    const flight: Flight = { controller, emitted, done: false, aborted: false };
+    const flight: Flight = { controller, done: false, aborted: false };
     flights.set(request.key, flight);
     if (handler.timeoutMs !== undefined) {
       setTimeout(() => {
@@ -155,7 +154,6 @@ export function referenceAdapter(): Adapter {
     // With no session, as after a rejected create, there is nothing to show.
     log: () => Promise.resolve([...(sim?.log ?? [])]),
     snapshot: () => Promise.resolve(sim?.snapshot ?? {}),
-    emitted: (key) => Promise.resolve(flights.get(key)?.emitted ?? []),
     close: () => {
       for (const flight of flights.values()) flight.controller.abort();
       Reflect.deleteProperty(globalThis, 'conformance');

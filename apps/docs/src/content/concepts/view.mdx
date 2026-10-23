@@ -65,17 +65,15 @@ Callers see the view, not the snapshot, for three reasons:
 The snapshot is still there for debugging: `acentric get <id> --snapshot` shows
 it. Apps should not depend on it.
 
-## View, log and emits
+## View and log
 
-An app usually reads three things from a session, each for its own job:
+An app reads two things from a session, each for its own job:
 
 | Read     | It is                                  | Use it for                                  |
 | -------- | -------------------------------------- | ------------------------------------------- |
 | The view | The session now, replaced on each step | Status, counts, what to show at a glance    |
 | The log  | Everything that happened, in order     | A chat transcript, an activity feed, audits |
-| Emits    | Live progress from a running handler   | Words appearing as a model writes them      |
 
-The chat agent's UI shows its status from the view, its transcript from the
-`user` and `assistant` log entries, and the reply being written from emits.
-Emits are never stored: when the reply finishes, it arrives in the log, which
-is the record.
+The chat agent's UI shows its status from the view, and its transcript from the
+`user` and `assistant` log entries. A reply appears in the log once it is
+finished, and the log is the record.

@@ -46,7 +46,6 @@ const handlers = `
 export default {
   work: { mode: 'reissue', run: async (ctx) => {
     console.log('a handler writing to stdout must not break the protocol');
-    ctx.emit('working');
     await new Promise((resolve) => setTimeout(resolve, ctx.args?.ms ?? 0));
     return 'worked';
   } },
@@ -143,12 +142,11 @@ const results = async (client: RunnerClient, id: string): Promise<Json[]> =>
   (await client.log(id, { kinds: ['result'] })).entries.map((entry) => entry.body);
 
 describe('the protocol', () => {
-  it('runs a kind the application provides, with its emits and signal', async () => {
+  it('runs a kind the application provides, with its signal', async () => {
     const dir = await workspace();
     const signalled: string[] = [];
     const { client } = await runner(dir, {
       ask_user: async (ctx) => {
-        ctx.emit({ asking: ctx.args });
         if (ctx.key === 'slow') {
           await new Promise((resolve) =>
             ctx.signal.addEventListener('abort', resolve, { once: true }),
@@ -161,8 +159,6 @@ describe('the protocol', () => {
     });
     await client.deploy(bundle);
     const id = await created(client);
-    const events: SessionEvent[] = [];
-    await client.subscribe(id, { emits: true }, (event) => events.push(event));
     await client.input(id, {
       kind: 'ask',
       payload: { key: 'q', kind: 'ask_user', args: 'continue?' },
@@ -171,7 +167,6 @@ describe('the protocol', () => {
     expect(await results(client, id)).toEqual([
       { key: 'q', outcome: { ok: { answer: 'yes', attempt: 1, entries: 0 } } },
     ]);
-    expect(events).toContainEqual({ type: 'emit', key: 'q', delta: { asking: 'continue?' } });
     await client.input(id, { kind: 'ask', payload: { key: 'slow', kind: 'ask_user' } });
     await until('it to run', async () =>
       (await client.get(id)).running.some((effect) => effect.active),
@@ -223,7 +218,7 @@ describe('the protocol', () => {
     expect((await results(plain, id))[1]).toEqual({ key: 'q', outcome: { ok: { attempt: 2 } } });
   });
 
-  it('subscribes over WebSocket: history, then each step, view, status and emits', async () => {
+  it('subscribes over WebSocket: history, then each step, view and status', async () => {
     const dir = await workspace();
     const client = await connectWebSocket(await listening(dir));
     cleanups.unshift(() => client.close());
@@ -232,7 +227,7 @@ describe('the protocol', () => {
     await client.input(id, { kind: 'ask', payload: { key: 'w1', kind: 'work' } });
     await until('the first result', async () => (await results(client, id)).length === 1);
     const events: SessionEvent[] = [];
-    const subscription = await client.subscribe(id, { emits: true }, (event) => events.push(event));
+    const subscription = await client.subscribe(id, {}, (event) => events.push(event));
     await client.input(id, { kind: 'ask', payload: { key: 'w2', kind: 'work', args: { ms: 30 } } });
     await until('the second result', async () => (await results(client, id)).length === 2);
     await until('idle', () => {
@@ -244,7 +239,6 @@ describe('the protocol', () => {
       event.type === 'log' ? event.entries.map((entry) => entry.seq) : [],
     );
     expect(seqs).toEqual([1, 2]);
-    expect(events).toContainEqual({ type: 'emit', key: 'w2', delta: 'working' });
     expect(events).toContainEqual({ type: 'view', view: { asks: 1 } });
     expect(events).toContainEqual({ type: 'status', status: 'busy', fault: null });
   });

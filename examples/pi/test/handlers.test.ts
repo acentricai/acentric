@@ -47,12 +47,11 @@ describe('llm handler', () => {
     const [request] = sim.effectsOf('llm');
     if (request === undefined) throw new Error('no llm effect');
 
-    const { ctx, emitted } = handlerContext({ args: request.args, log: sim.log, secrets: SECRETS });
+    const { ctx } = handlerContext({ args: request.args, log: sim.log, secrets: SECRETS });
     const result = await llmHandler(models).run(ctx);
 
     expect(result.stopReason).toBe('stop');
     expect(result.content).toEqual([text('hello there')]);
-    expect(emitted.length).toBeGreaterThan(0);
     expect(JSON.stringify(seen)).toContain('You are an expert coding assistant');
     expect(JSON.stringify(seen)).toContain('"name":"bash"');
     expect(JSON.stringify(seen)).toContain('hi');
@@ -162,12 +161,11 @@ describe('tool handlers', () => {
     expect(JSON.stringify(result.content)).toContain('Could not find the exact text');
   });
 
-  it('runs a command, streaming its output', async () => {
-    const { ctx, emitted } = handlerContext(toolCall('bash', { command: 'echo hello' }));
+  it('runs a command', async () => {
+    const { ctx } = handlerContext(toolCall('bash', { command: 'echo hello' }));
     const result = await toolHandler('bash').run(ctx);
     expect(result.isError).toBe(false);
     expect(JSON.stringify(result.content)).toContain('hello');
-    expect(emitted.length).toBeGreaterThan(0);
   });
 
   it('keeps what an aborted command printed', async () => {

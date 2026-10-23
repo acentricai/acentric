@@ -45,8 +45,6 @@ export type RunningEffect = {
   active: boolean;
 };
 
-export type EmitListener = (key: string, delta: Json) => void;
-
 /** The built-in kinds this runner provides, for an agent's map of kinds. */
 export type MemoryRunnerKinds = {
   /** Fires at `at`, in milliseconds since the Unix epoch, and returns null. */
@@ -112,7 +110,6 @@ export class MemoryRunner {
   readonly #mailboxes = new Map<string, Job[]>();
   readonly #draining = new Set<string>();
   readonly #flights = new Map<string, Map<string, Flight>>();
-  readonly #listeners = new Map<string, Set<EmitListener>>();
   #closed = false;
 
   constructor(options: MemoryRunnerOptions) {
@@ -256,14 +253,6 @@ export class MemoryRunner {
   /** Why the session stopped taking messages, or null if it has not. */
   fault(sessionId: string): string | null {
     return this.#session(sessionId).fault;
-  }
-
-  /** Listens to what the session's handlers emit. Returns a function that stops listening. */
-  onEmit(sessionId: string, listener: EmitListener): () => void {
-    const listeners = this.#listeners.get(sessionId) ?? new Set();
-    listeners.add(listener);
-    this.#listeners.set(sessionId, listeners);
-    return () => listeners.delete(listener);
   }
 
   // ---- lifecycle ------------------------------------------------------------
@@ -584,17 +573,12 @@ export class MemoryRunner {
       active: true,
     };
     this.#flightsOf(session.id).set(key, flight);
-    const listeners = (): Set<EmitListener> => this.#listeners.get(session.id) ?? new Set();
     const ctx: HandlerContext = {
       key,
       kind: request.kind,
       args: request.args,
       attempt: effect.attempt,
       signal: controller.signal,
-      emit: (delta) => {
-        if (flight.done || this.#closed || !isJson(delta)) return;
-        for (const listener of listeners()) listener(key, delta);
-      },
       secrets: {
         get: (name) => {
           const value = this.#secrets[name];

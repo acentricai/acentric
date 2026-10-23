@@ -69,8 +69,6 @@ export type HandlerContext<A extends Json = Json> = {
    * discards it.
    */
   signal: AbortSignal;
-  /** Sends live progress, such as streamed tokens. Best effort; never saved. */
-  emit(delta: Json): void;
   secrets: Secrets;
   log: LogReader;
 };

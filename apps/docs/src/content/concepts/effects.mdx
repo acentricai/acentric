@@ -3,8 +3,8 @@ a model's reply, a web page or a timer, it **declares an effect**: a description
 of the work, as data. A **handler** does the work, and its result comes back to
 `step` as a [message](/concepts/messages).
 
-This page follows one agent: a chat agent whose replies come from a model,
-stream as they are written, and can be stopped partway.
+This page follows one agent: a chat agent whose replies come from a model, and
+can be stopped partway.
 
 ```ts title="src/agent.ts"
 import type { Agent, NoConfig } from '@acentric/types';
@@ -79,12 +79,11 @@ const handlers: HandlersFor<ChatKinds> = {
   reply: {
     mode: 'reissue',
     timeoutMs: 120_000,
-    run: async ({ args, signal, emit, secrets }) => {
+    run: async ({ args, signal, secrets }) => {
       const apiKey = await secrets.get('MODEL_API_KEY');
       let text = '';
       for await (const delta of streamReply(args.prompt, apiKey, signal)) {
         text += delta;
-        emit(delta);
       }
       // Finished or stopped, what was written so far is the reply.
       return { text };
@@ -171,15 +170,13 @@ receives a context:
 | ------------------- | --------------------------------------------------------------------------- |
 | `args`, `key`       | What the agent declared. The key also makes a good idempotency key for APIs |
 | `signal`            | Fires on cancel, abort or timeout. Pass it to whatever does the I/O         |
-| `emit(delta)`       | Sends live progress, such as streamed words, to whoever is watching         |
 | `secrets.get(name)` | Reads a secret, from wherever the runner keeps them                         |
 | `log.list(query)`   | Reads any part of the session's log, beyond the step's window               |
 | `attempt`           | 1 on the first run, higher when it runs again after a crash                 |
 
 A handler depends only on its args: anything it needs from the agent's state,
 `effects` copies into them. Secrets are the exception, because args and state
-are stored, so a handler asks for a secret by name. What a handler emits is
-never stored; only what it returns is.
+are stored, so a handler asks for a secret by name.
 
 Handlers live apart from the agent: in their own file, and in the local runner,
 their own process. That keeps the agent pure, and lets `acentric build` check

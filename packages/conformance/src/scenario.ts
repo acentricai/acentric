@@ -65,6 +65,4 @@ export type Expectation = {
   logKinds?: string[];
   /** The snapshot, matched partly. */
   snapshot?: JsonObject;
-  /** What each key emitted, exactly. */
-  emitted?: Record<string, Json[]>;
 };

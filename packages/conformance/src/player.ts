@@ -42,7 +42,6 @@ export type Adapter = {
   signalled(): Promise<string[]>;
   log(): Promise<LogEntry[]>;
   snapshot(): Promise<JsonObject>;
-  emitted(key: string): Promise<Json[]>;
   /** Stops the runner abruptly and starts it again. Needed for 'durable'. */
   crash?(): Promise<void>;
   /** Upgrades the session to version 2 of the probe. Needed for 'upgrade'. */
@@ -172,14 +171,6 @@ async function check(
   }
   if (expected.snapshot !== undefined)
     problems.push(mismatch(expected.snapshot, await adapter.snapshot(), 'snapshot'));
-  if (expected.emitted !== undefined) {
-    const emitted = await Promise.all(
-      Object.entries(expected.emitted).map(async ([key, deltas]) =>
-        mismatch(deltas, await adapter.emitted(key), `emitted.${key}`),
-      ),
-    );
-    problems.push(...emitted);
-  }
   return problems.find((problem) => problem !== null) ?? null;
 }
 

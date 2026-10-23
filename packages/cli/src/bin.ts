@@ -22,7 +22,7 @@ const USAGE = `usage: acentric <command> [options]
   create <agent@version> [json]  create a session with a config
   send <id> <kind> [json]        send an input
   get <id> [--snapshot]          a session's status, view and running effects
-  log <id> [-f] [--emits]        the log; -f follows it, --emits shows streamed text
+  log <id> [-f]                  the log; -f follows it
   upgrade <id> <version>         move a session to another deployed version
 
 options:
@@ -58,7 +58,6 @@ async function main(argv: string[]): Promise<number> {
       id: { type: 'string' },
       'input-id': { type: 'string' },
       follow: { type: 'boolean', short: 'f', default: false },
-      emits: { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
       after: { type: 'string', default: '0' },
       snapshot: { type: 'boolean', default: false },
@@ -169,10 +168,9 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       case 'log': {
-        const [id = ''] = need(1, '<id> [-f] [--emits] [--json] [--after N]');
-        await inspect.log(client, out, (text) => process.stdout.write(text), id, {
+        const [id = ''] = need(1, '<id> [-f] [--json] [--after N]');
+        await inspect.log(client, out, id, {
           follow: values.follow,
-          emits: values.emits,
           json: values.json,
           after: Number(values.after),
         });

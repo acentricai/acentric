@@ -116,7 +116,7 @@ export type RunnerMethods = {
    * chooses: first the log after `after`, from the store, then each step.
    */
   'sessions/subscribe': {
-    params: { id: string; subscription: string; after?: number; emits?: boolean };
+    params: { id: string; subscription: string; after?: number };
     result: Empty;
   };
   'sessions/unsubscribe': { params: { subscription: string }; result: Empty };
@@ -127,7 +127,6 @@ export type RunnerNotifications = {
   log: { subscription: string; id: string; entries: LogEntry[] };
   view: { subscription: string; id: string; view: Json };
   status: { subscription: string; id: string; status: Status; fault: string | null };
-  emit: { subscription: string; id: string; key: string; delta: Json };
   /** Fires the signal of an effect an application is running. */
   'effect/cancel': { session: string; key: string };
 };
@@ -147,11 +146,6 @@ export type EffectResult = { ok: Json } | { error: Json };
 /** Requests the runner sends an application that provides kinds. */
 export type ProviderMethods = {
   'effect/run': { params: EffectRun; result: EffectResult };
-};
-
-/** Notifications an application that provides kinds sends the runner. */
-export type ProviderNotifications = {
-  'effect/emit': { session: string; key: string; delta: Json };
 };
 
 /** What a JSON-RPC error's `data.code` can say. */

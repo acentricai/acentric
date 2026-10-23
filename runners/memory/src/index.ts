@@ -4,7 +4,6 @@
 export { createMemoryRunner, MemoryRunner } from './runner.js';
 export type {
   Answer,
-  EmitListener,
   LoadedAgent,
   MemoryRunnerKinds,
   MemoryRunnerOptions,

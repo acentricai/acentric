@@ -9,8 +9,7 @@ message types and a small peer that speaks JSON-RPC in both directions. Use
 | Direction    | Messages                                                                                                                                                                    |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | app → runner | `initialize`, `secrets/set`, `agents/deploy`, `agents/list`, `sessions/create`, `input`, `configure`, `upgrade`, `get`, `list`, `log`, `delete`, `subscribe`, `unsubscribe` |
-| runner → app | notifications `log`, `view`, `status`, `emit` for subscriptions; `effect/run` requests and `effect/cancel` notifications for kinds the app provides                         |
-| app → runner | `effect/emit` notifications while it runs an effect                                                                                                                         |
+| runner → app | notifications `log`, `view`, `status` for subscriptions; `effect/run` requests and `effect/cancel` notifications for kinds the app provides                                 |
 
 A rejection or a failed step is a normal result, an `Answer`. A JSON-RPC
 error means the request itself was wrong; its `data.code` is an `ErrorCode`.

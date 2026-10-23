@@ -16,10 +16,9 @@ import { readEntry, readRange } from './log.js';
 
 /**
  * Calls the model with the agent's context: the system prompt, the latest
- * summary and the conversation in [fromSeq, toSeq), and the four tools. It
- * emits the reply's deltas as they stream. When aborted, pi-ai ends the
- * call with what had arrived and `stopReason: 'aborted'`, and that is
- * returned like any reply.
+ * summary and the conversation in [fromSeq, toSeq), and the four tools.
+ * When aborted, pi-ai ends the call with what had arrived and
+ * `stopReason: 'aborted'`, and that is returned like any reply.
  */
 export function llmHandler(models: Models): HandlerDef<LlmArgs, AssistantMessage> {
   return {
@@ -34,7 +33,7 @@ export function llmHandler(models: Models): HandlerDef<LlmArgs, AssistantMessage
       const entries = await readRange(ctx.log, fromSeq, toSeq);
       const apiKey = await ctx.secrets.get(apiKeySecret(model.provider));
 
-      const stream = models.streamSimple(
+      const reply = await models.completeSimple(
         model,
         {
           systemPrompt: systemPrompt(cwd),
@@ -47,16 +46,7 @@ export function llmHandler(models: Models): HandlerDef<LlmArgs, AssistantMessage
           ...(thinkingLevel === 'off' ? {} : { reasoning: thinkingLevel }),
         },
       );
-      for await (const event of stream) {
-        if (
-          event.type === 'text_delta' ||
-          event.type === 'thinking_delta' ||
-          event.type === 'toolcall_delta'
-        ) {
-          ctx.emit({ type: event.type, contentIndex: event.contentIndex, delta: event.delta });
-        }
-      }
-      return fromPiAssistant(await stream.result());
+      return fromPiAssistant(reply);
     },
   };
 }

@@ -33,7 +33,6 @@ export type PoolOptions = {
   idleMs: number;
   secret(name: string): string | undefined;
   readLog(session: string, query: LogQuery): Promise<Json>;
-  emitted(session: string, key: string, delta: Json): void;
 };
 
 const CHILD = fileURLToPath(new URL('./child.js', import.meta.url));
@@ -132,13 +131,8 @@ export class HostPool {
         },
         {
           request: (method, params) => this.#answer(method, params),
-          notify: (method, params) => {
-            if (method !== 'effect/emit' || !isObject(params)) return;
-            const { session, key, delta } = params;
-            if (typeof session === 'string' && typeof key === 'string' && delta !== undefined) {
-              this.#options.emitted(session, key, delta);
-            }
-          },
+          // A host sends no notifications.
+          notify: () => undefined,
         },
       ),
     };

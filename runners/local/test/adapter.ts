@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 
 import { serveGates } from '@acentric/conformance';
 import type { Adapter, Answer } from '@acentric/conformance';
-import type { Json, LogEntry } from '@acentric/types';
+import type { LogEntry } from '@acentric/types';
 
 import { createLocalRunner } from '../dist/index.js';
 import type { LocalRunner, Store } from '../dist/index.js';
@@ -36,9 +36,7 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
   const dir = await mkdtemp(join(tmpdir(), 'acentric-local-'));
   const path = join(dir, 'store');
   const probes = await probeBundles();
-  const emitted = new Map<string, Json[]>();
   let id: string | null = null;
-  let stopListening: (() => void) | null = null;
 
   const open = async (store: Store): Promise<LocalRunner> => {
     const runner = createLocalRunner({
@@ -54,18 +52,6 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
   let runner = await open(store);
   await runner.deploy({ name: 'probe', version: '1', agent: probes.v1, handlers: probes.handlers });
   await runner.deploy({ name: 'probe', version: '2', agent: probes.v2, handlers: probes.handlers });
-
-  const listen = async (): Promise<void> => {
-    if (id === null) return;
-    stopListening = await runner.subscribe(
-      id,
-      { after: Number.MAX_SAFE_INTEGER, emits: true },
-      (event) => {
-        if (event.type === 'emit')
-          emitted.set(event.key, [...(emitted.get(event.key) ?? []), event.delta]);
-      },
-    );
-  };
 
   const session = (): string => {
     if (id === null) throw new Error('no session has been created');
@@ -101,10 +87,7 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
         { name: 'probe', version: '1' },
         config,
       );
-      if (created !== undefined) {
-        id = created;
-        await listen();
-      }
+      if (created !== undefined) id = created;
       return answer;
     },
     input: (kind, payload) => answerOf(() => runner.input(session(), { kind, payload })),
@@ -139,18 +122,14 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
     signalled: () => Promise.resolve(gates.signalled()),
     log: async (): Promise<LogEntry[]> => (id === null ? [] : store.readLog(id)),
     snapshot: async () => (id === null ? {} : ((await store.load(id))?.snapshot ?? {})),
-    emitted: (key) => Promise.resolve(emitted.get(key) ?? []),
     crash: async () => {
-      stopListening?.();
       runner.kill();
       await store.close();
       store = await storeKind.open(path);
       runner = await open(store);
-      await listen();
     },
     upgrade: () => answerOf(() => runner.upgrade(session(), '2')),
     close: async () => {
-      stopListening?.();
       runner.kill();
       await store.close();
       await gates.close();

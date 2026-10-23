@@ -3,7 +3,7 @@
 
 import { connectWebSocket } from '@acentric/client';
 import type { RunnerClient } from '@acentric/client';
-import type { Json, JsonObject, LogEntry } from '@acentric/types';
+import type { JsonObject, LogEntry } from '@acentric/types';
 
 export type Output = (line: string) => void;
 
@@ -98,13 +98,12 @@ export async function upgrade(
   return 'accepted' in answer;
 }
 
-export type LogOptions = { follow: boolean; emits: boolean; json: boolean; after: number };
+export type LogOptions = { follow: boolean; json: boolean; after: number };
 
 /** Prints the log, and with `follow`, each step as it is saved, until the returned promise is cancelled by the caller. */
 export async function log(
   client: RunnerClient,
   out: Output,
-  write: (text: string) => void,
   id: string,
   options: LogOptions,
 ): Promise<void> {
@@ -122,18 +121,9 @@ export async function log(
       after = last.seq;
     }
   }
-  let streaming = false;
-  await client.subscribe(id, { after: options.after, emits: options.emits }, (event) => {
+  await client.subscribe(id, { after: options.after }, (event) => {
     if (event.type === 'log') {
-      if (streaming) write('\n');
-      streaming = false;
       for (const entry of event.entries) print(entry);
-    } else if (event.type === 'emit') {
-      const text = deltaText(event.delta);
-      if (text !== null) {
-        streaming = true;
-        write(text);
-      }
     } else if (event.type === 'status' && !options.json) {
       out(`-- ${event.status}${event.fault === null ? '' : `: ${event.fault}`}`);
     }
@@ -147,14 +137,4 @@ export function formatEntry(entry: LogEntry): string {
   const body = JSON.stringify(entry.body);
   const shown = body.length > 200 ? `${body.slice(0, 199)}…` : body;
   return `#${entry.seq}  ${time}  ${entry.kind}  ${shown}`;
-}
-
-/** The text in a streamed delta, for deltas that carry text, such as a model's reply. */
-function deltaText(delta: Json): string | null {
-  if (typeof delta === 'string') return delta;
-  if (typeof delta === 'object' && delta !== null && !Array.isArray(delta)) {
-    const text = delta['delta'] ?? delta['text'];
-    if (typeof text === 'string') return text;
-  }
-  return null;
 }

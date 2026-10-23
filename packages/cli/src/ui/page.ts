@@ -60,8 +60,6 @@ main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; height: 1
 .entry .kind { font-weight: 600; flex: none; }
 .entry .summary { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .entry pre { margin: 6px 0 4px 44px; padding: 8px 10px; background: var(--sunken); border-radius: 6px; max-height: 420px; overflow: auto; }
-.stream { margin: 8px 20px; padding: 8px 12px; border: 1px dashed var(--accent); border-radius: 8px; }
-.stream .label { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
 .side { border-left: 1px solid var(--line); overflow: auto; background: var(--panel); }
 .side .section { border-bottom: 1px solid var(--line); }
 .effect { display: flex; justify-content: space-between; gap: 6px; padding: 2px 0; font-size: 13px; }

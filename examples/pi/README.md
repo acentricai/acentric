@@ -35,7 +35,7 @@ Out, for now:
 | current model, the run's phase, queued messages, retries     | snapshot                                                         |
 | cwd, default model, compaction and retry settings            | config                                                           |
 | prompt, steer, follow-up, `/model`, `/thinking`, `/compact`  | inputs                                                           |
-| the model call                                               | the `llm` effect, streaming with `emit`, stopped with `abort`    |
+| the model call                                               | the `llm` effect, stopped with `abort`                           |
 | the four tools                                               | effects, one per tool call                                       |
 | compaction's summary call                                    | the `summarize` effect                                           |
 | backoff before a retry                                       | the runner's `@timer`                                            |
@@ -153,14 +153,14 @@ The handlers are in [src/handlers](src/handlers), behind their own entry
 point, `@acentric/example-pi/handlers`, so loading the pure half never loads
 Node or network code:
 
-| Handler     | Wraps                                                                |
-| ----------- | -------------------------------------------------------------------- |
-| `llm`       | pi-ai's `streamSimple`, emitting text, thinking and tool call deltas |
-| `summarize` | pi's `generateSummaryWithUsage`, with its compaction prompt          |
-| `read`      | pi's read tool                                                       |
-| `bash`      | pi's bash tool, emitting output as it arrives                        |
-| `edit`      | pi's edit tool                                                       |
-| `write`     | pi's write tool                                                      |
+| Handler     | Wraps                                                       |
+| ----------- | ----------------------------------------------------------- |
+| `llm`       | pi-ai's `completeSimple`                                    |
+| `summarize` | pi's `generateSummaryWithUsage`, with its compaction prompt |
+| `read`      | pi's read tool                                              |
+| `bash`      | pi's bash tool                                              |
+| `edit`      | pi's edit tool                                              |
+| `write`     | pi's write tool                                             |
 
 `createPiAgent()` returns the agent with its handlers, calling models through
 pi-ai's built-in providers; pass `models` to use others. API keys come from the
@@ -186,5 +186,5 @@ acentric build
 acentric start
 acentric create pi@0.1.0 '{"cwd": "/path/to/work", "model": {"provider": "openai", "id": "gpt-5.4-mini"}}'
 acentric send <id> prompt '{"text": "add a README"}'
-acentric log <id> -f --emits
+acentric log <id> -f
 ```

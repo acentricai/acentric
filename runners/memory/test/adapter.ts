@@ -7,7 +7,6 @@ import probe from '@acentric/conformance/probe/agent';
 import probeV2 from '@acentric/conformance/probe/agent-v2';
 import probeHandlers from '@acentric/conformance/probe/handlers';
 import badHandlers from '@acentric/conformance/probe/handlers-bad-name';
-import type { Json } from '@acentric/types';
 
 import { createMemoryRunner, createMemoryStore } from '../src/index.js';
 import type { MemoryRunner } from '../src/index.js';
@@ -16,7 +15,6 @@ export function memoryAdapter(): Adapter {
   const control = createGateHook();
   Reflect.set(globalThis, 'conformance', control.hook);
   const store = createMemoryStore();
-  const emitted = new Map<string, Json[]>();
   let runner = open();
   let id: string | null = null;
 
@@ -25,13 +23,6 @@ export function memoryAdapter(): Adapter {
     next.load(probe, probeHandlers);
     next.load(probeV2, probeHandlers);
     return next;
-  }
-
-  function listen(): void {
-    if (id === null) return;
-    runner.onEmit(id, (key, delta) => {
-      emitted.set(key, [...(emitted.get(key) ?? []), delta]);
-    });
   }
 
   function session(): string {
@@ -59,10 +50,7 @@ export function memoryAdapter(): Adapter {
         }
       }
       const { id: created, ...answer } = runner.create(probe, config);
-      if (created !== undefined) {
-        id = created;
-        listen();
-      }
+      if (created !== undefined) id = created;
       return Promise.resolve(answer);
     },
     input: (kind, payload) => runner.input(session(), kind, payload),
@@ -96,11 +84,9 @@ export function memoryAdapter(): Adapter {
     // With no session, as after a rejected create, there is nothing to show.
     log: () => Promise.resolve(id === null ? [] : [...runner.log(id)]),
     snapshot: () => Promise.resolve(id === null ? {} : runner.snapshot(id)),
-    emitted: (key) => Promise.resolve(emitted.get(key) ?? []),
     crash: () => {
       runner.close();
       runner = open();
-      listen();
       runner.start();
       return Promise.resolve();
     },

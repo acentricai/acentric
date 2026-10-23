@@ -10,10 +10,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { spawnRunner } from '@acentric/client/node';
-import type { RunnerClient, SpawnedRunner, Subscription } from '@acentric/client/node';
+import type { RunnerClient, SpawnedRunner } from '@acentric/client/node';
 import { serveGates } from '@acentric/conformance';
 import type { Adapter, Answer } from '@acentric/conformance';
-import type { Json, LogEntry } from '@acentric/types';
+import type { LogEntry } from '@acentric/types';
 
 import { probeBundles } from './bundles.js';
 import { SQLITE } from './stores.js';
@@ -34,9 +34,7 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
   const gates = await serveGates();
   const dir = await mkdtemp(join(tmpdir(), 'acentric-protocol-'));
   const probes = await probeBundles();
-  const emitted = new Map<string, Json[]>();
   let id: string | null = null;
-  let subscription: Subscription | null = null;
 
   const start = (): Promise<SpawnedRunner> =>
     spawnRunner({
@@ -62,18 +60,6 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
     agent: probes.v2,
     handlers: probes.handlers,
   });
-
-  const listen = async (): Promise<void> => {
-    if (id === null) return;
-    subscription = await client().subscribe(
-      id,
-      { after: Number.MAX_SAFE_INTEGER, emits: true },
-      (event) => {
-        if (event.type === 'emit')
-          emitted.set(event.key, [...(emitted.get(event.key) ?? []), event.delta]);
-      },
-    );
-  };
 
   const session = (): string => {
     if (id === null) throw new Error('no session has been created');
@@ -112,10 +98,7 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
         }
       }
       const { id: created, ...answer } = await client().create('probe@1', config);
-      if (created !== undefined) {
-        id = created;
-        await listen();
-      }
+      if (created !== undefined) id = created;
       return answer;
     },
     input: (kind, payload) => answerOf(() => client().input(session(), { kind, payload })),
@@ -149,16 +132,13 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
     log: async () => (id === null ? [] : readLog()),
     snapshot: async () =>
       id === null ? {} : ((await client().get(id, { snapshot: true })).snapshot ?? {}),
-    emitted: (key) => Promise.resolve(emitted.get(key) ?? []),
     crash: async () => {
       runner.process.kill('SIGKILL');
       await runner.exited;
       runner = await start();
-      await listen();
     },
     upgrade: () => answerOf(() => client().upgrade(session(), '2')),
     close: async () => {
-      await subscription?.close().catch(() => undefined);
       runner.process.kill('SIGKILL');
       await runner.exited;
       await gates.close();

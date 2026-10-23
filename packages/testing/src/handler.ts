@@ -20,15 +20,12 @@ export type TestHandlerContext<A extends Json> = {
   ctx: HandlerContext<A>;
   /** Fires the handler's signal, as a cancel or abort would. */
   controller: AbortController;
-  /** Every delta the handler emitted, in order. */
-  emitted: Json[];
 };
 
 export function handlerContext<A extends Json>(
   options: HandlerContextOptions<A>,
 ): TestHandlerContext<A> {
   const controller = new AbortController();
-  const emitted: Json[] = [];
   const log = options.log ?? [];
   const secrets = options.secrets ?? {};
   const pageSize = options.pageSize ?? 100;
@@ -39,9 +36,6 @@ export function handlerContext<A extends Json>(
     args: options.args,
     attempt: options.attempt ?? 1,
     signal: controller.signal,
-    emit: (delta) => {
-      emitted.push(delta);
-    },
     secrets: {
       get: (name) => {
         const value = secrets[name];
@@ -54,7 +48,7 @@ export function handlerContext<A extends Json>(
       list: (query = {}) => Promise.resolve(listLog(log, query, pageSize)),
     },
   };
-  return { ctx, controller, emitted };
+  return { ctx, controller };
 }
 
 function listLog(log: readonly LogEntry[], query: LogQuery, pageSize: number): LogPage {

@@ -34,12 +34,7 @@ type PiToolResult = {
 /** The parts of a pi tool the handler uses. */
 type PiTool<T extends TSchema> = {
   parameters: T;
-  execute: (
-    toolCallId: string,
-    params: Static<T>,
-    signal?: AbortSignal,
-    onUpdate?: (partial: PiToolResult) => void,
-  ) => Promise<PiToolResult>;
+  execute: (toolCallId: string, params: Static<T>, signal?: AbortSignal) => Promise<PiToolResult>;
 };
 
 export function toolHandler(name: ToolName): HandlerDef<ToolCallRef, ToolResult> {
@@ -77,9 +72,7 @@ async function execute<T extends TSchema>(
   if (!Value.Check(tool.parameters, args)) {
     return errorResult('The arguments do not match the tool schema');
   }
-  const result = await tool.execute(ctx.args.toolCallId, args, ctx.signal, (partial) => {
-    ctx.emit({ type: 'output', text: textOf(partial.content) });
-  });
+  const result = await tool.execute(ctx.args.toolCallId, args, ctx.signal);
   const content = result.content.map((block) =>
     block.type === 'text'
       ? { type: 'text' as const, text: block.text }
@@ -94,10 +87,6 @@ function toJsonObject(value: unknown): JsonObject | null {
   if (value === undefined || value === null) return null;
   const parsed: unknown = JSON.parse(JSON.stringify(value));
   return isJson(parsed) && isObject(parsed) ? parsed : null;
-}
-
-function textOf(content: PiToolResult['content']): string {
-  return content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
 }
 
 function errorResult(text: string): ToolResult {

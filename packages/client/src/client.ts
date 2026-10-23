@@ -36,7 +36,6 @@ export type ProvidedContext = {
   attempt: number;
   /** Fires when the effect is cancelled or aborted. */
   signal: AbortSignal;
-  emit(delta: Json): void;
   log: { list(query?: LogQuery): Promise<LogPage> };
 };
 
@@ -54,8 +53,7 @@ export type ClientOptions = {
 export type SessionEvent =
   | { type: 'log'; entries: LogEntry[] }
   | { type: 'view'; view: Json }
-  | { type: 'status'; status: Status; fault: string | null }
-  | { type: 'emit'; key: string; delta: Json };
+  | { type: 'status'; status: Status; fault: string | null };
 
 export type Subscription = { close(): Promise<void> };
 
@@ -179,11 +177,11 @@ export class RunnerClient {
 
   /**
    * Hears what happens to a session: the log after `after` first, then
-   * each step as it is saved, with no gap, and emits if asked for.
+   * each step as it is saved, with no gap.
    */
   async subscribe(
     id: string,
-    options: { after?: number; emits?: boolean },
+    options: { after?: number },
     listener: (event: SessionEvent) => void,
   ): Promise<Subscription> {
     this.#subscriptions += 1;
@@ -268,7 +266,6 @@ export class RunnerClient {
         args: args ?? null,
         attempt: typeof attempt === 'number' ? attempt : 1,
         signal: controller.signal,
-        emit: (delta) => this.#peer.notify('effect/emit', { session, key, delta }),
         log: {
           list: async (query = {}) => {
             const page = await this.log(session, query);
@@ -302,10 +299,6 @@ function toEvent(method: string, params: JsonObject): SessionEvent | null {
       if (status !== 'idle' && status !== 'busy' && status !== 'faulted') return null;
       return { type: 'status', status, fault: typeof fault === 'string' ? fault : null };
     }
-    case 'emit':
-      return typeof params['key'] === 'string'
-        ? { type: 'emit', key: params['key'], delta: params['delta'] ?? null }
-        : null;
     default:
       return null;
   }

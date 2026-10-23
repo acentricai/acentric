@@ -42,13 +42,8 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
         throw toRpcError(error);
       }
     },
-    notify: (method, params) => {
-      if (method !== 'effect/emit' || provision === null || !isObject(params)) return;
-      const { session, key, delta } = params;
-      if (typeof session === 'string' && typeof key === 'string' && delta !== undefined) {
-        provision.emitted(session, key, delta);
-      }
-    },
+    // An application sends no notifications.
+    notify: () => undefined,
   });
 
   const provider: Provider = {
@@ -201,7 +196,7 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
     try {
       const stop = await runner.subscribe(
         id,
-        { ...(typeof after === 'number' ? { after } : {}), emits: p['emits'] === true },
+        typeof after === 'number' ? { after } : {},
         (event) => {
           if (!ended) peer.notify(event.type, notification(subscription, id, event));
         },
@@ -238,8 +233,6 @@ function notification(subscription: string, id: string, event: SessionEvent): Js
       return { subscription, id, view: event.view };
     case 'status':
       return { subscription, id, status: event.status, fault: event.fault };
-    case 'emit':
-      return { subscription, id, key: event.key, delta: event.delta };
   }
 }
 

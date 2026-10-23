@@ -43,7 +43,6 @@ const state = {
   selected: null as string | null,
   info: null as SessionInfo | null,
   entries: [] as LogEntry[],
-  streams: new Map<string, string>(),
   expanded: new Set<number>(),
   subscription: null as Subscription | null,
   answer: { text: '', bad: false },
@@ -113,8 +112,6 @@ async function refreshSessions(): Promise<void> {
 async function refreshInfo(): Promise<void> {
   if (state.client === null || state.selected === null) return;
   state.info = await state.client.get(state.selected);
-  const running = new Set(state.info.running.map((effect) => effect.key));
-  for (const key of state.streams.keys()) if (!running.has(key)) state.streams.delete(key);
   render();
 }
 
@@ -124,13 +121,10 @@ async function select(id: string): Promise<void> {
   await state.subscription?.close().catch(() => undefined);
   state.selected = id;
   state.entries = [];
-  state.streams.clear();
   state.expanded.clear();
   state.answer = { text: '', bad: false };
   state.info = await client.get(id);
-  state.subscription = await client.subscribe(id, { emits: true }, (event) =>
-    onSessionEvent(id, event),
-  );
+  state.subscription = await client.subscribe(id, {}, (event) => onSessionEvent(id, event));
   render();
 }
 
@@ -140,8 +134,6 @@ function onSessionEvent(id: string, event: SessionEvent): void {
   if (id !== state.selected) return;
   if (event.type === 'log') {
     state.entries.push(...event.entries);
-  } else if (event.type === 'emit') {
-    state.streams.set(event.key, (state.streams.get(event.key) ?? '') + deltaText(event.delta));
   } else if (event.type === 'view' && state.info !== null) {
     state.info = { ...state.info, view: event.view };
   } else if (event.type === 'status' && state.info !== null) {
@@ -149,7 +141,7 @@ function onSessionEvent(id: string, event: SessionEvent): void {
     void refreshSessions();
   }
   // Running effects come from get, at most every 150 ms.
-  if (event.type !== 'emit' && refreshing === null) {
+  if (refreshing === null) {
     refreshing = setTimeout(() => {
       refreshing = null;
       void refreshInfo();
@@ -309,14 +301,6 @@ function logView(info: SessionInfo): HTMLElement {
   if (state.entries.length === 0)
     children.push(element('div', { class: 'empty' }, ['The log is empty.']));
   for (const entry of state.entries) children.push(entryView(entry));
-  for (const [key, text] of state.streams) {
-    children.push(
-      element('div', { class: 'stream' }, [
-        element('div', { class: 'label' }, [`${key} streaming…`]),
-        element('pre', {}, [text]),
-      ]),
-    );
-  }
   return element('div', { class: 'log', id: 'log' }, children);
 }
 
@@ -502,15 +486,6 @@ function summarize(body: Json): string {
     if (typeof body['text'] === 'string') return body['text'];
   }
   return JSON.stringify(body);
-}
-
-function deltaText(delta: Json): string {
-  if (typeof delta === 'string') return delta;
-  if (typeof delta === 'object' && delta !== null && !Array.isArray(delta)) {
-    const text = delta['delta'] ?? delta['text'];
-    if (typeof text === 'string') return text;
-  }
-  return `${JSON.stringify(delta)}\n`;
 }
 
 function describeAnswer(answer: Answer): string {

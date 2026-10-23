@@ -26,7 +26,6 @@ which the runner settles, and expectations about what must then be true.
 | `signalled`                      | gates whose signal fired                                                    |
 | `log`, `logKinds`                | the newest log entries, partly; the kinds of the whole log                  |
 | `snapshot`                       | the snapshot, partly                                                        |
-| `emitted`                        | what each key emitted                                                       |
 
 After every action the log must also be numbered 1, 2, 3 with no gaps, with
 times that never go backwards. A scenario that needs a feature the runner does
@@ -47,9 +46,9 @@ Runners in TypeScript can use `createGateHook`.
 ## Playing scenarios
 
 A runner provides an `Adapter`: create, input, configure, release, settle,
-and ways to read what is running, the log, the snapshot and what was
-emitted. `play(scenario, open)` plays one scenario through it. Runners in
-other languages implement the same small format themselves.
+and ways to read what is running, the log and the snapshot.
+`play(scenario, open)` plays one scenario through it. Runners in other
+languages implement the same small format themselves.
 
 The tests here play every scenario against a reference adapter built from the
 simulator, which checks the scenarios themselves before a real runner exists.

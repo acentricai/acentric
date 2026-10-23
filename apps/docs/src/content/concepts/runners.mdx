@@ -120,13 +120,13 @@ the effects running.
 
 Your runner provides an **adapter**, which the scenarios drive:
 
-| Adapter method                          | Does                                                 |
-| --------------------------------------- | ---------------------------------------------------- |
-| `create`, `input`, `configure`          | Creates the probe's session and sends it messages    |
-| `release`                               | Finishes a probe effect, with a value or by throwing |
-| `settle`                                | Waits until every message that can be delivered is   |
-| `running`, `log`, `snapshot`, `emitted` | Reads what the scenario checks                       |
-| `crash`, `upgrade`                      | Restarts the runner, or upgrades the session         |
+| Adapter method                 | Does                                                 |
+| ------------------------------ | ---------------------------------------------------- |
+| `create`, `input`, `configure` | Creates the probe's session and sends it messages    |
+| `release`                      | Finishes a probe effect, with a value or by throwing |
+| `settle`                       | Waits until every message that can be delivered is   |
+| `running`, `log`, `snapshot`   | Reads what the scenario checks                       |
+| `crash`, `upgrade`             | Restarts the runner, or upgrades the session         |
 
 A runner in TypeScript plays every scenario with `play`:
 

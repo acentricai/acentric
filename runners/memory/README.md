@@ -13,7 +13,6 @@ const agent = runner.load(myAgent, myHandlers);
 const { id } = runner.create(agent, { model: 'small' });
 
 await runner.input(id, 'chat', { text: 'hello' }); // answered once its step is saved
-runner.onEmit(id, (key, delta) => console.log(key, delta));
 runner.log(id);
 runner.view(id);
 ```
