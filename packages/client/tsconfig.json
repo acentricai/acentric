@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // WebSocket, AbortController and setTimeout come from the DOM library.
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [{ "path": "../types" }, { "path": "../protocol" }]
+}

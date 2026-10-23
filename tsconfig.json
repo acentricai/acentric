@@ -11,6 +11,12 @@
       "path": "packages/conformance"
     },
     {
+      "path": "packages/protocol"
+    },
+    {
+      "path": "packages/client"
+    },
+    {
       "path": "runners/memory"
     },
     {
