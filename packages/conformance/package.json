@@ -24,6 +24,10 @@
     "./probe/handlers-bad-name": {
       "types": "./dist/probe/handlers-bad-name.d.ts",
       "default": "./dist/probe/handlers-bad-name.js"
+    },
+    "./remote-hook": {
+      "types": "./dist/remote-hook.d.ts",
+      "default": "./dist/remote-hook.js"
     }
   },
   "files": [

@@ -3,6 +3,8 @@
 
 export { createGateHook, installedHook, isJson } from './hook.js';
 export type { ConformanceHook, GateControl, GateOutcome } from './hook.js';
+export { GATE_SERVER_ENV, serveGates } from './gate-server.js';
+export type { GateServer } from './gate-server.js';
 export { loadScenarios, scenariosDir } from './load.js';
 export { mismatch } from './match.js';
 export { play } from './player.js';
