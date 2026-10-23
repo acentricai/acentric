@@ -24,6 +24,7 @@ import {
   IconCopy,
   IconInfoCircle,
 } from '@tabler/icons-react';
+import { AgentLoop } from './diagrams';
 
 function Anchor({ href = '', children, ...rest }: ComponentProps<'a'>) {
   if (href.startsWith('/')) {
@@ -269,4 +270,5 @@ export const mdxComponents: MDXComponents = {
   Card,
   Tabs,
   Tab,
+  AgentLoop,
 };
