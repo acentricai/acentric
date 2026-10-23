@@ -1,0 +1,27 @@
+{
+  "name": "An accepted config change reaches step as a config message",
+  "section": "4",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "configure": {
+        "x": 1
+      }
+    },
+    {
+      "expect": {
+        "accepted": true,
+        "log": [
+          {
+            "kind": "config",
+            "body": {
+              "x": 1
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

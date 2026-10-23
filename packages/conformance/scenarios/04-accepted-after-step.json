@@ -1,0 +1,25 @@
+{
+  "name": "An accepted input has been through its step",
+  "section": "4",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "noop"
+    },
+    {
+      "expect": {
+        "accepted": true,
+        "log": [
+          {
+            "kind": "input",
+            "body": {
+              "kind": "noop"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

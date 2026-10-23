@@ -1,0 +1,40 @@
+{
+  "name": "A handler that throws is threw",
+  "section": "8",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "throw",
+            "args": {
+              "message": "boom"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "failed": {
+                  "code": "threw"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "A result that is not Json is invalid_result",
+  "section": "8",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "invalid",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "failed": {
+                  "code": "invalid_result"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

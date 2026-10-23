@@ -1,0 +1,50 @@
+{
+  "name": "A handler that throws after an abort is aborted",
+  "section": "8",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "abort",
+      "payload": {
+        "keys": ["a"]
+      }
+    },
+    {
+      "release": "a",
+      "with": {
+        "throw": "stopped"
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "failed": {
+                  "code": "aborted"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

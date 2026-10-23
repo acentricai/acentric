@@ -1,0 +1,29 @@
+{
+  "name": "Log times never go backwards",
+  "section": "5",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "now"
+    },
+    {
+      "wait": 5
+    },
+    {
+      "input": "now"
+    },
+    {
+      "wait": 5
+    },
+    {
+      "input": "now"
+    },
+    {
+      "expect": {
+        "logKinds": ["init", "input", "now", "input", "now", "input", "now"]
+      }
+    }
+  ]
+}

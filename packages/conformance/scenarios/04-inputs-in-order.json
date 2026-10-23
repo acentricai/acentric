@@ -1,0 +1,57 @@
+{
+  "name": "Inputs are delivered in the order they were accepted",
+  "section": "4",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "noop",
+      "payload": {
+        "n": 1
+      }
+    },
+    {
+      "input": "noop",
+      "payload": {
+        "n": 2
+      }
+    },
+    {
+      "input": "noop",
+      "payload": {
+        "n": 3
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "input",
+            "body": {
+              "payload": {
+                "n": 1
+              }
+            }
+          },
+          {
+            "kind": "input",
+            "body": {
+              "payload": {
+                "n": 2
+              }
+            }
+          },
+          {
+            "kind": "input",
+            "body": {
+              "payload": {
+                "n": 3
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

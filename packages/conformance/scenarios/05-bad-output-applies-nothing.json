@@ -1,0 +1,21 @@
+{
+  "name": "A step that returns something that is not Json applies nothing",
+  "section": "5",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "bad_output"
+    },
+    {
+      "expect": {
+        "failed": true,
+        "logKinds": ["init"],
+        "snapshot": {
+          "windowStart": 1
+        }
+      }
+    }
+  ]
+}

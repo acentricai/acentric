@@ -1,0 +1,32 @@
+{
+  "name": "A window below 1 starts at 1",
+  "section": "6",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "window",
+      "payload": {
+        "start": 0
+      }
+    },
+    {
+      "input": "report"
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "report",
+            "body": {
+              "start": 1,
+              "next": 3,
+              "entries": 2
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

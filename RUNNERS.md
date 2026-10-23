@@ -310,7 +310,9 @@ version's `step`.
 
 ## Conformance
 
-A runner conforms when it passes the conformance scenarios: JSON files
-that drive a small test agent through messages and handler outcomes and say
-what must happen, played through an adapter each runner provides. They are
-to be written alongside the first runner.
+A runner conforms when it passes the scenarios in
+[packages/conformance](packages/conformance): JSON files that drive a small
+test agent, the probe, through messages and handler outcomes and say what
+must happen, played through an adapter each runner provides. Scenarios that
+need a feature a runner does not offer, such as durability or upgrades, are
+skipped and reported.

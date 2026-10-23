@@ -1,0 +1,58 @@
+{
+  "name": "A finished key never runs again",
+  "section": "7",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "echo",
+            "args": {
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "ok": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "echo",
+            "args": {
+              "value": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "running": [],
+        "logKinds": ["init", "input", "result", "input"]
+      }
+    }
+  ]
+}

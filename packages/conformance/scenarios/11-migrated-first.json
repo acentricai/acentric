@@ -1,0 +1,32 @@
+{
+  "name": "An upgrade runs migrate and delivers migrated first",
+  "section": "11",
+  "requires": ["upgrade"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "noop"
+    },
+    {
+      "upgrade": "2"
+    },
+    {
+      "expect": {
+        "accepted": true,
+        "log": [
+          {
+            "kind": "migrated",
+            "body": {
+              "from": "1"
+            }
+          }
+        ],
+        "snapshot": {
+          "migratedFrom": "1"
+        }
+      }
+    }
+  ]
+}

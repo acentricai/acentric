@@ -1,0 +1,49 @@
+{
+  "name": "A running key keeps the args it started with",
+  "section": "7",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": {
+              "v": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": {
+              "v": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "running": [
+          {
+            "key": "a",
+            "args": {
+              "v": 1
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

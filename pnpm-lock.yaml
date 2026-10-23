@@ -147,6 +147,19 @@ importers:
         specifier: ^26.6.5
         version: 26.6.5
 
+  packages/conformance:
+    dependencies:
+      '@acentric/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      '@acentric/testing':
+        specifier: workspace:*
+        version: link:../testing
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
   packages/testing:
     dependencies:
       '@acentric/types':

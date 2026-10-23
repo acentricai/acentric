@@ -1,0 +1,42 @@
+{
+  "name": "A returned value is ok",
+  "section": "8",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "echo",
+            "args": {
+              "value": {
+                "x": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "ok": {
+                  "x": 1
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

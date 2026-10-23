@@ -1,0 +1,36 @@
+{
+  "name": "The first run of a key is attempt 1",
+  "section": "8",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "attempt",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "ok": 1
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

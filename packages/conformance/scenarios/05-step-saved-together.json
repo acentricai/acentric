@@ -1,0 +1,39 @@
+{
+  "name": "A step's appends and effects are saved together",
+  "section": "5",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          },
+          {
+            "key": "b",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "running": ["a", "b"],
+        "log": [
+          {
+            "kind": "input",
+            "body": {
+              "kind": "declare"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

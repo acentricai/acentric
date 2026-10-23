@@ -1,0 +1,60 @@
+{
+  "name": "An aborted key reports what it returns",
+  "section": "7",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "abort",
+      "payload": {
+        "keys": ["a"]
+      }
+    },
+    {
+      "expect": {
+        "running": [
+          {
+            "key": "a",
+            "abort": true
+          }
+        ],
+        "signalled": ["a"]
+      }
+    },
+    {
+      "release": "a",
+      "with": {
+        "return": "partial"
+      }
+    },
+    {
+      "expect": {
+        "running": [],
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "ok": "partial"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

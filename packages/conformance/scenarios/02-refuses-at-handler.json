@@ -1,0 +1,15 @@
+{
+  "name": "A runner refuses a handler named with @",
+  "section": "2",
+  "steps": [
+    {
+      "create": {},
+      "bundle": "probe-bad-handler-name"
+    },
+    {
+      "expect": {
+        "rejected": true
+      }
+    }
+  ]
+}

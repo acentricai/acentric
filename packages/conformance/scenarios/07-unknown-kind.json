@@ -1,0 +1,38 @@
+{
+  "name": "A kind with no handler fails at once with unknown_kind",
+  "section": "7",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "nope",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "failed": {
+                  "code": "unknown_kind"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

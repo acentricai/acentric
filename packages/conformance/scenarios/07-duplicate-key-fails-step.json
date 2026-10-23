@@ -1,0 +1,34 @@
+{
+  "name": "Naming a key twice in one list fails the step",
+  "section": "7",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          },
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ],
+        "raw": true
+      }
+    },
+    {
+      "expect": {
+        "failed": true,
+        "running": [],
+        "logKinds": ["init"]
+      }
+    }
+  ]
+}

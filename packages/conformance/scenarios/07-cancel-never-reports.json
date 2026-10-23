@@ -1,0 +1,44 @@
+{
+  "name": "A key that disappears is cancelled and never reports",
+  "section": "7",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "drop",
+      "payload": {
+        "keys": ["a"]
+      }
+    },
+    {
+      "expect": {
+        "running": [],
+        "signalled": ["a"]
+      }
+    },
+    {
+      "release": "a",
+      "with": {
+        "return": 1
+      }
+    },
+    {
+      "expect": {
+        "logKinds": ["init", "input", "input"]
+      }
+    }
+  ]
+}

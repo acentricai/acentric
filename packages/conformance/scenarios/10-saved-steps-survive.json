@@ -1,0 +1,24 @@
+{
+  "name": "Saved steps survive a crash, and are not applied again",
+  "section": "10",
+  "requires": ["durable"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "noop"
+    },
+    {
+      "input": "noop"
+    },
+    {
+      "crash": true
+    },
+    {
+      "expect": {
+        "logKinds": ["init", "input", "input"]
+      }
+    }
+  ]
+}

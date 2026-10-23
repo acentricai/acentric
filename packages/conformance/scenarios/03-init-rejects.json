@@ -1,0 +1,16 @@
+{
+  "name": "When init rejects, no instance is created",
+  "section": "3",
+  "steps": [
+    {
+      "create": {
+        "rejectInit": true
+      }
+    },
+    {
+      "expect": {
+        "rejected": "init rejected"
+      }
+    }
+  ]
+}

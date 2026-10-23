@@ -1,0 +1,45 @@
+{
+  "name": "@acentric/conformance",
+  "version": "0.1.0",
+  "description": "Scenarios every runner must pass, the probe agent they drive, and a player for runners written in TypeScript.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./probe/agent": {
+      "types": "./dist/probe/agent.d.ts",
+      "default": "./dist/probe/agent.js"
+    },
+    "./probe/agent-v2": {
+      "types": "./dist/probe/agent-v2.d.ts",
+      "default": "./dist/probe/agent-v2.js"
+    },
+    "./probe/handlers": {
+      "types": "./dist/probe/handlers.d.ts",
+      "default": "./dist/probe/handlers.js"
+    },
+    "./probe/handlers-bad-name": {
+      "types": "./dist/probe/handlers-bad-name.d.ts",
+      "default": "./dist/probe/handlers-bad-name.js"
+    }
+  },
+  "files": [
+    "dist",
+    "scenarios",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@acentric/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@acentric/testing": "workspace:*",
+    "@types/node": "^26.6.5"
+  }
+}

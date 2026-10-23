@@ -1,0 +1,21 @@
+{
+  "name": "When migrate rejects, the instance stays on its old version",
+  "section": "11",
+  "requires": ["upgrade"],
+  "steps": [
+    {
+      "create": {
+        "rejectMigrate": true
+      }
+    },
+    {
+      "upgrade": "2"
+    },
+    {
+      "expect": {
+        "rejected": true,
+        "logKinds": ["init"]
+      }
+    }
+  ]
+}

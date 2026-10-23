@@ -1,0 +1,36 @@
+{
+  "name": "Effects run at the same time",
+  "section": "7",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          },
+          {
+            "key": "b",
+            "kind": "gate",
+            "args": null
+          },
+          {
+            "key": "c",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "running": ["a", "b", "c"]
+      }
+    }
+  ]
+}

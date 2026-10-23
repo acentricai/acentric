@@ -1,0 +1,42 @@
+{
+  "name": "A once effect cut off by a crash is interrupted, and not run again",
+  "section": "10",
+  "requires": ["durable"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null,
+            "mode": "once"
+          }
+        ]
+      }
+    },
+    {
+      "crash": true
+    },
+    {
+      "expect": {
+        "running": [],
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "interrupted": true
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

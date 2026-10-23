@@ -1,0 +1,20 @@
+{
+  "name": "A rejected config change changes nothing",
+  "section": "4",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "configure": {
+        "reject": true
+      }
+    },
+    {
+      "expect": {
+        "rejected": "config rejected",
+        "logKinds": ["init"]
+      }
+    }
+  ]
+}

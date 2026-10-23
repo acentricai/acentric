@@ -1,0 +1,56 @@
+{
+  "name": "A reissue effect cut off by a crash runs again with the next attempt",
+  "section": "10",
+  "requires": ["durable"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "crash": true
+    },
+    {
+      "expect": {
+        "running": [
+          {
+            "key": "a",
+            "attempt": 2
+          }
+        ]
+      }
+    },
+    {
+      "release": "a",
+      "with": {
+        "return": 1
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "ok": 1
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

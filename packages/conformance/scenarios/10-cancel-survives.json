@@ -1,0 +1,36 @@
+{
+  "name": "A cancelled effect stays cancelled after a crash",
+  "section": "10",
+  "requires": ["durable"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "drop",
+      "payload": {
+        "keys": ["a"]
+      }
+    },
+    {
+      "crash": true
+    },
+    {
+      "expect": {
+        "running": []
+      }
+    }
+  ]
+}

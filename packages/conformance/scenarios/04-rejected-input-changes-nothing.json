@@ -1,0 +1,34 @@
+{
+  "name": "A rejected input changes nothing, and the caller gets the error",
+  "section": "4",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "reject",
+      "payload": {
+        "error": "no"
+      }
+    },
+    {
+      "expect": {
+        "rejected": "no",
+        "logKinds": ["init", "input"],
+        "running": ["a"]
+      }
+    }
+  ]
+}

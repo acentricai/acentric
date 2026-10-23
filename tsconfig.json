@@ -1,8 +1,17 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/types" },
-    { "path": "packages/testing" },
-    { "path": "examples/pi" }
+    {
+      "path": "packages/types"
+    },
+    {
+      "path": "packages/testing"
+    },
+    {
+      "path": "packages/conformance"
+    },
+    {
+      "path": "examples/pi"
+    }
   ]
 }

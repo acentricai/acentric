@@ -1,0 +1,51 @@
+{
+  "name": "A step sees the log from where window says",
+  "section": "6",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "append",
+      "payload": {
+        "entries": [
+          {
+            "kind": "note",
+            "body": 1
+          },
+          {
+            "kind": "note",
+            "body": 2
+          },
+          {
+            "kind": "note",
+            "body": 3
+          }
+        ]
+      }
+    },
+    {
+      "input": "window",
+      "payload": {
+        "start": 3
+      }
+    },
+    {
+      "input": "report"
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "report",
+            "body": {
+              "start": 3,
+              "next": 7,
+              "entries": 4
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

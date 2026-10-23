@@ -1,0 +1,31 @@
+{
+  "name": "A step that throws applies nothing",
+  "section": "5",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "throw"
+    },
+    {
+      "expect": {
+        "failed": true,
+        "logKinds": ["init", "input"],
+        "running": ["a"]
+      }
+    }
+  ]
+}

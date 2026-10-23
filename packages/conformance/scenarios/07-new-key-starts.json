@@ -1,0 +1,38 @@
+{
+  "name": "A new key starts",
+  "section": "7",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": {
+              "v": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "running": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "attempt": 1,
+            "abort": false,
+            "args": {
+              "v": 1
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

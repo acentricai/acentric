@@ -1,0 +1,40 @@
+{
+  "name": "A handler past its time limit is timeout",
+  "section": "8",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "slow",
+            "args": {
+              "ms": 2000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "failed": {
+                  "code": "timeout"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

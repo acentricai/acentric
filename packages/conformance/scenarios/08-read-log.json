@@ -1,0 +1,47 @@
+{
+  "name": "A handler can read the log",
+  "section": "8",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "read_log",
+            "args": {
+              "query": {
+                "kinds": ["init"]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "ok": {
+                  "entries": [
+                    {
+                      "seq": 1,
+                      "kind": "init"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Effects are matched right after init",
+  "section": "3",
+  "steps": [
+    {
+      "create": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "accepted": true,
+        "running": ["a"],
+        "logKinds": ["init"]
+      }
+    }
+  ]
+}
