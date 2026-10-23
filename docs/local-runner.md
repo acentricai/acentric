@@ -30,27 +30,29 @@ client SDKs       TypeScript first; the protocol is the contract
 ## Store
 
 A narrow `Store` interface shaped around what the runner does, so any backend
-can implement it. SQLite (Node's built-in `node:sqlite`) comes first, an
-append-only filesystem journal second. Each app chooses its store when it
-starts the runner; a Node app can pass its own implementation.
+can implement it: `Store` in
+[runners/local/src/store/types.ts](../runners/local/src/store/types.ts). Each
+app chooses its store when it starts the runner; a Node app can pass its own
+implementation. Opening a store takes it for one runner; a second fails with
+`locked`.
 
-```ts
-interface Store {
-  lock(): Promise<Release>;
-  putBundle(ref, bundle): Promise<void>; // refuses a different hash under the same name@version
-  getBundle(ref): Promise<Bundle>;
-  listAgents(): Promise<AgentRef[]>;
-  create(instance): Promise<void>; // the init step, atomic like commit
-  load(id): Promise<LoadedInstance>;
-  list(filter): Promise<InstanceSummary[]>;
-  commit(id, step: StepCommit): Promise<void>; // the one atomic operation
-  readLog(id, query): Promise<LogEntry[]>;
-  putResult(id, key, outcome): Promise<void>; // the durable inbox
-  recordAttempt(id, key, attempt): Promise<void>;
-  setFault(id, reason): Promise<void>;
-  delete(id): Promise<void>;
-}
-```
+| Group     | Operations                                                                        |
+| --------- | --------------------------------------------------------------------------------- |
+| Code      | `putBundle`, `getBundle`, `listBundles`, `deleteBundle`                           |
+| Instances | `create` (the init step, atomic like commit), `load`, `list`, `pending`, `delete` |
+| Steps     | `commit`, the one atomic operation; `readLog` by range; `findFinished`            |
+| Requests  | `findRequest`, `putRequest` for answers given without a step                      |
+| Between   | `putResult`, `inbox`, `dropResult`, `recordAttempt`, `setFault`                   |
+
+Two stores come with the runner:
+
+- **SQLite** (`sqlite:PATH`), through Node's built-in `node:sqlite`: each
+  commit is one transaction, and exclusive locking takes the file.
+- **Plain files** (`fs:DIR`): a journal per instance, where each commit is one
+  appended, synced line with a checksum, and a checkpoint every 500 lines.
+  A last line half written by a crash is cut off on the next open; any other
+  damaged line is refused. A lock file holds the owner's pid, and a lock
+  left by a process that is gone is taken over.
 
 A commit holds the snapshot, log appends, config or agent changes, effects
 started, finished and aborted, the result it consumed and the input id it
@@ -286,7 +288,7 @@ Each milestone ends in something runnable and tested.
 4. **`acentric dev` and the dev UI.** Done. Watching, dev versions, hot reload
    through upgrades, faults cleared on save. Verified by editing an agent
    while an instance is mid-conversation.
-5. **The filesystem store,** passing the same suite and scenarios.
+5. **The filesystem store,** passing the same suite and scenarios. Done.
 6. **`npm create acentric` and templates.**
 
 ## Open

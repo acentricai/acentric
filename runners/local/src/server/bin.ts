@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // acentric-runner: the local runner as a process applications talk to.
 //
-//   acentric-runner --store sqlite:./agents.db [--listen stdio | ws://127.0.0.1:7420]
+//   acentric-runner --store sqlite:./agents.db|fs:./agents [--listen stdio | ws://127.0.0.1:7420]
 //                   [--code-dir DIR] [--secret NAME]... [--host-import MODULE]...
 //                   [--grace-ms N] [--idle-ms N] [--timeout-ms N] [--max-attempts N]
 //
@@ -14,8 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { createLocalRunner } from '../runner.js';
-import { openSqliteStore } from '../store/sqlite.js';
-import type { Store } from '../store/types.js';
+import { openStore } from '../store/open.js';
 import { serveStreams, serveWebSocket } from './transports.js';
 
 // Stdout is the protocol.
@@ -23,7 +22,7 @@ console.log = console.error;
 console.info = console.error;
 console.debug = console.error;
 
-const USAGE = `usage: acentric-runner --store sqlite:PATH [--listen stdio|ws://HOST:PORT]
+const USAGE = `usage: acentric-runner --store sqlite:PATH|fs:DIR [--listen stdio|ws://HOST:PORT]
   [--code-dir DIR] [--secret NAME]... [--host-import MODULE]...
   [--grace-ms N] [--idle-ms N] [--timeout-ms N] [--max-attempts N]`;
 
@@ -94,12 +93,6 @@ async function main(): Promise<void> {
   const closeListener = (): Promise<void> => listener.close();
   process.once('SIGTERM', () => void stop(closeListener));
   process.once('SIGINT', () => void stop(closeListener));
-}
-
-function openStore(spec: string): Promise<Store> {
-  const sqlite = /^sqlite:(.+)$/.exec(spec);
-  if (sqlite?.[1] === undefined) fail(`--store must be sqlite:PATH, not ${spec}`);
-  return openSqliteStore(sqlite[1]);
 }
 
 function number(name: string, value: string | undefined): Record<string, number> {

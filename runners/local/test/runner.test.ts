@@ -7,10 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { Json, LogEntry } from '@acentric/types';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createLocalRunner, openSqliteStore, RunnerError } from '../dist/index.js';
+import { createLocalRunner, RunnerError } from '../dist/index.js';
 import type { InstanceEvent, LocalRunner, LocalRunnerOptions, Store } from '../dist/index.js';
+import { SQLITE, STORES } from './stores.js';
+import type { StoreKind } from './stores.js';
 
 // A test agent, as the two modules a bundle holds. Input `ask` declares an
 // effect; each effect's outcome is logged as a `result` entry. Version 1
@@ -81,13 +83,15 @@ afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
 });
 
+let storeKind: StoreKind = SQLITE;
+
 async function setup(options: Partial<LocalRunnerOptions> = {}): Promise<Setup> {
   const dir = await mkdtemp(join(tmpdir(), 'acentric-runner-'));
-  const path = join(dir, 'store.db');
+  const path = join(dir, 'store');
   let failCommits = false;
 
   const open = async (): Promise<{ runner: LocalRunner; store: Store }> => {
-    const opened = await openSqliteStore(path);
+    const opened = await storeKind.open(path);
     const store = new Proxy(opened, {
       get: (target, property) => {
         if (property === 'commit' && failCommits)
@@ -143,7 +147,11 @@ async function until(what: string, condition: () => Promise<boolean>, ms = 5000)
 const results = async (store: Store, id: string): Promise<Json[]> =>
   (await store.readLog(id, { kinds: ['result'] })).map((entry: LogEntry) => entry.body);
 
-describe('the local runner', () => {
+describe.each(STORES)('the local runner over $name', (kind) => {
+  beforeEach(() => {
+    storeKind = kind;
+  });
+
   it('fires a timer, and one that came due while it was down', async () => {
     const s = await setup();
     await s.runner.deploy(v1);

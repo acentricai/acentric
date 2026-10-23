@@ -13,9 +13,11 @@ import { serveGates } from '@acentric/conformance';
 import type { Adapter, Answer } from '@acentric/conformance';
 import type { Json, LogEntry } from '@acentric/types';
 
-import { createLocalRunner, openSqliteStore } from '../dist/index.js';
+import { createLocalRunner } from '../dist/index.js';
 import type { LocalRunner, Store } from '../dist/index.js';
 import { probeBundles } from './bundles.js';
+import { SQLITE } from './stores.js';
+import type { StoreKind } from './stores.js';
 
 const remoteHook = pathToFileURL(
   createRequire(import.meta.url).resolve('@acentric/conformance/remote-hook'),
@@ -29,10 +31,10 @@ async function answerOf(work: () => Promise<Answer>): Promise<Answer> {
   }
 }
 
-export async function localAdapter(): Promise<Adapter> {
+export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapter> {
   const gates = await serveGates();
   const dir = await mkdtemp(join(tmpdir(), 'acentric-local-'));
-  const path = join(dir, 'store.db');
+  const path = join(dir, 'store');
   const probes = await probeBundles();
   const emitted = new Map<string, Json[]>();
   let id: string | null = null;
@@ -48,7 +50,7 @@ export async function localAdapter(): Promise<Adapter> {
     return runner;
   };
 
-  let store = await openSqliteStore(path);
+  let store = await storeKind.open(path);
   let runner = await open(store);
   await runner.deploy({ name: 'probe', version: '1', agent: probes.v1, handlers: probes.handlers });
   await runner.deploy({ name: 'probe', version: '2', agent: probes.v2, handlers: probes.handlers });
@@ -142,7 +144,7 @@ export async function localAdapter(): Promise<Adapter> {
       stopListening?.();
       runner.kill();
       await store.close();
-      store = await openSqliteStore(path);
+      store = await storeKind.open(path);
       runner = await open(store);
       await listen();
     },

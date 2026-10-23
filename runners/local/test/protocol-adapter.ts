@@ -16,6 +16,8 @@ import type { Adapter, Answer } from '@acentric/conformance';
 import type { Json, LogEntry } from '@acentric/types';
 
 import { probeBundles } from './bundles.js';
+import { SQLITE } from './stores.js';
+import type { StoreKind } from './stores.js';
 
 export const RUNNER_BIN = fileURLToPath(new URL('../dist/server/bin.js', import.meta.url));
 const REMOTE_HOOK = createRequire(import.meta.url).resolve('@acentric/conformance/remote-hook');
@@ -28,7 +30,7 @@ async function answerOf(work: () => Promise<Answer>): Promise<Answer> {
   }
 }
 
-export async function protocolAdapter(): Promise<Adapter> {
+export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Adapter> {
   const gates = await serveGates();
   const dir = await mkdtemp(join(tmpdir(), 'acentric-protocol-'));
   const probes = await probeBundles();
@@ -38,7 +40,7 @@ export async function protocolAdapter(): Promise<Adapter> {
 
   const start = (): Promise<SpawnedRunner> =>
     spawnRunner({
-      store: `sqlite:${join(dir, 'store.db')}`,
+      store: storeKind.spec(join(dir, 'store')),
       command: process.execPath,
       args: [RUNNER_BIN],
       runnerArgs: ['--code-dir', join(dir, 'code'), '--host-import', REMOTE_HOOK],

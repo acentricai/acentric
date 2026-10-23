@@ -102,7 +102,31 @@ again. A host that crashes is the same, for its own effects only.
 
 ## Stores
 
-`openSqliteStore(path)` keeps everything in one SQLite file through Node's
-built-in `node:sqlite`, and takes the file for one runner at a time. Any
-backend that implements `Store` works; `test/store-suite.ts` is what it must
-pass.
+Two stores come with the runner, and pass the same store suite and every
+conformance scenario. `openStore('sqlite:PATH')` or `openStore('fs:DIR')`
+opens either, as `--store` does.
+
+**SQLite,** `openSqliteStore(path)`: everything in one file, through Node's
+built-in `node:sqlite`. Each commit is one transaction.
+
+**Plain files,** `openFileStore(dir)`: a folder you can read, tail, grep and
+back up.
+
+```
+lock                              the pid of the runner that has it open
+agents/<name>/<version>/          bundle.json, agent.js, handlers.js
+instances/<id>/journal.jsonl      one line per write: a checksum, then the record
+instances/<id>/checkpoint.json    the instance as of a place in its journal
+```
+
+Each commit is one journal line, appended and synced, so it is saved whole
+or not at all. A last line half written by a crash is cut off when the
+instance is next opened; a damaged line before it is refused. Log entries
+stay on disk and are read by range through an index of which lines hold
+which seqs. A checkpoint every 500 lines keeps opening an instance from
+replaying its whole history. New instances and bundles are written to a
+temporary folder and renamed into place. A lock left by a process that is
+gone is taken over.
+
+Either store takes its file or folder for one runner at a time. Any backend
+that implements `Store` works; `test/store-suite.ts` is what it must pass.

@@ -2,6 +2,9 @@
 // in child processes. It follows RUNNERS.md; docs/local-runner.md has the
 // design.
 
+export { openFileStore } from './store/files.js';
+export type { FileStoreOptions } from './store/files.js';
+export { openStore } from './store/open.js';
 export { openSqliteStore } from './store/sqlite.js';
 export { StoreError } from './store/types.js';
 export type {
