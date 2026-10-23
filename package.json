@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --build --noEmit && pnpm typecheck:tests",
-    "typecheck:tests": "tsc -p examples/pi/test && tsc -p packages/conformance/test",
+    "typecheck:tests": "tsc -p examples/pi/test && tsc -p packages/conformance/test && tsc -p runners/memory/test",
     "clean": "tsc --build --clean",
     "test": "vitest run",
     "lint": "oxlint --type-aware --deny-warnings",
