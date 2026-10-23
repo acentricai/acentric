@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && node scripts/check-links.mjs",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && node scripts/check-links.mjs && node scripts/check-examples.mjs",
     "build": "pnpm check && vite build",
     "preview": "vite preview"
   },
@@ -19,6 +19,9 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@acentric/runner-memory": "workspace:*",
+    "@acentric/testing": "workspace:*",
+    "@acentric/types": "workspace:*",
     "@mdx-js/rollup": "^3.1.0",
     "@shikijs/rehype": "^3.0.0",
     "@types/mdx": "^2.0.13",

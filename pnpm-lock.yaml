@@ -149,6 +149,15 @@ importers:
         specifier: ^19.3.0
         version: 19.3.1(react@19.3.1)
     devDependencies:
+      '@acentric/runner-memory':
+        specifier: workspace:*
+        version: link:../../runners/memory
+      '@acentric/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      '@acentric/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@mdx-js/rollup':
         specifier: ^3.1.0
         version: 3.1.1(rollup@4.65.0)
