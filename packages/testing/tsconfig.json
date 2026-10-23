@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // AbortSignal, reached through @acentric/types, is declared by the DOM library.
+    "lib": ["ES2023", "DOM"],
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [{ "path": "../types" }]
+}

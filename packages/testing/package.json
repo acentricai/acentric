@@ -1,0 +1,24 @@
+{
+  "name": "@acentric/testing",
+  "version": "0.1.0",
+  "description": "Runs an agent's pure half in memory, for tests: no runner, no handlers, no I/O.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@acentric/types": "workspace:*"
+  }
+}

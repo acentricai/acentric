@@ -3,7 +3,7 @@
   "compilerOptions": {
     // AbortSignal, used by HandlerContext, is declared by the DOM library.
     // Node, Bun, Deno and browsers all provide it at runtime.
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2023", "DOM"],
     "rootDir": "src",
     "outDir": "dist"
   },
