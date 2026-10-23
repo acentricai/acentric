@@ -17,7 +17,7 @@ export type AgentConfig = {
 export type AcentricConfig = {
   /** The project's agents, by name. */
   agents: Record<string, AgentConfig>;
-  /** The runner's store for `acentric start`. Defaults to sqlite:.acentric/store.db. */
+  /** The runner's store for `acentric start`: sqlite:PATH or fs:DIR. Defaults to sqlite:.acentric/store.db. */
   store?: string;
   /** Where `acentric start` listens. Defaults to ws://127.0.0.1:7420. */
   listen?: string;

@@ -29,7 +29,7 @@ export default defineConfig({
 | Field     | Default                     | Means                                                        |
 | --------- | --------------------------- | ------------------------------------------------------------ |
 | `agents`  | required                    | each agent's two modules, version and kinds the app provides |
-| `store`   | `sqlite:.acentric/store.db` | the store `start` uses                                       |
+| `store`   | `sqlite:.acentric/store.db` | the store `start` uses: `sqlite:PATH` or `fs:DIR`            |
 | `listen`  | `ws://127.0.0.1:7420`       | where `start` listens                                        |
 | `secrets` | none                        | environment variables handlers get; `.env` is read first     |
 | `outDir`  | `.acentric/build`           | where `build` writes bundles                                 |

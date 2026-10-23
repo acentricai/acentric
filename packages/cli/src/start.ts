@@ -9,14 +9,15 @@ import { join } from 'node:path';
 
 import {
   createLocalRunner,
-  openSqliteStore,
+  openStore,
   RunnerError,
   serveStreams,
   serveWebSocket,
 } from '@acentric/runner-local';
-import type { LocalRunner, Store } from '@acentric/runner-local';
+import type { LocalRunner } from '@acentric/runner-local';
 
 import type { Manifest } from './build.js';
+import { resolveStore } from './config.js';
 import type { Project } from './config.js';
 
 export type StartOptions = {
@@ -51,7 +52,7 @@ export async function startProject(project: Project, options: StartOptions = {})
   const secrets = loadSecrets(project, log);
 
   const bundles = await Promise.all(project.agents.map((agent) => readBuilt(project, agent)));
-  const store = await openStore(options.store ?? project.store);
+  const store = await openStore(resolveStore(project.dir, options.store ?? project.store));
   let runner: LocalRunner;
   try {
     runner = createLocalRunner({ store, secrets, codeDir: join(project.dir, '.acentric', 'code') });
@@ -145,11 +146,6 @@ async function deploy(runner: LocalRunner, bundle: Built): Promise<{ deployed: b
     }
     throw error;
   }
-}
-
-function openStore(spec: string): Promise<Store> {
-  if (!spec.startsWith('sqlite:')) throw new StartError(`store must be sqlite:PATH, not ${spec}`);
-  return openSqliteStore(spec.slice('sqlite:'.length));
 }
 
 function parseManifest(text: string): Manifest {

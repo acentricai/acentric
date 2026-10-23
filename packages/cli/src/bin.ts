@@ -30,7 +30,7 @@ options:
   --url URL           the runner to talk to (default: the project's listen, or ws://127.0.0.1:7420)
   --no-typecheck      build without type-checking
   --listen URL        where start listens
-  --store SPEC        the store for start or dev, such as sqlite:./agents.db
+  --store SPEC        the store for start or dev: sqlite:./agents.db or fs:./agents
   --port N            dev: the port for the dev UI and the protocol
   --id ID             create: the instance id
   --input-id ID       send: the input id, so a retry is answered as the first time

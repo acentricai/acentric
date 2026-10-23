@@ -189,6 +189,28 @@ describe('acentric start', () => {
     await again.close();
   });
 
+  it('keeps instances in a folder of plain files with an fs: store', async () => {
+    const dir = await project(files(AGENT, HANDLERS, ''));
+    await writeFile(
+      join(dir, 'acentric.config.ts'),
+      "export default { store: 'fs:.acentric/files', agents: { notes: { agent: 'src/agent.ts', handlers: 'src/handlers.ts' } } };",
+    );
+    await buildProject(await loadProject(dir), { typecheck: false });
+    const runner = await started(dir);
+    const client = await connectWebSocket(runner.url ?? '');
+    const { id } = await client.create('notes@1.0.0', {});
+    await client.input(id ?? '', { kind: 'note', payload: { text: 'on disk' } });
+    await client.close();
+    const journal = await readFile(
+      join(dir, '.acentric', 'files', 'instances', id ?? '', 'journal.jsonl'),
+      'utf8',
+    );
+    expect(journal).toContain('note: on disk');
+    expect(
+      existsSync(join(dir, '.acentric', 'files', 'agents', 'notes', '1.0.0', 'agent.js')),
+    ).toBe(true);
+  });
+
   it('refuses a build that does not match the config', async () => {
     const dir = await project();
     await expect(startProject(await loadProject(dir))).rejects.toThrow(

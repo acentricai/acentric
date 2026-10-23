@@ -22,10 +22,11 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 import type { Answer } from '@acentric/protocol';
-import { createLocalRunner, openSqliteStore, serveWebSocket } from '@acentric/runner-local';
+import { createLocalRunner, openStore, serveWebSocket } from '@acentric/runner-local';
 import type { LocalRunner } from '@acentric/runner-local';
 
 import { buildAgent } from './build.js';
+import { resolveStore } from './config.js';
 import type { Project } from './config.js';
 import { loadSecrets } from './start.js';
 import { PAGE } from './ui/page.js';
@@ -83,10 +84,9 @@ const IGNORED = new Set(['node_modules', '.acentric', '.git', 'dist']);
 export async function devProject(project: Project, options: DevOptions = {}): Promise<DevServer> {
   const log = options.log ?? (() => undefined);
   const secrets = loadSecrets(project, log);
-  const storeSpec = options.store ?? `sqlite:${join(project.dir, '.acentric', 'dev.db')}`;
-  if (!storeSpec.startsWith('sqlite:'))
-    throw new Error(`store must be sqlite:PATH, not ${storeSpec}`);
-  const store = await openSqliteStore(storeSpec.slice('sqlite:'.length));
+  const store = await openStore(
+    resolveStore(project.dir, options.store ?? 'sqlite:.acentric/dev.db'),
+  );
   const runner = createLocalRunner({
     store,
     secrets,

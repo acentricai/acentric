@@ -63,13 +63,18 @@ export async function loadProject(dir: string): Promise<Project> {
   return {
     dir: root,
     agents,
-    store: store.startsWith('sqlite:')
-      ? `sqlite:${resolve(root, store.slice('sqlite:'.length))}`
-      : store,
+    store: resolveStore(root, store),
     listen: config.listen ?? 'ws://127.0.0.1:7420',
     secrets: config.secrets ?? [],
     outDir: resolve(root, config.outDir ?? '.acentric/build'),
   };
+}
+
+/** A store spec with its path made absolute against the project. */
+export function resolveStore(root: string, spec: string): string {
+  const match = /^(sqlite|fs):(.+)$/.exec(spec);
+  if (match === null) throw new ConfigError(`a store is sqlite:PATH or fs:DIR, not ${spec}`);
+  return `${match[1] ?? ''}:${resolve(root, match[2] ?? '')}`;
 }
 
 async function importConfig(root: string, file: string): Promise<AcentricConfig> {
