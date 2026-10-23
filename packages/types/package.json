@@ -17,5 +17,8 @@
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

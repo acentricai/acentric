@@ -25,6 +25,9 @@
     "build": "tsc --build",
     "clean": "tsc --build --clean"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@acentric/client": "workspace:*",
     "@acentric/protocol": "workspace:*",
