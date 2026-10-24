@@ -65,7 +65,7 @@ export function simulate<
 }
 
 export class Simulation<S extends JsonObject, C extends JsonObject, K extends Kinds> {
-  readonly #agent: Agent<S, C, K>;
+  #agent: Agent<S, C, K>;
   #config: C;
   #snapshot: S;
   readonly #log: LogEntry[] = [];
@@ -108,6 +108,11 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
   /** Effects declared and not yet reported, cancelled or finished, in the order they started. */
   get running(): EffectRequest<K>[] {
     return [...this.#running.values()];
+  }
+
+  /** Keys of effects that finished or were cancelled: they never run again. */
+  get finished(): string[] {
+    return [...this.#finished];
   }
 
   /** The running effect with this key. Throws if there is none. */
@@ -163,11 +168,13 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
     return this.report(key, { interrupted: true });
   }
 
-  /** Changes the config, as a `config` message. */
+  /**
+   * Changes the config, as a `config` message. As in a runner, the step sees
+   * the current config, and the new one applies if it accepts.
+   */
   configure(config: C): Delivery<K> {
-    const delivery = this.send({ type: 'config', config });
-    if (delivery.rejected === null) this.#config = deepFreeze(structuredClone(config));
-    return delivery;
+    assertJson(config, 'config');
+    return this.#deliver({ type: 'config', config }, null, deepFreeze(structuredClone(config)));
   }
 
   /**
@@ -176,6 +183,49 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
    * Json, or names an effect key twice changes nothing.
    */
   send(message: Message<K>, reported: string | null = null): Delivery<K> {
+    return this.#deliver(message, reported, this.#config);
+  }
+
+  /**
+   * Moves the session to another version of the agent's code, as a runner's
+   * upgrade does: the new version's migrate converts the snapshot and config,
+   * effects are matched again, and `migrated` is delivered, unless
+   * `migrated: false`. Returns this simulation, now of the new version.
+   * Throws a SimulationError if migrate rejects, leaving it unchanged.
+   */
+  upgrade<S2 extends JsonObject, C2 extends JsonObject = NoConfig, K2 extends Kinds = Kinds>(
+    next: Agent<S2, C2, K2>,
+    options: { migrated?: boolean } = {},
+  ): Simulation<S2, C2, K2> {
+    const from = this.#agent.version;
+    const migrated = next.migrate?.(this.#snapshot, this.#config, from);
+    if (migrated !== undefined && 'error' in migrated) {
+      throw new SimulationError(`migrate rejected the upgrade: ${JSON.stringify(migrated.error)}`);
+    }
+    // The same simulation goes on as the new version, with its types.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const upgraded = this as unknown as Simulation<S2, C2, K2>;
+    // Without migrate, or without a config from it, the stored values carry over.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const snapshot = (migrated?.snapshot ?? this.#snapshot) as S2;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const config = (migrated?.config ?? this.#config) as C2;
+    assertJson(config, 'migrate config');
+    const before = this.#agent;
+    upgraded.#agent = next;
+    try {
+      upgraded.#apply(
+        upgraded.#prepare(snapshot, [], null, 'migrate', deepFreeze(structuredClone(config))),
+      );
+    } catch (error) {
+      this.#agent = before;
+      throw error;
+    }
+    if (options.migrated !== false) upgraded.send({ type: 'migrated', from });
+    return upgraded;
+  }
+
+  #deliver(message: Message<K>, reported: string | null, config: C): Delivery<K> {
     assertJson(message, 'message');
     const frozen = deepFreeze(structuredClone(message));
     const result = this.#agent.step(this.state(), frozen, this.#now);
@@ -186,18 +236,18 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
       assertJson(result.error, 'rejection');
       return { rejected: result.error, appended: [], started: [], cancelled: [], aborted: [] };
     }
-    const prepared = this.#prepare(result.snapshot, result.append ?? [], reported, 'step');
+    const prepared = this.#prepare(result.snapshot, result.append ?? [], reported, 'step', config);
     this.#apply(prepared);
     const { entries, started, cancelled, aborted } = prepared;
     return { rejected: null, appended: entries, started, cancelled, aborted };
   }
 
-  /** The state a step would see with this snapshot and log. */
-  #stateOf(snapshot: S, log: readonly LogEntry[]): State<S, C> {
+  /** The state a step would see with this snapshot, log and config. */
+  #stateOf(snapshot: S, log: readonly LogEntry[], config: C = this.#config): State<S, C> {
     const next = log.length + 1;
     const asked = this.#agent.window?.(snapshot) ?? 1;
     const start = Math.min(Math.max(Math.floor(asked), 1), next);
-    return { snapshot, log: { start, next, entries: log.slice(start - 1) }, config: this.#config };
+    return { snapshot, log: { start, next, entries: log.slice(start - 1) }, config };
   }
 
   /**
@@ -210,13 +260,14 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
     append: readonly { kind: string; body: Json }[],
     reported: string | null,
     where: string,
-  ): Prepared<S, K> {
+    config: C = this.#config,
+  ): Prepared<S, C, K> {
     assertJson(snapshot, `${where} snapshot`);
     const entries = append.map(({ kind, body }, index) => {
       assertJson(body, `${where} append ${kind}`);
       return deepFreeze({ seq: this.#log.length + 1 + index, at: this.#now, kind, body });
     });
-    const state = this.#stateOf(snapshot, [...this.#log, ...entries]);
+    const state = this.#stateOf(snapshot, [...this.#log, ...entries], config);
     if (this.#agent.view) assertJson(this.#agent.view(state), `${where} view`);
     const list = this.#agent.effects?.(state) ?? [];
 
@@ -251,6 +302,7 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
     for (const key of cancelled) finished.add(key);
     return {
       snapshot: deepFreeze(snapshot),
+      config,
       entries,
       running,
       finished,
@@ -260,8 +312,9 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
     };
   }
 
-  #apply(prepared: Prepared<S, K>): void {
+  #apply(prepared: Prepared<S, C, K>): void {
     this.#snapshot = prepared.snapshot;
+    this.#config = prepared.config;
     this.#log.push(...prepared.entries);
     this.#running = prepared.running;
     this.#finished = prepared.finished;
@@ -269,8 +322,9 @@ export class Simulation<S extends JsonObject, C extends JsonObject, K extends Ki
 }
 
 /** A step's result, checked and ready to apply. */
-type Prepared<S extends JsonObject, K extends Kinds> = {
+type Prepared<S extends JsonObject, C extends JsonObject, K extends Kinds> = {
   snapshot: S;
+  config: C;
   entries: LogEntry[];
   running: Map<string, EffectRequest<K>>;
   finished: Set<string>;

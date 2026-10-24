@@ -297,6 +297,10 @@ importers:
       '@acentric/types':
         specifier: workspace:*
         version: link:../types
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
 
   packages/types: {}
 

@@ -13,3 +13,4 @@ export type * from './migrate.js';
 export type * from './view.js';
 export type * from './window.js';
 export type * from './agent.js';
+export type * from './journal.js';
