@@ -3,10 +3,9 @@
   "compilerOptions": {
     // AbortController and setTimeout come from the DOM library.
     "lib": ["ES2023", "DOM"],
-    "types": ["node"],
     "rootDir": "src",
     "outDir": "dist"
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/types" }]
+  "references": [{ "path": "../../packages/types" }, { "path": "../../packages/replay" }]
 }

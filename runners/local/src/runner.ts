@@ -39,18 +39,11 @@ import type {
   State,
 } from '@acentric/types';
 
-import { forReplay, replay } from '@acentric/testing';
+import { forReplay, journalDigest, replay } from '@acentric/replay';
 
 import { HostPool } from './host/pool.js';
 import type { HostOutcome } from './host/pool.js';
-import {
-  deepFreeze,
-  frozenCopy,
-  isJson,
-  journalDigest,
-  requireJson,
-  thrownToJson,
-} from './json.js';
+import { deepFreeze, frozenCopy, isJson, requireJson, thrownToJson } from './json.js';
 import { StoreError } from './store/types.js';
 import type {
   AgentRef,

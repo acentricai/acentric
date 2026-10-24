@@ -65,7 +65,7 @@ where it was.
 
 Every session keeps a journal: `journal(id)` lists what it received, each
 entry with its time, version, answer and digest. `replay` from
-`@acentric/testing` replays it.
+`@acentric/replay` replays it.
 
 `fork(id, { at })` forks a session at a journal entry, the newest by
 default: a new session with the state the original had then, which goes its

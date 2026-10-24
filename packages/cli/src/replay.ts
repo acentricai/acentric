@@ -8,8 +8,8 @@
 import { pathToFileURL } from 'node:url';
 
 import type { RunnerClient } from '@acentric/client';
-import { forReplay, replay } from '@acentric/testing';
-import type { ReplayAgent, ReplayedEntry } from '@acentric/testing';
+import { forReplay, replay } from '@acentric/replay';
+import type { ReplayAgent, ReplayedEntry } from '@acentric/replay';
 import type { JournalEntry } from '@acentric/types';
 
 import { buildAgent } from './build.js';

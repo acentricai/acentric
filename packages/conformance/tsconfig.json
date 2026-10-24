@@ -8,5 +8,5 @@
     "outDir": "dist"
   },
   "include": ["src"],
-  "references": [{ "path": "../types" }, { "path": "../testing" }]
+  "references": [{ "path": "../types" }, { "path": "../replay" }]
 }

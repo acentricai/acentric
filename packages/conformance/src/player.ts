@@ -8,7 +8,7 @@
 // every entry must give the answer and digest it recorded, and the replay
 // must end with the runner's log and snapshot.
 
-import { forReplay, replay } from '@acentric/testing';
+import { forReplay, replay } from '@acentric/replay';
 import type { JournalEntry, Json, JsonObject, LogEntry } from '@acentric/types';
 
 import type { GateOutcome } from './hook.js';

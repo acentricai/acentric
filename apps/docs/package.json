@@ -21,6 +21,7 @@
   "devDependencies": {
     "@acentric/client": "workspace:*",
     "@acentric/conformance": "workspace:*",
+    "@acentric/replay": "workspace:*",
     "@acentric/runner-local": "workspace:*",
     "@acentric/runner-memory": "workspace:*",
     "@acentric/testing": "workspace:*",

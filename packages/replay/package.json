@@ -1,0 +1,30 @@
+{
+  "name": "@acentric/replay",
+  "version": "0.1.0",
+  "description": "Runs an agent's pure half with no runner: delivers messages to step as a runner would, and replays a session's journal.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@acentric/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5"
+  }
+}

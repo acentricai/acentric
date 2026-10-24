@@ -27,14 +27,9 @@ import type {
   State,
 } from '@acentric/types';
 
-import {
-  deepFreeze,
-  frozenCopy,
-  isJson,
-  journalDigest,
-  requireJson,
-  thrownToJson,
-} from './json.js';
+import { journalDigest } from '@acentric/replay';
+
+import { deepFreeze, frozenCopy, isJson, requireJson, thrownToJson } from './json.js';
 import { createMemoryStore } from './store.js';
 import type { MemoryStore, StoredEffect, StoredSession } from './store.js';
 

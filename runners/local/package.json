@@ -26,15 +26,15 @@
   },
   "dependencies": {
     "@acentric/protocol": "workspace:*",
-    "@acentric/testing": "workspace:*",
+    "@acentric/replay": "workspace:*",
     "@acentric/types": "workspace:*",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@acentric/client": "workspace:*",
     "@acentric/conformance": "workspace:*",
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.2",
-    "esbuild": "^0.28.2",
-    "@acentric/client": "workspace:*"
+    "esbuild": "^0.28.2"
   }
 }

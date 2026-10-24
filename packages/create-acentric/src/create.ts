@@ -44,6 +44,7 @@ const DIRECT = ['@acentric/cli', '@acentric/testing', '@acentric/types'];
 /** Every acentric package a project installs, with where it lives in the repository. */
 const PACKAGES: Record<string, string> = {
   '@acentric/types': 'packages/types',
+  '@acentric/replay': 'packages/replay',
   '@acentric/testing': 'packages/testing',
   '@acentric/protocol': 'packages/protocol',
   '@acentric/client': 'packages/client',

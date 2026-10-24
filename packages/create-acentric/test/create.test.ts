@@ -134,6 +134,7 @@ describe('create-acentric', () => {
       'acentric-cli-0.1.0.tgz',
       'acentric-client-0.1.0.tgz',
       'acentric-protocol-0.1.0.tgz',
+      'acentric-replay-0.1.0.tgz',
       'acentric-runner-local-0.1.0.tgz',
       'acentric-testing-0.1.0.tgz',
       'acentric-types-0.1.0.tgz',

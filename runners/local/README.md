@@ -98,7 +98,7 @@ again. A host that crashes is the same, for its own effects only.
 
 Every session keeps a journal of what it received, saved with each step:
 `journal(id)` reads it a page at a time, and `replay` from
-`@acentric/testing` replays it. `fork(id, { at, id })` forks a session at a
+`@acentric/replay` replays it. `fork(id, { at, id })` forks a session at a
 journal entry, the newest by default: the new session has the state the
 original had then, rebuilt by replaying the journal and checked against its
 digests. Effects that had finished stay finished; effects that were running

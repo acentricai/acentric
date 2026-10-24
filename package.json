@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --build --noEmit && pnpm typecheck:tests",
-    "typecheck:tests": "tsc -p examples/pi/test && tsc -p packages/conformance/test && tsc -p packages/testing/test && tsc -p runners/memory/test && tsc -p runners/local/test && tsc -p packages/cli/test && tsc -p packages/create-acentric/test && tsc -p packages/create-acentric/templates/minimal",
+    "typecheck:tests": "tsc -p examples/pi/test && tsc -p packages/conformance/test && tsc -p packages/replay/test && tsc -p runners/memory/test && tsc -p runners/local/test && tsc -p packages/cli/test && tsc -p packages/create-acentric/test && tsc -p packages/create-acentric/templates/minimal",
     "clean": "tsc --build --clean",
     "test": "vitest run",
     "lint": "oxlint --type-aware --deny-warnings",

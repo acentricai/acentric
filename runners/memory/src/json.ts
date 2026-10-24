@@ -1,9 +1,6 @@
-// Checks on values crossing between the runner and an agent, and the
-// digest of what a step left.
+// Checks on values crossing between the runner and an agent.
 
-import { createHash } from 'node:crypto';
-
-import type { Json, JsonObject } from '@acentric/types';
+import type { Json } from '@acentric/types';
 
 /** Whether a value is plain Json: no undefined, NaN, Infinity, functions or class instances. */
 export function isJson(value: unknown): value is Json {
@@ -42,26 +39,4 @@ export function frozenCopy<T extends Json>(value: T): T {
 export function thrownToJson(error: unknown): Json {
   if (error instanceof Error) return { name: error.name, message: error.message };
   return isJson(error) ? error : `a thrown ${typeof error} that is not Json`;
-}
-
-/**
- * A journal entry's digest: SHA-256, as lowercase hex, of the RFC 8785
- * canonical JSON of `[snapshot, config, appended]`, each appended entry as
- * `{ kind, body }`.
- */
-export function journalDigest(
-  snapshot: JsonObject,
-  config: JsonObject,
-  appended: readonly { kind: string; body: Json }[],
-): string {
-  const value = [snapshot, config, appended.map(({ kind, body }) => ({ kind, body }))];
-  return createHash('sha256').update(canonicalJson(value)).digest('hex');
-}
-
-/** RFC 8785: no whitespace, object keys sorted by their UTF-16 code units. */
-function canonicalJson(value: Json): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  const keys = Object.keys(value).toSorted();
-  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key] ?? null)}`).join(',')}}`;
 }

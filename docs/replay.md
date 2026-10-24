@@ -54,7 +54,7 @@ policy, like the log's.
 
 ## Replaying
 
-`replay` in `@acentric/testing` replays a journal with no runner:
+`replay` in `@acentric/replay` replays a journal with no runner:
 
 - **Faithful,** the default: each entry runs on the version that ran it, so it
   needs every version's code. It reproduces what happened, and checks that
@@ -72,6 +72,8 @@ happened, and the first entry that differs.
 `--what-if`, the CLI builds the project's code for the session's agent and
 replays the journal on it itself.
 
+The simulation and the replayer live in `@acentric/replay`, which runners
+and the CLI depend on; `@acentric/testing` re-exports them for tests.
 `Simulation` gains `upgrade(next)`, which runs `migrate` and delivers
 `migrated`, as a runner does. The replayer uses it to cross upgrades, and
 tests can use it to test a migration.
@@ -95,7 +97,7 @@ actually happened.
 
 Which effects had finished or were running at `n` follows from replaying the
 journal, so a fork needs nothing recorded beyond it. The local runner builds a
-fork's state with `replay` from `@acentric/testing`, which also checks every
+fork's state with `replay` from `@acentric/replay`, which also checks every
 digest, and saves the new session in one write. The memory runner replays
 with its own step code.
 
@@ -117,7 +119,7 @@ Two optional features, skipped and reported like `durable` and `upgrade`:
 
 | Milestone | Scope                                                                                      | Status |
 | --------- | ------------------------------------------------------------------------------------------ | ------ |
-| M1        | `JournalEntry` types; digest; `replay` and `Simulation.upgrade` in `@acentric/testing`     | Done   |
+| M1        | `JournalEntry` types; digest; `replay` and `Simulation.upgrade` in `@acentric/replay`      | Done   |
 | M2        | The contract; journal and forks in the memory runner; the `journal` and `fork` conformance | Done   |
 | M3        | Journal and forks in the local runner, both stores; `sessions/journal` and `sessions/fork` | Done   |
 | M4        | `acentric replay` and `acentric fork`; the docs' replay page                               | Done   |

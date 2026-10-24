@@ -10,7 +10,7 @@
   "include": ["src"],
   "references": [
     { "path": "../../packages/types" },
-    { "path": "../../packages/testing" },
+    { "path": "../../packages/replay" },
     { "path": "../../packages/protocol" }
   ]
 }

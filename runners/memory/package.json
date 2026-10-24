@@ -22,10 +22,10 @@
     "access": "public"
   },
   "dependencies": {
+    "@acentric/replay": "workspace:*",
     "@acentric/types": "workspace:*"
   },
   "devDependencies": {
-    "@acentric/conformance": "workspace:*",
-    "@types/node": "^26.6.5"
+    "@acentric/conformance": "workspace:*"
   }
 }
