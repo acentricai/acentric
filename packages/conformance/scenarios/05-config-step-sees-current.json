@@ -1,0 +1,75 @@
+{
+  "name": "A config step sees the current config, and later steps the new one",
+  "section": "5",
+  "steps": [
+    {
+      "create": {
+        "x": 0
+      }
+    },
+    {
+      "configure": {
+        "x": 1
+      }
+    },
+    {
+      "expect": {
+        "accepted": true,
+        "log": [
+          {
+            "kind": "config_seen",
+            "body": {
+              "x": 0
+            }
+          },
+          {
+            "kind": "config",
+            "body": {
+              "x": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "input": "show_config"
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "config_now",
+            "body": {
+              "x": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "configure": {
+        "reject": true
+      }
+    },
+    {
+      "expect": {
+        "rejected": "config rejected"
+      }
+    },
+    {
+      "input": "show_config"
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "config_now",
+            "body": {
+              "x": 1
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

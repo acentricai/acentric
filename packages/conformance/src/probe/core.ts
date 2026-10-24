@@ -11,6 +11,7 @@
 //   append { entries }     append log entries
 //   report {}             append what the step saw of the log window
 //   now {}                 append the step's now
+//   show_config {}         append the config the step sees
 //   window { start }       set what window returns
 //   reject { error }       reject the input
 //   throw {}               throw: a failed step
@@ -19,7 +20,8 @@
 //
 // A finished effect's result is appended as a `result` entry and its key is
 // no longer declared. A config change is rejected if it holds
-// `reject: true`, and appended otherwise.
+// `reject: true`. Otherwise it is appended, after a `config_seen` entry with
+// the config its step saw in its state.
 
 import type {
   Agent,
@@ -54,7 +56,7 @@ const step: Step<ProbeSnapshot, JsonObject> = (state, msg, now) => {
   const snapshot = state.snapshot;
   switch (msg.type) {
     case 'input':
-      return input(snapshot, msg.kind, msg.payload, state.log, now);
+      return input(snapshot, msg.kind, msg.payload, state.log, now, state.config);
     case 'effect':
       return {
         snapshot: {
@@ -65,7 +67,13 @@ const step: Step<ProbeSnapshot, JsonObject> = (state, msg, now) => {
       };
     case 'config':
       if (msg.config['reject'] === true) return { error: 'config rejected' };
-      return { snapshot, append: [{ kind: 'config', body: msg.config }] };
+      return {
+        snapshot,
+        append: [
+          { kind: 'config_seen', body: state.config },
+          { kind: 'config', body: msg.config },
+        ],
+      };
     case 'migrated':
       return { snapshot, append: [{ kind: 'migrated', body: { from: msg.from } }] };
   }
@@ -77,6 +85,7 @@ function input(
   payload: JsonObject,
   log: { start: number; next: number; entries: readonly unknown[] },
   now: number,
+  config: JsonObject,
 ): StepResult<ProbeSnapshot> {
   const recorded = { kind: 'input', body: { kind, payload } };
   const keys = strings(payload['keys']);
@@ -128,6 +137,8 @@ function input(
       };
     case 'now':
       return { snapshot, append: [recorded, { kind: 'now', body: { now } }] };
+    case 'show_config':
+      return { snapshot, append: [recorded, { kind: 'config_now', body: config }] };
     case 'window': {
       const start = payload['start'];
       return {
