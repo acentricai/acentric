@@ -126,10 +126,12 @@ cancelled, and only the second result reaches `step`. The
 
 ## Config changes
 
-A `config` message carries the new config, and the step sees it in the state
-too. A step can accept it, often by returning its snapshot unchanged, or
-reject it to keep the old config. The weather agent accepts only units it
-knows.
+A `config` message carries the new config. During that step, the state still
+holds the current config, so the step can compare the two, such as to log what
+changed. A step can accept the new config, often by returning its snapshot
+unchanged, or reject it to keep the current one. Once accepted, the new config
+is in the state for `effects`, `view` and every later step. The weather agent
+accepts only units it knows, reading them from the message.
 
 ## After an upgrade
 

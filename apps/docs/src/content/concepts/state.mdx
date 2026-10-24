@@ -100,9 +100,10 @@ Config holds the settings a session was created with, such as a model name or
 a system prompt. It is given at creation and passed to `init`.
 
 A step cannot change config. Only a `config` [message](/concepts/messages)
-does that. When one arrives, the step sees the new config in the state, and
-can reject it to keep the old one. An upgrade's `migrate` can also reshape
-config.
+does that. The message carries the new config, while the state still holds the
+current one, so the step can compare them. If the step accepts, the new config
+applies from then on; if it rejects, the current one stays. An upgrade's
+`migrate` can also reshape config.
 
 Never put secrets in config, or anywhere in state: everything there is stored.
 Handlers ask for secrets by name.

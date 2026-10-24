@@ -123,7 +123,10 @@ with no gaps, and `at` set to the step's `now`.
   failure, as below.
 
 **Config.** A `config` message's new config takes effect only if the step
-accepts it.
+accepts it. While that step runs, the state holds the current config; the
+message holds the new one. Once the step is accepted, the new config is in the
+state that `effects`, `window` and `view` see for its result, and in every
+later step's.
 
 **Failures.** A step fails if it throws, returns something that is not
 JSON, goes over a limit, or if `effects`, `window` or `view` does so on the

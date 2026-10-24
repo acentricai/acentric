@@ -79,7 +79,12 @@ export type FailureCode =
    */
   | 'limit_exceeded';
 
-/** The agent's configuration changed. The new config is also in the state. */
+/**
+ * A caller is changing the agent's configuration to `config`. The step that
+ * receives it still sees the current config in its state, so it can compare
+ * the two. If the step accepts, the new config applies from then on: to the
+ * effects, view and window of the state it returns, and to every later step.
+ */
 export type ConfigMessage = {
   readonly type: 'config';
   readonly config: JsonObject;
