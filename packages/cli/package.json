@@ -32,6 +32,7 @@
     "@acentric/client": "workspace:*",
     "@acentric/protocol": "workspace:*",
     "@acentric/runner-local": "workspace:*",
+    "@acentric/testing": "workspace:*",
     "@acentric/types": "workspace:*",
     "esbuild": "^0.28.2"
   },

@@ -9,6 +9,7 @@
   "include": ["src"],
   "references": [
     { "path": "../types" },
+    { "path": "../testing" },
     { "path": "../protocol" },
     { "path": "../client" },
     { "path": "../../runners/local" }

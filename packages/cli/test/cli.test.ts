@@ -266,6 +266,47 @@ describe('the acentric command', () => {
     ]);
   });
 
+  it('replays a session on its own code and on changed code, and forks it', async () => {
+    const dir = await project();
+    expect((await run(['build', '-C', dir])).code).toBe(0);
+    const runner = await started(dir);
+    const url = ['--url', runner.url ?? ''];
+    const id = (await run(['create', 'notes@1.0.0', '{}', ...url])).stdout.trim();
+    await run(['send', id, 'note', '{"text":"one"}', ...url]);
+    await run(['send', id, 'ask', '{"key":"c1"}', ...url]);
+    await expect.poll(async () => (await run(['log', id, ...url])).stdout).toMatch(/result/);
+
+    const faithful = await run(['replay', id, ...url]);
+    expect(faithful.code).toBe(0);
+    expect(faithful.stdout.trim()).toBe('replayed 4 entries: each gave what the journal recorded');
+
+    // Changed code: notes are labelled differently from now on.
+    await writeFile(
+      join(dir, 'src/shared.ts'),
+      'export const label = (text: string): string => `NOTE: ${text}`;',
+    );
+    const whatIf = await run(['replay', id, '--what-if', '-C', dir, ...url]);
+    expect(whatIf.code).toBe(1);
+    expect(whatIf.stdout).toMatch(
+      /^replayed 4 entries on notes@1\.0\.0: 1 would differ, the first at entry 2/,
+    );
+    expect(whatIf.stdout).toMatch(
+      /#2 input note: expected accepted [0-9a-f]{12}, got accepted [0-9a-f]{12}/,
+    );
+
+    const forked = await run(['fork', id, '--at', '2', ...url]);
+    expect(forked.code).toBe(0);
+    const fork = forked.stdout.trim();
+    expect(fork).toMatch(/^[0-9a-f-]{36}$/);
+    const json = (await run(['log', fork, '--json', ...url])).stdout.trim().split('\n');
+    expect(json.map((line) => Reflect.get(Object(JSON.parse(line)), 'kind'))).toEqual(['note']);
+    expect((await run(['replay', fork, ...url])).code).toBe(0);
+
+    const missing = await run(['fork', id, '--at', '99', ...url]);
+    expect(missing.code).toBe(1);
+    expect(missing.stdout).toMatch(/no journal entry 99/);
+  });
+
   it('says how to use it, and fails clearly', async () => {
     expect((await run([])).code).toBe(2);
     const unknown = await run(['frobnicate', '--url', 'ws://127.0.0.1:1']);

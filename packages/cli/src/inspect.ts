@@ -1,5 +1,5 @@
 // The commands that inspect and drive a running runner over its WebSocket:
-// agents, ls, create, send, get, log [-f] and upgrade.
+// agents, ls, create, send, get, log [-f], upgrade and fork.
 
 import { connectWebSocket } from '@acentric/client';
 import type { RunnerClient } from '@acentric/client';
@@ -85,6 +85,25 @@ export async function get(
   snapshot: boolean,
 ): Promise<void> {
   out(JSON.stringify(await client.get(id, { snapshot }), null, 2));
+}
+
+export async function fork(
+  client: RunnerClient,
+  out: Output,
+  id: string,
+  at: number | undefined,
+  as: string | undefined,
+): Promise<boolean> {
+  const answer = await client.fork(id, {
+    ...(at === undefined ? {} : { at }),
+    ...(as === undefined ? {} : { as }),
+  });
+  if ('accepted' in answer) {
+    out(answer.id ?? '');
+    return true;
+  }
+  out(JSON.stringify(answer));
+  return false;
 }
 
 export async function upgrade(

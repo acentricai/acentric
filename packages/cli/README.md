@@ -91,12 +91,14 @@ WebSocket until Ctrl-C, then stops gracefully.
 
 These talk to the runner at `--url`, or the project's `listen`.
 
-| Command                                   | Does                                        |
-| ----------------------------------------- | ------------------------------------------- |
-| `agents`                                  | deployed agents and their session counts    |
-| `ls`                                      | sessions, with status and entry counts      |
-| `create <agent@version> [config] [--id]`  | creates a session and prints its id         |
-| `send <id> <kind> [payload] [--input-id]` | sends an input and prints the answer        |
-| `get <id> [--snapshot]`                   | status, view and running effects as JSON    |
-| `log <id> [-f] [--json]`                  | the log; `-f` follows it                    |
-| `upgrade <id> <version>`                  | moves a session to another deployed version |
+| Command                                   | Does                                                                                           |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `agents`                                  | deployed agents and their session counts                                                       |
+| `ls`                                      | sessions, with status and entry counts                                                         |
+| `create <agent@version> [config] [--id]`  | creates a session and prints its id                                                            |
+| `send <id> <kind> [payload] [--input-id]` | sends an input and prints the answer                                                           |
+| `get <id> [--snapshot]`                   | status, view and running effects as JSON                                                       |
+| `log <id> [-f] [--json]`                  | the log; `-f` follows it                                                                       |
+| `upgrade <id> <version>`                  | moves a session to another deployed version                                                    |
+| `replay <id> [--what-if]`                 | replays a session on the code that ran it, or on the project's code, and says where it differs |
+| `fork <id> [--at N] [--id]`               | forks a session at a journal entry and prints the new id                                       |

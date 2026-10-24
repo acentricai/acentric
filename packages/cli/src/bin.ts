@@ -10,6 +10,7 @@ import { buildProject } from './build.js';
 import { loadProject } from './config.js';
 import { devProject } from './dev.js';
 import * as inspect from './inspect.js';
+import * as replay from './replay.js';
 import { startProject } from './start.js';
 
 const USAGE = `usage: acentric <command> [options]
@@ -24,6 +25,9 @@ const USAGE = `usage: acentric <command> [options]
   get <id> [--snapshot]          a session's status, view and running effects
   log <id> [-f]                  the log; -f follows it
   upgrade <id> <version>         move a session to another deployed version
+  replay <id> [--what-if]        replay a session on the code that ran it, or with
+                                 --what-if on the project's code, and say where it differs
+  fork <id> [--at N] [--id ID]   fork a session at a journal entry, the newest by default
 
 options:
   -C, --dir DIR       the project (default: the current directory)
@@ -32,7 +36,8 @@ options:
   --listen URL        where start listens
   --store SPEC        the store for start or dev: sqlite:./agents.db or fs:./agents
   --port N            dev: the port for the dev UI and the protocol
-  --id ID             create: the session id
+  --id ID             create, fork: the new session's id
+  --at N              fork: the journal entry to fork at
   --input-id ID       send: the input id, so a retry is answered as the first time
   --after N           log: start after this seq
   --json              log: one JSON entry per line`;
@@ -61,6 +66,8 @@ async function main(argv: string[]): Promise<number> {
       json: { type: 'boolean', default: false },
       after: { type: 'string', default: '0' },
       snapshot: { type: 'boolean', default: false },
+      'what-if': { type: 'boolean', default: false },
+      at: { type: 'string' },
       port: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -179,6 +186,17 @@ async function main(argv: string[]): Promise<number> {
       case 'upgrade': {
         const [id = '', version = ''] = need(2, '<id> <version>');
         return (await inspect.upgrade(client, out, id, version)) ? 0 : 1;
+      }
+      case 'replay': {
+        const [id = ''] = need(1, '<id> [--what-if]');
+        if (!values['what-if']) return (await replay.faithful(client, out, id)) ? 0 : 1;
+        const project = await loadProject(values.dir);
+        return (await replay.whatIf(client, out, err, project, id)) ? 0 : 1;
+      }
+      case 'fork': {
+        const [id = ''] = need(1, '<id> [--at N] [--id ID]');
+        const at = values.at === undefined ? undefined : Number(values.at);
+        return (await inspect.fork(client, out, id, at, values.id)) ? 0 : 1;
       }
       default:
         throw new UsageError(`unknown command ${command}\n\n${USAGE}`);

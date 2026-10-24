@@ -234,6 +234,9 @@ importers:
       '@acentric/runner-local':
         specifier: workspace:*
         version: link:../../runners/local
+      '@acentric/testing':
+        specifier: workspace:*
+        version: link:../testing
       '@acentric/types':
         specifier: workspace:*
         version: link:../types
