@@ -160,14 +160,14 @@ runner, because they follow from `step` being pure and state being data. Each
 page shows the feature in a loop and as a reducer, and proves the claim with
 examples that run in our docs check:
 
-| Claim                                          | In short                                                          |
-| ---------------------------------------------- | ----------------------------------------------------------------- |
-| [Testing without mocks](/why/testing)          | Feed `step` messages and check what it returns                    |
-| [Effects you can see and cancel](/why/effects) | `effects(state)` says what should run; cancel by not declaring    |
-| [One message at a time](/why/one-at-a-time)    | A stop or a steer is just the next message                        |
-| [Upgrading live sessions](/why/upgrades)       | New code takes over between steps                                 |
-| [Same agent, any runner](/why/portability)     | One bundle, every runner, the same conformance tests              |
-| [Replaying a session](/why/replay)             | Re-run what a session received, and get the same results (coming) |
+| Claim                                          | In short                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------- |
+| [Testing without mocks](/why/testing)          | Feed `step` messages and check what it returns                 |
+| [Effects you can see and cancel](/why/effects) | `effects(state)` says what should run; cancel by not declaring |
+| [One message at a time](/why/one-at-a-time)    | A stop or a steer is just the next message                     |
+| [Upgrading live sessions](/why/upgrades)       | New code takes over between steps                              |
+| [Same agent, any runner](/why/portability)     | One bundle, every runner, the same conformance tests           |
+| [Replaying a session](/why/replay)             | Re-run what a session received, and get the same results       |
 
 **Properties a runner delivers.** The model makes these possible, and a runner
 chooses whether to provide them: surviving crashes, recovering without paying

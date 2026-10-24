@@ -1,9 +1,3 @@
-<Callout type="warning" title="Not in the runners yet">
-  The model half of this works today, as the example shows. Runners do not yet record
-  what a session received, so a live session cannot be replayed yet. [What is
-  missing](#what-is-missing) says what will change.
-</Callout>
-
 **The claim:** a session is its first state plus the messages it received,
 with the time of each. Delivering the same messages again gives the same states
 and the same log, every time, with no model, network or handler running.
@@ -85,66 +79,87 @@ const fixed: Agent<Snapshot> = {
 export default fixed;
 ```
 
-A replay is a loop over recorded messages. This one uses `simulate` from
-`@acentric/testing`, which runs the steps as a runner would:
+A runner that keeps a journal records each message it delivers, with its time,
+the version that handled it, and a digest of what the step left. This runs the
+agent on the memory runner, which keeps one, then replays the journal: first on
+the code that ran it, then on the fix.
 
 ```ts title="replay.ts" run
 import assert from 'node:assert/strict';
 
-import { simulate } from '@acentric/testing';
-import type { Agent, JsonObject, Message } from '@acentric/types';
+import { createMemoryRunner } from '@acentric/runner-memory';
+import { forReplay, replay } from '@acentric/testing';
 
 import agent from './src/agent.js';
 import fixed from './src/fixed.js';
 
-type Recorded = { at: number; message: Message };
-
-/** Delivers each recorded message at its time, and returns the log. */
-function replay<S extends JsonObject>(code: Agent<S>, recorded: Recorded[]) {
-  const session = simulate(code, {});
-  for (const { at, message } of recorded) {
-    session.advance(at - session.now);
-    session.send(message);
-  }
-  return session.log.map(({ seq, at, kind }) => ({ seq, at, kind }));
+// A session that sends five messages, four of them in its first minute.
+let time = 0;
+const runner = createMemoryRunner({ clock: () => time });
+const { id } = runner.create(runner.load(agent), {});
+if (id === undefined) throw new Error('the session was not created');
+for (const at of [0, 10_000, 20_000, 30_000, 70_000]) {
+  time = at;
+  await runner.input(id, 'say', { at });
 }
+const journal = [...runner.journal(id)];
 
-// What a session received: five messages, four of them in its first minute.
-const recorded: Recorded[] = [0, 10_000, 20_000, 30_000, 70_000].map((at, i) => ({
-  at,
-  message: { type: 'input', id: `m${i + 1}`, kind: 'say', payload: { n: i + 1 } },
-}));
+// On the code that ran it, every entry gives what the journal recorded.
+assert.equal(replay(journal, forReplay(agent)).differs, null);
 
-// The same messages give the same log, every time.
-const first = replay(agent, recorded);
-assert.deepEqual(replay(agent, recorded), first);
+// On the fix, the same session differs at its fourth message: entry 5,
+// since entry 1 is the session's creation.
+const whatIf = replay(journal, forReplay(fixed), { mode: 'what-if' });
+assert.equal(whatIf.differs, 5);
 assert.deepEqual(
-  first.map((entry) => entry.kind),
-  ['accepted', 'accepted', 'accepted', 'accepted', 'accepted'],
+  whatIf.simulation.log.map((entry) => entry.kind),
+  ['accepted', 'accepted', 'accepted', 'limited', 'accepted'],
 );
-
-// Replayed on the fix, the same session differs at the fourth message.
-const after = replay(fixed, recorded);
-const differs = first.findIndex((entry, i) => entry.kind !== after[i]?.kind);
-assert.equal(differs, 3);
-assert.deepEqual(after[3], { seq: 4, at: 30_000, kind: 'limited' });
+runner.close();
 ```
 
-## What is missing
+No model, network or handler ran in either replay.
 
-Runners keep a session's latest snapshot, its log and its effects. They do not
-keep the messages it received: the log holds only what the agent chose to
-append. So the example above records its messages by hand.
+## On a runner
 
-The change is for a runner to record each delivered message with its `now`, in
-the same save as the step it led to. That costs one more record per step. With
-it, an `acentric replay` command can re-run a stored session on the code you
-have, and report the first step that differs. This page will show that when it
-exists.
+The memory and local runners keep a journal for every session. On the local
+runner, `acentric replay` replays a session on the code that ran it, each entry
+on its own version, and says whether every entry gave what was recorded:
+
+```sh
+acentric replay 3f2a91c4-0d7e-4b8a-9c51-6e2d8f0b7a13
+```
+
+```text
+replayed 128 entries: each gave what the journal recorded
+```
+
+With `--what-if`, it builds the project's code instead and replays the session
+on it from the start, listing the entries that would differ:
+
+```sh
+acentric replay 3f2a91c4-0d7e-4b8a-9c51-6e2d8f0b7a13 --what-if
+```
+
+```text
+replayed 128 entries on limiter@0.1.1: 3 would differ, the first at entry 5
+  #5 input say: expected accepted 9b2f41c07d3e, got accepted 51aa0e86c2f9
+  ...
+```
+
+The same journal lets a session be forked: `acentric fork <id> --at 40` makes a
+new session with the state the original had after entry 40, which then goes its
+own way. Effects that had finished stay finished, and those that were running
+start again, as after a crash.
 
 ## The proof
 
-- **The example above runs in our docs check.** It shows replay is
-  deterministic, and that replaying new code finds where it differs.
-- **The replay of a live session is not proven yet,** because no runner records
-  the messages. The claim on the overview is marked as coming until it does.
+- **The example above runs in our docs check,** on the memory runner's real
+  journal.
+- **The conformance scenarios replay every session.** For a runner that keeps
+  a journal, the conformance player replays it after every action of every
+  scenario, and each entry must give the answer and digest it recorded. The
+  memory runner and the local runner, over SQLite, plain files and the
+  protocol, pass them all, along with scenarios for forks.
+- **The CLI is tested on a running runner:** a faithful replay, a what-if
+  replay that finds the entry changed code would alter, and a fork.
