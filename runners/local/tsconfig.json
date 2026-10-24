@@ -8,5 +8,9 @@
     "outDir": "dist"
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/types" }, { "path": "../../packages/protocol" }]
+  "references": [
+    { "path": "../../packages/types" },
+    { "path": "../../packages/testing" },
+    { "path": "../../packages/protocol" }
+  ]
 }

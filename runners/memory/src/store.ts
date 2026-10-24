@@ -5,7 +5,7 @@
 // recovers, and how tests stand in for a crash. Nothing outlives the
 // process.
 
-import type { EffectRequest, JsonObject, LogEntry, Mode } from '@acentric/types';
+import type { EffectRequest, JournalEntry, JsonObject, LogEntry, Mode } from '@acentric/types';
 
 /** An effect that was declared and has not finished. */
 export type StoredEffect = {
@@ -27,6 +27,8 @@ export type StoredSession = {
   finished: Set<string>;
   /** Set when a step the runner could not drop failed; the session then takes no messages. */
   fault: string | null;
+  /** Everything the session received, for replaying and forking it. */
+  journal: JournalEntry[];
 };
 
 export type MemoryStore = {

@@ -43,10 +43,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@acentric/types": "workspace:*"
+    "@acentric/types": "workspace:*",
+    "@acentric/testing": "workspace:*"
   },
   "devDependencies": {
-    "@acentric/testing": "workspace:*",
     "@types/node": "^26.6.5"
   }
 }

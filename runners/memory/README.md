@@ -2,8 +2,8 @@
 
 A runner that keeps everything in memory, for tests, scripts and trying
 agents out. It follows [RUNNERS.md](../../RUNNERS.md) and passes every
-[conformance](../../packages/conformance) scenario, including `durable` and
-`upgrade`.
+[conformance](../../packages/conformance) scenario, including `durable`,
+`upgrade`, `journal` and `fork`.
 
 ```ts
 import { createMemoryRunner } from '@acentric/runner-memory';
@@ -60,3 +60,14 @@ are cancelled. Nothing outlives the process.
 agent between steps: `migrate` runs, and `migrated` is the first message
 the new version sees. If `migrate` rejects or throws, the session stays
 where it was.
+
+## Journal and forks
+
+Every session keeps a journal: `journal(id)` lists what it received, each
+entry with its time, version, answer and digest. `replay` from
+`@acentric/testing` replays it.
+
+`fork(id, { at })` forks a session at a journal entry, the newest by
+default: a new session with the state the original had then, which goes its
+own way. Effects that had finished stay finished; effects that were running
+start again at attempt 1, and once effects are reported `interrupted`.

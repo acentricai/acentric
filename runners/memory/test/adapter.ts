@@ -40,7 +40,7 @@ export function memoryAdapter(): Adapter {
   }
 
   return {
-    supports: ['durable', 'upgrade'],
+    supports: ['durable', 'upgrade', 'journal', 'fork'],
     create: (bundle, config) => {
       if (bundle === 'probe-bad-handler-name') {
         try {
@@ -91,6 +91,12 @@ export function memoryAdapter(): Adapter {
       return Promise.resolve();
     },
     upgrade: (): Promise<Answer> => runner.upgrade(session(), probeV2),
+    journal: () => Promise.resolve(id === null ? [] : [...runner.journal(id)]),
+    fork: (at) => {
+      const { id: forked, ...answer } = runner.fork(session(), at === undefined ? {} : { at });
+      if (forked !== undefined) id = forked;
+      return Promise.resolve(answer);
+    },
     close: () => {
       runner.close();
       Reflect.deleteProperty(globalThis, 'conformance');

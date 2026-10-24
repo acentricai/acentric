@@ -3,12 +3,18 @@
 //
 // After every action the player waits for the runner to settle, then
 // checks the invariants that hold after any step: log entries are numbered
-// 1, 2, 3 with no gaps, and their times never go backwards.
+// 1, 2, 3 with no gaps, and their times never go backwards. For a runner
+// that keeps a journal, it also replays the journal with the probe's code:
+// every entry must give the answer and digest it recorded, and the replay
+// must end with the runner's log and snapshot.
 
-import type { Json, JsonObject, LogEntry } from '@acentric/types';
+import { forReplay, replay } from '@acentric/testing';
+import type { JournalEntry, Json, JsonObject, LogEntry } from '@acentric/types';
 
 import type { GateOutcome } from './hook.js';
 import { mismatch } from './match.js';
+import probe from './probe/agent.js';
+import probeV2 from './probe/agent-v2.js';
 import type { Bundle, Expectation, Feature, Scenario, ScenarioStep } from './scenario.js';
 
 /** What a runner answered to a create, input, config change or upgrade. */
@@ -46,6 +52,13 @@ export type Adapter = {
   crash?(): Promise<void>;
   /** Upgrades the session to version 2 of the probe. Needed for 'upgrade'. */
   upgrade?(): Promise<Answer>;
+  /** The session's journal, oldest first; empty before it is created. Needed for 'journal'. */
+  journal?(): Promise<JournalEntry[]>;
+  /**
+   * Forks the session at journal entry `at`, the newest by default, and acts
+   * on the fork from then on. Needed for 'fork'.
+   */
+  fork?(at?: number): Promise<Answer>;
   close(): Promise<void>;
 };
 
@@ -92,7 +105,7 @@ async function playFrom(
     }
     const next = await act(adapter, step, answer);
     await adapter.settle();
-    const problem = invariants(await adapter.log());
+    const problem = invariants(await adapter.log()) ?? (await journalProblem(adapter));
     if (problem !== null) return { step: index, problem };
     return await playFrom(adapter, steps, index + 1, next);
   } catch (error) {
@@ -121,8 +134,35 @@ async function act(
     await adapter.crash();
     return answer;
   }
+  if ('fork' in step) {
+    if (adapter.fork === undefined) throw new Error('the adapter cannot fork');
+    return adapter.fork(step.fork.at);
+  }
   if (adapter.upgrade === undefined) throw new Error('the adapter cannot upgrade');
   return adapter.upgrade();
+}
+
+/** Replays the runner's journal with the probe's code, and says how it differs. */
+async function journalProblem(adapter: Adapter): Promise<string | null> {
+  if (!adapter.supports.includes('journal') || adapter.journal === undefined) return null;
+  const journal = await adapter.journal();
+  if (journal.length === 0) {
+    const log = await adapter.log();
+    return log.length === 0 ? null : 'the session has a log, but its journal is empty';
+  }
+  const numbers = journal.map((entry) => entry.n);
+  if (numbers.some((n, index) => n !== index + 1)) {
+    return `the journal is numbered ${JSON.stringify(numbers)}, not 1, 2, 3...`;
+  }
+  const replayed = replay(journal, [forReplay(probe), forReplay(probeV2)]);
+  if (replayed.differs !== null) {
+    const entry = replayed.entries.find((candidate) => !candidate.same);
+    return `replaying the journal differs at entry ${replayed.differs}: expected ${JSON.stringify(entry?.expected)}, got ${JSON.stringify(entry?.actual)}`;
+  }
+  return (
+    mismatch([...replayed.simulation.log], await adapter.log(), 'the replayed log') ??
+    mismatch(replayed.simulation.snapshot, await adapter.snapshot(), 'the replayed snapshot')
+  );
 }
 
 async function check(
@@ -171,6 +211,11 @@ async function check(
   }
   if (expected.snapshot !== undefined)
     problems.push(mismatch(expected.snapshot, await adapter.snapshot(), 'snapshot'));
+  if (expected.journal !== undefined) {
+    if (adapter.journal === undefined) throw new Error('the adapter cannot read the journal');
+    const newest = (await adapter.journal()).slice(-expected.journal.length);
+    problems.push(mismatch(expected.journal, newest, 'journal'));
+  }
   return problems.find((problem) => problem !== null) ?? null;
 }
 

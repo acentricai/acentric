@@ -62,7 +62,7 @@ describe('the filesystem store after a crash', () => {
 
   it('cuts off a last line a crash left half written', async () => {
     const store = await openFileStore(join(dir, 'store'));
-    await store.create(session, { append: [entry(1)], started: [] });
+    await store.create(session, { append: [entry(1)], started: [], journal: [] });
     await store.commit('i1', step(2, 1));
     await store.close();
     const before = await readFile(journal(), 'utf8');
@@ -78,7 +78,7 @@ describe('the filesystem store after a crash', () => {
 
   it('refuses a journal damaged before its last line', async () => {
     const store = await openFileStore(join(dir, 'store'));
-    await store.create(session, { append: [entry(1)], started: [] });
+    await store.create(session, { append: [entry(1)], started: [], journal: [] });
     await store.commit('i1', step(2, 1));
     await store.close();
     const lines = (await readFile(journal(), 'utf8')).split('\n');
@@ -102,7 +102,7 @@ describe('the filesystem store after a crash', () => {
 
   it('replays the journal after its latest checkpoint', async () => {
     const store = await openFileStore(join(dir, 'store'), { checkpointEvery: 3 });
-    await store.create(session, { append: [entry(1)], started: [] });
+    await store.create(session, { append: [entry(1)], started: [], journal: [] });
     for (let seq = 2; seq <= 8; seq += 1) {
       // Each commit follows the one before.
       // oxlint-disable-next-line no-await-in-loop
@@ -121,7 +121,7 @@ describe('the filesystem store after a crash', () => {
 
   it('writes journals a person can read', async () => {
     const store = await openFileStore(join(dir, 'store'));
-    await store.create(session, { append: [entry(1)], started: [] });
+    await store.create(session, { append: [entry(1)], started: [], journal: [] });
     await store.close();
     const [line] = (await readFile(journal(), 'utf8')).trim().split('\n');
     expect(line).toMatch(/^[0-9a-f]{16} \{"t":"create","session":\{"id":"i1"/);

@@ -8,7 +8,7 @@ import type { Json, JsonObject } from '@acentric/types';
 import type { GateOutcome } from './hook.js';
 
 /** Features some scenarios need, which a runner may not offer. */
-export type Feature = 'durable' | 'upgrade';
+export type Feature = 'durable' | 'upgrade' | 'journal' | 'fork';
 
 /** The probe bundles a scenario can create a session from. */
 export type Bundle = 'probe' | 'probe-bad-handler-name';
@@ -37,6 +37,11 @@ export type ScenarioStep =
   | { crash: true }
   /** Upgrade the session to version 2 of the probe. */
   | { upgrade: '2' }
+  /**
+   * Fork the session at journal entry `at`, the newest by default. The
+   * steps after it act on the fork.
+   */
+  | { fork: { at?: number } }
   | { expect: Expectation };
 
 /** A running effect, as far as a scenario checks it. */
@@ -65,4 +70,6 @@ export type Expectation = {
   logKinds?: string[];
   /** The snapshot, matched partly. */
   snapshot?: JsonObject;
+  /** The newest journal entries, matched partly. Needs 'journal'. */
+  journal?: JsonObject[];
 };

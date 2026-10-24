@@ -12,6 +12,11 @@
 // a last line half written; opening the session again cuts it off. Any
 // other bad line means the journal was damaged, and the store refuses it.
 //
+// A session's replay journal, the entries the runner records for replaying
+// it, travels in the same lines: a creation or commit line carries its entry,
+// and an `entry` line records a step that changed nothing. An index of which
+// lines hold which entries lets them be read back like the log.
+//
 // A session's state is rebuilt from its latest checkpoint and the journal
 // lines after it, and kept in memory while the store is open. Log entries
 // stay on disk: an index of which journal lines hold which seqs lets a range
@@ -42,15 +47,17 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import type { LogEntry, Outcome } from '@acentric/types';
+import type { JournalEntry, LogEntry, Outcome } from '@acentric/types';
 
 import { StoreError } from './types.js';
 import type {
   AgentRef,
   Bundle,
   InboxItem,
+  JournalRange,
   SessionFilter,
   SessionRecord,
+  SessionStart,
   SessionSummary,
   KindInfo,
   LoadedSession,
@@ -79,14 +86,12 @@ export function openFileStore(dir: string, options: FileStoreOptions = {}): Prom
 
 /** One line of a journal. */
 type JournalRecord =
-  | {
-      t: 'create';
-      session: SessionRecord;
-      append: LogEntry[];
-      started: StoredEffect[];
-      request?: RequestRecord;
-    }
+  | ({ t: 'create'; session: SessionRecord } & Omit<SessionStart, 'journal'> & {
+        /** Absent in lines written before journals: such a session keeps none. */
+        journal?: JournalEntry[];
+      })
   | { t: 'commit'; step: StepCommit }
+  | { t: 'entry'; entry: JournalEntry; request?: RequestRecord; fault?: string }
   | { t: 'result'; ord: number; key: string; outcome: Outcome }
   | { t: 'drop'; ord: number }
   | { t: 'attempt'; key: string; attempt: number }
@@ -95,6 +100,9 @@ type JournalRecord =
 
 /** Where a journal line with log entries is, and which seqs it holds. */
 type LineIndex = { offset: number; length: number; firstSeq: number; count: number };
+
+/** Where a journal line with replay journal entries is, and which `n`s it holds. */
+type EntryIndex = { offset: number; length: number; firstN: number; count: number };
 
 /** A session as its journal says it is now. */
 type SessionState = {
@@ -105,6 +113,9 @@ type SessionState = {
   inbox: Map<number, InboxItem>;
   nextOrd: number;
   lines: LineIndex[];
+  entryLines: EntryIndex[];
+  /** The `n` the next replay journal entry gets, or null for a session that keeps none. */
+  nextEntry: number | null;
   /** The journal's length, where the next line goes. */
   size: number;
   /** Lines written since the last checkpoint. */
@@ -120,6 +131,9 @@ type Checkpoint = {
   inbox: InboxItem[];
   nextOrd: number;
   lines: LineIndex[];
+  /** Absent in checkpoints written before journals. */
+  entryLines?: EntryIndex[];
+  nextEntry?: number | null;
 };
 
 class FileStore implements Store {
@@ -206,10 +220,7 @@ class FileStore implements Store {
 
   // ---- sessions ------------------------------------------------------------
 
-  create(
-    session: SessionRecord,
-    init: { append: LogEntry[]; started: StoredEffect[]; request?: RequestRecord },
-  ): Promise<void> {
+  create(session: SessionRecord, init: SessionStart): Promise<void> {
     return this.#run(() => {
       const dir = this.#sessionDir(session.id);
       if (existsSync(dir))
@@ -231,7 +242,9 @@ class FileStore implements Store {
   load(id: string): Promise<LoadedSession | null> {
     return this.#run(() => {
       const state = this.#state(id);
-      return state === null ? null : { ...state.record, running: [...state.running.values()] };
+      return state === null
+        ? null
+        : { ...state.record, running: [...state.running.values()], nextEntry: state.nextEntry };
     });
   }
 
@@ -322,6 +335,44 @@ class FileStore implements Store {
         }
       }
       return found;
+    });
+  }
+
+  readJournal(id: string, range: JournalRange = {}): Promise<JournalEntry[]> {
+    return this.#run(() => {
+      const state = this.#state(id);
+      if (state === null) return [];
+      const after = range.after ?? 0;
+      const limit = range.limit ?? Number.POSITIVE_INFINITY;
+      const found: JournalEntry[] = [];
+      const fd = this.#journal(id);
+      for (const line of state.entryLines) {
+        if (found.length >= limit) break;
+        if (line.firstN + line.count - 1 <= after) continue;
+        for (const entry of journalEntriesOf(readRecord(fd, line))) {
+          if (entry.n <= after) continue;
+          found.push(entry);
+          if (found.length >= limit) break;
+        }
+      }
+      return found;
+    });
+  }
+
+  record(
+    id: string,
+    entry: JournalEntry,
+    alongside: { request?: RequestRecord; fault?: string },
+  ): Promise<void> {
+    return this.#run(() => {
+      const state = this.#require(id);
+      if (alongside.request !== undefined && state.requests.has(alongside.request.id)) {
+        throw new StoreError(
+          'invalid',
+          `request ${alongside.request.id} of ${id} was already answered`,
+        );
+      }
+      this.#append(id, state, { t: 'entry', entry, ...alongside });
     });
   }
 
@@ -433,6 +484,8 @@ class FileStore implements Store {
       inbox: [...state.inbox.values()],
       nextOrd: state.nextOrd,
       lines: state.lines,
+      entryLines: state.entryLines,
+      nextEntry: state.nextEntry,
     };
     const path = join(this.#sessionDir(id), 'checkpoint.json');
     const temporary = `${path}.tmp`;
@@ -469,6 +522,8 @@ class FileStore implements Store {
           inbox: new Map(checkpoint.inbox.map((item) => [item.ord, item])),
           nextOrd: checkpoint.nextOrd,
           lines: checkpoint.lines,
+          entryLines: checkpoint.entryLines ?? [],
+          nextEntry: checkpoint.nextEntry ?? null,
           size: checkpoint.offset,
           sinceCheckpoint: 0,
         };
@@ -597,6 +652,8 @@ function emptyState(record: SessionRecord): SessionState {
     inbox: new Map(),
     nextOrd: 1,
     lines: [],
+    entryLines: [],
+    nextEntry: null,
     size: 0,
     sinceCheckpoint: 0,
   };
@@ -612,7 +669,10 @@ function apply(state: SessionState, record: JournalRecord, offset: number, lengt
         nextSeq: record.session.nextSeq + record.append.length,
       };
       index(state, record.append, offset, length);
+      indexEntries(state, record.journal ?? [], offset, length);
       for (const effect of record.started) state.running.set(effect.request.key, effect);
+      for (const key of record.finished ?? []) state.finished.add(key);
+      for (const request of record.requests ?? []) state.requests.set(request.id, request);
       if (record.request !== undefined) state.requests.set(record.request.id, record.request);
       return;
     case 'commit': {
@@ -638,6 +698,7 @@ function apply(state: SessionState, record: JournalRecord, offset: number, lengt
       for (const effect of step.started) state.running.set(effect.request.key, effect);
       if (step.consumed !== undefined) state.inbox.delete(step.consumed);
       if (step.request !== undefined) state.requests.set(step.request.id, step.request);
+      if (step.journal !== undefined) indexEntries(state, [step.journal], offset, length);
       return;
     }
     case 'result':
@@ -659,7 +720,32 @@ function apply(state: SessionState, record: JournalRecord, offset: number, lengt
     case 'request':
       state.requests.set(record.request.id, record.request);
       return;
+    case 'entry':
+      indexEntries(state, [record.entry], offset, length);
+      if (record.request !== undefined) state.requests.set(record.request.id, record.request);
+      if (record.fault !== undefined) state.record = { ...state.record, fault: record.fault };
+      return;
   }
+}
+
+function indexEntries(
+  state: SessionState,
+  entries: readonly JournalEntry[],
+  offset: number,
+  length: number,
+): void {
+  const first = entries[0];
+  const last = entries.at(-1);
+  if (first === undefined || last === undefined) return;
+  state.entryLines.push({ offset, length, firstN: first.n, count: entries.length });
+  state.nextEntry = last.n + 1;
+}
+
+function journalEntriesOf(record: JournalRecord): JournalEntry[] {
+  if (record.t === 'create') return record.journal ?? [];
+  if (record.t === 'commit') return record.step.journal === undefined ? [] : [record.step.journal];
+  if (record.t === 'entry') return [record.entry];
+  return [];
 }
 
 function index(
@@ -698,7 +784,7 @@ function decode(line: string): JournalRecord | null {
   }
 }
 
-function readRecord(fd: number, line: LineIndex): JournalRecord {
+function readRecord(fd: number, line: { offset: number; length: number }): JournalRecord {
   const buffer = Buffer.alloc(line.length);
   readSync(fd, buffer, 0, line.length, line.offset);
   const record = decode(buffer.toString('utf8').replace(/\n$/, ''));

@@ -6,7 +6,14 @@
 // errors are for problems with the request itself: an unknown session, bad
 // params, an agent that is not deployed. Their `data.code` names the problem.
 
-import type { Json, JsonObject, LogEntry, Mode } from '@acentric/types';
+import type {
+  JournalAnswer,
+  JournalEntry,
+  Json,
+  JsonObject,
+  LogEntry,
+  Mode,
+} from '@acentric/types';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -77,6 +84,25 @@ export type LogParams = {
 
 export type LogPageResult = { entries: LogEntry[]; cursor?: string };
 
+export type JournalParams = { id: string; after?: number; limit?: number; cursor?: string };
+
+export type JournalPageResult = { entries: JournalEntry[]; cursor?: string };
+
+/** One side of a replayed journal entry: how step answered, and the digest of what it left. */
+export type ReplayedSide = { answer: JournalAnswer; digest: string | null };
+
+/** What faithfully replaying a session's journal found. */
+export type ReplayResult = {
+  entries: number;
+  /** The first entry whose answer or digest differs from the journal's, or null. */
+  differs: {
+    n: number;
+    type: JournalEntry['type'];
+    expected: ReplayedSide;
+    actual: ReplayedSide | null;
+  } | null;
+};
+
 type Empty = Record<string, never>;
 
 /** Requests an application sends the runner: each method's params and result. */
@@ -110,6 +136,18 @@ export type RunnerMethods = {
     result: { sessions: SessionListing[] };
   };
   'sessions/log': { params: LogParams; result: LogPageResult };
+  /** A page of what the session received, for replaying it. */
+  'sessions/journal': { params: JournalParams; result: JournalPageResult };
+  /**
+   * Forks a session at journal entry `at`, the newest by default, into a
+   * new session with id `as`, or a new id.
+   */
+  /** Replays a session's whole journal on the code that ran it, and reports where it differs. */
+  'sessions/replay': { params: { id: string }; result: ReplayResult };
+  'sessions/fork': {
+    params: { id: string; at?: number; as?: string };
+    result: Answer & { id?: string };
+  };
   'sessions/delete': { params: { id: string }; result: Empty };
   /**
    * Starts notifications for a session under a subscription id the client
@@ -160,6 +198,7 @@ export type ErrorCode =
   | 'request_conflict'
   | 'kind_taken'
   | 'agent_in_use'
+  | 'no_journal'
   | 'not_initialized'
   | 'protocol_version'
   | 'invalid_params'

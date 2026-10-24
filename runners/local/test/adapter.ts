@@ -69,7 +69,7 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
   };
 
   return {
-    supports: ['durable', 'upgrade'],
+    supports: ['durable', 'upgrade', 'journal', 'fork'],
     create: async (bundle, config) => {
       if (bundle === 'probe-bad-handler-name') {
         try {
@@ -129,6 +129,16 @@ export async function localAdapter(storeKind: StoreKind = SQLITE): Promise<Adapt
       runner = await open(store);
     },
     upgrade: () => answerOf(() => runner.upgrade(session(), '2')),
+    journal: async () => (id === null ? [] : store.readJournal(id)),
+    fork: (at) =>
+      answerOf(async () => {
+        const { id: forked, ...answer } = await runner.fork(
+          session(),
+          at === undefined ? {} : { at },
+        );
+        if (forked !== undefined) id = forked;
+        return answer;
+      }),
     close: async () => {
       runner.kill();
       await store.close();

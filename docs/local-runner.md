@@ -41,6 +41,7 @@ implementation. Opening a store takes it for one runner; a second fails with
 | Code     | `putBundle`, `getBundle`, `listBundles`, `deleteBundle`                           |
 | Sessions | `create` (the init step, atomic like commit), `load`, `list`, `pending`, `delete` |
 | Steps    | `commit`, the one atomic operation; `readLog` by range; `findFinished`            |
+| Journal  | `readJournal` by range; `record` for a step that changed nothing                  |
 | Requests | `findRequest`, `putRequest` for answers given without a step                      |
 | Between  | `putResult`, `inbox`, `dropResult`, `recordAttempt`, `setFault`                   |
 
@@ -55,8 +56,11 @@ Two stores come with the runner:
   left by a process that is gone is taken over.
 
 A commit holds the snapshot, log appends, config or agent changes, effects
-started, finished and aborted, the result it consumed and the input id it
-accepted. When `commit` resolves, all of it is durable, or none of it is.
+started, finished and aborted, the result it consumed, the input id it
+accepted and its journal entry. When `commit` resolves, all of it is durable,
+or none of it is. A rejected or failed step changes nothing but the journal:
+`record` saves its entry together with the rejection's answer or the fault.
+[replay.md](replay.md) has the journal's design.
 
 | Decision       | Choice                                                                                                              |
 | -------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -91,6 +95,8 @@ and their `data.code` names the problem. The messages are typed in
 | `sessions/get`                           | Agent, status, view and running effects now; the snapshot if asked, for debugging |
 | `sessions/list`                          | Sessions by agent or status, paged                                                |
 | `sessions/log`                           | A range of the log                                                                |
+| `sessions/journal`                       | A range of the journal, for replaying the session                                 |
+| `sessions/fork`                          | Forks the session at a journal entry into a new session                           |
 | `sessions/delete`                        | Cancels running effects and removes the session                                   |
 | `sessions/subscribe`, `unsubscribe`      | Starts or stops notifications, under a subscription id the client chooses         |
 | `secrets/set`                            | Sets a secret in memory only                                                      |

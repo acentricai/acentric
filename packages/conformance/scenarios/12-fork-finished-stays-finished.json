@@ -1,0 +1,47 @@
+{
+  "name": "In a fork, an effect that had finished never runs again",
+  "section": "12",
+  "requires": ["fork"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "echo",
+            "args": {
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fork": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "echo",
+            "args": {
+              "value": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "running": [],
+        "logKinds": ["init", "input", "result", "input"]
+      }
+    }
+  ]
+}

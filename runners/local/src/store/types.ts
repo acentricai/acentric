@@ -7,7 +7,15 @@
 // record. Opening a store takes it for one runner: a second runner opening
 // the same store fails with 'locked' until the first closes it.
 
-import type { EffectRequest, Json, JsonObject, LogEntry, Mode, Outcome } from '@acentric/types';
+import type {
+  EffectRequest,
+  JournalEntry,
+  Json,
+  JsonObject,
+  LogEntry,
+  Mode,
+  Outcome,
+} from '@acentric/types';
 
 /** Names an agent's code. */
 export type AgentRef = { name: string; version: string };
@@ -61,6 +69,28 @@ export type SessionRecord = {
 export type LoadedSession = SessionRecord & {
   /** Declared, unfinished effects, in the order they started. */
   running: StoredEffect[];
+  /** The `n` the next journal entry gets, or null for a session that keeps no journal. */
+  nextEntry: number | null;
+};
+
+/** What a new session starts with, saved with it. */
+export type SessionStart = {
+  append: LogEntry[];
+  started: StoredEffect[];
+  /** Its journal so far: the init entry, or the entries a fork copies. Empty keeps no journal. */
+  journal: JournalEntry[];
+  /** Keys that already finished, for a fork. */
+  finished?: string[];
+  /** Answered requests, for a fork. */
+  requests?: RequestRecord[];
+  /** The request that created it. */
+  request?: RequestRecord;
+};
+
+export type JournalRange = {
+  /** Only entries with an `n` greater than this. */
+  after?: number;
+  limit?: number;
 };
 
 export type SessionSummary = {
@@ -120,6 +150,8 @@ export type StepCommit = {
   consumed?: number;
   /** The caller's request this step answered. */
   request?: RequestRecord;
+  /** The journal entry for this change, for a session that keeps a journal. */
+  journal?: JournalEntry;
 };
 
 export type StoreErrorCode =
@@ -143,11 +175,8 @@ export type Store = {
   /** Removes a bundle. The runner removes only bundles no session uses. */
   deleteBundle(ref: AgentRef): Promise<void>;
 
-  /** Saves a new session with its init step, atomically. Refuses an id already used. */
-  create(
-    session: SessionRecord,
-    init: { append: LogEntry[]; started: StoredEffect[]; request?: RequestRecord },
-  ): Promise<void>;
+  /** Saves a new session with its init step or forked state, atomically. Refuses an id already used. */
+  create(session: SessionRecord, start: SessionStart): Promise<void>;
   load(id: string): Promise<LoadedSession | null>;
   list(filter?: SessionFilter): Promise<SessionSummary[]>;
   /** Ids of sessions with running effects or inbox items: what recovery looks at. */
@@ -156,6 +185,17 @@ export type Store = {
   /** Saves a step, atomically. */
   commit(id: string, step: StepCommit): Promise<void>;
   readLog(id: string, range?: LogRange): Promise<LogEntry[]>;
+  /** A session's journal entries, oldest first. */
+  readJournal(id: string, range?: JournalRange): Promise<JournalEntry[]>;
+  /**
+   * Saves a journal entry for a step that changed nothing, atomically with
+   * the answer to its request or the fault it caused.
+   */
+  record(
+    id: string,
+    entry: JournalEntry,
+    alongside: { request?: RequestRecord; fault?: string },
+  ): Promise<void>;
   /** Which of `keys` finished. */
   findFinished(id: string, keys: readonly string[]): Promise<Set<string>>;
 

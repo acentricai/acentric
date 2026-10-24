@@ -1,0 +1,48 @@
+{
+  "name": "The journal records an upgrade, then migrated on the new version",
+  "section": "12",
+  "requires": ["journal", "upgrade"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "noop"
+    },
+    {
+      "upgrade": "2"
+    },
+    {
+      "input": "noop"
+    },
+    {
+      "expect": {
+        "journal": [
+          {
+            "type": "upgrade",
+            "version": "2",
+            "from": "1"
+          },
+          {
+            "type": "step",
+            "version": "2",
+            "answer": "accepted",
+            "message": {
+              "type": "migrated",
+              "from": "1"
+            }
+          },
+          {
+            "type": "step",
+            "version": "2",
+            "answer": "accepted",
+            "message": {
+              "type": "input",
+              "kind": "noop"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

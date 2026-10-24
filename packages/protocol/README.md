@@ -6,10 +6,10 @@ message types and a small peer that speaks JSON-RPC in both directions. Use
 [@acentric/client](../client) to talk to a runner; the design is in
 [docs/local-runner.md](../../docs/local-runner.md#protocol).
 
-| Direction    | Messages                                                                                                                                                                    |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| app → runner | `initialize`, `secrets/set`, `agents/deploy`, `agents/list`, `sessions/create`, `input`, `configure`, `upgrade`, `get`, `list`, `log`, `delete`, `subscribe`, `unsubscribe` |
-| runner → app | notifications `log`, `view`, `status` for subscriptions; `effect/run` requests and `effect/cancel` notifications for kinds the app provides                                 |
+| Direction    | Messages                                                                                                                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| app → runner | `initialize`, `secrets/set`, `agents/deploy`, `agents/list`, `sessions/create`, `input`, `configure`, `upgrade`, `get`, `list`, `log`, `journal`, `fork`, `delete`, `subscribe`, `unsubscribe` |
+| runner → app | notifications `log`, `view`, `status` for subscriptions; `effect/run` requests and `effect/cancel` notifications for kinds the app provides                                                    |
 
 A rejection or a failed step is a normal result, an `Answer`. A JSON-RPC
 error means the request itself was wrong; its `data.code` is an `ErrorCode`.

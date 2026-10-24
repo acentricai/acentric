@@ -3,6 +3,7 @@
   "compilerOptions": {
     // AbortController and setTimeout come from the DOM library.
     "lib": ["ES2023", "DOM"],
+    "types": ["node"],
     "rootDir": "src",
     "outDir": "dist"
   },

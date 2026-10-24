@@ -276,6 +276,40 @@ to effects running during an upgrade, are the runner's choice. If results
 of effects the old version started are delivered, they go to the new
 version's `step`.
 
+## 12. Journal and forks
+
+A runner MAY keep a journal of what each session received (the
+`JournalEntry` type), so a session can be replayed. If it does, it records
+an entry in the same save as the change the entry describes:
+
+- `init` when a session is created: the version, `now`, config and digest;
+- `step` for every message delivered to `step`, with the version that
+  received it, `now`, the message, the answer (`accepted`, `rejected` or
+  `failed`) and, for an accepted step, the digest. Rejected inputs and
+  config changes and failed steps are recorded too;
+- `upgrade` when `migrate` moves a session: the new version, the old one,
+  `now` and the digest. `migrated` is then its own `step` entry, on the new
+  version.
+
+Entries are numbered `n` = 1, 2, 3... per session, with no gaps. A create
+that `init` rejects, an upgrade that `migrate` rejects, and an input whose id
+was already answered change nothing and are not recorded.
+
+A digest is SHA-256, as lowercase hex, of the RFC 8785 canonical JSON of
+`[snapshot, config, appended]`, where `appended` holds the entries the change
+added, as `{ kind, body }`.
+
+A runner that keeps a journal MAY fork a session at entry `n`: a new session
+with the state the original had after that entry, on the version that ran it.
+It MUST rebuild that state by replaying the journal up to `n`, refusing if a
+digest differs, and then:
+
+- copy the journal and the log up to `n`, with the same numbers and times;
+- keep every effect that had finished by `n` finished;
+- start effects that were running at `n` again, as after a crash, but at
+  attempt 1, and report `once` effects `interrupted`;
+- keep the input ids answered up to `n` answered, if it remembers input ids.
+
 ## What a runner chooses
 
 | Area                     | For example                                                                   |
@@ -290,7 +324,7 @@ version's `step`.
 | Caller interface         | function calls, HTTP, SSE, WebSocket, a CLI                                   |
 | Identity                 | counters, UUIDs, names                                                        |
 | Limits and defaults      | effect counts, sizes, the window, time limits, attempts                       |
-| Policies                 | failed steps, upgrades, log retention                                         |
+| Policies                 | failed steps, upgrades, log and journal retention                             |
 | `view`                   | when views are computed and served                                            |
 | Secrets                  | environment variables, a vault, per-tenant stores                             |
 | Security                 | authentication, which callers may send which inputs, sandboxes, approvals     |

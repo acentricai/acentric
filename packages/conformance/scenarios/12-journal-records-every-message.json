@@ -1,0 +1,113 @@
+{
+  "name": "The journal records every message, including rejected ones and failed steps",
+  "section": "12",
+  "requires": ["journal"],
+  "steps": [
+    {
+      "create": {
+        "a": 1
+      }
+    },
+    {
+      "input": "noop"
+    },
+    {
+      "input": "reject",
+      "payload": {
+        "error": "no"
+      }
+    },
+    {
+      "input": "throw"
+    },
+    {
+      "configure": {
+        "b": 2
+      }
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "echo",
+            "args": {
+              "value": 7
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "journal": [
+          {
+            "n": 1,
+            "type": "init",
+            "version": "1",
+            "config": {
+              "a": 1
+            }
+          },
+          {
+            "n": 2,
+            "type": "step",
+            "answer": "accepted",
+            "message": {
+              "type": "input",
+              "kind": "noop"
+            }
+          },
+          {
+            "n": 3,
+            "type": "step",
+            "answer": "rejected",
+            "message": {
+              "kind": "reject"
+            }
+          },
+          {
+            "n": 4,
+            "type": "step",
+            "answer": "failed",
+            "message": {
+              "kind": "throw"
+            }
+          },
+          {
+            "n": 5,
+            "type": "step",
+            "answer": "accepted",
+            "message": {
+              "type": "config",
+              "config": {
+                "b": 2
+              }
+            }
+          },
+          {
+            "n": 6,
+            "type": "step",
+            "answer": "accepted",
+            "message": {
+              "kind": "declare"
+            }
+          },
+          {
+            "n": 7,
+            "type": "step",
+            "answer": "accepted",
+            "message": {
+              "type": "effect",
+              "key": "a",
+              "outcome": {
+                "ok": 7
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

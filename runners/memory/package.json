@@ -25,6 +25,7 @@
     "@acentric/types": "workspace:*"
   },
   "devDependencies": {
-    "@acentric/conformance": "workspace:*"
+    "@acentric/conformance": "workspace:*",
+    "@types/node": "^26.6.5"
   }
 }

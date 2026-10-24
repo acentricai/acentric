@@ -260,13 +260,13 @@ importers:
 
   packages/conformance:
     dependencies:
+      '@acentric/testing':
+        specifier: workspace:*
+        version: link:../testing
       '@acentric/types':
         specifier: workspace:*
         version: link:../types
     devDependencies:
-      '@acentric/testing':
-        specifier: workspace:*
-        version: link:../testing
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -309,6 +309,9 @@ importers:
       '@acentric/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@acentric/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
       '@acentric/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -341,6 +344,9 @@ importers:
       '@acentric/conformance':
         specifier: workspace:*
         version: link:../../packages/conformance
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
 
 packages:
 

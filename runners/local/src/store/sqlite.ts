@@ -8,19 +8,25 @@
 //
 // node:sqlite is synchronous. The methods are async to satisfy the Store
 // type, which other backends need; here they finish before they return.
+//
+// Schema 3 added the journal table. A store with schema 2 is moved to 3 when
+// opened; its sessions keep no journal, since theirs would not start with
+// their creation.
 
 import { DatabaseSync } from 'node:sqlite';
 import type { SQLInputValue, SQLOutputValue } from 'node:sqlite';
 
-import type { Json, JsonObject, LogEntry, Outcome } from '@acentric/types';
+import type { JournalEntry, Json, JsonObject, LogEntry, Outcome } from '@acentric/types';
 
 import { StoreError } from './types.js';
 import type {
   AgentRef,
   Bundle,
   InboxItem,
+  JournalRange,
   SessionFilter,
   SessionRecord,
+  SessionStart,
   SessionSummary,
   KindInfo,
   LoadedSession,
@@ -63,9 +69,13 @@ CREATE TABLE IF NOT EXISTS requests (
   session TEXT NOT NULL, id TEXT NOT NULL, hash TEXT NOT NULL, answer TEXT NOT NULL,
   PRIMARY KEY (session, id)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS journal (
+  session TEXT NOT NULL, n INTEGER NOT NULL, entry TEXT NOT NULL,
+  PRIMARY KEY (session, n)
+) WITHOUT ROWID;
 `;
 
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 
 /** Opens, or creates, the store in the SQLite file at `path`. */
 export function openSqliteStore(path: string): Promise<Store> {
@@ -95,6 +105,9 @@ class SqliteStore implements Store {
           this.#db
             .prepare('INSERT INTO meta (key, value) VALUES (?, ?)')
             .run('schema', SCHEMA_VERSION);
+        } else if (text(version, 'value') === '2') {
+          // Schema 3 only adds the journal table, created above.
+          this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?').run(SCHEMA_VERSION, 'schema');
         } else if (text(version, 'value') !== SCHEMA_VERSION) {
           throw new StoreError(
             'invalid',
@@ -183,10 +196,7 @@ class SqliteStore implements Store {
 
   // ---- sessions ------------------------------------------------------------
 
-  create(
-    session: SessionRecord,
-    init: { append: LogEntry[]; started: StoredEffect[]; request?: RequestRecord },
-  ): Promise<void> {
+  create(session: SessionRecord, init: SessionStart): Promise<void> {
     return this.#run(() =>
       this.#transaction(() => {
         if (this.#db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(session.id) !== undefined) {
@@ -212,7 +222,13 @@ class SqliteStore implements Store {
           );
         this.#append(session.id, init.append);
         this.#start(session.id, init.started);
+        const finished = this.#db.prepare(
+          "INSERT INTO effects (session, key, status) VALUES (?, ?, 'finished')",
+        );
+        for (const key of init.finished ?? []) finished.run(session.id, key);
+        for (const request of init.requests ?? []) this.#putRequest(session.id, request);
         if (init.request !== undefined) this.#putRequest(session.id, init.request);
+        for (const entry of init.journal) this.#putEntry(session.id, entry);
       }),
     );
   }
@@ -231,7 +247,9 @@ class SqliteStore implements Store {
           mode: text(effect, 'mode') === 'once' ? ('once' as const) : ('reissue' as const),
           attempt: int(effect, 'attempt'),
         }));
-      return { ...record(row), running };
+      const newest = this.#db.prepare('SELECT max(n) AS n FROM journal WHERE session = ?').get(id);
+      const n = newest?.['n'];
+      return { ...record(row), running, nextEntry: typeof n === 'number' ? n + 1 : null };
     });
   }
 
@@ -329,7 +347,33 @@ class SqliteStore implements Store {
           }
         }
         if (step.request !== undefined) this.#putRequest(id, step.request);
+        if (step.journal !== undefined) this.#putEntry(id, step.journal);
       }),
+    );
+  }
+
+  record(
+    id: string,
+    entry: JournalEntry,
+    alongside: { request?: RequestRecord; fault?: string },
+  ): Promise<void> {
+    return this.#run(() =>
+      this.#transaction(() => {
+        if (alongside.request !== undefined) this.#putRequest(id, alongside.request);
+        if (alongside.fault !== undefined) {
+          this.#db.prepare('UPDATE sessions SET fault = ? WHERE id = ?').run(alongside.fault, id);
+        }
+        this.#putEntry(id, entry);
+      }),
+    );
+  }
+
+  readJournal(id: string, range: JournalRange = {}): Promise<JournalEntry[]> {
+    return this.#run(() =>
+      this.#db
+        .prepare('SELECT entry FROM journal WHERE session = ? AND n > ? ORDER BY n LIMIT ?')
+        .all(id, range.after ?? 0, range.limit ?? -1)
+        .map((row) => stored<JournalEntry>(text(row, 'entry'))),
     );
   }
 
@@ -447,7 +491,7 @@ class SqliteStore implements Store {
   delete(id: string): Promise<void> {
     return this.#run(() =>
       this.#transaction(() => {
-        for (const table of ['log', 'effects', 'inbox', 'requests']) {
+        for (const table of ['log', 'effects', 'inbox', 'requests', 'journal']) {
           this.#db.prepare(`DELETE FROM ${table} WHERE session = ?`).run(id);
         }
         this.#db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
@@ -497,6 +541,12 @@ class SqliteStore implements Store {
         throw new StoreError('invalid', `effect ${key} of ${id} is not running`);
       }
     }
+  }
+
+  #putEntry(id: string, entry: JournalEntry): void {
+    this.#db
+      .prepare('INSERT INTO journal (session, n, entry) VALUES (?, ?, ?)')
+      .run(id, entry.n, JSON.stringify(entry));
   }
 
   #putRequest(id: string, request: RequestRecord): void {

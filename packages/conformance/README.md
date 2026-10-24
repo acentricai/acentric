@@ -9,15 +9,16 @@ the probe agent they drive, and a player for runners written in TypeScript.
 of RUNNERS.md it checks. A scenario is a list of steps: actions, after each of
 which the runner settles, and expectations about what must then be true.
 
-| Action      | Does                                                             |
-| ----------- | ---------------------------------------------------------------- |
-| `create`    | creates the session from a probe bundle with a config            |
-| `input`     | sends an input                                                   |
-| `configure` | sends a config change                                            |
-| `release`   | finishes a gate, returning a value or throwing                   |
-| `wait`      | lets a few milliseconds of real time pass                        |
-| `crash`     | stops the runner abruptly and starts it again (needs `durable`)  |
-| `upgrade`   | upgrades the session to version 2 of the probe (needs `upgrade`) |
+| Action      | Does                                                                     |
+| ----------- | ------------------------------------------------------------------------ |
+| `create`    | creates the session from a probe bundle with a config                    |
+| `input`     | sends an input                                                           |
+| `configure` | sends a config change                                                    |
+| `release`   | finishes a gate, returning a value or throwing                           |
+| `wait`      | lets a few milliseconds of real time pass                                |
+| `crash`     | stops the runner abruptly and starts it again (needs `durable`)          |
+| `upgrade`   | upgrades the session to version 2 of the probe (needs `upgrade`)         |
+| `fork`      | forks the session at a journal entry and acts on the fork (needs `fork`) |
 
 | Expectation                      | Checks                                                                      |
 | -------------------------------- | --------------------------------------------------------------------------- |
@@ -26,9 +27,13 @@ which the runner settles, and expectations about what must then be true.
 | `signalled`                      | gates whose signal fired                                                    |
 | `log`, `logKinds`                | the newest log entries, partly; the kinds of the whole log                  |
 | `snapshot`                       | the snapshot, partly                                                        |
+| `journal`                        | the newest journal entries, partly (needs `journal`)                        |
 
 After every action the log must also be numbered 1, 2, 3 with no gaps, with
-times that never go backwards. A scenario that needs a feature the runner does
+times that never go backwards. For a runner that offers `journal`, the
+player also replays the session's journal with the probe's code after every
+action: each entry must give the answer and digest it recorded, and the
+replay must end with the runner's log and snapshot. A scenario that needs a feature the runner does
 not offer is skipped and reported, never passed.
 
 ## The probe

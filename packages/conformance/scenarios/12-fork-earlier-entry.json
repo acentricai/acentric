@@ -1,0 +1,50 @@
+{
+  "name": "A fork at an earlier entry has the state from then, and goes its own way",
+  "section": "12",
+  "requires": ["fork"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "echo",
+            "args": {
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "input": "noop"
+    },
+    {
+      "fork": {
+        "at": 2
+      }
+    },
+    {
+      "expect": {
+        "accepted": true,
+        "running": [],
+        "logKinds": ["init", "input", "result"],
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "ok": 1
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 // What every store must do, for any backend: run `describeStore` with a
 // way to open the same store more than once.
 
-import type { LogEntry } from '@acentric/types';
+import type { JournalAnswer, JournalEntry, LogEntry } from '@acentric/types';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { StoreError } from '../dist/index.js';
@@ -105,10 +105,19 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
         append: [entry(1), entry(2)],
         started: [effect('a')],
         request: { id: 'create', hash: 'c1', answer: { accepted: true } },
+        journal: [],
       });
-      await rejects(store.create(session(), { append: [], started: [] }), 'session_exists');
+      await rejects(
+        store.create(session(), { append: [], started: [], journal: [] }),
+        'session_exists',
+      );
       const again = await reopen(store);
-      expect(await again.load('i1')).toEqual({ ...session(), nextSeq: 3, running: [effect('a')] });
+      expect(await again.load('i1')).toEqual({
+        ...session(),
+        nextSeq: 3,
+        running: [effect('a')],
+        nextEntry: null,
+      });
       expect(await again.readLog('i1')).toEqual([entry(1), entry(2)]);
       expect(await again.findRequest('i1', 'create')).toEqual({
         id: 'create',
@@ -120,7 +129,11 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('saves a step whole', async () => {
       const store = await open();
-      await store.create(session(), { append: [entry(1)], started: [effect('a'), effect('b')] });
+      await store.create(session(), {
+        append: [entry(1)],
+        started: [effect('a'), effect('b')],
+        journal: [],
+      });
       const ord = await store.putResult('i1', 'a', { ok: 5 });
       await store.commit('i1', {
         expectedSeq: 2,
@@ -147,7 +160,7 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('applies nothing of a step that fails', async () => {
       const store = await open();
-      await store.create(session(), { append: [entry(1)], started: [effect('a')] });
+      await store.create(session(), { append: [entry(1)], started: [effect('a')], journal: [] });
       // The last change is invalid: finishing a key that is not running.
       await rejects(
         store.commit('i1', {
@@ -161,13 +174,18 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
         'invalid',
       );
       const again = await reopen(store);
-      expect(await again.load('i1')).toEqual({ ...session(), nextSeq: 2, running: [effect('a')] });
+      expect(await again.load('i1')).toEqual({
+        ...session(),
+        nextSeq: 2,
+        running: [effect('a')],
+        nextEntry: null,
+      });
       expect(await again.readLog('i1')).toEqual([entry(1)]);
     });
 
     it('refuses a stale step, and entries out of sequence', async () => {
       const store = await open();
-      await store.create(session(), { append: [entry(1)], started: [] });
+      await store.create(session(), { append: [entry(1)], started: [], journal: [] });
       const step = { snapshot: {}, started: [], finished: [], aborted: [] };
       await rejects(
         store.commit('i1', { ...step, expectedSeq: 1, append: [entry(1)] }),
@@ -185,7 +203,11 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('keeps the inbox in order across a restart', async () => {
       const store = await open();
-      await store.create(session(), { append: [], started: [effect('a'), effect('b')] });
+      await store.create(session(), {
+        append: [],
+        started: [effect('a'), effect('b')],
+        journal: [],
+      });
       await store.putResult('i1', 'b', { ok: 'b' });
       await store.putResult('i1', 'a', { interrupted: true });
       expect(await store.pending()).toEqual(['i1']);
@@ -203,6 +225,7 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
       await store.create(session(), {
         append: [entry(1, 'a'), entry(2, 'b'), entry(3, 'a'), entry(4, 'b'), entry(5, 'a')],
         started: [],
+        journal: [],
       });
       const seqs = async (range: Parameters<Store['readLog']>[1]): Promise<number[]> =>
         (await store.readLog('i1', range)).map((e) => e.seq);
@@ -215,7 +238,7 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('records attempts, faults and answers given without a step', async () => {
       const store = await open();
-      await store.create(session(), { append: [], started: [effect('a')] });
+      await store.create(session(), { append: [], started: [effect('a')], journal: [] });
       await store.recordAttempt('i1', 'a', 2);
       await store.setFault('i1', 'broken');
       await store.putRequest('i1', { id: 'r', hash: 'h', answer: { rejected: 'no' } });
@@ -241,8 +264,8 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
 
     it('lists and deletes sessions', async () => {
       const store = await open();
-      await store.create(session('i1'), { append: [], started: [effect('a')] });
-      await store.create(session('i2'), { append: [], started: [] });
+      await store.create(session('i1'), { append: [], started: [effect('a')], journal: [] });
+      await store.create(session('i2'), { append: [], started: [], journal: [] });
       await store.setFault('i2', 'broken');
       expect((await store.list()).map((i) => [i.id, i.running, i.fault])).toEqual([
         ['i1', 1, null],
@@ -257,5 +280,75 @@ export function describeStore(name: string, location: () => Promise<StoreLocatio
       expect(await store.pending()).toEqual([]);
       expect((await store.list()).map((i) => i.id)).toEqual(['i2']);
     });
+
+    it('keeps a journal, each entry with the change it records', async () => {
+      const store = await open();
+      await store.create(session(), {
+        append: [entry(1)],
+        started: [effect('a')],
+        journal: [init],
+      });
+      expect((await store.load('i1'))?.nextEntry).toBe(2);
+      await store.commit('i1', {
+        expectedSeq: 2,
+        snapshot: { n: 1 },
+        append: [entry(2)],
+        started: [],
+        finished: [],
+        aborted: [],
+        journal: step(2, 'accepted'),
+      });
+      const rejection = { id: 'in-2', hash: 'r', answer: { rejected: 'no' } };
+      await store.record('i1', step(3, 'rejected'), { request: rejection });
+      await store.record('i1', step(4, 'failed'), { fault: 'broken' });
+      const again = await reopen(store);
+      expect(await again.readJournal('i1')).toEqual([
+        init,
+        step(2, 'accepted'),
+        step(3, 'rejected'),
+        step(4, 'failed'),
+      ]);
+      expect((await again.readJournal('i1', { after: 2, limit: 1 })).map((e) => e.n)).toEqual([3]);
+      expect(await again.load('i1')).toMatchObject({ nextEntry: 5, fault: 'broken' });
+      expect(await again.findRequest('i1', 'in-2')).toEqual(rejection);
+      await again.delete('i1');
+      expect(await again.readJournal('i1')).toEqual([]);
+    });
+
+    it("creates a fork with the original's finished keys, answers and journal", async () => {
+      const store = await open();
+      const answered = { id: 'input:x', hash: 'x', answer: { accepted: true } };
+      await store.create(session(), {
+        append: [entry(1), entry(2)],
+        started: [effect('a')],
+        finished: ['done'],
+        requests: [answered],
+        journal: [init, step(2, 'accepted')],
+      });
+      const again = await reopen(store);
+      expect(await again.load('i1')).toMatchObject({ nextSeq: 3, nextEntry: 3 });
+      expect(await again.findFinished('i1', ['done', 'a'])).toEqual(new Set(['done']));
+      expect(await again.findRequest('i1', 'input:x')).toEqual(answered);
+      expect(await again.readJournal('i1')).toEqual([init, step(2, 'accepted')]);
+    });
   });
 }
+
+const init: JournalEntry = {
+  n: 1,
+  type: 'init',
+  version: '1',
+  now: 1000,
+  config: { a: 1 },
+  digest: 'd1',
+};
+
+const step = (n: number, answer: JournalAnswer): JournalEntry => ({
+  n,
+  type: 'step',
+  version: '1',
+  now: 1000 + n,
+  message: { type: 'input', id: `in-${n}`, kind: 'note', payload: {} },
+  answer,
+  ...(answer === 'accepted' ? { digest: `d${n}` } : {}),
+});

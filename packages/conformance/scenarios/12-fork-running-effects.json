@@ -1,0 +1,53 @@
+{
+  "name": "A fork starts the effects running at its entry again, and interrupts once effects",
+  "section": "12",
+  "requires": ["fork"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "r",
+            "kind": "gate",
+            "args": null
+          },
+          {
+            "key": "o",
+            "kind": "gate",
+            "args": null,
+            "mode": "once"
+          }
+        ]
+      }
+    },
+    {
+      "fork": {}
+    },
+    {
+      "expect": {
+        "accepted": true,
+        "running": [
+          {
+            "key": "r",
+            "attempt": 1
+          }
+        ],
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "o",
+              "outcome": {
+                "interrupted": true
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

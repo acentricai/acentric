@@ -13,7 +13,7 @@ import { spawnRunner } from '@acentric/client/node';
 import type { RunnerClient, SpawnedRunner } from '@acentric/client/node';
 import { serveGates } from '@acentric/conformance';
 import type { Adapter, Answer } from '@acentric/conformance';
-import type { LogEntry } from '@acentric/types';
+import type { JournalEntry, LogEntry } from '@acentric/types';
 
 import { probeBundles } from './bundles.js';
 import { SQLITE } from './stores.js';
@@ -75,6 +75,13 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
     );
   };
 
+  const readJournal = async (after = 0): Promise<JournalEntry[]> => {
+    const page = await client().journal(session(), { after });
+    const last = page.entries.at(-1);
+    if (page.cursor === undefined || last === undefined) return page.entries;
+    return [...page.entries, ...(await readJournal(last.n))];
+  };
+
   const readLog = async (after = 0): Promise<LogEntry[]> => {
     const page = await client().log(session(), { after });
     const last = page.entries.at(-1);
@@ -83,7 +90,7 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
   };
 
   return {
-    supports: ['durable', 'upgrade'],
+    supports: ['durable', 'upgrade', 'journal', 'fork'],
     create: async (bundle, config) => {
       if (bundle === 'probe-bad-handler-name') {
         try {
@@ -138,6 +145,16 @@ export async function protocolAdapter(storeKind: StoreKind = SQLITE): Promise<Ad
       runner = await start();
     },
     upgrade: () => answerOf(() => client().upgrade(session(), '2')),
+    journal: async () => (id === null ? [] : readJournal()),
+    fork: (at) =>
+      answerOf(async () => {
+        const { id: forked, ...answer } = await client().fork(
+          session(),
+          at === undefined ? {} : { at },
+        );
+        if (forked !== undefined) id = forked;
+        return answer;
+      }),
     close: async () => {
       runner.process.kill('SIGKILL');
       await runner.exited;

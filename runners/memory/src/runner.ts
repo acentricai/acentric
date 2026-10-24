@@ -13,6 +13,8 @@ import type {
   EffectMessage,
   HandlerContext,
   HandlerDef,
+  JournalAnswer,
+  JournalEntry,
   Json,
   JsonObject,
   Kinds,
@@ -25,7 +27,14 @@ import type {
   State,
 } from '@acentric/types';
 
-import { deepFreeze, frozenCopy, isJson, requireJson, thrownToJson } from './json.js';
+import {
+  deepFreeze,
+  frozenCopy,
+  isJson,
+  journalDigest,
+  requireJson,
+  thrownToJson,
+} from './json.js';
 import { createMemoryStore } from './store.js';
 import type { MemoryStore, StoredEffect, StoredSession } from './store.js';
 
@@ -170,6 +179,7 @@ export class MemoryRunner {
       effects: new Map(),
       finished: new Set(),
       fault: null,
+      journal: [],
     };
     let prepared;
     try {
@@ -187,6 +197,16 @@ export class MemoryRunner {
     }
     this.store.sessions.set(session.id, session);
     this.#apply(session, prepared);
+    session.journal.push(
+      deepFreeze({
+        n: 1,
+        type: 'init',
+        version: agent.version,
+        now,
+        config: session.config,
+        digest: journalDigest(session.snapshot, session.config, prepared.entries),
+      }),
+    );
     this.#act(session, registered, prepared);
     return { accepted: true, id: session.id };
   }
@@ -253,6 +273,39 @@ export class MemoryRunner {
   /** Why the session stopped taking messages, or null if it has not. */
   fault(sessionId: string): string | null {
     return this.#session(sessionId).fault;
+  }
+
+  /** Everything the session received, oldest first, for replaying it. */
+  journal(sessionId: string): readonly JournalEntry[] {
+    return this.#session(sessionId).journal;
+  }
+
+  /**
+   * Forks a session at journal entry `at`, the newest by default: a new
+   * session with the state the original had after that entry, on the
+   * version that ran it. Effects that had finished stay finished; effects
+   * that were running start again as after a crash, at attempt 1, and once
+   * effects are reported interrupted. Fails if replaying the journal does
+   * not give the digests it recorded.
+   */
+  fork(sessionId: string, options: { at?: number; id?: string } = {}): Answer & { id?: string } {
+    const source = this.#session(sessionId);
+    const at = options.at ?? source.journal.length;
+    if (!Number.isInteger(at) || at < 1 || at > source.journal.length) {
+      return { failed: `session ${sessionId} has no journal entry ${at}` };
+    }
+    this.store.created += 1;
+    const id = options.id ?? `session-${this.store.created}`;
+    if (this.store.sessions.has(id)) return { failed: `session ${id} already exists` };
+    let session;
+    try {
+      session = this.#replay(id, source.agent.name, source.journal.slice(0, at));
+    } catch (error) {
+      return { failed: thrownToJson(error) };
+    }
+    this.store.sessions.set(id, session);
+    this.#recover(session, this.#registered(session.agent), 'first');
+    return { accepted: true, id };
   }
 
   // ---- lifecycle ------------------------------------------------------------
@@ -336,25 +389,53 @@ export class MemoryRunner {
     reported: string | null,
   ): Answer {
     const now = this.#now(session);
+    const { answer, prepared } = this.#step(session, registered, message, reported, now);
+    if (prepared !== null) this.#apply(session, prepared);
+    else if ('failed' in answer) this.#stepFailed(session, message, answer.failed);
+    session.journal.push(
+      deepFreeze({
+        n: session.journal.length + 1,
+        type: 'step',
+        version: session.agent.version,
+        now,
+        message: frozenCopy(message),
+        answer: answerOf(answer),
+        ...(prepared === null
+          ? {}
+          : { digest: journalDigest(session.snapshot, session.config, prepared.entries) }),
+      }),
+    );
+    if (prepared !== null) this.#act(session, registered, prepared);
+    return answer;
+  }
+
+  /** Runs one step and checks its result, changing nothing. */
+  #step(
+    session: StoredSession,
+    registered: Registered,
+    message: Message,
+    reported: string | null,
+    now: number,
+  ): { answer: Answer; prepared: Prepared | null } {
     const state = this.#state(registered, session.snapshot, session.log, session.config);
     let result;
     try {
       result = registered.agent.step(state, frozenCopy(message), now);
     } catch (error) {
-      return this.#stepFailed(session, message, thrownToJson(error));
+      return { answer: { failed: thrownToJson(error) }, prepared: null };
     }
     if ('error' in result) {
       if (message.type === 'input' || message.type === 'config') {
-        return isJson(result.error)
+        const answer: Answer = isJson(result.error)
           ? { rejected: result.error }
-          : this.#stepFailed(session, message, 'the rejection is not plain Json');
+          : { failed: 'the rejection is not plain Json' };
+        return { answer, prepared: null };
       }
-      return this.#stepFailed(session, message, `step rejected a ${message.type} message`);
+      return { answer: { failed: `step rejected a ${message.type} message` }, prepared: null };
     }
     const config = message.type === 'config' ? message.config : session.config;
-    let prepared;
     try {
-      prepared = this.#prepare(
+      const prepared = this.#prepare(
         session,
         registered,
         result.snapshot,
@@ -363,12 +444,10 @@ export class MemoryRunner {
         reported,
         now,
       );
+      return { answer: { accepted: true }, prepared };
     } catch (error) {
-      return this.#stepFailed(session, message, thrownToJson(error));
+      return { answer: { failed: thrownToJson(error) }, prepared: null };
     }
-    this.#apply(session, prepared);
-    this.#act(session, registered, prepared);
-    return { accepted: true };
   }
 
   /**
@@ -376,41 +455,119 @@ export class MemoryRunner {
    * answered with the failure and dropped; any other message stops the
    * session, since a pure step would fail the same way again.
    */
-  #stepFailed(session: StoredSession, message: Message, error: Json): Answer {
+  #stepFailed(session: StoredSession, message: Message, error: Json): void {
     if (message.type !== 'input' && message.type !== 'config') {
       session.fault = `a ${message.type} message's step failed: ${JSON.stringify(error)}`;
     }
-    return { failed: error };
   }
 
   #upgrade(session: StoredSession, agent: LoadedAgent): Answer {
     const registered = this.#registered(agent);
     const from = session.agent.version;
+    const now = this.#now(session);
+    const { answer, prepared } = this.#migrate(session, registered, now);
+    if (prepared === null) return answer;
+    session.agent = { name: agent.name, version: agent.version };
+    this.#apply(session, prepared);
+    session.journal.push(
+      deepFreeze({
+        n: session.journal.length + 1,
+        type: 'upgrade',
+        version: agent.version,
+        from,
+        now,
+        digest: journalDigest(session.snapshot, session.config, []),
+      }),
+    );
+    this.#act(session, registered, prepared);
+    this.#deliver(session, registered, { type: 'migrated', from }, null);
+    return { accepted: true };
+  }
+
+  /** Runs the new version's migrate and checks its result, changing nothing. */
+  #migrate(
+    session: StoredSession,
+    registered: Registered,
+    now: number,
+  ): { answer: Answer; prepared: Prepared | null } {
     let snapshot = session.snapshot;
     let config = session.config;
     const migrate = registered.agent.migrate;
     if (migrate !== undefined) {
       let result;
       try {
-        result = migrate(session.snapshot, session.config, from);
+        result = migrate(session.snapshot, session.config, session.agent.version);
       } catch (error) {
-        return { failed: thrownToJson(error) };
+        return { answer: { failed: thrownToJson(error) }, prepared: null };
       }
-      if ('error' in result) return { rejected: requireJson(result.error, 'the rejection') };
+      if ('error' in result) {
+        return { answer: { rejected: requireJson(result.error, 'the rejection') }, prepared: null };
+      }
       snapshot = result.snapshot;
       config = result.config ?? config;
     }
-    let prepared;
     try {
-      prepared = this.#prepare(session, registered, snapshot, [], config, null, this.#now(session));
+      const prepared = this.#prepare(session, registered, snapshot, [], config, null, now);
+      return { answer: { accepted: true }, prepared };
     } catch (error) {
-      return { failed: thrownToJson(error) };
+      return { answer: { failed: thrownToJson(error) }, prepared: null };
     }
-    session.agent = { name: agent.name, version: agent.version };
-    this.#apply(session, prepared);
-    this.#act(session, registered, prepared);
-    this.#deliver(session, registered, { type: 'migrated', from }, null);
-    return { accepted: true };
+  }
+
+  /**
+   * Builds a session from journal entries, as their steps left it, starting
+   * no effects. Throws if an entry's code is not loaded or it does not leave
+   * the digest the journal recorded.
+   */
+  #replay(id: string, name: string, entries: readonly JournalEntry[]): StoredSession {
+    const [first, ...rest] = entries;
+    if (first?.type !== 'init') throw new Error('a journal starts with its init entry');
+    let registered = this.#registered({ name, version: first.version });
+    const result = registered.agent.init(frozenCopy(first.config), first.now);
+    if ('error' in result) throw new Error('init rejected the config the journal recorded');
+    const session: StoredSession = {
+      id,
+      agent: { name, version: first.version },
+      config: frozenCopy(first.config),
+      snapshot: {},
+      log: [],
+      effects: new Map(),
+      finished: new Set(),
+      fault: null,
+      journal: [...entries],
+    };
+    const replayed = (entry: JournalEntry, prepared: Prepared | null): void => {
+      if (prepared === null) throw new Error(`journal entry ${entry.n} no longer applies`);
+      this.#apply(session, prepared);
+      const digest = journalDigest(session.snapshot, session.config, prepared.entries);
+      if (digest !== entry.digest) throw new Error(`journal entry ${entry.n} gives another digest`);
+    };
+    replayed(
+      first,
+      this.#prepare(
+        session,
+        registered,
+        result.snapshot,
+        result.append ?? [],
+        first.config,
+        null,
+        first.now,
+      ),
+    );
+    for (const entry of rest) {
+      if (entry.type === 'init') throw new Error(`journal entry ${entry.n} is a second init`);
+      if (entry.type === 'upgrade') {
+        registered = this.#registered({ name, version: entry.version });
+        const { prepared } = this.#migrate(session, registered, entry.now);
+        session.agent = { name, version: entry.version };
+        replayed(entry, prepared);
+      } else if (entry.answer === 'accepted') {
+        const { message } = entry;
+        const reported = message.type === 'effect' ? message.key : null;
+        replayed(entry, this.#step(session, registered, message, reported, entry.now).prepared);
+      }
+    }
+    return session;
   }
 
   // ---- checking and applying a step -----------------------------------------
@@ -660,7 +817,16 @@ export class MemoryRunner {
 
   // ---- recovery -------------------------------------------------------------
 
-  #recover(session: StoredSession, registered: Registered): void {
+  /**
+   * Starts a stored session's effects again. After a crash, a reissue effect
+   * runs at its next attempt; in a new fork, `attempts: 'first'` keeps it at
+   * its first.
+   */
+  #recover(
+    session: StoredSession,
+    registered: Registered,
+    attempts: 'next' | 'first' = 'next',
+  ): void {
     let list;
     try {
       list =
@@ -682,6 +848,8 @@ export class MemoryRunner {
         this.#startTimer(session, key, effect.request.args);
       } else if (effect.mode === 'once') {
         reports.push({ key, kind, outcome: { interrupted: true } });
+      } else if (attempts === 'first') {
+        this.#start(session, registered, key);
       } else if (
         effect.attempt + 1 >
         (registered.handlers[kind]?.maxAttempts ?? this.#maxAttempts)
@@ -746,4 +914,10 @@ function erase<S extends JsonObject, C extends JsonObject, K extends Kinds>(
 ): Agent<JsonObject, JsonObject> {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return agent as unknown as Agent<JsonObject, JsonObject>;
+}
+
+/** How step answered, as a journal records it. */
+function answerOf(answer: Answer): JournalAnswer {
+  if ('accepted' in answer) return 'accepted';
+  return 'rejected' in answer ? 'rejected' : 'failed';
 }

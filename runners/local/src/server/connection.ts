@@ -118,6 +118,24 @@ export function connect(runner: LocalRunner, channel: Channel): Connection {
           ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
         };
       }
+      case 'sessions/journal': {
+        const { after, limit, cursor } = p;
+        return runner.journal(text(p, 'id'), {
+          ...(typeof after === 'number' ? { after } : {}),
+          ...(typeof limit === 'number' ? { limit } : {}),
+          ...(typeof cursor === 'string' ? { cursor } : {}),
+        });
+      }
+      case 'sessions/replay':
+        return runner.replay(text(p, 'id'));
+      case 'sessions/fork': {
+        const at = p['at'];
+        const as = optionalText(p, 'as');
+        return runner.fork(text(p, 'id'), {
+          ...(typeof at === 'number' ? { at } : {}),
+          ...(as === undefined ? {} : { id: as }),
+        });
+      }
       case 'sessions/delete':
         await runner.delete(text(p, 'id'));
         return {};

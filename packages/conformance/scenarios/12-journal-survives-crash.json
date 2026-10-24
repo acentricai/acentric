@@ -1,0 +1,54 @@
+{
+  "name": "The journal survives a crash, and the steps after it continue it",
+  "section": "12",
+  "requires": ["journal", "durable"],
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "g",
+            "kind": "gate",
+            "args": null
+          }
+        ]
+      }
+    },
+    {
+      "crash": true
+    },
+    {
+      "release": "g",
+      "with": {
+        "return": "done"
+      }
+    },
+    {
+      "expect": {
+        "journal": [
+          {
+            "n": 2,
+            "message": {
+              "kind": "declare"
+            }
+          },
+          {
+            "n": 3,
+            "answer": "accepted",
+            "message": {
+              "type": "effect",
+              "key": "g",
+              "outcome": {
+                "ok": "done"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

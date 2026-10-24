@@ -9,6 +9,9 @@
 // outcome is saved to the inbox before its step runs, so a crash in between
 // loses nothing.
 //
+// Every step is also recorded in the session's journal, in the same write as
+// its change, so the session can be replayed and forked.
+//
 // Sessions are loaded when a job needs them and unloaded after a while
 // idle. Effects and timers are tracked apart from loaded sessions, so an
 // session can be unloaded while its effects run.
@@ -23,6 +26,8 @@ import type {
   Agent,
   EffectMessage,
   InputMessage,
+  JournalAnswer,
+  JournalEntry,
   Json,
   JsonObject,
   LogAppend,
@@ -34,12 +39,23 @@ import type {
   State,
 } from '@acentric/types';
 
+import { forReplay, replay } from '@acentric/testing';
+
 import { HostPool } from './host/pool.js';
 import type { HostOutcome } from './host/pool.js';
-import { deepFreeze, frozenCopy, isJson, requireJson, thrownToJson } from './json.js';
+import {
+  deepFreeze,
+  frozenCopy,
+  isJson,
+  journalDigest,
+  requireJson,
+  thrownToJson,
+} from './json.js';
 import { StoreError } from './store/types.js';
 import type {
   AgentRef,
+  JournalRange,
+  RequestRecord,
   SessionFilter,
   SessionSummary,
   KindInfo,
@@ -52,6 +68,19 @@ import { Scheduler } from './timers.js';
 export type Answer = { accepted: true } | { rejected: Json } | { failed: Json };
 
 export type Status = 'idle' | 'busy' | 'faulted';
+
+/** What faithfully replaying a session's journal found. */
+export type ReplayReport = {
+  /** How many journal entries were replayed. */
+  entries: number;
+  /** The first entry whose answer or digest differs from the journal's, or null. */
+  differs: {
+    n: number;
+    type: JournalEntry['type'];
+    expected: { answer: JournalAnswer; digest: string | null };
+    actual: { answer: JournalAnswer; digest: string | null } | null;
+  } | null;
+};
 
 export type RunningEffect = {
   key: string;
@@ -164,7 +193,8 @@ export type RunnerErrorCode =
   | 'missing_kinds'
   | 'request_conflict'
   | 'kind_taken'
-  | 'agent_in_use';
+  | 'agent_in_use'
+  | 'no_journal';
 
 export class RunnerError extends Error {
   readonly code: RunnerErrorCode;
@@ -204,6 +234,8 @@ type Live = {
   effects: Map<string, StoredEffect>;
   view: Json;
   usedAt: number;
+  /** The `n` the next journal entry gets, or null for a session that keeps no journal. */
+  nextEntry: number | null;
 };
 
 type Flight = {
@@ -227,7 +259,8 @@ type Job =
   | ({ type: 'upgrade'; version: string } & Reply)
   | { type: 'delete'; done: Reply }
   | { type: 'result'; ord: number; key: string; outcome: Outcome }
-  | { type: 'recover' };
+  /** `first` starts a fork's effects at their first attempt. */
+  | { type: 'recover'; first?: true };
 
 type Mailbox = { jobs: Job[]; running: Promise<void> | null };
 
@@ -533,6 +566,7 @@ export class LocalRunner {
       effects: new Map(),
       view: null,
       usedAt: Date.now(),
+      nextEntry: null,
     };
     let prepared;
     try {
@@ -560,7 +594,20 @@ export class LocalRunner {
           createHash: creation,
           createdAt: now,
         },
-        { append: prepared.entries, started: prepared.started },
+        {
+          append: prepared.entries,
+          started: prepared.started,
+          journal: [
+            {
+              n: 1,
+              type: 'init',
+              version: code.ref.version,
+              now,
+              config: prepared.config,
+              digest: journalDigest(prepared.snapshot, prepared.config, prepared.entries),
+            },
+          ],
+        },
       );
     } catch (error) {
       if (error instanceof StoreError && error.code === 'session_exists') {
@@ -568,6 +615,7 @@ export class LocalRunner {
       }
       throw error;
     }
+    live.nextEntry = 2;
     this.#lives.set(id, Promise.resolve(live));
     const viewBefore = JSON.stringify(live.view);
     this.#apply(live, prepared, null);
@@ -652,6 +700,142 @@ export class LocalRunner {
     if (entries.length <= limit) return { entries };
     const page = entries.slice(0, limit);
     return { entries: page, cursor: String(page.at(-1)?.seq ?? after) };
+  }
+
+  /** A page of the session's journal, oldest first. */
+  async journal(
+    id: string,
+    query: JournalRange & { cursor?: string } = {},
+  ): Promise<{ entries: JournalEntry[]; cursor?: string }> {
+    const after = Math.max(query.after ?? 0, query.cursor === undefined ? 0 : Number(query.cursor));
+    const limit = Math.max(1, Math.min(query.limit ?? PAGE_SIZE, PAGE_SIZE));
+    const entries = await this.#store.readJournal(id, { after, limit: limit + 1 });
+    if (entries.length <= limit) return { entries };
+    const page = entries.slice(0, limit);
+    return { entries: page, cursor: String(page.at(-1)?.n ?? after) };
+  }
+
+  /**
+   * Forks a session at journal entry `at`, the newest by default: a new
+   * session with the state the original had after that entry, on the
+   * version that ran it, rebuilt by replaying the journal. Effects that had
+   * finished stay finished; effects that were running start again at their
+   * first attempt, and once effects are reported interrupted. Fails if the
+   * session keeps no journal, or replaying it does not give the digests it
+   * recorded. A fork with the same id, session and entry is accepted again.
+   */
+  async fork(
+    id: string,
+    options: { at?: number; id?: string } = {},
+  ): Promise<Answer & { id?: string }> {
+    this.#open();
+    const source = await this.#live(id);
+    if (source === null) throw new RunnerError('no_session', `no session ${id}`);
+    if (source.nextEntry === null) return { failed: `session ${id} keeps no journal` };
+    const at = options.at ?? source.nextEntry - 1;
+    if (!Number.isInteger(at) || at < 1 || at >= source.nextEntry) {
+      return { failed: `session ${id} has no journal entry ${at}` };
+    }
+    const forkId = options.id ?? randomUUID();
+    const creation = digest(['fork', id, at]);
+    if (options.id !== undefined) {
+      const existing = await this.#store.load(forkId);
+      if (existing !== null) {
+        if (existing.createHash === creation) return { accepted: true, id: forkId };
+        throw new RunnerError('session_exists', `session ${forkId} already exists`);
+      }
+    }
+    const entries = await this.#store.readJournal(id, { limit: at });
+    const name = source.code.ref.name;
+    let result;
+    try {
+      result = await this.#replayed(name, entries);
+    } catch (error) {
+      return { failed: thrownToJson(error) };
+    }
+    const { codes, replayed } = result;
+    if (replayed.differs !== null) {
+      return { failed: `replaying the journal of ${id} differs at entry ${replayed.differs}` };
+    }
+    const code = codes.find((candidate) => candidate.ref.version === entries.at(-1)?.version);
+    if (code === undefined) return { failed: `session ${id} has no journal entry ${at}` };
+    const { simulation } = replayed;
+    const requests = await Promise.all(
+      entries.flatMap((entry) =>
+        entry.type === 'step' && entry.message.type === 'input'
+          ? [this.#store.findRequest(id, `input:${entry.message.id}`)]
+          : [],
+      ),
+    );
+    try {
+      await this.#store.create(
+        {
+          id: forkId,
+          agent: code.ref,
+          config: simulation.config,
+          snapshot: simulation.snapshot,
+          nextSeq: 1,
+          fault: null,
+          createHash: creation,
+          createdAt: this.#clock(),
+        },
+        {
+          append: [...simulation.log],
+          started: simulation.running.map((request) => ({
+            request,
+            mode: request.mode ?? code.kinds[request.kind]?.mode ?? 'reissue',
+            attempt: 1,
+          })),
+          journal: entries,
+          finished: simulation.finished,
+          requests: requests.filter((request) => request !== null),
+        },
+      );
+    } catch (error) {
+      if (error instanceof StoreError && error.code === 'session_exists') {
+        throw new RunnerError('session_exists', error.message);
+      }
+      throw error;
+    }
+    this.#enqueue(forkId, { type: 'recover', first: true });
+    return { accepted: true, id: forkId };
+  }
+
+  /**
+   * Replays a session's whole journal faithfully, each entry on the version
+   * that ran it, and reports the first entry whose answer or digest differs
+   * from what the journal recorded, or null.
+   */
+  async replay(id: string): Promise<ReplayReport> {
+    this.#open();
+    const source = await this.#live(id);
+    if (source === null) throw new RunnerError('no_session', `no session ${id}`);
+    if (source.nextEntry === null)
+      throw new RunnerError('no_journal', `session ${id} keeps no journal`);
+    const entries = await this.#store.readJournal(id);
+    const { replayed } = await this.#replayed(source.code.ref.name, entries);
+    const first = replayed.entries.find((entry) => !entry.same);
+    return {
+      entries: replayed.entries.length,
+      differs:
+        first === undefined
+          ? null
+          : { n: first.n, type: first.type, expected: first.expected, actual: first.actual },
+    };
+  }
+
+  /** Replays journal entries on the code of every version they name. */
+  async #replayed(name: string, entries: readonly JournalEntry[]) {
+    const versions = [...new Set(entries.map((entry) => entry.version))];
+    const codes = await Promise.all(versions.map((version) => this.#code({ name, version })));
+    return {
+      codes,
+      // An agent is named by how it was deployed, which its module need not say.
+      replayed: replay(
+        entries,
+        codes.map((code) => forReplay({ ...code.agent, ...code.ref })),
+      ),
+    };
   }
 
   /**
@@ -768,7 +952,7 @@ export class LocalRunner {
         await this.#result(live, job);
         return;
       case 'recover':
-        if (live.fault === null) await this.#recover(live);
+        if (live.fault === null) await this.#recover(live, job.first === true ? 'first' : 'next');
         return;
     }
   }
@@ -794,15 +978,11 @@ export class LocalRunner {
       }
     }
     if (live.fault !== null) return { failed: `the session has stopped: ${live.fault}` };
-    const answer = await this.#deliver(
+    return this.#deliver(
       live,
       message,
       requestId === null ? {} : { request: { id: requestId, hash, answer: { accepted: true } } },
     );
-    if (requestId !== null && 'rejected' in answer) {
-      await this.#store.putRequest(live.id, { id: requestId, hash, answer });
-    }
-    return answer;
   }
 
   async #result(live: Live, job: Extract<Job, { type: 'result' }>): Promise<void> {
@@ -846,15 +1026,16 @@ export class LocalRunner {
     try {
       result = live.code.agent.step(state, frozenCopy(message), now);
     } catch (error) {
-      return this.#stepFailed(live, message, thrownToJson(error));
+      return this.#unchanged(live, message, now, { failed: thrownToJson(error) }, extra);
     }
     if ('error' in result) {
-      if (message.type === 'input' || message.type === 'config') {
-        return isJson(result.error)
-          ? { rejected: result.error }
-          : this.#stepFailed(live, message, 'the rejection is not plain Json');
-      }
-      return this.#stepFailed(live, message, `step rejected a ${message.type} message`);
+      const answer: Answer =
+        message.type !== 'input' && message.type !== 'config'
+          ? { failed: `step rejected a ${message.type} message` }
+          : isJson(result.error)
+            ? { rejected: result.error }
+            : { failed: 'the rejection is not plain Json' };
+      return this.#unchanged(live, message, now, answer, extra);
     }
     const config = message.type === 'config' ? message.config : live.config;
     let prepared;
@@ -869,8 +1050,9 @@ export class LocalRunner {
         now,
       );
     } catch (error) {
-      return this.#stepFailed(live, message, thrownToJson(error));
+      return this.#unchanged(live, message, now, { failed: thrownToJson(error) }, extra);
     }
+    const left = journalDigest(prepared.snapshot, prepared.config, prepared.entries);
     await this.#store.commit(live.id, {
       expectedSeq: live.nextSeq,
       snapshot: prepared.snapshot,
@@ -881,7 +1063,11 @@ export class LocalRunner {
       aborted: prepared.aborted,
       ...(extra.consumed === undefined ? {} : { consumed: extra.consumed }),
       ...(extra.request === undefined ? {} : { request: extra.request }),
+      ...(live.nextEntry === null
+        ? {}
+        : { journal: this.#stepEntry(live, now, message, 'accepted', left) }),
     });
+    if (live.nextEntry !== null) live.nextEntry += 1;
     const viewBefore = JSON.stringify(live.view);
     this.#apply(live, prepared, extra.consumed ?? null);
     this.#act(live, prepared);
@@ -890,19 +1076,63 @@ export class LocalRunner {
   }
 
   /**
-   * A failed step applies nothing. A caller's input or config change is
-   * answered with the failure; any other message stops the session, since
-   * the same step would fail again, until an upgrade brings fixed code.
+   * A rejected or failed step changes nothing but the journal. A rejection
+   * is kept as its request's answer. A caller's failed input or config
+   * change is answered with the failure; any other failed message stops the
+   * session, since the same step would fail again, until an upgrade brings
+   * fixed code.
    */
-  async #stepFailed(live: Live, message: Message, error: Json): Promise<Answer> {
-    if (message.type !== 'input' && message.type !== 'config') {
-      const fault = `a ${message.type} message's step failed: ${JSON.stringify(error)}`;
-      await this.#store.setFault(live.id, fault);
+  async #unchanged(
+    live: Live,
+    message: Message,
+    now: number,
+    answer: Answer,
+    extra: { request?: RequestRecord },
+  ): Promise<Answer> {
+    const fault =
+      'failed' in answer && message.type !== 'input' && message.type !== 'config'
+        ? `a ${message.type} message's step failed: ${JSON.stringify(answer.failed)}`
+        : undefined;
+    const request =
+      'rejected' in answer && extra.request !== undefined
+        ? { ...extra.request, answer }
+        : undefined;
+    if (live.nextEntry === null) {
+      if (request !== undefined) await this.#store.putRequest(live.id, request);
+      if (fault !== undefined) await this.#store.setFault(live.id, fault);
+    } else {
+      const entry = this.#stepEntry(live, now, message, answerOf(answer), null);
+      await this.#store.record(live.id, entry, {
+        ...(request === undefined ? {} : { request }),
+        ...(fault === undefined ? {} : { fault }),
+      });
+      live.nextEntry += 1;
+    }
+    if (fault !== undefined) {
       live.fault = fault;
       this.#queued.delete(live.id);
       this.#notifyStatus(live.id);
     }
-    return { failed: error };
+    return answer;
+  }
+
+  /** The journal entry for a message delivered to step. */
+  #stepEntry(
+    live: Live,
+    now: number,
+    message: Message,
+    answer: JournalAnswer,
+    left: string | null,
+  ): JournalEntry {
+    return {
+      n: live.nextEntry ?? 0,
+      type: 'step',
+      version: live.code.ref.version,
+      now,
+      message: frozenCopy(message),
+      answer,
+      ...(left === null ? {} : { digest: left }),
+    };
   }
 
   async #upgrade(live: Live, version: string): Promise<Answer> {
@@ -944,7 +1174,20 @@ export class LocalRunner {
       started: prepared.started,
       finished: prepared.finished,
       aborted: prepared.aborted,
+      ...(live.nextEntry === null
+        ? {}
+        : {
+            journal: {
+              n: live.nextEntry,
+              type: 'upgrade',
+              version: code.ref.version,
+              from,
+              now,
+              digest: journalDigest(prepared.snapshot, prepared.config, []),
+            },
+          }),
     });
+    if (live.nextEntry !== null) live.nextEntry += 1;
     live.fault = null;
     const viewBefore = JSON.stringify(live.view);
     this.#apply(live, prepared, null);
@@ -1256,7 +1499,12 @@ export class LocalRunner {
    * store are what the last step declared, from the same code, so they are
    * taken as they are.
    */
-  async #recover(live: Live): Promise<void> {
+  /**
+   * Starts a loaded session's effects again and queues its inbox. After a
+   * crash, a reissue effect runs at its next attempt; in a new fork,
+   * `attempts: 'first'` keeps it at its first.
+   */
+  async #recover(live: Live, attempts: 'next' | 'first' = 'next'): Promise<void> {
     const inbox = await this.#store.inbox(live.id);
     const queued = this.#queuedOf(live.id);
     for (const item of inbox) {
@@ -1275,6 +1523,8 @@ export class LocalRunner {
         // Recovery handles effects one at a time, in the order they started.
         // oxlint-disable-next-line no-await-in-loop
         await this.#report(live.id, key, { interrupted: true });
+      } else if (attempts === 'first') {
+        this.#start(live.id, live.code, effect);
       } else if (effect.attempt + 1 > (live.code.kinds[kind]?.maxAttempts ?? this.#maxAttempts)) {
         // oxlint-disable-next-line no-await-in-loop
         await this.#report(live.id, key, {
@@ -1352,6 +1602,7 @@ export class LocalRunner {
       effects: new Map(record.running.map((effect) => [effect.request.key, deepFreeze(effect)])),
       view: null,
       usedAt: Date.now(),
+      nextEntry: record.nextEntry,
     };
     const state = this.#state(live.snapshot, windowStart, live.nextSeq, live.entries, live.config);
     live.view =
@@ -1561,4 +1812,10 @@ function isAgent(value: unknown): value is Agent<JsonObject, JsonObject> {
     typeof Reflect.get(value, 'init') === 'function' &&
     typeof Reflect.get(value, 'step') === 'function'
   );
+}
+
+/** How step answered, as a journal records it. */
+function answerOf(answer: Answer): JournalAnswer {
+  if ('accepted' in answer) return 'accepted';
+  return 'rejected' in answer ? 'rejected' : 'failed';
 }

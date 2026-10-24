@@ -94,6 +94,17 @@ again with the next attempt (or fail `attempts_exhausted`), once effects
 that were running are reported `interrupted`, and timers are scheduled
 again. A host that crashes is the same, for its own effects only.
 
+## Journal and forks
+
+Every session keeps a journal of what it received, saved with each step:
+`journal(id)` reads it a page at a time, and `replay` from
+`@acentric/testing` replays it. `fork(id, { at, id })` forks a session at a
+journal entry, the newest by default: the new session has the state the
+original had then, rebuilt by replaying the journal and checked against its
+digests. Effects that had finished stay finished; effects that were running
+start again at attempt 1, and once effects are reported `interrupted`.
+Sessions created before journals keep none, and cannot be forked.
+
 ## Built-in kinds
 
 | Kind     | Args             | Result | Does                                    |

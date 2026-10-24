@@ -10,7 +10,9 @@ import type {
   ErrorCode,
   SessionInfo,
   SessionListing,
+  JournalPageResult,
   LogPageResult,
+  ReplayResult,
   RpcMessage,
   RunnerMethods,
   Status,
@@ -169,6 +171,24 @@ export class RunnerClient {
   /** A page of the log. */
   log(id: string, query: LogQuery = {}): Promise<LogPageResult> {
     return this.#call('sessions/log', { id, ...query });
+  }
+
+  /** A page of what the session received, for replaying it. */
+  journal(
+    id: string,
+    query: { after?: number; limit?: number; cursor?: string } = {},
+  ): Promise<JournalPageResult> {
+    return this.#call('sessions/journal', { id, ...query });
+  }
+
+  /** Replays a session's whole journal on the code that ran it, and reports where it differs. */
+  replay(id: string): Promise<ReplayResult> {
+    return this.#call('sessions/replay', { id });
+  }
+
+  /** Forks a session at journal entry `at`, the newest by default, into a new session. */
+  fork(id: string, options: { at?: number; as?: string } = {}): Promise<Answer & { id?: string }> {
+    return this.#call('sessions/fork', { id, ...options });
   }
 
   delete(id: string): Promise<void> {

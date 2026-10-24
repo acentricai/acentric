@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@acentric/protocol": "workspace:*",
+    "@acentric/testing": "workspace:*",
     "@acentric/types": "workspace:*",
     "ws": "^8.22.0"
   },
