@@ -2,6 +2,16 @@
   "name": "@acentric/cli",
   "version": "0.1.0",
   "description": "The acentric command: build agents into bundles, start a runner with them, and inspect and drive it.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.acentric.dev",
+  "bugs": {
+    "url": "https://github.com/acentricai/acentric/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acentricai/acentric.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "sideEffects": false,
   "bin": {
@@ -24,6 +34,9 @@
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean"
+  },
+  "engines": {
+    "node": ">=22.13"
   },
   "publishConfig": {
     "access": "public"
