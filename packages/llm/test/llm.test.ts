@@ -1,5 +1,7 @@
 // createLlm: where a call goes, from the handler's secrets, and what happens
-// on the way: the gateway, a direct call, failures, cancelling.
+// on the way: a direct call, the gateway, failures, cancelling.
+
+import { readFileSync } from 'node:fs';
 
 import type { Agent, Handlers, JsonObject } from '@acentric/types';
 import { createMemoryRunner } from '@acentric/runner-memory';
@@ -9,11 +11,13 @@ import {
   callProvider,
   createLlm,
   GATEWAY_ROUTE,
+  LLM_VERSION,
   LlmError,
   llmFailure,
   llmSecrets,
   outputText,
   readCredentials,
+  VERSION_HEADER,
 } from '../src/client.js';
 import type { GatewayRequest, LlmRequest, LlmResponse } from '../src/client.js';
 import { anthropicBody, fakeFetch, responsesBody, secrets } from './fake.js';
@@ -60,22 +64,58 @@ describe('createLlm', () => {
     ]);
   });
 
-  it('calls the gateway with its token when the secrets name one, and no credentials of its own', async () => {
+  it('calls the gateway with its token and the client version when the secrets name one', async () => {
     const { fetch, sent } = fakeFetch(() => ({ body: { provider: 'anthropic', message: {} } }));
     await createLlm({ secrets: secrets(gatewaySecrets) }, { fetch }).complete(request);
     expect(sent[0]?.url).toBe(`https://llm.example.test${GATEWAY_ROUTE}`);
     expect(sent[0]?.headers.get('authorization')).toBe('Bearer tok_1');
-    expect(sent[0]?.body).not.toHaveProperty('credentials');
+    expect(sent[0]?.headers.get(VERSION_HEADER)).toBe(LLM_VERSION);
+    expect(sent[0]?.body).not.toHaveProperty('effect');
     expect(sent[0]?.body['messages']).toHaveLength(1);
   });
 
-  it("sends the provider's key to the gateway when both are set", async () => {
-    const { fetch, sent } = fakeFetch(() => ({ body: { provider: 'anthropic', message: {} } }));
-    await createLlm(
+  it('sends the version in package.json', () => {
+    const url = new URL('../package.json', import.meta.url);
+    const { version }: { version: string } = JSON.parse(readFileSync(url, 'utf8'));
+    expect(LLM_VERSION).toBe(version);
+  });
+
+  it('calls a provider with its own key even when the secrets name a gateway, and the gateway for the others', async () => {
+    const { fetch, sent } = fakeFetch((call) =>
+      call.url.startsWith('https://api.anthropic.com')
+        ? { body: anthropicBody([]) }
+        : { body: { provider: 'openai', message: {} } },
+    );
+    const llm = createLlm(
       { secrets: secrets({ ...gatewaySecrets, ANTHROPIC_API_KEY: 'sk-ant' }) },
       { fetch },
-    ).complete(request);
-    expect(sent[0]?.body['credentials']).toEqual({ apiKey: 'sk-ant' });
+    );
+    await llm.complete(request);
+    await llm.complete({ provider: 'openai', model: 'gpt-6.1-sol', messages: [] });
+    expect(sent.map((call) => call.url)).toEqual([
+      'https://api.anthropic.com/v1/messages',
+      `https://llm.example.test${GATEWAY_ROUTE}`,
+    ]);
+    expect(sent[0]?.headers.get('x-api-key')).toBe('sk-ant');
+    expect(sent[1]?.headers.get('authorization')).toBe('Bearer tok_1');
+    expect(sent[1]?.body).not.toHaveProperty('credentials');
+  });
+
+  it('sends the gateway the effect the call is made for, and never a provider', async () => {
+    const { fetch, sent } = fakeFetch((call) =>
+      call.url.startsWith('https://api.anthropic.com')
+        ? { body: anthropicBody([]) }
+        : { body: { provider: 'openai', message: {} } },
+    );
+    const effect = { key: 'llm:1', kind: 'llm', attempt: 2 };
+    const llm = createLlm(
+      { secrets: secrets({ ...gatewaySecrets, ANTHROPIC_API_KEY: 'sk-ant' }), ...effect },
+      { fetch },
+    );
+    await llm.complete({ provider: 'openai', model: 'gpt-6.1-sol', messages: [] });
+    await llm.complete(request);
+    expect(sent[0]?.body['effect']).toEqual(effect);
+    expect(sent[1]?.body).not.toHaveProperty('effect');
   });
 
   it('lets options choose: given credentials, another gateway, or none', async () => {
@@ -92,7 +132,7 @@ describe('createLlm', () => {
     }).complete(request);
     await createLlm(context, {
       fetch,
-      gateway: false,
+      gateway: { url: 'http://localhost:8787', token: 't' },
       credentials: { anthropic: { apiKey: 'other' } },
     }).complete(request);
     expect(sent.map((call) => call.url)).toEqual([
@@ -163,24 +203,36 @@ describe('createLlm', () => {
   });
 });
 
+/**
+ * A gateway as acentric-cloud would run it: read the body, keep the effect
+ * to show the call under, call the provider with its own key.
+ */
+function fakeGateway(provider: typeof fetch): {
+  fetch: typeof fetch;
+  effects: (GatewayRequest['effect'] | undefined)[];
+} {
+  const effects: (GatewayRequest['effect'] | undefined)[] = [];
+  const { fetch } = fakeFetch(async (call) => {
+    // What the client sent the gateway.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const { effect, ...asked } = call.body as GatewayRequest;
+    effects.push(effect);
+    const credentials = readCredentials(asked.provider, { apiKey: 'sk-ours' });
+    const response: LlmResponse = await callProvider(asked, credentials, { fetch: provider });
+    return { body: response };
+  });
+  return { fetch, effects };
+}
+
 describe('a gateway built on callProvider', () => {
-  it('answers what the provider answered, with the caller’s or its own credentials', async () => {
+  it('answers what the provider answered, called with its own key', async () => {
     const provider = fakeFetch(() => ({ body: responsesBody([]) }));
-    // A gateway as acentric-cloud would run it: read the body, call the provider.
-    const gateway = fakeFetch(async (call) => {
-      // What the client sent the gateway.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-      const body = call.body as GatewayRequest;
-      const credentials = readCredentials(body.provider, body.credentials ?? { apiKey: 'sk-ours' });
-      const response: LlmResponse = await callProvider(body, credentials, {
-        fetch: provider.fetch,
-      });
-      return { body: response };
-    });
+    const gateway = fakeGateway(provider.fetch);
     const llm = createLlm({ secrets: secrets(gatewaySecrets) }, { fetch: gateway.fetch });
     const response = await llm.complete({ provider: 'openai', model: 'gpt-6.1-sol', messages: [] });
     expect(response).toMatchObject({ provider: 'openai', id: 'resp_1', stopReason: 'stop' });
     expect(provider.sent[0]?.headers.get('authorization')).toBe('Bearer sk-ours');
+    expect(provider.sent[0]?.body).not.toHaveProperty('effect');
   });
 
   it('refuses credentials that are not a key', () => {
@@ -229,8 +281,28 @@ describe('in a handler', () => {
     const other = keyless.create(keyless.load(agent, handlers), {}).id;
     if (other === undefined) throw new Error('not created');
     expect(await settled(() => keyless.snapshot(other))).toEqual({ reply: null, failure: 'auth' });
+
+    // Through the gateway, which shows the call under the effect the runner ran.
+    const gateway = fakeGateway(fetch);
+    const viaGateway = createMemoryRunner({ secrets: llmSecrets(gatewaySecrets) });
+    const third = viaGateway.create(
+      viaGateway.load(agent, {
+        llm: {
+          mode: 'reissue',
+          run: (ctx) => createLlm(ctx, { fetch: gateway.fetch }).complete(request),
+        },
+      }),
+      {},
+    ).id;
+    if (third === undefined) throw new Error('not created');
+    expect(await settled(() => viaGateway.snapshot(third))).toEqual({
+      reply: 'Hello',
+      failure: null,
+    });
+    expect(gateway.effects).toEqual([{ key: 'llm:1', kind: 'llm', attempt: 1 }]);
     runner.close();
     keyless.close();
+    viaGateway.close();
   });
 });
 
