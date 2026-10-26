@@ -151,6 +151,22 @@ describe('acentric build', () => {
     expect(built?.warnings.join('\n')).toMatch(/Math\.random/);
   });
 
+  it('builds handlers for the fetch environment without Node', async () => {
+    const fetchOnly =
+      "export default { clock: { mode: 'reissue', run: async () => ({ at: 1 }) } };";
+    const dir = await project(files(AGENT, fetchOnly, ", environment: 'fetch'"));
+    await buildProject(await loadProject(dir), { typecheck: false });
+    const handlers = await readFile(
+      join(dir, '.acentric', 'build', 'notes', 'handlers.js'),
+      'utf8',
+    );
+    expect(handlers).not.toMatch(/^\s*import\s/m);
+    expect(handlers).not.toContain('node:module');
+    expect(await buildError(files(AGENT, HANDLERS, ", environment: 'fetch'"))).toMatch(
+      /may not import Node modules/,
+    );
+  });
+
   it('checks that every kind the agent lists is handled or provided', async () => {
     const mail = AGENT.replace("kinds: ['clock']", "kinds: ['clock', 'mail']");
     expect(await buildError(files(mail))).toMatch(/uses mail, which nothing handles or provides/);

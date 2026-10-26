@@ -36,7 +36,9 @@ export default defineConfig({
 
 Each agent's `agent` module default-exports its pure half and its
 `handlers` module default-exports its handlers. An agent's version defaults
-to the project's `package.json` version.
+to the project's `package.json` version. Its `environment` says what its
+handlers may use: `node`, the default, or `fetch`, for runners whose handlers
+have only the web platform, such as acentric-cloud.
 
 ## dev
 
@@ -72,8 +74,9 @@ For each agent, writes `agent.js`, `handlers.js` and `manifest.json` to
   import Node modules or use globals that do I/O, such as `fetch`, timers or
   `process`. Using `Date.now` or `Math.random` gives a warning: steps should
   use the `now` they are given.
-- `handlers.js` bundles the handlers and their npm dependencies; Node
-  built-ins are allowed.
+- `handlers.js` bundles the handlers and their npm dependencies. In the
+  `node` environment Node built-ins are allowed; in `fetch` they are not, and
+  the bundle imports nothing, as `agent.js` does.
 - `manifest.json` has the name, version, the hash the runner will give the
   bundle, the kinds the agent lists, and the kinds the handlers cover. A
   listed kind that nothing handles or provides fails the build.

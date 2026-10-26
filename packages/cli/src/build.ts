@@ -127,7 +127,11 @@ export async function buildAgent(
       `${label}'s pure half uses ${name.replace('_', '.')}: steps should use the \`now\` they are given`,
     );
   }
-  const handlersSource = await bundle(agent.handlers, 'node', `${label}'s handlers`);
+  const handlersSource = await bundle(
+    agent.handlers,
+    agent.environment === 'fetch' ? 'browser' : 'node',
+    `${label}'s handlers`,
+  );
 
   const dir = join(project.outDir, agent.name);
   await mkdir(dir, { recursive: true });
@@ -159,9 +163,11 @@ export async function buildAgent(
   return { manifest, dir, warnings };
 }
 
+// 'neutral' is the pure half, 'browser' handlers for a fetch-only runner and
+// 'node' handlers that may use Node built-ins. Only 'node' output may import.
 async function bundle(
   entry: string,
-  platform: 'neutral' | 'node',
+  platform: 'neutral' | 'browser' | 'node',
   what: string,
   define?: Record<string, string>,
 ): Promise<string> {
@@ -189,7 +195,7 @@ async function bundle(
     });
     const output = result.outputFiles[0];
     if (output === undefined) throw new BuildError(`esbuild produced nothing for ${what}`);
-    if (platform === 'neutral' && /^\s*import\s/m.test(output.text)) {
+    if (platform !== 'node' && /^\s*import\s/m.test(output.text)) {
       throw new BuildError(
         `${what} still imports a module after bundling; it must be self-contained`,
       );
@@ -203,10 +209,14 @@ async function bundle(
         return `${where}${problem.text}`;
       });
       const node =
-        platform === 'neutral' &&
+        platform !== 'node' &&
         problems.some((problem) => /Could not resolve "node:|built-in/.test(problem));
+      const hint =
+        platform === 'neutral'
+          ? 'The pure half may not import Node modules: that I/O belongs in handlers.'
+          : "Handlers built for the 'fetch' environment may not import Node modules.";
       throw new BuildError(
-        `could not bundle ${what}:\n  ${problems.join('\n  ')}${node ? '\n  The pure half may not import Node modules: that I/O belongs in handlers.' : ''}`,
+        `could not bundle ${what}:\n  ${problems.join('\n  ')}${node ? `\n  ${hint}` : ''}`,
       );
     }
     throw error;
