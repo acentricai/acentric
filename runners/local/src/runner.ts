@@ -43,7 +43,7 @@ import { forReplay, journalDigest, replay } from '@acentric/replay';
 
 import { HostPool } from './host/pool.js';
 import type { HostOutcome } from './host/pool.js';
-import { deepFreeze, frozenCopy, isJson, requireJson, thrownToJson } from './json.js';
+import { deepFreeze, frozenCopy, isJson, isJsonObject, requireJson, thrownToJson } from './json.js';
 import { StoreError } from './store/types.js';
 import type {
   AgentRef,
@@ -1217,7 +1217,7 @@ export class LocalRunner {
     now: number,
   ): Promise<Prepared> {
     const checked = requireJson(snapshotValue, 'the snapshot');
-    if (typeof checked !== 'object' || checked === null || Array.isArray(checked)) {
+    if (!isJsonObject(checked)) {
       throw new TypeError('the snapshot is not an object');
     }
     const snapshot = frozenCopy(checked);

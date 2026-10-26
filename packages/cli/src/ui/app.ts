@@ -470,11 +470,11 @@ function openCreate(): void {
 /** A one-line summary of an entry's body: its text if it has any, else its Json. */
 function summarize(body: Json): string {
   if (typeof body === 'string') return body;
-  if (typeof body === 'object' && body !== null && !Array.isArray(body)) {
+  if (isObject(body)) {
     const content = body['content'];
     if (Array.isArray(content)) {
       const parts = content.flatMap((block) => {
-        if (typeof block !== 'object' || block === null || Array.isArray(block)) return [];
+        if (!isObject(block)) return [];
         if (block['type'] === 'text' && typeof block['text'] === 'string') return [block['text']];
         if (block['type'] === 'toolCall' && typeof block['name'] === 'string') {
           return [`→ ${block['name']}(${JSON.stringify(block['arguments'] ?? {})})`];

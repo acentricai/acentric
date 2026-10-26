@@ -1,7 +1,7 @@
 // Partial matching: an expected object matches when each field it gives
 // matches; arrays and other values must match exactly.
 
-import type { Json } from '@acentric/types';
+import type { Json, JsonObject } from '@acentric/types';
 
 /** Why `actual` does not match `expected`, or null if it does. */
 export function mismatch(expected: Json, actual: Json | undefined, path = '$'): string | null {
@@ -17,7 +17,7 @@ export function mismatch(expected: Json, actual: Json | undefined, path = '$'): 
     return null;
   }
   if (typeof expected === 'object' && expected !== null) {
-    if (typeof actual !== 'object' || actual === null || Array.isArray(actual)) {
+    if (!isJsonObject(actual)) {
       return `${path}: expected an object, got ${show(actual)}`;
     }
     for (const [key, item] of Object.entries(expected)) {
@@ -31,4 +31,9 @@ export function mismatch(expected: Json, actual: Json | undefined, path = '$'): 
 
 function show(value: Json | undefined): string {
   return value === undefined ? 'nothing' : JSON.stringify(value);
+}
+
+/** Whether a value is a Json object; `Array.isArray` does not narrow a readonly JsonArray out. */
+function isJsonObject(value: Json | undefined): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

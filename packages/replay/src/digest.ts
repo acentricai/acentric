@@ -3,7 +3,7 @@
 
 import { createHash } from 'node:crypto';
 
-import type { Json, JsonObject } from '@acentric/types';
+import type { Json, JsonArray, JsonObject } from '@acentric/types';
 
 /**
  * SHA-256, as lowercase hex, of the RFC 8785 canonical JSON of
@@ -25,7 +25,12 @@ export function journalDigest(
  */
 export function canonicalJson(value: Json): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (isJsonArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   const keys = Object.keys(value).toSorted();
   return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key] ?? null)}`).join(',')}}`;
+}
+
+/** `Array.isArray` as a guard that narrows a readonly JsonArray out of Json. */
+function isJsonArray(value: Json): value is JsonArray {
+  return Array.isArray(value);
 }

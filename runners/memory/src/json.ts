@@ -1,6 +1,6 @@
 // Checks on values crossing between the runner and an agent.
 
-import type { Json } from '@acentric/types';
+import type { Json, JsonObject } from '@acentric/types';
 
 /** Whether a value is plain Json: no undefined, NaN, Infinity, functions or class instances. */
 export function isJson(value: unknown): value is Json {
@@ -59,3 +59,10 @@ function ownJson(value: unknown): Json | undefined {
   }
 }
 
+/**
+ * Whether a Json value is an object. `Array.isArray` cannot say so: it does
+ * not narrow a readonly JsonArray out of Json.
+ */
+export function isJsonObject(value: Json): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
