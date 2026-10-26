@@ -20,8 +20,10 @@ dropped.
 
 ## Runners
 
-- **Thrown values to Json.** How a runner turns what a handler threw into
-  `Failure.error`, such as `Error` to `{ name, message }`.
+- **Thrown values to Json.** A thrown value's `toJSON()` is used when it gives
+  Json (RUNNERS.md §8). Without one, how a runner turns what a handler threw
+  into `Failure.error`, such as `Error` to `{ name, message }`, is still its
+  own choice.
 - **Non-Json numbers.** Rejecting `NaN` and `Infinity` in outputs.
 - **Runtime freezing.** Deep-freezing the state and message given to a step.
 - **Send and wait.** A way for a caller to send an input and wait for the

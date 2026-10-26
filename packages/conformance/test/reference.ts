@@ -6,7 +6,7 @@
 import { handlerContext, simulate } from '@acentric/testing';
 import type { Simulation } from '@acentric/testing';
 import type { Delivery } from '@acentric/testing';
-import type { EffectRequest, HandlerDef, JsonObject, Kinds, Outcome } from '@acentric/types';
+import type { EffectRequest, HandlerDef, Json, JsonObject, Kinds, Outcome } from '@acentric/types';
 
 import { createGateHook, isJson } from '../src/index.js';
 import type { Adapter, Answer } from '../src/index.js';
@@ -74,9 +74,8 @@ export function referenceAdapter(): Adapter {
           isJson(value) ? { ok: value } : { failed: { code: 'invalid_result', error: null } },
         ),
       (error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
         finish(request.key, {
-          failed: { code: flight.aborted ? 'aborted' : 'threw', error: message },
+          failed: { code: flight.aborted ? 'aborted' : 'threw', error: thrownToJson(error) },
         });
       },
     );
@@ -160,4 +159,16 @@ export function referenceAdapter(): Adapter {
       return Promise.resolve();
     },
   };
+}
+
+/** What a handler threw, as Json: its `toJSON()` when that gives Json, else its message. */
+function thrownToJson(error: unknown): Json {
+  if (typeof error === 'object' && error !== null) {
+    const toJSON: unknown = Reflect.get(error, 'toJSON');
+    if (typeof toJSON === 'function') {
+      const json: unknown = Reflect.apply(toJSON, error, []);
+      if (isJson(json)) return json;
+    }
+  }
+  return error instanceof Error ? error.message : String(error);
 }

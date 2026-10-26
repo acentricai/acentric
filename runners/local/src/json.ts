@@ -35,8 +35,27 @@ export function frozenCopy<T extends Json>(value: T): T {
   return deepFreeze(structuredClone(value));
 }
 
-/** What a thrown value says, as Json. */
+/**
+ * What a thrown value says, as Json: what its `toJSON()` returns when that is
+ * Json, as RUNNERS.md §8 requires, and otherwise its name and message.
+ */
 export function thrownToJson(error: unknown): Json {
+  const own = ownJson(error);
+  if (own !== undefined) return own;
   if (error instanceof Error) return { name: error.name, message: error.message };
   return isJson(error) ? error : `a thrown ${typeof error} that is not Json`;
 }
+
+/** What a value's `toJSON()` returns, if it has one that returns Json. */
+function ownJson(value: unknown): Json | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const toJSON: unknown = Reflect.get(value, 'toJSON');
+  if (typeof toJSON !== 'function') return undefined;
+  try {
+    const json: unknown = Reflect.apply(toJSON, value, []);
+    return isJson(json) ? json : undefined;
+  } catch {
+    return undefined;
+  }
+}
+

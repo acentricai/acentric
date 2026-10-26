@@ -215,8 +215,12 @@ message:
 | `once`, and was cut off by a crash                   | `{ interrupted: true }`                       |
 | `reissue`, and was cut off by crashes too many times | failed, `attempts_exhausted`                  |
 
-A failure's `error` is JSON. How a runner turns a thrown value into JSON is
-its choice; an `Error` is typically `{ name, message }`.
+A failure's `error` is JSON. If what the handler threw has a `toJSON()`
+method that returns JSON, the runner MUST use what it returns as `error`, so a
+handler, or a library it uses, decides what `step` learns about its errors.
+Otherwise, such as when `toJSON()` throws or returns something that is not
+JSON, how a runner turns a thrown value into JSON is its choice; an `Error` is
+typically `{ name, message }`.
 
 **Modes.**
 

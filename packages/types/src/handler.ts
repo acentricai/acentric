@@ -85,7 +85,8 @@ export type HandlerContext<A extends Json = Json> = {
  * The runner turns what `run` does into the outcome `step` receives:
  *   - returns a Json value: { ok: value }
  *   - throws: { failed: { code: 'threw', error } }, or code 'aborted' when
- *     it throws after the agent asked it to stop
+ *     it throws after the agent asked it to stop. `error` is what the thrown
+ *     value's `toJSON()` returns, when it has one that returns Json
  *   - returns something that is not Json: { failed: { code: 'invalid_result', error } }
  *   - returns a result larger than the runner allows: { failed: { code: 'limit_exceeded', error } }
  */
