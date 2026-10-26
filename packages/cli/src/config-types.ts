@@ -12,7 +12,17 @@ export type AgentConfig = {
   version?: string;
   /** Kinds the application that embeds the runner provides, with their settings. */
   provides?: Record<string, { mode: Mode; timeoutMs?: number; maxAttempts?: number }>;
+  /**
+   * What the handlers may use where they run. 'node', the default, allows
+   * Node built-ins. 'fetch' builds them for runners whose handlers have only
+   * the web platform, such as fetch and timers: no Node built-ins, and the
+   * bundle imports nothing.
+   */
+  environment?: HandlerEnvironment;
 };
+
+/** What a runner's handlers may use, which decides how they are bundled. */
+export type HandlerEnvironment = 'node' | 'fetch';
 
 export type AcentricConfig = {
   /** The project's agents, by name. */

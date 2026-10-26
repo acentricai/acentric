@@ -22,7 +22,7 @@ const NAMES = [
 /** A project's config with every default filled in, and paths made absolute. */
 export type Project = {
   dir: string;
-  agents: (Required<Pick<AgentConfig, 'agent' | 'handlers' | 'version'>> & {
+  agents: (Required<Pick<AgentConfig, 'agent' | 'handlers' | 'version' | 'environment'>> & {
     name: string;
     provides: NonNullable<AgentConfig['provides']>;
   })[];
@@ -56,6 +56,7 @@ export async function loadProject(dir: string): Promise<Project> {
       handlers: resolve(root, agent.handlers),
       version: agentVersion,
       provides: agent.provides ?? {},
+      environment: agent.environment ?? 'node',
     };
   });
   if (agents.length === 0) throw new ConfigError('the config names no agents');
