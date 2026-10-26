@@ -31,14 +31,11 @@ dropped.
 - **Purity checks.** Optionally checking that the pure half does no I/O.
 - **`@timer`.** A timer kind, stored natively rather than held by a sleeping
   handler, taking an absolute time.
-- **Suspend, unsuspend, terminate.** Operator controls. Undecided: whether
-  suspend cancels running handlers or lets them finish, whether inputs that
-  arrive while suspended are queued or refused. A suspend should not count
-  toward a handler's attempts.
-- **Upgrade policy.** Pinning sessions to a version or upgrading them, and
-  what happens to effects running during an upgrade.
-- **Faulted sessions.** What happens after a step fails deterministically,
-  retrying infrastructure errors, and how an operator recovers.
+- **Faulted sessions.** Retrying infrastructure errors, and how an operator
+  recovers a faulted session other than by upgrading it.
+- **Operator controls in the protocol.** RUNNERS.md describes suspend, resume
+  and close; the local runner's protocol and the conformance scenarios do not
+  cover them yet.
 - **Limits and defaults.** Effect counts, sizes, the log window, timeouts and
   attempts.
 - **Log storage.** Paging, and whether old entries are ever deleted.

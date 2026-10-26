@@ -259,9 +259,29 @@ Within what it keeps, a crash MUST look the same as on every other runner:
 - a `reissue` effect that was running runs again, with `attempt` one higher;
 - a `once` effect that was running is reported `interrupted`.
 
-A runner MAY offer operator controls such as suspending a session. If a
-suspend stops running handlers, resuming MUST look like recovering from a
-crash.
+**Restarts that are not crashes.** A runner can stop a run on purpose: by
+suspending a session, by upgrading it, or by rebuilding a sandbox that other
+runs shared. For the runs it stops, each MUST look to the agent like a crash:
+a `reissue` effect runs again with `attempt` one higher, and a `once` effect
+is reported `interrupted`. A restart the runner chose MUST NOT count toward a
+handler's `maxAttempts`, so it is never the reason an effect fails with
+`attempts_exhausted`.
+
+**Operator controls.** A runner MAY offer controls the agent does not see:
+
+- **Suspend** stops a session. If it stops running handlers, their signals
+  fire and their results are discarded. Timers do not fire while a session is
+  suspended. Inputs and config changes that arrive meanwhile are queued, not
+  refused.
+- **Resume** restarts a suspended session as after a crash: effects are
+  matched again with `effects(state)`, stopped runs restart as above, and
+  overdue timers fire.
+- **Close** ends a session for good: every effect is cancelled and no message
+  is delivered.
+
+None of these is a message. An agent that wants to stop its own work, such as
+when a user presses stop, defines an input for it and drops or aborts the
+effects in question.
 
 ## 11. Upgrades
 
@@ -275,9 +295,19 @@ A runner MAY upgrade sessions to a new version of their agent. If it does:
   as the new version's first message.
 
 Whether sessions are pinned to their version or upgraded, and what happens
-to effects running during an upgrade, are the runner's choice. If results
-of effects the old version started are delivered, they go to the new
-version's `step`.
+to effects running during an upgrade, are the runner's choice:
+
+- A runner that keeps them running delivers their results to the new
+  version's `step`.
+- A runner that cannot keep the old version's handlers running stops them
+  as described in [Restarts that are not crashes](#10-durability-and-recovery):
+  after `migrate`, effects are matched on the migrated state, and every key it
+  still declares runs again on the new version's handler, or is reported
+  `interrupted` if it is `once`.
+
+An upgrade MAY clear a session that a failed step left faulted. The message
+whose step failed is then delivered again, to the new version, after
+`migrated`.
 
 ## 12. Journal and forks
 
