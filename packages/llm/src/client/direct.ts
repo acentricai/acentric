@@ -133,8 +133,8 @@ function read<T>(answer: JsonAnswer, parse: () => T): T {
 }
 
 /**
- * Credentials checked before they are sent, since a gateway takes them from
- * its callers. A message names the field at fault, never its value.
+ * Credentials checked before they are sent, such as the keys a gateway reads
+ * from its configuration. A message names the field at fault, never its value.
  */
 export function readCredentials<P extends Provider>(
   provider: P,

@@ -1,13 +1,15 @@
-// One call through the acentric gateway, which acentric-cloud runs. The
-// request goes as it is, with the token in a header and any provider
-// credentials the caller has in the body; the response comes back as it is.
+// One call through the acentric gateway, which acentric-cloud runs with
+// provider keys of its own. The request goes as it is, with the token and the
+// client's version in headers and the effect that made the call in the body;
+// the response comes back as it is.
 
 import { isLlmFailure, LlmError } from '../failure.js';
 import type { LlmFailure } from '../failure.js';
 import { isObject } from '../json.js';
-import type { Credentials, Provider } from '../providers.js';
+import type { Provider } from '../providers.js';
 import type { LlmRequest } from '../request.js';
 import type { LlmResponse } from '../response.js';
+import { LLM_VERSION } from '../version.js';
 import type { CallOptions } from './direct.js';
 import { postJson, retryAfter } from './http.js';
 import type { HttpAnswer } from './http.js';
@@ -17,12 +19,27 @@ import { cut, invalidResponse } from './util.js';
 /** Where a gateway takes completions, under its URL. */
 export const GATEWAY_ROUTE = '/v1/complete';
 
+/** The header that carries the client's LLM_VERSION to the gateway. */
+export const VERSION_HEADER = 'acentric-llm-version';
+
 /**
- * The body of a call to the gateway: the request, and the caller's own
- * credentials for its provider, which the gateway uses instead of its own.
+ * The effect a call is made for, as its handler's context names it. A gateway
+ * shows each call under it, but it is the caller's word: never a credential,
+ * and never what a call is charged to.
+ */
+export type GatewayEffect = {
+  readonly key?: string;
+  readonly kind?: string;
+  readonly attempt?: number;
+};
+
+/**
+ * The body of a call to the gateway: the request, and the effect that made
+ * it. It carries no credentials, since the gateway calls providers with its
+ * own keys.
  */
 export type GatewayRequest<P extends Provider = Provider> = P extends Provider
-  ? LlmRequest<P> & { readonly credentials?: Credentials<P> }
+  ? LlmRequest<P> & { readonly effect?: GatewayEffect }
   : never;
 
 /** The body of a gateway's answer that is not 2xx. */
@@ -35,19 +52,23 @@ export type Gateway = {
   readonly token: string;
 };
 
+export type GatewayCallOptions = CallOptions & {
+  /** The effect the call is made for, sent for the gateway to show. */
+  readonly effect?: GatewayEffect;
+};
+
 export async function callGateway<P extends Provider>(
   request: LlmRequest<P>,
   gateway: Gateway,
-  credentials: Credentials<P> | undefined,
-  { signal, fetch }: CallOptions = {},
+  { signal, fetch, effect }: GatewayCallOptions = {},
 ): Promise<LlmResponse<P>> {
   const provider = request.provider;
   const answer = await postJson({
     provider,
     label: 'the acentric gateway',
     url: `${base(provider, gateway.url)}${GATEWAY_ROUTE}`,
-    headers: { authorization: `Bearer ${gateway.token}` },
-    body: credentials === undefined ? request : { ...request, credentials },
+    headers: { authorization: `Bearer ${gateway.token}`, [VERSION_HEADER]: LLM_VERSION },
+    body: effect === undefined ? request : { ...request, effect },
     ...(request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs }),
     ...(signal === undefined ? {} : { signal }),
     ...(fetch === undefined ? {} : { fetch }),

@@ -88,11 +88,19 @@ if ('ok' in message.outcome) {
   directly) and `options.fetch` override what the secrets say.
 
 For a gateway, `callProvider(request, credentials)` makes one call to the
-provider with credentials in hand, and `readCredentials` checks credentials a
-caller sent. `GatewayRequest`, `GatewayFailure` and `GATEWAY_ROUTE` are the
-gateway's wire format: the request as it is, with the caller's own
-credentials if any; the response as it is; and `{ error: LlmFailure }` on
-failure.
+provider with credentials in hand, and `readCredentials` checks credentials,
+such as keys read from configuration, before they are used. The gateway's
+wire format is `GATEWAY_ROUTE`, `GatewayRequest`, `VERSION_HEADER` and
+`GatewayFailure`:
+
+- The request goes as it is, with no credentials, since the gateway calls
+  providers with its own keys.
+- `effect` names the effect the call is made for: the `key`, `kind` and
+  `attempt` of the handler's context. A gateway shows calls under it, but it
+  is the caller's word, never a credential.
+- The client's `LLM_VERSION` goes in the `VERSION_HEADER` header, so a
+  gateway can refuse a client newer than its own copy.
+- The response comes back as it is, and `{ error: LlmFailure }` on failure.
 
 The client uses only `fetch` and the web platform, so it runs in handlers
 built for `node` and for `fetch`.
@@ -102,19 +110,20 @@ built for `node` and for `fetch`.
 The client reads everything from the handler's secrets, never from the
 environment, so the same code runs on every runner:
 
-1. With `ACENTRIC_LLM_URL` and `ACENTRIC_LLM_TOKEN` set, it calls the gateway
-   at that address with that token.
-2. Otherwise it calls the provider directly with its key: `ANTHROPIC_API_KEY`,
-   `OPENAI_API_KEY` or `FIREWORKS_API_KEY`.
-3. A provider key set alongside the gateway's travels as the call's
-   credentials, so the gateway uses it instead of its own.
+1. With a provider's key set, it calls that provider directly with it:
+   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `FIREWORKS_API_KEY`.
+2. Otherwise, with `ACENTRIC_LLM_URL` and `ACENTRIC_LLM_TOKEN` set, it calls
+   the gateway at that address with that token, and the gateway calls the
+   provider with keys of its own.
 
-Options passed to the client override all of these. A secret that is not set
-rejects with `SecretNotSet` on every runner ([RUNNERS.md](../../RUNNERS.md#8-handlers)),
-which is how the client tells which are set.
+So an agent can use its own account for one provider and the gateway for the
+others. Options passed to the client override all of these. A secret that is
+not set rejects with `SecretNotSet` on every runner
+([RUNNERS.md](../../RUNNERS.md#8-handlers)), which is how the client tells
+which are set.
 
 The names are exported as `PROVIDER_SECRETS` and `GATEWAY_SECRETS`, and
 `llmSecrets(env)` picks those that are set from an environment. `acentric dev`
 and `acentric start` pass them to handlers on their own, from the environment
 and `.env`; with the memory runner, pass `secrets: llmSecrets(process.env)`.
-acentric-cloud sets the gateway's two for every release.
+acentric-cloud sets the gateway's two for agents that use its gateway.

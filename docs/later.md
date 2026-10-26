@@ -55,3 +55,27 @@ dropped.
   rejected, and stating the runner's durability.
 - **Handler safety.** Child processes left behind by a crash, and guards such
   as allowlists, approval for `once` handlers, and sandboxes.
+
+## @acentric/llm
+
+- **Hosted tools in usage and cost.** The client reads token counts only. It
+  does not read hosted tool use: Anthropic's `usage.server_tool_use` (web
+  search and fetch requests) and code execution time, or the `*_call` output
+  items of OpenAI and Fireworks (web and file search, code interpreter, image
+  generation). So `usage.cost` for a call that uses them covers its tokens and
+  quietly leaves out the tools' own charges. `Usage` should count tool uses,
+  the catalog should price those with published prices, and `cost` should be
+  left out when a tool's price is not known, as it already is for tokens.
+  acentric-cloud's gateway charges calls at cost from this figure.
+- **OpenAI's 12-hour cache writes.** OpenAI added a 12-hour lifetime for
+  prompt caches (`prompt_cache_options.ttl`, GPT-5.6 and later), reported as
+  writing at 2.5 times the input price against 1.25 times for the 30-minute
+  default; reads are unchanged. Confirm against OpenAI's pricing page. The
+  client prices every OpenAI cache write at the catalog's one `cacheWrite`
+  price, so 12-hour writes are priced too low, and the `ttl` type names only
+  `'30m'`. The fix is the one Anthropic's hour-long writes have
+  (`cacheWrite1h`): a price for each lifetime and writes split by lifetime.
+  The request's `ttl` alone does not settle the split, since a breakpoint can
+  override it and a token is billed at the longest lifetime covering it; use
+  a breakdown in `usage` if OpenAI reports one, and otherwise leave `cost` out
+  when lifetimes are mixed.

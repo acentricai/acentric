@@ -2,11 +2,10 @@
 // names to pass the matching environment variables to handlers, so no
 // runner names a provider itself.
 //
-// The client calls the gateway when both gateway secrets are set, and a
-// provider directly with its key otherwise. A provider key set alongside the
-// gateway's travels as the call's credentials, so the gateway uses it instead
-// of its own. A secret that is not set rejects with SecretNotSet on every
-// runner (RUNNERS.md §8), which is how the client tells which are set.
+// The client calls a provider directly when its key is set, and otherwise
+// the gateway when both gateway secrets are set. A secret that is not set
+// rejects with SecretNotSet on every runner (RUNNERS.md §8), which is how the
+// client tells which are set.
 
 import type { Provider } from './providers.js';
 
@@ -17,7 +16,7 @@ export const PROVIDER_SECRETS = {
   fireworks: 'FIREWORKS_API_KEY',
 } as const satisfies { readonly [P in Provider]: string };
 
-/** The gateway's address and token, which acentric-cloud sets for every release. */
+/** The gateway's address and token, which acentric-cloud sets for agents that use its gateway. */
 export const GATEWAY_SECRETS = {
   url: 'ACENTRIC_LLM_URL',
   token: 'ACENTRIC_LLM_TOKEN',

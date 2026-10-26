@@ -1,11 +1,11 @@
-// The client a handler uses: it finds the gateway or the provider's key in
+// The client a handler uses: it finds the provider's key or the gateway in
 // the handler's secrets, never in the environment, so the same code runs on
 // every runner.
 //
-// With ACENTRIC_LLM_URL and ACENTRIC_LLM_TOKEN set, a call goes through the
-// gateway; otherwise straight to the provider with its key. A provider key
-// set alongside the gateway's goes with the call, so the gateway uses it
-// instead of its own. Options override all of this.
+// A call goes straight to its provider when that provider's key is set, so an
+// application with its own account uses it. Otherwise, with ACENTRIC_LLM_URL
+// and ACENTRIC_LLM_TOKEN set, it goes through the gateway, which calls the
+// provider with keys of its own. Options override all of this.
 
 import type { Secrets } from '@acentric/types';
 
@@ -17,21 +17,26 @@ import type { LlmResponse } from '../response.js';
 import { GATEWAY_SECRETS, PROVIDER_SECRETS } from '../secrets.js';
 import { callProvider } from './direct.js';
 import { callGateway } from './gateway.js';
-import type { Gateway } from './gateway.js';
+import type { Gateway, GatewayEffect } from './gateway.js';
 
 /** What the client needs of a handler's context. A HandlerContext is one. */
 export type LlmContext = {
   readonly secrets: Secrets;
   /** Stops every call, unless a call passes its own. */
   readonly signal?: AbortSignal;
+  /** The effect's key, kind and attempt, which the gateway shows each call under. */
+  readonly key?: string;
+  readonly kind?: string;
+  readonly attempt?: number;
 };
 
 export type LlmOptions = {
-  /** Credentials for a provider, used instead of its secret. */
+  /** Credentials for a provider, used instead of its secret or a gateway. */
   readonly credentials?: { readonly [P in Provider]?: Credentials<P> };
   /**
-   * A gateway to call instead of the one in the secrets, or `false` to call
-   * providers directly even when the secrets name one.
+   * A gateway to call instead of the provider's key or the gateway in the
+   * secrets, or `false` to call providers directly even when the secrets name
+   * one.
    */
   readonly gateway?: Gateway | false;
   /** A fetch to use instead of the global one, such as in tests. */
@@ -62,18 +67,16 @@ export function createLlm(context: LlmContext, options: LlmOptions = {}): LlmCli
         ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       };
       const sent = withoutCustom(request);
-      const gateway =
-        options.gateway === false
-          ? undefined
-          : (options.gateway ?? (await gatewayIn(context.secrets)));
-      const credentials = await credentialsFor(request.provider, context.secrets, options);
-      if (gateway !== undefined) return callGateway(sent, gateway, credentials, callOptions);
-      if (credentials !== undefined) return callProvider(sent, credentials, callOptions);
-      throw new LlmError(
-        `no credentials for ${request.provider}: set the secret ${PROVIDER_SECRETS[request.provider]}, ` +
-          `or ${GATEWAY_SECRETS.url} and ${GATEWAY_SECRETS.token} for the gateway`,
-        { kind: 'auth', provider: request.provider },
-      );
+      const route = await routeFor(request.provider, context.secrets, options);
+      if (route === undefined) {
+        throw new LlmError(
+          `no credentials for ${request.provider}: set the secret ${PROVIDER_SECRETS[request.provider]}, ` +
+            `or ${GATEWAY_SECRETS.url} and ${GATEWAY_SECRETS.token} for the gateway`,
+          { kind: 'auth', provider: request.provider },
+        );
+      }
+      if ('credentials' in route) return callProvider(sent, route.credentials, callOptions);
+      return callGateway(sent, route.gateway, { ...callOptions, ...effectOf(context) });
     },
   };
 }
@@ -99,17 +102,39 @@ async function gatewayIn(secrets: Secrets): Promise<Gateway | undefined> {
   return { url, token };
 }
 
-async function credentialsFor<P extends Provider>(
+/**
+ * Where a call goes: credentials or a gateway given as options, then the
+ * provider's key, then the gateway in the secrets. Undefined when there is
+ * none of these.
+ */
+async function routeFor<P extends Provider>(
   provider: P,
   secrets: Secrets,
   options: LlmOptions,
-): Promise<Credentials<P> | undefined> {
+): Promise<{ readonly credentials: Credentials<P> } | { readonly gateway: Gateway } | undefined> {
   const given: Credentials<P> | undefined = options.credentials?.[provider];
-  if (given !== undefined) return given;
+  if (given !== undefined) return { credentials: given };
+  if (options.gateway !== undefined && options.gateway !== false) {
+    return { gateway: options.gateway };
+  }
   const apiKey = await secret(secrets, PROVIDER_SECRETS[provider]);
-  // Every provider's credentials are an apiKey with optional extras.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return apiKey === undefined ? undefined : ({ apiKey } as Credentials<P>);
+  if (apiKey !== undefined) return { credentials: { apiKey } };
+  if (options.gateway === false) return undefined;
+  const gateway = await gatewayIn(secrets);
+  return gateway === undefined ? undefined : { gateway };
+}
+
+/** The effect the context names, for the gateway, when it names one. */
+function effectOf(context: LlmContext): { readonly effect?: GatewayEffect } {
+  const { key, kind, attempt } = context;
+  if (key === undefined && kind === undefined && attempt === undefined) return {};
+  return {
+    effect: {
+      ...(key === undefined ? {} : { key }),
+      ...(kind === undefined ? {} : { kind }),
+      ...(attempt === undefined ? {} : { attempt }),
+    },
+  };
 }
 
 /**
