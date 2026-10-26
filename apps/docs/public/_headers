@@ -1,4 +1,5 @@
-# Served by Cloudflare Pages beside every file. The docs load nothing from
+# Served by Cloudflare with every file: the docs are a Worker serving the
+# build as static assets (wrangler.jsonc). The docs load nothing from
 # elsewhere: scripts, styles and fonts are this origin's, and search runs in
 # the page. The exception is Cloudflare Web Analytics, which the zone injects:
 # its beacon script, and where it reports page views (cookieless).

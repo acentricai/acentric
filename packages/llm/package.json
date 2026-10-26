@@ -2,6 +2,16 @@
   "name": "@acentric/llm",
   "version": "0.1.0",
   "description": "Calls LLM providers from an agent's handlers, directly or through the acentric gateway, with readers for replies that an agent's pure half can use.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.acentric.dev",
+  "bugs": {
+    "url": "https://github.com/acentricai/acentric/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acentricai/acentric.git",
+    "directory": "packages/llm"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -21,6 +31,9 @@
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public"

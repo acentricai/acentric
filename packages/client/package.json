@@ -2,6 +2,16 @@
   "name": "@acentric/client",
   "version": "0.1.0",
   "description": "Talk to an acentric runner from an application: over WebSocket, or by starting one over stdio.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.acentric.dev",
+  "bugs": {
+    "url": "https://github.com/acentricai/acentric/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acentricai/acentric.git",
+    "directory": "packages/client"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -21,6 +31,9 @@
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public"

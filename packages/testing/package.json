@@ -2,6 +2,16 @@
   "name": "@acentric/testing",
   "version": "0.1.0",
   "description": "Runs an agent's pure half in memory, for tests: no runner, no handlers, no I/O.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.acentric.dev",
+  "bugs": {
+    "url": "https://github.com/acentricai/acentric/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acentricai/acentric.git",
+    "directory": "packages/testing"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -17,6 +27,9 @@
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public"

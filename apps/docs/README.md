@@ -8,7 +8,12 @@ pnpm --filter @acentric/docs dev      # http://localhost:5175
 pnpm --filter @acentric/docs check    # types, and every internal link
 pnpm --filter @acentric/docs build    # check, then dist/
 pnpm --filter @acentric/docs preview
+pnpm --filter @acentric/docs release   # build, then publish to https://docs.acentric.dev
 ```
+
+Deploying needs `wrangler login` with access to the Cloudflare account that
+holds acentric.dev; `wrangler.jsonc` names it, and the custom domain it
+serves.
 
 ## Layout
 
