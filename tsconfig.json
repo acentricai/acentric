@@ -17,6 +17,9 @@
       "path": "packages/client"
     },
     {
+      "path": "packages/llm"
+    },
+    {
       "path": "runners/memory"
     },
     {

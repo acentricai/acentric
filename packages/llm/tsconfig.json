@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // fetch and AbortSignal come from the DOM library, not Node's types: the
+    // client runs wherever handlers do, including runners that offer only fetch.
+    "lib": ["ES2023", "DOM"],
+    "types": [],
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [{ "path": "../types" }]
+}

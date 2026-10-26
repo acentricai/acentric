@@ -1,0 +1,36 @@
+{
+  "name": "@acentric/llm",
+  "version": "0.1.0",
+  "description": "Calls LLM providers from an agent's handlers, directly or through the acentric gateway, with readers for replies that an agent's pure half can use.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@acentric/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@acentric/runner-memory": "workspace:*",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2"
+  }
+}
