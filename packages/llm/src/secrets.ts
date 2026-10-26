@@ -22,3 +22,20 @@ export const GATEWAY_SECRETS = {
   url: 'ACENTRIC_LLM_URL',
   token: 'ACENTRIC_LLM_TOKEN',
 } as const;
+
+/**
+ * The secrets the client reads, taken from an environment where they are set:
+ * what a runner on your own machine passes to handlers, such as
+ * `createMemoryRunner({ secrets: llmSecrets(process.env) })`.
+ */
+export function llmSecrets(env: { readonly [name: string]: string | undefined }): {
+  [name: string]: string;
+} {
+  const names = [...Object.values(PROVIDER_SECRETS), ...Object.values(GATEWAY_SECRETS)];
+  const found: { [name: string]: string } = {};
+  for (const name of names) {
+    const value = env[name];
+    if (value !== undefined && value !== '') found[name] = value;
+  }
+  return found;
+}

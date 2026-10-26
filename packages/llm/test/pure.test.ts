@@ -36,4 +36,21 @@ describe('the pure entry', () => {
       expect(code, name).not.toContain(name);
     }
   });
+
+  it('leaves the client to handlers, which it bundles for with nothing but the web platform', async () => {
+    const client = fileURLToPath(new URL('../src/client.ts', import.meta.url));
+    const result = await build({
+      entryPoints: [client],
+      bundle: true,
+      platform: 'browser',
+      format: 'esm',
+      write: false,
+      logLevel: 'silent',
+    });
+    const code = result.outputFiles[0]?.text ?? '';
+    expect(code).toContain('fetch');
+    expect(code).not.toMatch(/^\s*import\s/m);
+    expect(code).not.toContain('node:');
+    expect(code).not.toContain('process.');
+  });
 });

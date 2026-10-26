@@ -12,6 +12,7 @@
     { "path": "../replay" },
     { "path": "../protocol" },
     { "path": "../client" },
+    { "path": "../llm" },
     { "path": "../../runners/local" }
   ]
 }

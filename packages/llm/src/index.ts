@@ -41,4 +41,4 @@ export {
 export type { TextOptions, ToolResultOptions } from './read.js';
 export type * from './model.js';
 export { findModel, MODELS } from './models.js';
-export { GATEWAY_SECRETS, PROVIDER_SECRETS } from './secrets.js';
+export { GATEWAY_SECRETS, llmSecrets, PROVIDER_SECRETS } from './secrets.js';

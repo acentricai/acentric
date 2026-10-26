@@ -14,6 +14,7 @@ import {
   serveStreams,
   serveWebSocket,
 } from '@acentric/runner-local';
+import { llmSecrets } from '@acentric/llm';
 import type { LocalRunner } from '@acentric/runner-local';
 
 import type { Manifest } from './build.js';
@@ -96,11 +97,16 @@ export async function startProject(project: Project, options: StartOptions = {})
   };
 }
 
-/** Reads the project's .env, then takes the config's secrets from the environment. */
+/**
+ * Reads the project's .env, then takes from the environment the config's
+ * secrets and those @acentric/llm reads: provider keys and the gateway's.
+ */
 export function loadSecrets(project: Project, log: (line: string) => void): Record<string, string> {
   const env = join(project.dir, '.env');
   if (existsSync(env)) process.loadEnvFile(env);
-  const secrets: Record<string, string> = {};
+  const secrets: Record<string, string> = llmSecrets(process.env);
+  const found = Object.keys(secrets);
+  if (found.length > 0) log(`secrets for @acentric/llm from the environment: ${found.join(', ')}`);
   for (const name of project.secrets) {
     const value = process.env[name];
     if (value === undefined) log(`warning: secret ${name} is not set in the environment or .env`);

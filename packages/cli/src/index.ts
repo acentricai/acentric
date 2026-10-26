@@ -10,5 +10,5 @@ export type { Project } from './config.js';
 export { defineConfig } from './config-types.js';
 export type { AcentricConfig, AgentConfig } from './config-types.js';
 export { formatEntry } from './inspect.js';
-export { StartError, startProject } from './start.js';
+export { loadSecrets, StartError, startProject } from './start.js';
 export type { Started, StartOptions } from './start.js';

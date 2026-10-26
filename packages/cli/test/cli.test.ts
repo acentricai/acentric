@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { connectWebSocket } from '@acentric/client';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { buildProject, loadProject, startProject } from '../dist/index.js';
+import { buildProject, loadProject, loadSecrets, startProject } from '../dist/index.js';
 import type { Started } from '../dist/index.js';
 
 const BIN = fileURLToPath(new URL('../dist/bin.js', import.meta.url));
@@ -182,6 +182,25 @@ describe('acentric build', () => {
 });
 
 describe('acentric start', () => {
+  it('passes handlers the LLM keys it finds in .env, naming them', async () => {
+    const saved = process.env['ANTHROPIC_API_KEY'];
+    delete process.env['ANTHROPIC_API_KEY'];
+    try {
+      const dir = await project();
+      await writeFile(join(dir, '.env'), 'ANTHROPIC_API_KEY=sk-from-env\n');
+      const lines: string[] = [];
+      const secrets = loadSecrets(await loadProject(dir), (line) => lines.push(line));
+      expect(secrets['ANTHROPIC_API_KEY']).toBe('sk-from-env');
+      expect(lines.join('\n')).toMatch(
+        /secrets for @acentric\/llm from the environment: .*ANTHROPIC_API_KEY/,
+      );
+      expect(lines.join('\n')).not.toContain('sk-from-env');
+    } finally {
+      if (saved === undefined) delete process.env['ANTHROPIC_API_KEY'];
+      else process.env['ANTHROPIC_API_KEY'] = saved;
+    }
+  });
+
   it('deploys the built agents once and serves them', async () => {
     const dir = await project();
     await buildProject(await loadProject(dir), { typecheck: false });
