@@ -176,7 +176,9 @@ receives a context:
 
 A handler depends only on its args: anything it needs from the agent's state,
 `effects` copies into them. Secrets are the exception, because args and state
-are stored, so a handler asks for a secret by name.
+are stored, so a handler asks for a secret by name. On every runner, a secret
+that is not set rejects with an error named `SecretNotSet`, so a handler can
+fall back to another, such as a gateway's token when there is no provider key.
 
 Handlers live apart from the agent: in their own file, and in the local runner,
 their own process. That keeps the agent pure, and lets `acentric build` check

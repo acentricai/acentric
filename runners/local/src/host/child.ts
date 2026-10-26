@@ -106,7 +106,8 @@ async function run(loaded: Record<string, HandlerDef>, params: Json): Promise<Js
     secrets: {
       get: async (name) => {
         const value = await peer.request('secrets/get', { name });
-        if (typeof value !== 'string') throw new Error(`secret ${name} is not set`);
+        if (value === null) throw secretNotSet(name);
+        if (typeof value !== 'string') throw new Error(`secret ${name} could not be read`);
         return value;
       },
     },
@@ -144,6 +145,13 @@ function toPage(value: Json): LogPage {
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** What `secrets.get` rejects with when no secret has the name, as RUNNERS.md fixes it. */
+function secretNotSet(name: string): Error {
+  const error = new Error(`secret ${name} is not set`);
+  error.name = 'SecretNotSet';
+  return error;
 }
 
 function isHandlerDef(value: unknown): value is HandlerDef {

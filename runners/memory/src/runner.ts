@@ -734,9 +734,7 @@ export class MemoryRunner {
       secrets: {
         get: (name) => {
           const value = this.#secrets[name];
-          return value === undefined
-            ? Promise.reject(new Error(`secret ${name} is not set`))
-            : Promise.resolve(value);
+          return value === undefined ? Promise.reject(secretNotSet(name)) : Promise.resolve(value);
         },
       },
       log: { list: (query) => Promise.resolve(this.#list(session.id, query ?? {})) },
@@ -915,4 +913,11 @@ function erase<S extends JsonObject, C extends JsonObject, K extends Kinds>(
 function answerOf(answer: Answer): JournalAnswer {
   if ('accepted' in answer) return 'accepted';
   return 'rejected' in answer ? 'rejected' : 'failed';
+}
+
+/** What `secrets.get` rejects with when no secret has the name, as RUNNERS.md fixes it. */
+function secretNotSet(name: string): Error {
+  const error = new Error(`secret ${name} is not set`);
+  error.name = 'SecretNotSet';
+  return error;
 }

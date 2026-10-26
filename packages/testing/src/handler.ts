@@ -10,7 +10,7 @@ export type HandlerContextOptions<A extends Json> = {
   attempt?: number;
   /** The agent's log, oldest first. */
   log?: readonly LogEntry[];
-  /** Secret values by name. Reading one that is missing throws, as a runner would. */
+  /** Secret values by name. Reading one that is missing rejects with SecretNotSet, as a runner would. */
   secrets?: Record<string, string>;
   /** The most entries one page of `log.list` returns. Defaults to 100. */
   pageSize?: number;
@@ -39,9 +39,7 @@ export function handlerContext<A extends Json>(
     secrets: {
       get: (name) => {
         const value = secrets[name];
-        return value === undefined
-          ? Promise.reject(new Error(`secret ${name} is not set`))
-          : Promise.resolve(value);
+        return value === undefined ? Promise.reject(secretNotSet(name)) : Promise.resolve(value);
       },
     },
     log: {
@@ -49,6 +47,13 @@ export function handlerContext<A extends Json>(
     },
   };
   return { ctx, controller };
+}
+
+/** What `secrets.get` rejects with when no secret has the name, as on every runner. */
+function secretNotSet(name: string): Error {
+  const error = new Error(`secret ${name} is not set`);
+  error.name = 'SecretNotSet';
+  return error;
 }
 
 function listLog(log: readonly LogEntry[], query: LogQuery, pageSize: number): LogPage {

@@ -293,6 +293,25 @@ describe.each(STORES)('the local runner over $name', (kind) => {
     expect(await results(s.store, id)).toEqual([{ key: 's', outcome: { ok: 'abc' } }]);
   });
 
+  it('rejects with SecretNotSet when a handler reads a secret that is not set', async () => {
+    const s = await setup();
+    await s.runner.deploy(v1);
+    const id = await created(s.runner);
+    await s.runner.input(id, { kind: 'ask', payload: { key: 's', kind: 'secret' } });
+    await until('the failure', async () => (await results(s.store, id)).length === 1);
+    expect(await results(s.store, id)).toEqual([
+      {
+        key: 's',
+        outcome: {
+          failed: {
+            code: 'threw',
+            error: { name: 'SecretNotSet', message: 'secret token is not set' },
+          },
+        },
+      },
+    ]);
+  });
+
   it('tells a subscriber the history, then each step, view and status', async () => {
     const s = await setup();
     await s.runner.deploy(v1);
