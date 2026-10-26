@@ -5,7 +5,22 @@ each used the way it is designed, directly or through the acentric gateway.
 Its readers for replies, such as the tool calls a reply makes, are pure, so an
 agent's step can use them too.
 
-The pure entry is written; the client is not yet.
+```ts
+// handlers.ts
+import { createLlm } from '@acentric/llm/client';
+
+export default {
+  llm: {
+    mode: 'reissue',
+    run: (ctx) =>
+      createLlm(ctx).complete({
+        provider: 'anthropic',
+        model: 'claude-sonnet-5-5',
+        messages: ctx.args.messages,
+      }),
+  },
+};
+```
 
 ## Two entries
 
@@ -58,6 +73,30 @@ if ('ok' in message.outcome) {
 }
 ```
 
+## The client
+
+`createLlm(ctx, options?)` takes a handler's context, or anything with its
+`secrets` and `signal`, and returns `{ complete(request) }`:
+
+- One call, one finished response: no streaming, and never retried. Whether
+  to try again is the agent's decision, from `llmFailure(outcome)` in step.
+- The handler's signal stops the call: a cancelled or aborted effect fails
+  with `cancelled`, and a call past `timeoutMs` (15 minutes at most) with
+  `timeout`.
+- The application's `custom` messages are left out of what is sent.
+- `options.credentials`, `options.gateway` (or `false` to call providers
+  directly) and `options.fetch` override what the secrets say.
+
+For a gateway, `callProvider(request, credentials)` makes one call to the
+provider with credentials in hand, and `readCredentials` checks credentials a
+caller sent. `GatewayRequest`, `GatewayFailure` and `GATEWAY_ROUTE` are the
+gateway's wire format: the request as it is, with the caller's own
+credentials if any; the response as it is; and `{ error: LlmFailure }` on
+failure.
+
+The client uses only `fetch` and the web platform, so it runs in handlers
+built for `node` and for `fetch`.
+
 ## Keys and the gateway
 
 The client reads everything from the handler's secrets, never from the
@@ -74,6 +113,8 @@ Options passed to the client override all of these. A secret that is not set
 rejects with `SecretNotSet` on every runner ([RUNNERS.md](../../RUNNERS.md#8-handlers)),
 which is how the client tells which are set.
 
-The names are exported as `PROVIDER_SECRETS` and `GATEWAY_SECRETS`, so the CLI
-and runners pass the matching environment variables without naming providers
-themselves. acentric-cloud sets the gateway's two for every release.
+The names are exported as `PROVIDER_SECRETS` and `GATEWAY_SECRETS`, and
+`llmSecrets(env)` picks those that are set from an environment. `acentric dev`
+and `acentric start` pass them to handlers on their own, from the environment
+and `.env`; with the memory runner, pass `secrets: llmSecrets(process.env)`.
+acentric-cloud sets the gateway's two for every release.

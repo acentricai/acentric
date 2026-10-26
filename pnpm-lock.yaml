@@ -231,6 +231,9 @@ importers:
       '@acentric/client':
         specifier: workspace:*
         version: link:../client
+      '@acentric/llm':
+        specifier: workspace:*
+        version: link:../llm
       '@acentric/protocol':
         specifier: workspace:*
         version: link:../protocol

@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@acentric/client": "workspace:*",
+    "@acentric/llm": "workspace:*",
     "@acentric/protocol": "workspace:*",
     "@acentric/replay": "workspace:*",
     "@acentric/runner-local": "workspace:*",
