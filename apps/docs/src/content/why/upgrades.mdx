@@ -89,9 +89,13 @@ type Snapshot = { reminders: Reminder[] };
 
 /** A version 1 reminder, `{ key, text, at }`, in version 2's shape. */
 function fromV1(old: Json): Reminder {
-  const r: JsonObject =
-    typeof old === 'object' && old !== null && !Array.isArray(old) ? old : {};
+  const r: JsonObject = isObject(old) ? old : {};
   return { key: String(r['key']), message: String(r['text']), dueAt: Number(r['at']) };
+}
+
+/** A guard, since `Array.isArray` alone does not narrow Json's readonly arrays. */
+function isObject(value: Json): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 const v2: Agent<Snapshot, NoConfig, ReminderKinds> = {

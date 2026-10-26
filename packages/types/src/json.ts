@@ -9,6 +9,10 @@ export type Json = JsonPrimitive | JsonArray | JsonObject;
 
 export type JsonPrimitive = null | boolean | number | string;
 
-export type JsonArray = Json[];
+/**
+ * Readonly, like all of an agent's state, so readonly arrays (as libraries
+ * type their JSON) are Json too. A mutable array still is.
+ */
+export type JsonArray = readonly Json[];
 
 export type JsonObject = { [key: string]: Json };

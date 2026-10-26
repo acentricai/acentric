@@ -241,10 +241,7 @@ export class RunnerClient {
     } catch (error) {
       if (error instanceof RpcError) {
         const data = error.data;
-        const code =
-          typeof data === 'object' && data !== null && !Array.isArray(data)
-            ? data['code']
-            : undefined;
+        const code = isObject(data) ? data['code'] : undefined;
         throw new RunnerRequestError(isErrorCode(code) ? code : 'protocol', error.message);
       }
       throw error;

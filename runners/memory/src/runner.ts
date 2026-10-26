@@ -29,7 +29,7 @@ import type {
 
 import { journalDigest } from '@acentric/replay';
 
-import { deepFreeze, frozenCopy, isJson, requireJson, thrownToJson } from './json.js';
+import { deepFreeze, frozenCopy, isJson, isJsonObject, requireJson, thrownToJson } from './json.js';
 import { createMemoryStore } from './store.js';
 import type { MemoryStore, StoredEffect, StoredSession } from './store.js';
 
@@ -603,7 +603,7 @@ export class MemoryRunner {
     now: number,
   ): Prepared {
     const snapshot = requireJson(snapshotValue, 'the snapshot');
-    if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) {
+    if (!isJsonObject(snapshot)) {
       throw new TypeError('the snapshot is not an object');
     }
     const entries = append.map(({ kind, body }, index) => {

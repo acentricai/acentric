@@ -18,7 +18,7 @@ import type { HandlerDef, Handlers, Json, JsonObject, LogQuery } from '@acentric
 import { installedHook } from '../hook.js';
 
 function arg(args: Json, name: string): Json | undefined {
-  return typeof args === 'object' && args !== null && !Array.isArray(args) ? args[name] : undefined;
+  return isObject(args) ? args[name] : undefined;
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<Json> {
@@ -106,6 +106,11 @@ const handlers: Handlers = {
 };
 
 function isQuery(value: Json | undefined): value is LogQuery & JsonObject {
+  return isObject(value);
+}
+
+/** Whether a value is a Json object; `Array.isArray` does not narrow a readonly JsonArray out. */
+function isObject(value: Json | undefined): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
