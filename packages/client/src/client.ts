@@ -2,7 +2,7 @@
 // protocol's requests, subscriptions that deliver a session's
 // notifications, and handlers for the kinds this application provides.
 
-import { PROTOCOL_VERSION, RpcError, RpcPeer } from '@acentric/protocol';
+import { isJson, PROTOCOL_VERSION, RpcError, RpcPeer } from '@acentric/protocol';
 import type {
   AgentRef,
   Answer,
@@ -295,10 +295,7 @@ export class RunnerClient {
       });
       return { ok: result };
     } catch (error) {
-      return {
-        error:
-          error instanceof Error ? { name: error.name, message: error.message } : String(error),
-      };
+      return { error: thrownToJson(error) };
     } finally {
       this.#running.delete(id);
     }
@@ -368,4 +365,23 @@ function runKey(session: unknown, key: unknown): string {
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * What a provided handler threw, as Json: what its `toJSON()` returns when
+ * that is Json, as RUNNERS.md §8 requires, and otherwise its name and message.
+ */
+function thrownToJson(error: unknown): Json {
+  if (typeof error === 'object' && error !== null) {
+    const toJSON: unknown = Reflect.get(error, 'toJSON');
+    if (typeof toJSON === 'function') {
+      try {
+        const json: unknown = Reflect.apply(toJSON, error, []);
+        if (isJson(json)) return json;
+      } catch {
+        // Falls through to the name and message.
+      }
+    }
+  }
+  return error instanceof Error ? { name: error.name, message: error.message } : String(error);
 }

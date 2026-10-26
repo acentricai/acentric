@@ -55,7 +55,11 @@ export type Outcome<R extends Json = Json> =
 export type Failure = {
   /** Set by the runner, so `step` can branch on what went wrong. */
   readonly code: FailureCode;
-  /** The detail: what the handler threw, made into Json by the runner. */
+  /**
+   * The detail: what the handler threw, made into Json by the runner. When
+   * the thrown value has a `toJSON()` that returns Json, it is what that
+   * returns, on every runner.
+   */
   readonly error: Json;
 };
 

@@ -3,6 +3,7 @@
 //
 //   echo       returns args.value
 //   throw      throws an Error with args.message
+//   throw_json throws an Error whose toJSON() returns args.value
 //   invalid    returns undefined, which is not Json
 //   sleep      waits args.ms, or returns { aborted: true } when signalled
 //   slow       sleep with a 50 ms time limit
@@ -53,6 +54,13 @@ const handlers: Handlers = {
     run: (ctx) => {
       const message = arg(ctx.args, 'message');
       return Promise.reject(new Error(typeof message === 'string' ? message : 'thrown'));
+    },
+  },
+  throw_json: {
+    mode: 'reissue',
+    run: (ctx) => {
+      const value = arg(ctx.args, 'value') ?? null;
+      return Promise.reject(Object.assign(new Error('thrown'), { toJSON: () => value }));
     },
   },
   invalid: {

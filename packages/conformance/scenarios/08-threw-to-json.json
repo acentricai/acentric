@@ -1,0 +1,49 @@
+{
+  "name": "A thrown value's toJSON is its failure's error",
+  "section": "8",
+  "steps": [
+    {
+      "create": {}
+    },
+    {
+      "input": "declare",
+      "payload": {
+        "effects": [
+          {
+            "key": "a",
+            "kind": "throw_json",
+            "args": {
+              "value": {
+                "kind": "rate_limited",
+                "retryable": true,
+                "retryAfterMs": 3000
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "expect": {
+        "log": [
+          {
+            "kind": "result",
+            "body": {
+              "key": "a",
+              "outcome": {
+                "failed": {
+                  "code": "threw",
+                  "error": {
+                    "kind": "rate_limited",
+                    "retryable": true,
+                    "retryAfterMs": 3000
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
