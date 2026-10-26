@@ -195,6 +195,12 @@ A runner runs a handler with a context:
 | `secrets` | `get(name)`, from wherever the runner keeps them                             |
 | `log`     | `list(query)`, reading the session's log                                     |
 
+**Secrets.** `secrets.get(name)` resolves with the secret's value, a string.
+When no secret has that name, it MUST reject with an `Error` whose `name` is
+`SecretNotSet`, so a handler can tell a secret that is not set from one that
+could not be read, and choose another. Any other failure to read a secret
+MUST NOT use that name.
+
 **Outcomes.** What the handler does becomes the `outcome` of an `effect`
 message:
 

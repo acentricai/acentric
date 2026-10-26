@@ -149,9 +149,10 @@ export class HostPool {
     if (!isObject(params)) throw new RpcError(-32602, `${method} needs params`);
     if (method === 'secrets/get') {
       const name = params['name'];
-      const value = typeof name === 'string' ? this.#options.secret(name) : undefined;
-      if (value === undefined) throw new RpcError(1, `secret ${JSON.stringify(name)} is not set`);
-      return value;
+      if (typeof name !== 'string') throw new RpcError(-32602, 'secrets/get needs a name');
+      // A secret that is not set is an answer, null, not an error: the host
+      // tells it from a failed request.
+      return this.#options.secret(name) ?? null;
     }
     if (method === 'log/list') {
       const session = params['session'];

@@ -19,6 +19,11 @@ import type { LogEntry } from './state.js';
 
 /** Reads secrets by name. Each runner decides where the values come from. */
 export type Secrets = {
+  /**
+   * The secret's value. Rejects with an Error named 'SecretNotSet' when no
+   * secret has this name, on every runner, so a handler can fall back to
+   * another; any other failure to read it rejects with a different error.
+   */
   get(name: string): Promise<string>;
 };
 

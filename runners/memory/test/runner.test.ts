@@ -86,7 +86,7 @@ describe('the memory runner', () => {
     second.close();
   });
 
-  it('gives handlers its secrets, and fails them when one is missing', async () => {
+  it('gives handlers its secrets, and rejects with SecretNotSet when one is missing', async () => {
     const runner = createMemoryRunner({ secrets: { token: 'abc' } });
     const loaded = runner.load(agent);
     const { id } = runner.create(loaded, {});
@@ -100,7 +100,9 @@ describe('the memory runner', () => {
     if (other === undefined) throw new Error('not created');
     await bare.input(other, 'ask', {});
     await wait(5);
-    expect(bare.log(other)).toMatchObject([{ body: { failed: { code: 'threw' } } }]);
+    expect(bare.log(other)).toMatchObject([
+      { body: { failed: { code: 'threw', error: { name: 'SecretNotSet' } } } },
+    ]);
     runner.close();
     bare.close();
   });

@@ -9,6 +9,8 @@
 //   gate       waits until the scenario releases it; at most 2 attempts
 //   read_log   returns a page of ctx.log.list(args.query)
 //   attempt    returns ctx.attempt
+//   secret     reads the secret args.name: { set: true }, or { rejected: name }
+//              with the name of the error it rejected with; never its value
 
 import type { HandlerDef, Handlers, Json, JsonObject, LogQuery } from '@acentric/types';
 
@@ -81,6 +83,18 @@ const handlers: Handlers = {
     },
   },
   attempt: { mode: 'reissue', run: (ctx) => Promise.resolve(ctx.attempt) },
+  secret: {
+    mode: 'reissue',
+    run: async (ctx) => {
+      const name = arg(ctx.args, 'name');
+      try {
+        await ctx.secrets.get(typeof name === 'string' ? name : '');
+        return { set: true };
+      } catch (error) {
+        return { rejected: error instanceof Error ? error.name : null };
+      }
+    },
+  },
 };
 
 function isQuery(value: Json | undefined): value is LogQuery & JsonObject {
