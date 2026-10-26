@@ -35,6 +35,14 @@ dropped.
   handler, taking an absolute time.
 - **Faulted sessions.** Retrying infrastructure errors, and how an operator
   recovers a faulted session other than by upgrading it.
+- **Shutdowns that count as attempts.** RUNNERS.md §10 says a restart the
+  runner chose never counts toward `maxAttempts`. The local runner's graceful
+  `close()` stops handlers still running after the grace period, and the next
+  `start()` reruns them with the next attempt, counted toward the limit, so a
+  long effect can fail `attempts_exhausted` after a few restarts. The store
+  needs to record which stops were the runner's choice (a SQLite schema
+  change and a files-format change), and the limit check leave them out
+  while `attempt` still goes up.
 - **Operator controls in the protocol.** RUNNERS.md describes suspend, resume
   and close; the local runner's protocol and the conformance scenarios do not
   cover them yet.
