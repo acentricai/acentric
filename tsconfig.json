@@ -30,6 +30,9 @@
     },
     {
       "path": "packages/create-acentric"
+    },
+    {
+      "path": "templates/composable-agent"
     }
   ]
 }

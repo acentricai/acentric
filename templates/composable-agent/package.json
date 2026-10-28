@@ -1,0 +1,17 @@
+{
+  "name": "@acentric/composable-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A composable template for agents: the shared loop, with the parts that vary plugged in.",
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@acentric/llm": "workspace:*",
+    "@acentric/types": "workspace:*",
+    "typebox": "1.3.27"
+  }
+}
