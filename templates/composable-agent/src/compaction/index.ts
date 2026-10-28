@@ -6,3 +6,4 @@ export * from './config.js';
 export * from './settings.js';
 export * from './state.js';
 export * from './log.js';
+export * from './kinds.js';

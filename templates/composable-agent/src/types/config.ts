@@ -10,7 +10,9 @@ import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
 
 import { CompactionConfig } from '../compaction/index.js';
+import { problems } from '../core/check.js';
 import { CustomConfig } from '../custom/index.js';
+import { InputsConfig } from '../inputs/index.js';
 import { ModelConfig } from '../model/index.js';
 import { RetryConfig } from '../retry/index.js';
 import { ToolsConfig } from '../tools/index.js';
@@ -19,6 +21,7 @@ import { ToolsConfig } from '../tools/index.js';
 export const Config = Type.Object(
   {
     ...ModelConfig.properties,
+    ...InputsConfig.properties,
     ...CompactionConfig.properties,
     ...RetryConfig.properties,
     ...ToolsConfig.properties,
@@ -31,19 +34,5 @@ export type Config = Static<typeof Config>;
 /** The config if it fits the schema, or what is wrong with it. */
 export function readConfig(value: unknown): { config: Config } | { error: string } {
   if (Value.Check(Config, value)) return { config: value };
-  const problems = Value.Errors(Config, value).flatMap((error): string[] => {
-    const at = error.instancePath || 'config';
-    switch (error.keyword) {
-      // The `additionalProperties` error that follows names the field.
-      case 'boolean':
-        return [];
-      case 'additionalProperties':
-        return error.params.additionalProperties.map((name) => `${at}/${name} is not a field`);
-      case 'enum':
-        return [`${at} must be one of ${error.params.allowedValues.join(', ')}`];
-      default:
-        return [`${at} ${error.message}`];
-    }
-  });
-  return { error: `invalid config: ${problems.join('; ')}` };
+  return { error: `invalid config: ${problems(Config, value, 'config').join('; ')}` };
 }

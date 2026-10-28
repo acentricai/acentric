@@ -4,20 +4,19 @@
 import type { Agent, Window } from '@acentric/types';
 
 import { compactionWindow } from './compaction/index.js';
-import { inputsWindow } from './inputs/index.js';
+import { inputsWindow, readInput } from './inputs/index.js';
 import type { Config } from './types/config.js';
+import { KIND_NAMES } from './types/kinds.js';
+import type { Kinds } from './types/kinds.js';
 import { log } from './types/log.js';
 import { readSettings } from './types/settings.js';
 import { initialSnapshot } from './types/snapshot.js';
 import type { Snapshot } from './types/snapshot.js';
 
-/** Every kind of effect the agent may request: what each takes and returns. */
-export type Kinds = Record<string, never>;
-
 /**
  * The log a step sees: the earliest entry any part needs. The compaction
  * part needs everything from its first kept entry; the inputs part needs
- * the oldest queued message, to read it when its turn comes.
+ * the oldest waiting message, to read it when its turn comes.
  */
 const window: Window<Snapshot> = (snapshot) =>
   Math.min(compactionWindow(snapshot), inputsWindow(snapshot));
@@ -25,6 +24,7 @@ const window: Window<Snapshot> = (snapshot) =>
 const agent: Agent<Snapshot, Config, Kinds> = {
   name: 'composable-agent',
   version: '0.1.0',
+  kinds: KIND_NAMES,
   init: (config) => {
     const read = readSettings(config);
     if ('error' in read) return read;
@@ -34,6 +34,10 @@ const agent: Agent<Snapshot, Config, Kinds> = {
     };
   },
   step: ({ snapshot }, message) => {
+    if (message.type === 'input') {
+      const read = readInput(message.kind, message.payload);
+      if ('error' in read) return read;
+    }
     if (message.type === 'config') {
       const read = readSettings(message.config);
       if ('error' in read) return read;

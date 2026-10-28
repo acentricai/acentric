@@ -8,6 +8,8 @@ import { compactionSettings } from '../compaction/index.js';
 import type { CompactionSettings } from '../compaction/index.js';
 import { customSettings } from '../custom/index.js';
 import type { CustomSettings } from '../custom/index.js';
+import { inputsSettings } from '../inputs/index.js';
+import type { InputsSettings } from '../inputs/index.js';
 import { modelSettings } from '../model/index.js';
 import type { ModelSettings } from '../model/index.js';
 import { retrySettings } from '../retry/index.js';
@@ -19,6 +21,7 @@ import type { Config } from './config.js';
 
 /** The whole settings: every part's fields side by side. */
 export type Settings = ModelSettings &
+  InputsSettings &
   CompactionSettings &
   RetrySettings &
   ToolsSettings &
@@ -40,6 +43,7 @@ export function resolveSettings(config: Config): { settings: Settings } | { erro
   return {
     settings: {
       ...model,
+      ...inputsSettings(config),
       ...compaction,
       ...retry,
       ...toolsSettings(config),

@@ -3,13 +3,12 @@
 // parts together, so its phase is every part's phases side by side.
 
 import type { CompactionPhase } from '../compaction/index.js';
-import type { ModelCallArgs } from '../model/index.js';
 import type { RetryPhase } from '../retry/index.js';
 import type { ToolsPhase } from '../tools/index.js';
+import type { LlmArgs } from './kinds.js';
 
 /** The loop's own phases: no run going, or a model call running. */
-export type LoopPhase =
-  { type: 'idle' } | { type: 'calling_model'; key: string; args: ModelCallArgs };
+export type LoopPhase = { type: 'idle' } | { type: 'calling_model'; key: string; args: LlmArgs };
 
 /** Where the loop is. Each phase holds what `effects` needs to declare its effect. */
 export type Phase = LoopPhase | ToolsPhase | RetryPhase | CompactionPhase;

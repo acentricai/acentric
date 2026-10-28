@@ -1,5 +1,7 @@
 // The tools part's snapshot part and phase.
 
+import type { Json } from '@acentric/types';
+
 import type { ToolsSettings } from './settings.js';
 
 /** What the agent's tools keep between calls, such as a table of running commands. */
@@ -15,13 +17,26 @@ export function initialTools(_settings: ToolsSettings): ToolsState {
   return {};
 }
 
-/** One tool call of a reply. Its arguments are read from the reply in the log. */
-export type ToolCall = {
+/**
+ * One call of a reply that runs as an effect. Its arguments are read from
+ * the reply in the log; what `prepare` passed on is kept here, since
+ * `effects` must declare the same args every time it is asked.
+ */
+export type CallState = {
   callId: string;
+  /** The tool's name: its effect kind is `tool:<name>`. */
+  name: string;
   /** The key of the effect running it. */
   key: string;
-  done: boolean;
+  /** What `prepare` passed on to the handler. */
+  extra: Json;
+  /** Waiting for calls before it to finish, running, or answered. */
+  status: 'waiting' | 'running' | 'done';
 };
 
-/** The calls of the reply at `replySeq`, in parallel or one at a time, as the tools say. */
-export type ToolsPhase = { type: 'running_tools'; replySeq: number; calls: ToolCall[] };
+/**
+ * The calls of the reply at `replySeq` that run as effects, in the order
+ * the model made them, in parallel or one at a time as their tools say.
+ * Calls answered at once are already in the log.
+ */
+export type ToolsPhase = { type: 'running_tools'; replySeq: number; calls: CallState[] };
