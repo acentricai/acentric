@@ -30,9 +30,6 @@
     },
     {
       "path": "packages/create-acentric"
-    },
-    {
-      "path": "examples/pi"
     }
   ]
 }
