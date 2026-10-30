@@ -9,3 +9,5 @@ export * from './log.js';
 export * from './kinds.js';
 export * from './tokens.js';
 export * from './compact.js';
+export * from './context.js';
+export * from './prompt.js';
