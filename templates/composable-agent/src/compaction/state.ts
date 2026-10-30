@@ -17,6 +17,8 @@ export type CompactionPhase = {
   key: string;
   reason: 'threshold' | 'overflow';
   firstKeptSeq: number;
+  /** The estimated context when it started, for the record. */
+  tokensBefore: number;
   thenContinue: boolean;
 };
 

@@ -33,6 +33,18 @@ export function readSettings(value: unknown): { settings: Settings } | { error: 
   return 'error' in read ? read : resolveSettings(read.config);
 }
 
+/**
+ * The settings of a config the session already accepted. It was checked
+ * then, so it gives settings unless a new version of the code checks it
+ * differently; then this throws, the step fails, and the runner stops the
+ * session for someone to look at.
+ */
+export function settingsOf(config: Config): Settings {
+  const resolved = resolveSettings(config);
+  if ('error' in resolved) throw new Error(`the stored config no longer works: ${resolved.error}`);
+  return resolved.settings;
+}
+
 /** The config with every default filled in, or why its fields do not work together. */
 export function resolveSettings(config: Config): { settings: Settings } | { error: string } {
   const model = modelSettings(config);

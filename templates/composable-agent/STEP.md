@@ -221,39 +221,49 @@ The custom part declares its own effects beside these, in any phase.
 
 ## The contracts this needs
 
-The table runs through each part only at these points.
+The loop, in [src/loop/step.ts](src/loop/step.ts), runs through each part
+only at these points. A part's functions are pure and change nothing: they
+get the snapshot as their own part, and the loop applies what they return.
+A function that returns a part's whole state is applied on its own, before
+the loop changes fields of its own, since it carries every other field as
+it was.
 
-**Compaction**, for a strategy that summarises and for one that does nothing:
+**Compaction** ([src/compaction/compact.ts](src/compaction/compact.ts)), for a
+strategy that summarises and for one that does nothing:
 
-| Hook                                     | Summarise                                                      | None             |
-| ---------------------------------------- | -------------------------------------------------------------- | ---------------- |
-| `beforeModelCall(state, settings)`       | compact if the estimated context is over the threshold         | never            |
-| `afterTurn(state, settings)`             | the same, to compact while idle                                | never            |
-| `onOverflow(state)`                      | compact, once a turn                                           | give up          |
-| `start(draft, reason, thenContinue)`     | find the cut point; enter `compacting`                         | not called       |
-| `settle(draft, outcome)`                 | append the summary and move the pointer                        | not called       |
-| `effects(state, settings)`               | `summarize` while compacting                                   | none             |
-| `contextRefs(state, toSeq)`              | the latest summary, then the entries from its first kept entry | everything       |
-| `window(state)`                          | the latest compaction's first kept entry                       | 1                |
-| `context(entries, refs)`, in the handler | the summary as a user message, then the conversation           | the conversation |
+| Function                                   | Summarise                                                      | None             |
+| ------------------------------------------ | -------------------------------------------------------------- | ---------------- |
+| `shouldCompact(state, entries, settings)`  | the estimated context is over the threshold                    | never            |
+| `compactOnOverflow(state)`                 | once a turn                                                    | never            |
+| `planCompaction(state, entries, settings)` | the cut point, or null if nothing is left to summarise         | not called       |
+| `summarizeArgs(state, phase, settings)`    | the range from the last cut to this one, and the summary       | not called       |
+| `compactionEntry`, `compacted`             | the summary's entry, and the pointer moved to it               | not called       |
+| `atTurnStart`, `overflowCompacting`        | forget, or note, an overflow compacted this turn               | nothing          |
+| `contextRefs(state, toSeq)`                | the latest summary, then the entries from its first kept entry | everything       |
+| `compactionWindow(state)`                  | the latest compaction's first kept entry                       | 1                |
+| `context(entries, refs)`, in the handler   | the summary as a user message, then the conversation           | the conversation |
 
-**Tools**: the contract in [src/tools/define.ts](src/tools/define.ts), plus
-starting what may run, above.
+**Tools** ([src/tools/calls.ts](src/tools/calls.ts)): `startCalls` decides how
+each of a reply's calls goes ahead, `schedule` marks what may run,
+`settleCall` turns what a call's effect reported into what the model reads,
+and `notRun` answers a call that never ran. The contract each tool meets is
+in [src/tools/define.ts](src/tools/define.ts).
 
-**Retry**: `shouldRetry(failure, retries, settings)` and
-`retryAt(now, retries, failure, settings)`.
+**Retry** ([src/retry/policy.ts](src/retry/policy.ts)): `shouldRetry`,
+`retryAt`, `failedOnce` and `reset`.
 
 **Inputs**: `readInput`, and the settings' default delivery.
 
-**Custom**: told when a turn starts and when the agent goes idle; owns the
-results of effects whose keys it made; declares effects of its own. Meals'
-cache warming is one: it starts a timer when the agent goes idle and drops
-it when a turn starts.
+**Custom** ([src/custom/hooks.ts](src/custom/hooks.ts)): `onTurnStart` and
+`onIdle`; `ownsKey` and `onEffect` for the results of effects whose keys it
+made; `customEffects` for the effects it wants, in any phase. Meals' cache
+warming is one: it starts a timer when the agent goes idle and drops it when
+a turn starts.
 
-**A working copy per step**: step opens one holding the snapshot, the
-entries to append, the settings, the window and `now`. Each part changes it
-through it: appending an entry returns the seq it will get, and a new key
-comes from `nextKey`. Step returns what it holds at the end.
+**A working copy per step** ([src/loop/draft.ts](src/loop/draft.ts)): step
+opens one holding the snapshot, the window's entries, the entries to append,
+the settings and `now`. Appending an entry returns the seq it will get, and
+`newKey` takes the next effect key. Step returns what it holds at the end.
 
 ## Open
 

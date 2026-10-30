@@ -129,14 +129,3 @@ export type ToolEffectArgs<E extends Json = Json> = {
   /** What `prepare` passed on. */
   extra: E;
 };
-
-type ExtraOf<T> = T extends ToolDef<string, TSchema, infer E> ? E : never;
-type ResultOf<T> = T extends ToolDef<string, TSchema, Json, infer R> ? R : never;
-
-/** The effect kinds of a list of tools: one per tool, with its args and result. */
-export type ToolKindsOf<T extends readonly AnyTool[]> = {
-  [D in T[number] as ToolKind<D['name']>]: {
-    args: ToolEffectArgs<ExtraOf<D>>;
-    result: ResultOf<D>;
-  };
-};

@@ -4,10 +4,18 @@
 
 import type { CompactionKinds } from '../compaction/index.js';
 import type { RunnerKinds } from '../core/kinds.js';
+import { CUSTOM_KINDS } from '../custom/index.js';
+import type { CustomKinds } from '../custom/index.js';
 import type { LoopKinds } from '../loop/kinds.js';
 import { TOOL_KINDS } from '../tools/index.js';
 import type { ToolKinds } from '../tools/index.js';
 
-export type Kinds = LoopKinds & CompactionKinds & ToolKinds & RunnerKinds;
+export type Kinds = LoopKinds & CompactionKinds & ToolKinds & CustomKinds & RunnerKinds;
 
-export const KIND_NAMES: (keyof Kinds)[] = ['llm', 'summarize', ...TOOL_KINDS, '@timer'];
+export const KIND_NAMES: (keyof Kinds)[] = [
+  'llm',
+  'summarize',
+  ...TOOL_KINDS,
+  ...CUSTOM_KINDS,
+  '@timer',
+];

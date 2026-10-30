@@ -1,10 +1,13 @@
 // The composable agent's pure half: what it remembers and how it responds.
-// Its handlers are in handlers.ts.
+// Its handlers are in handlers.ts. What step does is in loop/step.ts, and
+// STEP.md says it in words.
 
 import type { Agent, Window } from '@acentric/types';
 
 import { compactionWindow } from './compaction/index.js';
-import { inputsWindow, readInput } from './inputs/index.js';
+import { inputsWindow } from './inputs/index.js';
+import { effects } from './loop/effects.js';
+import { step } from './loop/step.js';
 import type { Config } from './types/config.js';
 import { KIND_NAMES } from './types/kinds.js';
 import type { Kinds } from './types/kinds.js';
@@ -33,17 +36,8 @@ const agent: Agent<Snapshot, Config, Kinds> = {
       append: [log.append('notice', { level: 'info', text: 'session created' })],
     };
   },
-  step: ({ snapshot }, message) => {
-    if (message.type === 'input') {
-      const read = readInput(message.kind, message.payload);
-      if ('error' in read) return read;
-    }
-    if (message.type === 'config') {
-      const read = readSettings(message.config);
-      if ('error' in read) return read;
-    }
-    return { snapshot };
-  },
+  step,
+  effects,
   window,
 };
 
