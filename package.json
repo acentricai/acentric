@@ -1,7 +1,7 @@
 {
   "name": "acentric",
   "private": true,
-  "description": "A framework for writing AI agents as pure reducers with declared effects.",
+  "description": "An experimental framework for writing AI agents as pure reducers with declared effects.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

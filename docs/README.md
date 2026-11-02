@@ -1,8 +1,8 @@
 # Acentric documentation
 
-Acentric is a framework for writing agents as pure reducers. An agent
-describes how it behaves: what it remembers, how it responds to each message,
-and which effects it wants running. A runner executes it: in memory for
+Acentric is an experimental framework for writing agents as pure reducers. An
+agent describes how it behaves: what it remembers, how it responds to each
+message, and which effects it wants running. A runner executes it: in memory for
 tests, on your machine with a store that survives restarts, or anywhere else
 that follows the same contract.
 

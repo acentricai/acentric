@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/@acentric/types?label=npm)](https://www.npmjs.com/org/acentric)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-**A framework for writing AI agents as pure reducers with declared effects.**
+**An experimental framework for writing AI agents as pure reducers with declared effects.**
 
 An agent describes how it behaves: what it remembers, how it responds to each
 message, and which effects it wants running. A runner executes it: in memory
