@@ -27,5 +27,5 @@ if (result.differs !== null) console.log(`entry ${result.differs} differs`);
 
 `forReplay` erases an agent's types, so versions with different snapshots
 replay together. The journal format and digest are in
-[RUNNERS.md](../../RUNNERS.md#12-journal-and-forks); the design is in
-[docs/replay.md](../../docs/replay.md).
+[the runner specification](../../docs/reference/runner-spec.md#12-journal-and-forks); the design is in
+[docs/reference/replay.md](../../docs/reference/replay.md).

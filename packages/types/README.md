@@ -17,6 +17,7 @@ import type { Agent, HandlersFor, KindsOf } from '@acentric/types';
 | Journal  | `JournalEntry`: what a session received, for replaying it                             |
 
 An agent's pure half (`init`, `step`, `effects`, `view`, `window`, `migrate`)
-decides; its handlers do the I/O. A runner connects them, following
-[RUNNERS.md](../../RUNNERS.md). The docs at
-[docs.acentric.dev](https://docs.acentric.dev) explain each part.
+decides; its handlers do the I/O. A runner connects them, following the
+[runner specification](../../docs/reference/runner-spec.md). The
+[docs](../../docs/README.md) explain each part, starting with
+[How an agent works](../../docs/concepts/README.md).

@@ -1,8 +1,9 @@
 # Step
 
 How the template's step handles every message in every phase, and the
-contracts its parts meet to make that work. It follows the pi and meals
-agents' loops, with what differs between agents moved into parts. Types are
+contracts its parts meet to make that work. It follows the loops of
+earlier agents built on the framework, with what differs between agents
+moved into parts. Types are
 in [src/loop](src/loop), [src/tools](src/tools), [src/compaction](src/compaction),
 [src/retry](src/retry) and [src/inputs](src/inputs).
 

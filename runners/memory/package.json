@@ -1,9 +1,20 @@
 {
   "name": "@acentric/runner-memory",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A runner that keeps everything in memory: for tests, scripts and trying agents out.",
+  "keywords": [
+    "acentric",
+    "ai",
+    "agent",
+    "agents",
+    "reducer",
+    "effects",
+    "runner",
+    "in-memory",
+    "testing"
+  ],
   "license": "Apache-2.0",
-  "homepage": "https://docs.acentric.dev",
+  "homepage": "https://github.com/acentricai/acentric/tree/main/runners/memory#readme",
   "bugs": {
     "url": "https://github.com/acentricai/acentric/issues"
   },

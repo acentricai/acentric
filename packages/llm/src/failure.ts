@@ -1,6 +1,6 @@
 // Every way a completion can fail, as an error the client throws and as the
 // Json a step reads. An LlmError's toJSON() is what a runner reports as the
-// failure's error (RUNNERS.md §8), so step learns its kind, whether a retry
+// failure's error (docs/reference/runner-spec.md §8), so step learns its kind, whether a retry
 // may help and how long to wait. Retrying is the agent's decision.
 
 import type { Json, Outcome } from '@acentric/types';

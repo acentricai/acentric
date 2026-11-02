@@ -15,7 +15,7 @@ export type Bundle = 'probe' | 'probe-bad-handler-name';
 
 export type Scenario = {
   name: string;
-  /** The section of RUNNERS.md it checks. */
+  /** The section of docs/reference/runner-spec.md it checks. */
   section: string;
   /** Features the runner must offer, or the scenario is skipped. */
   requires?: Feature[];

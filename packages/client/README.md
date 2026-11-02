@@ -11,18 +11,18 @@ import { spawnRunner } from '@acentric/client/node';
 
 const { client } = await spawnRunner({ store: 'sqlite:./agents.db' });
 await client.deploy({
-  name: 'pi',
+  name: 'notes',
   version: '0.1.0',
   agentPath: 'agent.mjs',
   handlersPath: 'handlers.mjs',
 });
 await client.setSecret('OPENAI_API_KEY', key);
 
-const { id } = await client.create('pi@0.1.0', { cwd, model });
+const { id } = await client.create('notes@0.1.0', {});
 await client.subscribe(id, {}, (event) => {
   if (event.type === 'log') render(event.entries);
 });
-await client.input(id, { kind: 'prompt', payload: { text: 'fix the tests' } });
+await client.input(id, { kind: 'add', payload: { text: 'buy milk' } });
 ```
 
 **Connecting to a running one:** `connectWebSocket('ws://127.0.0.1:7420')`,

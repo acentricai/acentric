@@ -1,5 +1,5 @@
 // The memory runner: runs agents' sessions in this process, following
-// RUNNERS.md, and keeps their state in a memory store.
+// docs/reference/runner-spec.md, and keeps their state in a memory store.
 //
 // Each session has a mailbox. Messages are taken one at a time: the step
 // runs, its result is checked, and then everything it changes is applied at
@@ -915,7 +915,7 @@ function answerOf(answer: Answer): JournalAnswer {
   return 'rejected' in answer ? 'rejected' : 'failed';
 }
 
-/** What `secrets.get` rejects with when no secret has the name, as RUNNERS.md fixes it. */
+/** What `secrets.get` rejects with when no secret has the name, as docs/reference/runner-spec.md fixes it. */
 function secretNotSet(name: string): Error {
   const error = new Error(`secret ${name} is not set`);
   error.name = 'SecretNotSet';

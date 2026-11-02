@@ -1,9 +1,20 @@
 {
   "name": "create-acentric",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Create an acentric agent project: npm create acentric.",
+  "keywords": [
+    "acentric",
+    "ai",
+    "agent",
+    "agents",
+    "reducer",
+    "effects",
+    "create",
+    "scaffold",
+    "template"
+  ],
   "license": "Apache-2.0",
-  "homepage": "https://docs.acentric.dev",
+  "homepage": "https://github.com/acentricai/acentric/tree/main/packages/create-acentric#readme",
   "bugs": {
     "url": "https://github.com/acentricai/acentric/issues"
   },
@@ -41,6 +52,6 @@
     "@acentric/cli": "workspace:*",
     "@acentric/testing": "workspace:*",
     "@acentric/types": "workspace:*",
-    "@types/node": "^26.6.5"
+    "@types/node": "^26.6.6"
   }
 }

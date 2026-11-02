@@ -1,4 +1,4 @@
-// The local runner: runs sessions kept in a store, following RUNNERS.md.
+// The local runner: runs sessions kept in a store, following docs/reference/runner-spec.md.
 //
 // Each session has a mailbox, and its jobs run one at a time: a caller's
 // input or config change, an effect's result from the durable inbox, an

@@ -4,7 +4,7 @@
 //
 // The client calls a provider directly when its key is set, and otherwise
 // the gateway when both gateway secrets are set. A secret that is not set
-// rejects with SecretNotSet on every runner (RUNNERS.md §8), which is how the
+// rejects with SecretNotSet on every runner (docs/reference/runner-spec.md §8), which is how the
 // client tells which are set.
 
 import type { Provider } from './providers.js';

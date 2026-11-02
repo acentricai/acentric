@@ -1,0 +1,188 @@
+# Why an agent is a reducer
+
+_A loop keeps its state in a paused function; a reducer's state is data._
+
+Most agents are written as a loop. It calls a model, runs the tools the model
+asks for, adds the results, and goes round again:
+
+```ts
+async function chat(messages: Message[]) {
+  while (true) {
+    const reply = await model(messages);
+    messages.push(reply);
+    if (reply.toolCalls.length === 0) return reply;
+    for (const call of reply.toolCalls) messages.push(await runTool(call));
+  }
+}
+```
+
+It is short, and it reads well. But while it waits on `await model(...)`, where
+is the agent's state? Some of it is in `messages`. The rest is in the call
+stack: which line it is paused on, which tool call comes next, the loop it is
+inside. That part exists only in this process's memory, as a paused function.
+So questions that sound simple have no simple answer:
+
+- The process dies mid-call. What does the agent come back as?
+- The user says "stop". How does that reach a function paused in an `await`?
+- How do you test what happens after the third tool call, without a model?
+- Can new code take over while sessions are waiting?
+- Can a waiting session move to another machine?
+- What is it doing right now, and why?
+
+A paused function cannot be saved, read, moved or swapped, so every answer is
+something built around the loop.
+
+## The state is a value
+
+An Acentric agent has no loop. Its state is data, a snapshot and a log, and
+`step` turns one message into the next state. While the weather tool runs,
+this is the chat agent's whole snapshot:
+
+```json
+{
+  "waiting": {
+    "on": "tools",
+    "calls": [{ "key": "tool:2:0", "tool": "weather", "input": "Rome" }]
+  }
+}
+```
+
+The conversation so far is in its log. Nothing is paused; waiting is a session
+with nothing to do. This is the same agent as the loop above, as a reducer:
+
+`src/agent.ts`:
+
+```ts title="src/agent.ts"
+import type { Agent, Json, NoConfig } from '@acentric/types';
+
+type ToolCall = { tool: string; input: string };
+type Reply = { text: string; toolCalls: ToolCall[] };
+type Waiting =
+  { on: 'model'; key: string } | { on: 'tools'; calls: (ToolCall & { key: string })[] };
+type Snapshot = { waiting: Waiting | null };
+
+export type ChatKinds = {
+  model: { args: { messages: Json[] }; result: Reply };
+  tool: { args: ToolCall; result: string };
+};
+
+const agent: Agent<Snapshot, NoConfig, ChatKinds> = {
+  name: 'chat',
+  version: '0.1.0',
+  kinds: ['model', 'tool'],
+
+  init: () => ({ snapshot: { waiting: null } }),
+
+  step: ({ snapshot, log }, message) => {
+    const { waiting } = snapshot;
+    // Keyed by where the log is, so each model call gets a key of its own.
+    const callModel: Waiting = { on: 'model', key: `model:${log.next}` };
+    if (message.type === 'input' && message.kind === 'say') {
+      if (waiting !== null) return { error: 'still working on the last message' };
+      return {
+        snapshot: { waiting: callModel },
+        append: [{ kind: 'user', body: message.payload }],
+      };
+    }
+    if (message.type !== 'effect') return { snapshot };
+    if (message.kind === 'model') {
+      if (!('ok' in message.outcome)) {
+        return { snapshot: { waiting: null }, append: [{ kind: 'error', body: null }] };
+      }
+      const reply = message.outcome.ok;
+      const calls = reply.toolCalls.map((call, i) => ({
+        key: `tool:${log.next}:${i}`,
+        ...call,
+      }));
+      return {
+        snapshot: { waiting: calls.length === 0 ? null : { on: 'tools', calls } },
+        append: [{ kind: 'assistant', body: reply }],
+      };
+    }
+    // A tool finished: log its result, and call the model again once all have.
+    const calls =
+      waiting?.on === 'tools' ? waiting.calls.filter((c) => c.key !== message.key) : [];
+    const result = 'ok' in message.outcome ? message.outcome.ok : 'the tool failed';
+    return {
+      snapshot: { waiting: calls.length === 0 ? callModel : { on: 'tools', calls } },
+      append: [{ kind: 'tool', body: { key: message.key, result } }],
+    };
+  },
+
+  effects: ({ snapshot, log }) => {
+    const { waiting } = snapshot;
+    if (waiting === null) return [];
+    if (waiting.on === 'model') {
+      const messages = log.entries.map((entry) => entry.body);
+      return [{ key: waiting.key, kind: 'model', args: { messages } }];
+    }
+    return waiting.calls.map(({ key, tool, input }) => ({
+      key,
+      kind: 'tool',
+      args: { tool, input },
+    }));
+  },
+};
+
+export default agent;
+```
+
+It is longer than the loop, because what the loop leaves in its call stack is
+written down: what the agent is waiting on, and what to do when it arrives. That
+is the point. The snapshot above is not a diagram; it comes from this test,
+which plays the model's reply by hand and runs in our docs check:
+
+`mid-call.ts`:
+
+```ts title="mid-call.ts" run
+import assert from 'node:assert/strict';
+
+import { simulate } from '@acentric/testing';
+
+import agent from './src/agent.js';
+
+const chat = simulate(agent, {});
+chat.input('say', { text: 'What is the weather in Rome?' });
+chat.ok('model:1', { text: '', toolCalls: [{ tool: 'weather', input: 'Rome' }] });
+
+assert.deepEqual(chat.snapshot, {
+  waiting: {
+    on: 'tools',
+    calls: [{ key: 'tool:2:0', tool: 'weather', input: 'Rome' }],
+  },
+});
+assert.deepEqual(
+  chat.running.map((effect) => effect.key),
+  ['tool:2:0'],
+);
+```
+
+Because the state is a value, each of the questions above has a direct answer.
+
+## Two kinds of claim
+
+The answers fall into two tiers, and these docs keep them apart.
+
+**Properties of the model.** These hold on every runner, even the memory
+runner, because they follow from `step` being pure and state being data. Each
+page shows the feature in a loop and as a reducer, and proves the claim with
+examples that run in our docs check:
+
+| Claim                                        | In short                                                       |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| [Testing without mocks](testing.md)          | Feed `step` messages and check what it returns                 |
+| [Effects you can see and cancel](effects.md) | `effects(state)` says what should run; cancel by not declaring |
+| [One message at a time](one-at-a-time.md)    | A stop or a steer is just the next message                     |
+| [Upgrading live sessions](upgrades.md)       | New code takes over between steps                              |
+| [Same agent, any runner](portability.md)     | One bundle, every runner, the same conformance tests           |
+| [Replaying a session](replay.md)             | Re-run what a session received, and get the same results       |
+
+**Properties a runner delivers.** The model makes these possible, and a runner
+chooses whether to provide them: surviving crashes, recovering without paying
+for model calls again, holding no memory while waiting, and spreading sessions
+across machines. The memory runner has none of these; the local runner has
+most. They are measured, not argued, on benchmark pages still to come.
+
+None of this is free. [What it costs](costs.md) covers the price: splitting
+I/O into effects, keeping everything JSON, and the cases where a plain loop is
+the better choice.

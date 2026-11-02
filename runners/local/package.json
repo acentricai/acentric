@@ -1,9 +1,20 @@
 {
   "name": "@acentric/runner-local",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A runner for your own machine: keeps sessions in a store across restarts and runs handlers in child processes.",
+  "keywords": [
+    "acentric",
+    "ai",
+    "agent",
+    "agents",
+    "reducer",
+    "effects",
+    "runner",
+    "sqlite",
+    "durable"
+  ],
   "license": "Apache-2.0",
-  "homepage": "https://docs.acentric.dev",
+  "homepage": "https://github.com/acentricai/acentric/tree/main/runners/local#readme",
   "bugs": {
     "url": "https://github.com/acentricai/acentric/issues"
   },
@@ -41,12 +52,12 @@
     "@acentric/protocol": "workspace:*",
     "@acentric/replay": "workspace:*",
     "@acentric/types": "workspace:*",
-    "ws": "^8.22.0"
+    "ws": "^8.22.1"
   },
   "devDependencies": {
     "@acentric/client": "workspace:*",
     "@acentric/conformance": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2"
   }

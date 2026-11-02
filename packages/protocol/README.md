@@ -4,7 +4,7 @@ The protocol between applications and acentric runners: JSON-RPC 2.0, one
 message per line on stdio or one per WebSocket frame. This package has the
 message types and a small peer that speaks JSON-RPC in both directions. Use
 [@acentric/client](../client) to talk to a runner; the design is in
-[docs/local-runner.md](../../docs/local-runner.md#protocol).
+[the local runner's design](../../docs/reference/local-runner.md#protocol).
 
 | Direction    | Messages                                                                                                                                                                                       |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

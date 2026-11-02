@@ -14,6 +14,14 @@ import { createProject, detectPackageManager, runCommand } from '../dist/index.j
 
 const BIN = fileURLToPath(new URL('../dist/bin.js', import.meta.url));
 const REPOSITORY = fileURLToPath(new URL('../../..', import.meta.url));
+/** create-acentric's version, which every acentric package shares. */
+const own: unknown = JSON.parse(
+  await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+);
+const version: unknown =
+  typeof own === 'object' && own !== null ? Reflect.get(own, 'version') : undefined;
+if (typeof version !== 'string') throw new Error('create-acentric has no version');
+const VERSION = version;
 
 const cleanups: string[] = [];
 afterEach(async () => {
@@ -80,9 +88,9 @@ describe('create-acentric', () => {
         test: 'vitest run',
       },
       devDependencies: {
-        '@acentric/cli': '^0.1.0',
-        '@acentric/testing': '^0.1.0',
-        '@acentric/types': '^0.1.0',
+        '@acentric/cli': `^${VERSION}`,
+        '@acentric/testing': `^${VERSION}`,
+        '@acentric/types': `^${VERSION}`,
       },
     });
   });
@@ -131,19 +139,19 @@ describe('create-acentric', () => {
     await createProject({ dir, local: REPOSITORY, git: false, install: false });
     const tarballs = (await readdir(join(dir, '.acentric', 'packages'))).toSorted();
     expect(tarballs).toEqual([
-      'acentric-cli-0.1.0.tgz',
-      'acentric-client-0.1.0.tgz',
-      'acentric-protocol-0.1.0.tgz',
-      'acentric-replay-0.1.0.tgz',
-      'acentric-runner-local-0.1.0.tgz',
-      'acentric-testing-0.1.0.tgz',
-      'acentric-types-0.1.0.tgz',
+      `acentric-cli-${VERSION}.tgz`,
+      `acentric-client-${VERSION}.tgz`,
+      `acentric-protocol-${VERSION}.tgz`,
+      `acentric-replay-${VERSION}.tgz`,
+      `acentric-runner-local-${VERSION}.tgz`,
+      `acentric-testing-${VERSION}.tgz`,
+      `acentric-types-${VERSION}.tgz`,
     ]);
     const manifest: unknown = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'));
     expect(manifest).toMatchObject({
-      devDependencies: { '@acentric/cli': 'file:.acentric/packages/acentric-cli-0.1.0.tgz' },
+      devDependencies: { '@acentric/cli': `file:.acentric/packages/acentric-cli-${VERSION}.tgz` },
       overrides: {
-        '@acentric/runner-local': 'file:.acentric/packages/acentric-runner-local-0.1.0.tgz',
+        '@acentric/runner-local': `file:.acentric/packages/acentric-runner-local-${VERSION}.tgz`,
       },
     });
   });

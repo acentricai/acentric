@@ -1,12 +1,12 @@
 # @acentric/conformance
 
-The scenarios every runner must pass to conform to [RUNNERS.md](../../RUNNERS.md),
+The scenarios every runner must pass to conform to [the runner specification](../../docs/reference/runner-spec.md),
 the probe agent they drive, and a player for runners written in TypeScript.
 
 ## Scenarios
 
 [scenarios](scenarios) holds one JSON file per scenario, named by the section
-of RUNNERS.md it checks. A scenario is a list of steps: actions, after each of
+of the specification it checks. A scenario is a list of steps: actions, after each of
 which the runner settles, and expectations about what must then be true.
 
 | Action      | Does                                                                     |
@@ -41,7 +41,7 @@ not offer is skipped and reported, never passed.
 The probe is a test agent with no behaviour of its own: each input says what
 its step does (declare, drop or abort effects, append, reject, throw, return
 something that is not JSON, move its window, report what it saw). It ships as
-the two-module bundle RUNNERS.md describes, in [src/probe](src/probe), with a
+the two-module bundle the specification describes, in [src/probe](src/probe), with a
 version 2 for upgrades and a handlers module a runner must refuse.
 
 Its `gate` handler waits until the scenario releases it, through a hook the

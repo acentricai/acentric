@@ -1,5 +1,5 @@
 // A runner that keeps everything in memory: for tests, scripts and trying
-// agents out. It follows RUNNERS.md and passes the conformance scenarios.
+// agents out. It follows docs/reference/runner-spec.md and passes the conformance scenarios.
 
 export { createMemoryRunner, MemoryRunner } from './runner.js';
 export type {

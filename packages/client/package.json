@@ -1,9 +1,20 @@
 {
   "name": "@acentric/client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Talk to an acentric runner from an application: over WebSocket, or by starting one over stdio.",
+  "keywords": [
+    "acentric",
+    "ai",
+    "agent",
+    "agents",
+    "reducer",
+    "effects",
+    "client",
+    "websocket",
+    "json-rpc"
+  ],
   "license": "Apache-2.0",
-  "homepage": "https://docs.acentric.dev",
+  "homepage": "https://github.com/acentricai/acentric/tree/main/packages/client#readme",
   "bugs": {
     "url": "https://github.com/acentricai/acentric/issues"
   },
@@ -43,6 +54,6 @@
     "@acentric/types": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5"
+    "@types/node": "^26.6.6"
   }
 }

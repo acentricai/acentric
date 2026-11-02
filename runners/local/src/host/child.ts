@@ -147,7 +147,7 @@ function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** What `secrets.get` rejects with when no secret has the name, as RUNNERS.md fixes it. */
+/** What `secrets.get` rejects with when no secret has the name, as docs/reference/runner-spec.md fixes it. */
 function secretNotSet(name: string): Error {
   const error = new Error(`secret ${name} is not set`);
   error.name = 'SecretNotSet';

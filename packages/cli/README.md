@@ -7,8 +7,8 @@ deploys, start a runner with them, and inspect and drive a running one.
 acentric dev                       # a dev runner and UI on http://127.0.0.1:7420, hot-reloading on save
 acentric build                     # bundle, type-check, check purity, write manifests
 acentric start                     # a runner on ws://127.0.0.1:7420 with the built agents
-acentric create pi@0.1.0 '{"cwd": "/work", "model": {"provider": "openai", "id": "gpt-5.4-mini"}}'
-acentric send <id> prompt '{"text": "fix the tests"}'
+acentric create notes@0.1.0       # prints the new session's id
+acentric send <id> add '{"text": "buy milk"}'
 acentric log <id> -f               # the log, then each step live
 ```
 
@@ -20,7 +20,7 @@ import { defineConfig } from '@acentric/cli/config';
 
 export default defineConfig({
   agents: {
-    pi: { agent: 'src/entry/agent.ts', handlers: 'src/entry/handlers.ts' },
+    notes: { agent: 'src/agent.ts', handlers: 'src/handlers.ts' },
   },
   secrets: ['OPENAI_API_KEY'],
 });
@@ -38,7 +38,7 @@ Each agent's `agent` module default-exports its pure half and its
 `handlers` module default-exports its handlers. An agent's version defaults
 to the project's `package.json` version. Its `environment` says what its
 handlers may use: `node`, the default, or `fetch`, for runners whose handlers
-have only the web platform, such as acentric-cloud.
+have only the web platform, such as Acentric Cloud.
 
 ## dev
 

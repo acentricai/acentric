@@ -1,9 +1,20 @@
 {
   "name": "@acentric/conformance",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Scenarios every runner must pass, the probe agent they drive, and a player for runners written in TypeScript.",
+  "keywords": [
+    "acentric",
+    "ai",
+    "agent",
+    "agents",
+    "reducer",
+    "effects",
+    "conformance",
+    "testing",
+    "runner"
+  ],
   "license": "Apache-2.0",
-  "homepage": "https://docs.acentric.dev",
+  "homepage": "https://github.com/acentricai/acentric/tree/main/packages/conformance#readme",
   "bugs": {
     "url": "https://github.com/acentricai/acentric/issues"
   },
@@ -61,6 +72,6 @@
   },
   "devDependencies": {
     "@acentric/testing": "workspace:*",
-    "@types/node": "^26.6.5"
+    "@types/node": "^26.6.6"
   }
 }

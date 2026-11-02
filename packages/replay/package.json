@@ -1,9 +1,20 @@
 {
   "name": "@acentric/replay",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Runs an agent's pure half with no runner: delivers messages to step as a runner would, and replays a session's journal.",
+  "keywords": [
+    "acentric",
+    "ai",
+    "agent",
+    "agents",
+    "reducer",
+    "effects",
+    "replay",
+    "journal",
+    "deterministic"
+  ],
   "license": "Apache-2.0",
-  "homepage": "https://docs.acentric.dev",
+  "homepage": "https://github.com/acentricai/acentric/tree/main/packages/replay#readme",
   "bugs": {
     "url": "https://github.com/acentricai/acentric/issues"
   },
@@ -38,6 +49,6 @@
     "@acentric/types": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5"
+    "@types/node": "^26.6.6"
   }
 }

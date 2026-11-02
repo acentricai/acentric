@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/acentricai/acentric/security/advisories/new
+    about: Report security issues privately, not in public issues.
+  - name: Documentation
+    url: https://github.com/acentricai/acentric/tree/main/docs
+    about: Read the docs, including getting started and the runner specification.

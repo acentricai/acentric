@@ -1,7 +1,7 @@
 # @acentric/runner-memory
 
 A runner that keeps everything in memory, for tests, scripts and trying
-agents out. It follows [RUNNERS.md](../../RUNNERS.md) and passes every
+agents out. It follows [the runner specification](../../docs/reference/runner-spec.md) and passes every
 [conformance](../../packages/conformance) scenario, including `durable`,
 `upgrade`, `journal` and `fork`.
 

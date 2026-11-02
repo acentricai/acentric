@@ -3,9 +3,9 @@
 A runner for your own machine or a single server. It keeps sessions in a
 store, so they survive restarts, and runs handlers in child processes, so a
 handler that crashes or hangs takes down only its host. It follows
-[RUNNERS.md](../../RUNNERS.md) and passes every
+[the runner specification](../../docs/reference/runner-spec.md) and passes every
 [conformance](../../packages/conformance) scenario, including `durable` and
-`upgrade`. The design is in [docs/local-runner.md](../../docs/local-runner.md).
+`upgrade`. The design is in [docs/reference/local-runner.md](../../docs/reference/local-runner.md).
 
 ```ts
 import { createLocalRunner, openSqliteStore } from '@acentric/runner-local';
@@ -14,11 +14,16 @@ const store = await openSqliteStore('./agents.db');
 const runner = createLocalRunner({ store, secrets: { OPENAI_API_KEY: '...' } });
 await runner.start(); // recovers what the store holds
 
-await runner.deploy({ name: 'pi', version: '0.1.0', agent: agentSource, handlers: handlersSource });
-const { id } = await runner.create({ name: 'pi', version: '0.1.0' }, { cwd, model });
+await runner.deploy({
+  name: 'notes',
+  version: '0.1.0',
+  agent: agentSource,
+  handlers: handlersSource,
+});
+const { id } = await runner.create({ name: 'notes', version: '0.1.0' }, {});
 
 const stop = await runner.subscribe(id, {}, (event) => console.log(event));
-await runner.input(id, { id: 'u1', kind: 'prompt', payload: { text: 'hello' } });
+await runner.input(id, { id: 'u1', kind: 'add', payload: { text: 'buy milk' } });
 
 await runner.close(); // lets running handlers finish, then stops
 await store.close();

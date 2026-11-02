@@ -3,4 +3,4 @@
 // of failing on a shape it does not know. A test keeps it equal to
 // package.json's version.
 
-export const LLM_VERSION = '0.1.0';
+export const LLM_VERSION = '0.1.1';

@@ -1,10 +1,16 @@
 {
   "name": "acentric",
   "private": true,
+  "description": "A framework for writing AI agents as pure reducers with declared effects.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acentricai/acentric.git"
+  },
   "type": "module",
   "packageManager": "pnpm@12.3.4",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "build": "tsc --build",
@@ -16,15 +22,24 @@
     "lint:fix": "oxlint --type-aware --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm build && pnpm lint && pnpm typecheck:tests && pnpm test && pnpm --filter @acentric/docs check",
-    "release": "pnpm check && pnpm -r publish --access public"
+    "check": "pnpm format:check && pnpm build && pnpm lint && pnpm typecheck:tests && pnpm test && pnpm docs:check",
+    "release": "pnpm check && pnpm -r publish --access public",
+    "docs:check": "node scripts/check-docs.mjs"
   },
   "devDependencies": {
-    "oxlint": "^1.89.0",
-    "oxlint-tsgolint": "^7.0.2004",
+    "@acentric/client": "workspace:*",
+    "@acentric/conformance": "workspace:*",
+    "@acentric/replay": "workspace:*",
+    "@acentric/runner-local": "workspace:*",
+    "@acentric/runner-memory": "workspace:*",
+    "@acentric/testing": "workspace:*",
+    "@acentric/types": "workspace:*",
+    "@types/node": "^26.6.6",
+    "github-slugger": "^2.0.0",
+    "oxlint": "^1.90.0",
+    "oxlint-tsgolint": "^7.0.2005",
     "prettier": "^3.9.10",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
-  },
-  "license": "Apache-2.0"
+  }
 }

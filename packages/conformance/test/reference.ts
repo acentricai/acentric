@@ -1,7 +1,7 @@
 // A reference adapter: the simulator from @acentric/testing, with the
 // probe's handlers run in this process. It is a small runner that keeps
 // nothing past the process and cannot upgrade, enough to check that the
-// scenarios themselves say what RUNNERS.md says before a real runner exists.
+// scenarios themselves say what docs/reference/runner-spec.md says before a real runner exists.
 
 import { handlerContext, simulate } from '@acentric/testing';
 import type { Simulation } from '@acentric/testing';

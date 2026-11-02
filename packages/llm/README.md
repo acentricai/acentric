@@ -52,7 +52,7 @@ export default {
   window, output limit, input types and prices, and `estimateCost(usage,
 pricing)` what a call cost. A model not listed still works.
 - **Failures:** the client throws `LlmError`, whose `toJSON()` is what a runner
-  reports to step ([RUNNERS.md](../../RUNNERS.md#8-handlers)). In step,
+  reports to step ([runner spec §8](../../docs/reference/runner-spec.md#8-handlers)). In step,
   `llmFailure(outcome)` reads it back: its `kind`, whether it is `retryable`,
   and `retryAfterMs`.
 
@@ -119,7 +119,7 @@ environment, so the same code runs on every runner:
 So an agent can use its own account for one provider and the gateway for the
 others. Options passed to the client override all of these. A secret that is
 not set rejects with `SecretNotSet` on every runner
-([RUNNERS.md](../../RUNNERS.md#8-handlers)), which is how the client tells
+([runner spec §8](../../docs/reference/runner-spec.md#8-handlers)), which is how the client tells
 which are set.
 
 The names are exported as `PROVIDER_SECRETS` and `GATEWAY_SECRETS`, and

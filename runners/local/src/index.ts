@@ -1,5 +1,5 @@
 // The local runner: sessions kept in a store across restarts, handlers run
-// in child processes. It follows RUNNERS.md; docs/local-runner.md has the
+// in child processes. It follows docs/reference/runner-spec.md; docs/reference/local-runner.md has the
 // design.
 
 export { openFileStore } from './store/files.js';

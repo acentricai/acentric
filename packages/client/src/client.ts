@@ -366,7 +366,7 @@ function isObject(value: unknown): value is JsonObject {
 
 /**
  * What a provided handler threw, as Json: what its `toJSON()` returns when
- * that is Json, as RUNNERS.md §8 requires, and otherwise its name and message.
+ * that is Json, as docs/reference/runner-spec.md §8 requires, and otherwise its name and message.
  */
 function thrownToJson(error: unknown): Json {
   if (typeof error === 'object' && error !== null) {

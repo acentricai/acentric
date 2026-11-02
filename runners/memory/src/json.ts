@@ -37,7 +37,7 @@ export function frozenCopy<T extends Json>(value: T): T {
 
 /**
  * What a thrown value says, as Json: what its `toJSON()` returns when that is
- * Json, as RUNNERS.md §8 requires, and otherwise its name and message.
+ * Json, as docs/reference/runner-spec.md §8 requires, and otherwise its name and message.
  */
 export function thrownToJson(error: unknown): Json {
   const own = ownJson(error);
