@@ -1,8 +1,6 @@
 packages:
   - packages/*
   - apps/*
-  # Throwaway experiments. None is published, and each says when it is to be deleted.
-  - spikes/*
 
 # One version of what several packages use. The Node types are those of the oldest Node the
 # packages run on, so that nothing newer is used by mistake.

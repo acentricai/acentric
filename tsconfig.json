@@ -38,12 +38,6 @@
       "path": "scripts"
     },
     {
-      "path": "spikes/walking-skeleton"
-    },
-    {
-      "path": "spikes/walking-skeleton/test"
-    },
-    {
       "path": "packages/core/test"
     },
     {
