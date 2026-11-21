@@ -17,6 +17,8 @@ export type Settings = {
   readonly readOnly: boolean;
   /** Without it, every write is a transaction of its own: for measuring what the grouping saves. */
   readonly groupCommit: boolean;
+  /** See `SqliteOptions`. */
+  readonly fullFsync: boolean;
 };
 
 export type Request = {
@@ -41,7 +43,7 @@ const port = parentPort;
 if (port === null) throw new Error('This file is a thread of the store, and was run as a program');
 const settings = workerData as Settings;
 
-const db = open(settings.path, settings.readOnly);
+const db = open(settings.path, settings.readOnly, settings.fullFsync);
 if (!settings.readOnly) migrate(db);
 const ops = operations(db) as unknown as { [op: string]: (...args: never[]) => unknown };
 

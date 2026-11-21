@@ -93,12 +93,15 @@ export type Operation = keyof Operations;
 
 export const WRITES: ReadonlySet<Operation> = new Set(['createActor', 'commit', 'addInput']);
 
-export function open(path: string, readOnly: boolean): DatabaseSync {
+export function open(path: string, readOnly: boolean, fullFsync = false): DatabaseSync {
   const db = new DatabaseSync(path, { readOnly });
   if (!readOnly) {
     // A commit is on the disk before anyone is told of it. Readers do not wait for a writer.
     db.exec('PRAGMA journal_mode = WAL');
     db.exec('PRAGMA synchronous = FULL');
+    // On macOS a sync does not reach the disk itself unless it is asked to, at a cost. It makes
+    // no difference elsewhere, where a sync always does.
+    if (fullFsync) db.exec('PRAGMA fullfsync = ON');
   }
   db.exec('PRAGMA busy_timeout = 5000');
   return db;
