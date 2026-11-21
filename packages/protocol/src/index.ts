@@ -10,3 +10,7 @@ export * from './content.ts';
 export * from './messages.ts';
 export * from './auth.ts';
 export * from './versions.ts';
+export * from './manifest.ts';
+export * from './resources/agents.ts';
+export * from './resources/actors.ts';
+export * from './resources/people.ts';
