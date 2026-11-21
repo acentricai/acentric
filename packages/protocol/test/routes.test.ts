@@ -109,8 +109,6 @@ describe('events', () => {
   const events: ActorEvent[] = [
     { type: 'message', entry },
     { type: 'status', status: 'working', lastTurn: null, pendingInputs: 0 },
-    { type: 'delta', answer: 'a1', part: 0, kind: 'text', text: 'Hel' },
-    { type: 'delta', answer: 'a1', part: 0, kind: 'text', text: 'Hello, wor', snapshot: true },
   ];
 
   it('go out as server-sent events and come back the same', () => {
@@ -122,15 +120,16 @@ describe('events', () => {
   });
 
   it('only a message has an ID: its place in the conversation', () => {
-    expect(events.map((event) => toSse(event).id)).toEqual(['7', undefined, undefined, undefined]);
+    expect(events.map((event) => toSse(event).id)).toEqual(['7', undefined]);
   });
 
   it('refuse what is not an event', () => {
     expect(() => fromSse({ data: '{"type":"ping"}' })).toThrow(/Invalid discriminator value/);
-    expect(
-      actorEventSchema.safeParse({ type: 'delta', answer: 'a1', part: 0, kind: 'audio', text: '' })
-        .success,
-    ).toBe(false);
+  });
+
+  it('have nothing of an answer the model is still writing', () => {
+    const piece = { type: 'delta', answer: 'a1', part: 0, kind: 'text', text: 'Hel' };
+    expect(actorEventSchema.safeParse(piece).success).toBe(false);
   });
 });
 
