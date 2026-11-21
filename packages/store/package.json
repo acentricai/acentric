@@ -28,6 +28,11 @@
     "provenance": true
   },
   "devDependencies": {
+    "@acentric/ai": "workspace:*",
     "@types/node": "catalog:"
+  },
+  "dependencies": {
+    "@acentric/core": "workspace:*",
+    "@acentric/protocol": "workspace:*"
   }
 }

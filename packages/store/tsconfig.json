@@ -7,5 +7,15 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "references": []
+  "references": [
+    {
+      "path": "../ai"
+    },
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../protocol"
+    }
+  ]
 }
