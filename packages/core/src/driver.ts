@@ -152,6 +152,11 @@ export class ActorDriver {
 
   /** An input the store has taken: it starts a turn, or joins the one going on. */
   receive(input: Input): void {
+    // A driver made after the input was stored read it from the mailbox already.
+    if (this.mail.some((waiting) => waiting.id === input.id)) {
+      this.wake();
+      return;
+    }
     this.mail.push(input);
     this.record = {
       ...this.record,

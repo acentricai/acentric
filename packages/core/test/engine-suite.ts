@@ -438,6 +438,32 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         expect(roles).toEqual(actors.map(() => ['user', 'assistant']));
       });
 
+      it('take an input once, though their driver was given up while the agent’s code read it', async () => {
+        const slow = deferred<string>();
+        const one = w.engine([says('Hello B.'), says('Hello A.')], {
+          handler: (payload) => {
+            const { text } = payload as { text: string };
+            return text === 'slow' ? slow.promise : text;
+          },
+          options: { maxHotActors: 1 },
+        });
+        const a = await one.createActor();
+        const b = await one.createActor();
+
+        const sending = one.say(a.id, 'slow');
+        await eventually(() => one.executor.made.length === 1);
+        // While the agent's code reads what A was sent, B takes a turn, and A's driver, which
+        // has nothing to do yet, is the one given up.
+        await one.say(b.id, 'Hello.');
+        await one.it.settled(b.id);
+        slow.resolve('Hello.');
+        await sending;
+        await one.it.settled(a.id);
+
+        expect(await w.roles(a.id)).toEqual(['user', 'assistant']);
+        expect((await store.loadActor(a.id))?.actor.pendingInputs).toBe(0);
+      });
+
       it('keep a driver only while they have something to do, past a number', async () => {
         const one = w.engine(
           Array.from({ length: 5 }, () => says('Hello.')),
