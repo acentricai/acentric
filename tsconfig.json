@@ -42,6 +42,12 @@
     },
     {
       "path": "spikes/walking-skeleton/test"
+    },
+    {
+      "path": "packages/core/test"
+    },
+    {
+      "path": "packages/store/test"
     }
   ]
 }

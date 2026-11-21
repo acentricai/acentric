@@ -4,7 +4,7 @@
   "@acentric/client": ["@acentric/protocol"],
   "@acentric/ai": ["@acentric/protocol"],
   "@acentric/core": ["@acentric/protocol", "@acentric/ai"],
-  "@acentric/store": ["@acentric/protocol", "@acentric/core"],
+  "@acentric/store": ["@acentric/protocol", "@acentric/core", "@acentric/ai"],
   "@acentric/executor": ["@acentric/protocol", "@acentric/core"],
   "@acentric/sandbox": ["@acentric/protocol", "@acentric/core"],
   "@acentric/server": [

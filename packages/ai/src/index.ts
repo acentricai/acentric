@@ -1,6 +1,4 @@
-// Calls model providers: the interface a provider implements, the codecs of the wire protocols
-// providers share, and the providers themselves.
-//
-// Nothing is here yet.
+// Calls model providers: the interface a provider's runner implements, and, as they are
+// written, the codecs of the wire protocols providers share and the providers themselves.
 
-export {};
+export * from './runner.ts';

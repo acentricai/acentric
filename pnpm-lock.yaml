@@ -208,11 +208,30 @@ importers:
 
   packages/agent: {}
 
-  packages/ai: {}
+  packages/ai:
+    dependencies:
+      '@acentric/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
 
   packages/client: {}
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@acentric/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@acentric/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
 
   packages/executor:
     devDependencies:
@@ -233,7 +252,17 @@ importers:
         version: 24.19.2
 
   packages/store:
+    dependencies:
+      '@acentric/core':
+        specifier: workspace:*
+        version: link:../core
+      '@acentric/protocol':
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
+      '@acentric/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
