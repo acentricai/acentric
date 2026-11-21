@@ -8,3 +8,5 @@ export * from './primitives.ts';
 export * from './errors.ts';
 export * from './content.ts';
 export * from './messages.ts';
+export * from './auth.ts';
+export * from './versions.ts';

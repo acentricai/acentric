@@ -179,7 +179,7 @@ export const messageSchema = z
   .meta({ id: 'Message' });
 export type Message = z.infer<typeof messageSchema>;
 
-export type Role = Message['role'];
+export type MessageRole = Message['role'];
 
 // What a model call reports besides its message.
 
