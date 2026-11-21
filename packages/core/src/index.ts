@@ -9,3 +9,7 @@ export * from './executor.ts';
 export * from './bus.ts';
 export * from './errors.ts';
 export * from './memory-store.ts';
+export * from './limits.ts';
+export { ActorDriver } from './driver.ts';
+export type { Clock, Timer } from './driver.ts';
+export * from './engine.ts';

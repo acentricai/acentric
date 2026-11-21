@@ -7,6 +7,22 @@
     "tsBuildInfoFile": "tsconfig.tsbuildinfo",
     "types": ["node"]
   },
-  "include": [".", "../bench", "../../core/test/store-suite.ts", "../../core/test/world.ts"],
-  "references": [{ "path": ".." }, { "path": "../../core" }, { "path": "../../ai" }]
+  "include": [
+    ".",
+    "../bench",
+    "../../core/test/store-suite.ts",
+    "../../core/test/engine-suite.ts",
+    "../../core/test/world.ts"
+  ],
+  "references": [
+    {
+      "path": ".."
+    },
+    {
+      "path": "../../core"
+    },
+    {
+      "path": "../../ai"
+    }
+  ]
 }
