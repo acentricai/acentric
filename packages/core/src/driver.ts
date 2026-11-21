@@ -44,7 +44,8 @@ export type Timer = (ms: number, signal: AbortSignal) => Promise<void>;
 /** What a driver is given of the engine it is part of. */
 export type Host = {
   readonly store: Store;
-  readonly runner: ModelRunner;
+  /** The runner of an actor's model: its agent says which provider's. */
+  runnerFor(actor: Actor, definition: AgentDefinition): ModelRunner;
   readonly executor: Executor;
   readonly bus: EventBus;
   readonly clock: Clock;
@@ -318,7 +319,7 @@ export class ActorDriver {
   }
 
   async #model(turn: ModelTurn, cutOff: boolean): Promise<void> {
-    const { clock, timer, runner } = this.#host;
+    const { clock, timer } = this.#host;
     // A call that was waiting for its next try was not under way: there is nothing to count.
     const waiting = turn.retryAt !== null && turn.retryAt > clock();
     if (cutOff && !waiting) {
@@ -341,7 +342,7 @@ export class ActorDriver {
 
       let event: MachineEvent;
       try {
-        const step = await this.#step();
+        const { step, runner } = await this.#step();
         const answer = await untilAborted(runner.run(step, controller.signal), controller.signal);
         if (answer === ABORTED) return;
         event = { type: 'answered', answer };
@@ -407,6 +408,8 @@ export class ActorDriver {
       toolName: call.name,
       content,
       isError,
+      // What the provider needs said again on the result of this call.
+      ...(call.resultOptions === undefined ? {} : { providerOptions: call.resultOptions }),
     });
 
     const { tools } = await this.#host.definition(actor.deployment.id);
@@ -435,7 +438,7 @@ export class ActorDriver {
   }
 
   /** What the model is called with: the agent's definition, and the conversation so far. */
-  async #step(): Promise<ModelStep> {
+  async #step(): Promise<{ readonly step: ModelStep; readonly runner: ModelRunner }> {
     const { actor } = this.record;
     const definition = await this.#host.definition(actor.deployment.id);
     if (this.#conversation === null) {
@@ -444,7 +447,7 @@ export class ActorDriver {
         .filter((entry) => entry.leftOut !== true)
         .map((entry) => entry.message);
     }
-    return {
+    const step: ModelStep = {
       model: actor.model,
       reasoning: actor.reasoning,
       instructions: definition.instructions,
@@ -455,7 +458,12 @@ export class ActorDriver {
         parameters: tool.parameters,
       })),
       messages: [...this.#conversation],
+      // The same at every call of this actor's: a provider finds what it has read of the
+      // conversation by it.
+      session: actor.id,
+      ...(definition.providerOptions === undefined ? {} : { options: definition.providerOptions }),
     };
+    return { step, runner: this.#host.runnerFor(actor, definition) };
   }
 
   /**

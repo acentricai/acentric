@@ -153,6 +153,80 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
       });
     });
 
+    describe('the model', () => {
+      it('is called with what names the conversation, the same at every call', async () => {
+        const one = w.engine([lookup, says('It was refunded twice.')]);
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Why two refunds?');
+        await one.it.settled(actor.id);
+        expect(one.steps.map((step) => step.session)).toEqual([actor.id, actor.id]);
+      });
+
+      it('has its tool’s result sent back with what its provider wants said again', async () => {
+        const called = calls({
+          id: 'c1',
+          name: 'lookup_order',
+          arguments: { id: 4411 },
+          resultOptions: { caller: { type: 'direct' } },
+        });
+        const one = w.engine([called, says('It was refunded twice.')]);
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Why two refunds?');
+        await one.it.settled(actor.id);
+        expect((await store.conversation(actor.id))[2]?.message).toMatchObject({
+          role: 'tool_result',
+          providerOptions: { caller: { type: 'direct' } },
+        });
+      });
+
+      it('is called again when its provider paused in the middle of its own work', async () => {
+        const paused: ModelAnswer = { ...says('Searching.'), stopReason: 'pause_turn' };
+        const one = w.engine([paused, says('Found it.')]);
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Find it.');
+        await one.it.settled(actor.id);
+        expect(await w.roles(actor.id)).toEqual(['user', 'assistant', 'assistant']);
+        expect(one.steps[1]?.messages).toHaveLength(2);
+      });
+
+      it('is that of the actor’s agent, when the engine is given a source of them', async () => {
+        const asked: string[] = [];
+        const one = w.engine([], {
+          options: {
+            runner: (actor, definition) => ({
+              run: async () => {
+                asked.push(`${definition.provider} for ${actor.id}`);
+                return says('Hello.');
+              },
+            }),
+          },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Hello?');
+        await one.it.settled(actor.id);
+        expect(asked).toEqual([`fake for ${actor.id}`]);
+      });
+
+      it('that cannot be had fails the turn, with what is missing', async () => {
+        const one = w.engine([], {
+          options: {
+            runner: () => {
+              throw new Error('There is no account for Fake: its calls cannot be made');
+            },
+          },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Hello?');
+        await one.it.settled(actor.id);
+        expect((await store.loadActor(actor.id))?.actor.lastTurn).toEqual({
+          end: 'failed',
+          at: expect.any(Number) as number,
+          reason: 'There is no account for Fake: its calls cannot be made',
+        });
+        expect(one.failures).toEqual([]);
+      });
+    });
+
     describe('a call of the model that fails', () => {
       it('in a way that may pass is made again, after a wait that grows', async () => {
         const one = w.engine([overloaded, overloaded, says('Hello.')]);

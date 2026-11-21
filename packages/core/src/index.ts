@@ -13,3 +13,4 @@ export * from './limits.ts';
 export { ActorDriver } from './driver.ts';
 export type { Clock, Timer } from './driver.ts';
 export * from './engine.ts';
+export * from './runners.ts';

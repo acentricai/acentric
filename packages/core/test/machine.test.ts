@@ -130,6 +130,18 @@ describe('the model answers', () => {
     expect(change.lastTurn).toEqual({ end: 'ok', at: NOW });
   });
 
+  it('having paused in work of its provider’s own: its answer is kept, and it is called again', () => {
+    const answer = { ...says('Searching.'), stopReason: 'pause_turn' as const };
+    const change = decide(
+      at(model({ startSeq: 3, attempt: 2 }), 4),
+      { type: 'answered', answer },
+      NOW,
+    );
+    expect(change.turn).toEqual(model({ startSeq: 3 }));
+    expect(change.status).toBe('working');
+    expect(change.append.map((entry) => entry.message.role)).toEqual(['assistant']);
+  });
+
   it('by declining: the turn is refused, and everything of it is left out from then on', () => {
     const answer = { ...says('I cannot help with that.'), stopReason: 'refusal' as const };
     const change = decide(at(model({ startSeq: 3 }), 4), { type: 'answered', answer }, NOW);
