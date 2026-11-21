@@ -32,12 +32,19 @@ import { DEFAULT_RULES } from './machine.ts';
 import type { Rules } from './machine.ts';
 import type { Store } from './store.ts';
 
+/** Gives an actor the runner of its model. It is asked at every call, so it is quick to answer. */
+export type RunnerSource = (actor: Actor, definition: AgentDefinition) => ModelRunner;
+
 /** Ten random bytes. */
 export type Entropy = () => Uint8Array;
 
 export type EngineOptions = {
   readonly store: Store;
-  readonly runner: ModelRunner;
+  /**
+   * What calls the model: one runner for every actor, or what gives each actor the runner of
+   * its agent's provider (see `providerRunners`).
+   */
+  readonly runner: ModelRunner | RunnerSource;
   readonly executor: Executor;
   /** Without it, a bus of this process. */
   readonly bus?: EventBus;
@@ -92,6 +99,7 @@ export class Engine {
     this.#timer = options.timer ?? wait;
     this.#slots = new Semaphore(options.maxConcurrentTurns ?? 100);
     this.#maxHot = options.maxHotActors ?? 1000;
+    const { runner } = options;
     const report =
       options.report ??
       ((error: unknown) => {
@@ -99,7 +107,7 @@ export class Engine {
       });
     this.#host = {
       store: options.store,
-      runner: options.runner,
+      runnerFor: typeof runner === 'function' ? runner : () => runner,
       executor: options.executor,
       bus: options.bus ?? new MemoryBus(),
       clock: this.#clock,

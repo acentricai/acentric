@@ -177,7 +177,11 @@ export function decide(
         };
       }
       const said = entry(answer.message, { completion });
-      if (answer.toolCalls.length === 0) return ends('ok', undefined, [said]);
+      if (answer.toolCalls.length === 0) {
+        // The provider paused in the middle of its own work: sent its answer back, it goes on.
+        if (answer.stopReason === 'pause_turn') return goesOn(model(turn.startSeq), [said]);
+        return ends('ok', undefined, [said]);
+      }
       const calls: OwedCall[] = answer.toolCalls.map((call) => ({ ...call, result: null }));
       return goesOn({ phase: 'tools', startSeq: turn.startSeq, calls }, [said]);
     }
