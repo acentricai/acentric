@@ -1,16 +1,41 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/protocol" },
-    { "path": "packages/agent" },
-    { "path": "packages/client" },
-    { "path": "packages/ai" },
-    { "path": "packages/core" },
-    { "path": "packages/store" },
-    { "path": "packages/executor" },
-    { "path": "packages/sandbox" },
-    { "path": "apps/server" },
-    { "path": "apps/cli" },
-    { "path": "scripts" }
+    {
+      "path": "packages/protocol"
+    },
+    {
+      "path": "packages/protocol/test"
+    },
+    {
+      "path": "packages/agent"
+    },
+    {
+      "path": "packages/client"
+    },
+    {
+      "path": "packages/ai"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/store"
+    },
+    {
+      "path": "packages/executor"
+    },
+    {
+      "path": "packages/sandbox"
+    },
+    {
+      "path": "apps/server"
+    },
+    {
+      "path": "apps/cli"
+    },
+    {
+      "path": "scripts"
+    }
   ]
 }
