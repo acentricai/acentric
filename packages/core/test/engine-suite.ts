@@ -16,7 +16,6 @@ import {
   Unavailable,
   UnknownInput,
 } from '../src/errors.ts';
-import { StaleEpoch } from '../src/store.ts';
 import type { Store } from '../src/store.ts';
 import { HANDLER, LOOKUP, deferred, eventually, world } from './world.ts';
 import type { World } from './world.ts';
@@ -487,7 +486,7 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         hung.resolve(says('Late.'));
         await first.it.settled(actor.id);
         expect(first.failures).toHaveLength(1);
-        expect(first.failures[0]).toBeInstanceOf(StaleEpoch);
+        expect(first.failures[0]).toMatchObject({ name: 'StaleEpoch' });
         expect(await w.roles(actor.id)).toEqual(['user', 'assistant']);
       });
 

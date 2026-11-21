@@ -7,7 +7,6 @@ import { makeId } from '@acentric/protocol';
 import type { Actor, AgentId, ConversationEntry, Input } from '@acentric/protocol';
 
 import type { Change } from '../src/state.ts';
-import { NameTaken, StaleEpoch } from '../src/store.ts';
 import type { Store } from '../src/store.ts';
 
 const NOW = 1_795_305_600_000;
@@ -110,9 +109,9 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
     it('refuses a name another actor of the agent has', async () => {
       const agent = agentId();
       await create({ name: 'eu-desk' }, agent);
-      await expect(store.createActor(actorOf(agent, { name: 'eu-desk' }))).rejects.toBeInstanceOf(
-        NameTaken,
-      );
+      await expect(store.createActor(actorOf(agent, { name: 'eu-desk' }))).rejects.toMatchObject({
+        name: 'NameTaken',
+      });
       expect((await store.createActor(actorOf(agentId(), { name: 'eu-desk' }))).created).toBe(true);
     });
 
@@ -138,7 +137,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
 
       await expect(
         store.commit(actor.id, 0, change({ append: [said(2, 'late')] })),
-      ).rejects.toBeInstanceOf(StaleEpoch);
+      ).rejects.toMatchObject({ name: 'StaleEpoch' });
       expect(await store.conversation(actor.id)).toEqual([said(1, 'first')]);
       expect((await store.loadActor(actor.id))?.epoch).toBe(1);
     });

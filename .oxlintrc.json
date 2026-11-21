@@ -13,7 +13,8 @@
         "maxArgs": 2
       }
     ],
-    "unicorn/consistent-function-scoping": "off"
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/require-post-message-target-origin": "off"
   },
   "env": {
     "builtin": true
