@@ -117,14 +117,11 @@ function messageOf(message: Message, where: string, model: string): JsonObject[]
       if (message.toolType === 'custom')
         return refuse(`${where} answers a custom tool, and ${LABEL} has none`);
       const [only] = message.content;
+      // One piece of text and nothing else is sent as it is. Anything else is sent as its parts.
       const plain =
-        message.content.length === 0
-          ? ''
-          : message.content.length === 1 &&
-              only?.type === 'text' &&
-              only.providerOptions === undefined
-            ? only.text
-            : undefined;
+        message.content.length === 1 && only?.type === 'text' && only.providerOptions === undefined
+          ? only.text
+          : undefined;
       return [
         {
           role: 'user',

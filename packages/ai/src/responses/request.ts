@@ -102,7 +102,6 @@ function toolResult(
 
 /** The text of content that is one piece of text and nothing else, which is sent as it is. */
 function plainText(content: readonly ContentPart[]): string | undefined {
-  if (content.length === 0) return '';
   const [only] = content;
   if (content.length !== 1 || only?.type !== 'text' || only.providerOptions !== undefined)
     return undefined;
