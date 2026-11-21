@@ -26,11 +26,15 @@ export function deferred<T>(): {
   return { promise, resolve };
 }
 
-/** Waits for `check` to hold, giving everything else its turn in between. */
+/**
+ * Waits for `check` to hold, giving everything else its turn in between. It waits by the
+ * clock, not by a number of turns: a store on a thread of its own answers when it answers.
+ */
 export async function eventually(check: () => boolean | Promise<boolean>): Promise<void> {
-  for (let tries = 0; tries < 2000; tries += 1) {
+  const until = Date.now() + 10_000;
+  while (Date.now() < until) {
     if (await check()) return;
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 1));
   }
   throw new Error('It never happened');
 }
