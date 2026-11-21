@@ -4,3 +4,4 @@ pnpm-lock.yaml
 *.tsbuildinfo
 LICENSE
 .notes
+packages/protocol/openapi.json

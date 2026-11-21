@@ -14,3 +14,6 @@ export * from './manifest.ts';
 export * from './resources/agents.ts';
 export * from './resources/actors.ts';
 export * from './resources/people.ts';
+export * from './routes.ts';
+export * from './events.ts';
+export * from './openapi.ts';
