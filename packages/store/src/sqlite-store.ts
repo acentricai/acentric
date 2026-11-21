@@ -19,6 +19,13 @@ export type SqliteOptions = {
    * True without it. False is for measuring what that saves.
    */
   readonly groupCommit?: boolean;
+  /**
+   * On macOS, whether a commit waits for the disk itself, not only for the system: without it a
+   * commit survives the process and the system ending, and may not survive the power going. It
+   * is slow, and off without this. On Linux a commit always waits for the disk, and this
+   * changes nothing.
+   */
+  readonly fullFsync?: boolean;
 };
 
 // The thread's file is beside this one: TypeScript where this is run as it was written, and
@@ -115,10 +122,13 @@ export class SqliteStore implements Store {
   /** Opens the database at `path`, making it and bringing its tables up to date as needed. */
   static async open(path: string, options: SqliteOptions = {}): Promise<SqliteStore> {
     const groupCommit = options.groupCommit ?? true;
-    const write = await Line.start({ path, readOnly: false, groupCommit });
+    const fullFsync = options.fullFsync ?? false;
+    const write = await Line.start({ path, readOnly: false, groupCommit, fullFsync });
     // A database in memory is one connection's own: there is nothing for a second to read.
     const read =
-      path === ':memory:' ? write : await Line.start({ path, readOnly: true, groupCommit });
+      path === ':memory:'
+        ? write
+        : await Line.start({ path, readOnly: true, groupCommit, fullFsync });
     return new SqliteStore(write, read);
   }
 
