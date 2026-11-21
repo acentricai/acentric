@@ -1,0 +1,11 @@
+{
+  "name": "spike-walking-skeleton",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Throwaway: one turn of one actor on fake parts, to see whether the engine's interfaces fit together.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@acentric/protocol": "workspace:*"
+  }
+}
