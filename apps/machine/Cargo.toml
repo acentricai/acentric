@@ -1,0 +1,9 @@
+[package]
+name = "acentric-machine"
+description = "The machine's side of Acentric: it connects out to an engine, runs the commands it is sent, and says how each ended."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+# It is released as a binary, not as a crate.
+publish = false

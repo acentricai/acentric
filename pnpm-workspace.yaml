@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - apps/*
+
+# One version of what several packages use. The Node types are those of the oldest Node the
+# packages run on, so that nothing newer is used by mistake.
+catalog:
+  '@types/node': ^24.19.2

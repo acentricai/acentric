@@ -1,0 +1,47 @@
+name: Release
+
+# Started by hand. Without `publish` it only shows what would go to npm, and publishes nothing.
+#
+# Versions are set before this runs, by `pnpm changeset version` in a pull request. While
+# .changeset/pre.json is there, they are alpha versions and are published under the `alpha` tag.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to npm. Without it, the run only shows what would be published.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # For npm's provenance: a statement of which commit and run a package was built by.
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  npm:
+    if: github.repository == 'acentricai/acentric'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      # Each package is packed with the licence in it.
+      - run: pnpm copy-license
+      - name: Show what would be published
+        if: ${{ !inputs.publish }}
+        run: pnpm -r publish --dry-run --no-git-checks --tag alpha
+      - name: Publish
+        if: ${{ inputs.publish }}
+        run: pnpm changeset publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,33 @@
+{
+  "name": "acentric-repo",
+  "private": true,
+  "description": "The Acentric repository: the engine, the framework, the command and the machine daemon.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "tsc -b && vitest run",
+    "lint": "oxlint --deny-warnings",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "boundaries": "node scripts/check-boundaries.ts",
+    "check": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm test",
+    "check:rust": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
+    "clean": "tsc -b --clean",
+    "changeset": "changeset",
+    "copy-license": "node scripts/copy-license.ts"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^3.0.3",
+    "@types/node": "catalog:",
+    "oxlint": "^1.94.0",
+    "prettier": "^3.10.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}

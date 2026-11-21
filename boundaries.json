@@ -1,0 +1,19 @@
+{
+  "@acentric/protocol": [],
+  "@acentric/agent": ["@acentric/protocol"],
+  "@acentric/client": ["@acentric/protocol"],
+  "@acentric/ai": ["@acentric/protocol"],
+  "@acentric/core": ["@acentric/protocol", "@acentric/ai"],
+  "@acentric/store": ["@acentric/protocol", "@acentric/core"],
+  "@acentric/executor": ["@acentric/protocol", "@acentric/core"],
+  "@acentric/sandbox": ["@acentric/protocol", "@acentric/core"],
+  "@acentric/server": [
+    "@acentric/protocol",
+    "@acentric/ai",
+    "@acentric/core",
+    "@acentric/store",
+    "@acentric/executor",
+    "@acentric/sandbox"
+  ],
+  "acentric": ["@acentric/protocol", "@acentric/client"]
+}

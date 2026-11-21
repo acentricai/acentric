@@ -1,0 +1,6 @@
+dist
+target
+pnpm-lock.yaml
+*.tsbuildinfo
+LICENSE
+.notes

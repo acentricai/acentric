@@ -1,0 +1,30 @@
+{
+  "name": "@acentric/ai",
+  "version": "0.15.0-alpha.0",
+  "description": "Calls model providers: the provider interface, the protocol codecs, and each provider.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acentricai/acentric.git",
+    "directory": "packages/ai"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

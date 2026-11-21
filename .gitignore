@@ -1,0 +1,21 @@
+# Private working notes: decisions, build order.
+.notes/
+
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# Rust's build output.
+target/
+
+# The licence is copied into each package when it is packed (scripts/copy-license.ts).
+/packages/*/LICENSE
+/apps/*/LICENSE
+*.tgz
+
+.env
+.env.*
+*.log
+.DS_Store
+.claude/

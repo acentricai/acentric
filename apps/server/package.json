@@ -1,0 +1,29 @@
+{
+  "name": "@acentric/server",
+  "version": "0.15.0-alpha.0",
+  "description": "The Acentric server: the API, sign-in, and the engine that runs actors.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acentricai/acentric.git",
+    "directory": "apps/server"
+  },
+  "type": "module",
+  "bin": {
+    "acentric-server": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}

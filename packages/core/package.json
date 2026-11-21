@@ -1,0 +1,30 @@
+{
+  "name": "@acentric/core",
+  "version": "0.15.0-alpha.0",
+  "description": "The engine as a library: the turn machine, mailbox, tasks, compaction and scheduler, built on interfaces alone.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acentricai/acentric.git",
+    "directory": "packages/core"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
