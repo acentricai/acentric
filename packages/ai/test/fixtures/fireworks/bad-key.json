@@ -1,0 +1,62 @@
+{
+  "provider": "fireworks",
+  "scenario": "bad-key",
+  "step": {
+    "model": "accounts/fireworks/models/glm-5p3-flash",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "",
+    "tools": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello."
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.fireworks.ai/inference/v1/responses",
+    "headers": {
+      "content-type": "application/json",
+      "authorization": "<redacted>"
+    },
+    "body": {
+      "reasoning": {
+        "effort": "low"
+      },
+      "prompt_cache_key": "a-recorded-conversation",
+      "model": "accounts/fireworks/models/glm-5p3-flash",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Hello."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "text": "{\"error\":{\"message\":\"The API key you provided is invalid.\",\"param\":null,\"code\":\"UNAUTHORIZED\",\"type\":\"error\"},\"request_id\":\"00a6193a-6ee9-4a5b-9a15-f1f6cad4cf2e\"}"
+  },
+  "expected": {
+    "failure": {
+      "kind": "auth",
+      "retryable": false,
+      "status": 401
+    }
+  }
+}

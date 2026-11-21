@@ -1,0 +1,136 @@
+{
+  "provider": "fireworks",
+  "scenario": "tool-call",
+  "step": {
+    "model": "accounts/fireworks/models/glm-5p3-flash",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "You answer questions about orders. Look an order up before you say anything of it.",
+    "tools": [
+      {
+        "type": "function",
+        "name": "lookup_order",
+        "description": "Finds an order by its number, and says what happened to it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "description": "The number of the order."
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What happened to order 4411?"
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.fireworks.ai/inference/v1/responses",
+    "headers": {
+      "content-type": "application/json",
+      "authorization": "<redacted>"
+    },
+    "body": {
+      "reasoning": {
+        "effort": "low"
+      },
+      "prompt_cache_key": "a-recorded-conversation",
+      "model": "accounts/fireworks/models/glm-5p3-flash",
+      "instructions": "You answer questions about orders. Look an order up before you say anything of it.",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What happened to order 4411?"
+            }
+          ]
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "name": "lookup_order",
+          "description": "Finds an order by its number, and says what happened to it.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "The number of the order."
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "text": "{\"id\":\"resp_b12f8c951b934a0ba622c822a7468cd7\",\"object\":\"response\",\"created_at\":1795304390,\"status\":\"completed\",\"model\":\"accounts/fireworks/models/glm-5p3-flash\",\"output\":[{\"id\":\"fc_2a61b3161d7b47a6aae2a297f4af1c7d\",\"type\":\"function_call\",\"call_id\":\"chatcmpl-tool-8baf31576d1bca62\",\"name\":\"lookup_order\",\"arguments\":\"{\\\"id\\\": 4411}\",\"status\":\"completed\"}],\"previous_response_id\":null,\"usage\":{\"input_tokens\":205,\"output_tokens\":14,\"total_tokens\":219,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens_details\":{\"reasoning_tokens\":0}},\"error\":null,\"incomplete_details\":null,\"instructions\":\"You answer questions about orders. Look an order up before you say anything of it.\",\"max_output_tokens\":null,\"max_tool_calls\":null,\"parallel_tool_calls\":true,\"reasoning\":{\"effort\":\"low\"},\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"}},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"name\":\"lookup_order\",\"description\":\"Finds an order by its number, and says what happened to it.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"The number of the order.\"}},\"required\":[\"id\"],\"additionalProperties\":false}}],\"top_p\":1.0,\"top_logprobs\":null,\"truncation\":\"disabled\",\"user\":null,\"background\":null,\"metadata\":{}}"
+  },
+  "expected": {
+    "answer": {
+      "message": {
+        "role": "assistant",
+        "provider": "fireworks",
+        "api": "openai-responses",
+        "model": "accounts/fireworks/models/glm-5p3-flash",
+        "content": [
+          {
+            "id": "fc_2a61b3161d7b47a6aae2a297f4af1c7d",
+            "type": "function_call",
+            "call_id": "chatcmpl-tool-8baf31576d1bca62",
+            "name": "lookup_order",
+            "arguments": "{\"id\": 4411}",
+            "status": "completed"
+          }
+        ],
+        "id": "resp_b12f8c951b934a0ba622c822a7468cd7"
+      },
+      "stopReason": "tool_use",
+      "toolCalls": [
+        {
+          "id": "chatcmpl-tool-8baf31576d1bca62",
+          "name": "lookup_order",
+          "arguments": {
+            "id": 4411
+          }
+        }
+      ],
+      "usage": {
+        "totalInput": 205,
+        "input": 205,
+        "output": 14,
+        "reasoning": 0,
+        "cacheRead": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 0.00003075,
+          "output": 0.000007,
+          "cacheRead": 0,
+          "total": 0.00003775
+        }
+      }
+    }
+  }
+}

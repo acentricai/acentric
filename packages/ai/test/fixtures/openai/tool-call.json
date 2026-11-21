@@ -1,0 +1,152 @@
+{
+  "provider": "openai",
+  "scenario": "tool-call",
+  "step": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "You answer questions about orders. Look an order up before you say anything of it.",
+    "tools": [
+      {
+        "type": "function",
+        "name": "lookup_order",
+        "description": "Finds an order by its number, and says what happened to it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "description": "The number of the order."
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What happened to order 4411?"
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "content-type": "application/json",
+      "authorization": "<redacted>"
+    },
+    "body": {
+      "reasoning": {
+        "effort": "low",
+        "summary": "auto",
+        "context": "all_turns"
+      },
+      "store": false,
+      "include": ["reasoning.encrypted_content"],
+      "parallel_tool_calls": true,
+      "prompt_cache_key": "a-recorded-conversation",
+      "model": "gpt-6-luna",
+      "input": [
+        {
+          "type": "message",
+          "role": "developer",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "You answer questions about orders. Look an order up before you say anything of it."
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What happened to order 4411?"
+            }
+          ]
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "name": "lookup_order",
+          "description": "Finds an order by its number, and says what happened to it.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "The number of the order."
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "text": "{\n  \"access_programs\": null,\n  \"background\": false,\n  \"billing\": {\n    \"payer\": \"openai\"\n  },\n  \"completed_at\": 1795304377,\n  \"created_at\": 1795304376,\n  \"error\": null,\n  \"frequency_penalty\": 0.0,\n  \"id\": \"resp_013ee89c0d89abb1016b022bb871e087d0a528f0464247e9a8\",\n  \"image\": {\n    \"context_compression\": \"disabled\"\n  },\n  \"incomplete_details\": null,\n  \"input_transformations\": [],\n  \"instructions\": null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\": null,\n  \"model\": \"gpt-6-luna\",\n  \"moderation\": null,\n  \"object\": \"response\",\n  \"output\": [\n    {\n      \"arguments\": \"{\\\"id\\\":4411}\",\n      \"call_id\": \"call_0fee6c6ef4d44bb4bfbe09046dd5b70a\",\n      \"id\": \"fc_013ee89c0d89abb1016b022bb90c2887d0ba359340fcf9e67d\",\n      \"name\": \"lookup_order\",\n      \"status\": \"completed\",\n      \"type\": \"function_call\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"presence_penalty\": 0.0,\n  \"previous_response_id\": null,\n  \"prompt_cache_key\": \"a-recorded-conversation\",\n  \"prompt_cache_retention\": \"24h\",\n  \"reasoning\": {\n    \"context\": \"all_turns\",\n    \"effort\": \"low\",\n    \"mode\": \"standard\",\n    \"summary\": \"detailed\"\n  },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"status\": \"completed\",\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tool_usage\": {\n    \"image_gen\": {\n      \"input_tokens\": 0,\n      \"input_tokens_details\": {\n        \"image_tokens\": 0,\n        \"text_tokens\": 0\n      },\n      \"output_tokens\": 0,\n      \"output_tokens_details\": {\n        \"image_tokens\": 0,\n        \"text_tokens\": 0\n      },\n      \"total_tokens\": 0\n    },\n    \"web_search\": {\n      \"num_requests\": 0\n    }\n  },\n  \"tools\": [\n    {\n      \"description\": \"Finds an order by its number, and says what happened to it.\",\n      \"name\": \"lookup_order\",\n      \"output_schema\": null,\n      \"parameters\": {\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"id\": {\n            \"description\": \"The number of the order.\",\n            \"type\": \"integer\"\n          }\n        },\n        \"required\": [\n          \"id\"\n        ],\n        \"type\": \"object\"\n      },\n      \"strict\": true,\n      \"type\": \"function\"\n    }\n  ],\n  \"top_logprobs\": 0,\n  \"top_p\": 0.98,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 86,\n    \"input_tokens_details\": {\n      \"cache_write_tokens\": 0,\n      \"cache_write_tokens_details\": {\n        \"ttl_12h_tokens\": 0,\n        \"ttl_30m_tokens\": 0\n      },\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 19,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 105\n  },\n  \"user\": null,\n  \"metadata\": {}\n}"
+  },
+  "expected": {
+    "answer": {
+      "message": {
+        "role": "assistant",
+        "provider": "openai",
+        "api": "openai-responses",
+        "model": "gpt-6-luna",
+        "content": [
+          {
+            "arguments": "{\"id\":4411}",
+            "call_id": "call_0fee6c6ef4d44bb4bfbe09046dd5b70a",
+            "id": "fc_013ee89c0d89abb1016b022bb90c2887d0ba359340fcf9e67d",
+            "name": "lookup_order",
+            "status": "completed",
+            "type": "function_call"
+          }
+        ],
+        "id": "resp_013ee89c0d89abb1016b022bb871e087d0a528f0464247e9a8"
+      },
+      "stopReason": "tool_use",
+      "toolCalls": [
+        {
+          "id": "call_0fee6c6ef4d44bb4bfbe09046dd5b70a",
+          "name": "lookup_order",
+          "arguments": {
+            "id": 4411
+          }
+        }
+      ],
+      "usage": {
+        "totalInput": 86,
+        "input": 86,
+        "output": 19,
+        "reasoning": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 0.000008599999999999999,
+          "output": 0.0000095,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.0000181
+        }
+      }
+    }
+  }
+}
