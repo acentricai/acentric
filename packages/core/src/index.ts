@@ -4,3 +4,8 @@
 
 export * from './state.ts';
 export * from './machine.ts';
+export * from './store.ts';
+export * from './executor.ts';
+export * from './bus.ts';
+export * from './errors.ts';
+export * from './memory-store.ts';

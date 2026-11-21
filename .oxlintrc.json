@@ -12,7 +12,8 @@
       {
         "maxArgs": 2
       }
-    ]
+    ],
+    "unicorn/consistent-function-scoping": "off"
   },
   "env": {
     "builtin": true
