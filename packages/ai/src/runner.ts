@@ -10,6 +10,7 @@ import type {
   FunctionTool,
   Json,
   Message,
+  ProviderFields,
   Reasoning,
   StopReason,
   Usage,
@@ -19,7 +20,10 @@ import type {
 export type ToolCall = {
   readonly id: string;
   readonly name: string;
+  /** What the model called it with: JSON as it read, or the text itself when it does not read. */
   readonly arguments: Json;
+  /** What the provider needs said again on the result of this call. */
+  readonly resultOptions?: ProviderFields;
 };
 
 /** What one call of the model is given. */
@@ -29,6 +33,13 @@ export type ModelStep = {
   readonly instructions: string;
   readonly tools: readonly FunctionTool[];
   readonly messages: readonly Message[];
+  /**
+   * What names the conversation to the provider, the same at every call of it: a provider that
+   * keeps what it has read of a conversation finds it again by this.
+   */
+  readonly session?: string;
+  /** What the agent asks of its provider that only that provider has, as the provider read it. */
+  readonly options?: ProviderFields;
 };
 
 /** What one call of the model came to. */
@@ -45,39 +56,4 @@ export interface ModelRunner {
    * it can when `signal` is aborted.
    */
   run(step: ModelStep, signal: AbortSignal): Promise<ModelAnswer>;
-}
-
-/** Why a call of a model failed, as far as what to do about it goes. */
-export type FailureKind =
-  /** Too many calls: the same call may work later. */
-  | 'rate_limited'
-  /** The provider cannot take the call now. */
-  | 'overloaded'
-  /** The call did not reach the provider, or its answer did not come back. */
-  | 'network'
-  /** The credential was refused. */
-  | 'auth'
-  /** The provider refused the call as it is: the same call will be refused again. */
-  | 'invalid_request'
-  | 'other';
-
-const RETRYABLE: readonly FailureKind[] = ['rate_limited', 'overloaded', 'network'];
-
-/** A call of a model failed. */
-export class ModelFailure extends Error {
-  override readonly name = 'ModelFailure';
-  readonly kind: FailureKind;
-  /** How long the provider said to wait before the call is made again, when it said. */
-  readonly retryAfterMs: number | undefined;
-
-  constructor(message: string, kind: FailureKind, retryAfterMs?: number) {
-    super(message);
-    this.kind = kind;
-    this.retryAfterMs = retryAfterMs;
-  }
-
-  /** Whether the same call, made again later, may work. */
-  get retryable(): boolean {
-    return RETRYABLE.includes(this.kind);
-  }
 }
