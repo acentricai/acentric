@@ -1,6 +1,6 @@
-// The engine as a library: the turn machine, the mailbox, tasks, compaction and the scheduler.
-// It is built on interfaces alone: the store, the providers and the executor are given to it.
-//
-// Nothing is here yet.
+// The engine as a library: the turn machine, the mailbox, and the loop that drives an actor.
+// It is built on interfaces alone: the store, the model's runner and the executor are given
+// to it.
 
-export {};
+export * from './state.ts';
+export * from './machine.ts';
