@@ -60,6 +60,23 @@ Two sets of tests are written against an interface, and run on everything that i
 every point where an actor's state changes. A change to how a turn is stored is not done until
 it passes.
 
+## Model providers
+
+A provider is one file in `packages/ai/src/providers`, which writes its own request and reads
+its own answer. Nothing in the engine names a provider.
+
+The tests do not call a provider. They replay what was recorded of the real one, in
+`packages/ai/test/fixtures`. To add a provider, or to change what one sends:
+
+1. Add it to the list in `packages/ai/test/record.ts`.
+2. Run that script with the provider's key in the environment. It makes a few real calls and
+   writes what was sent and answered, with no key in it.
+3. Read what it wrote before you commit it.
+
+Two more scripts make real calls and are run by hand: `packages/ai/test/cache-check.ts` says
+whether a provider keeps what it has read, and `packages/core/test/live.ts` runs one turn
+through the whole engine for each provider.
+
 ## Changesets
 
 A pull request that changes what a published package does needs a changeset: a short file that
