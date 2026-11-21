@@ -1,0 +1,98 @@
+{
+  "provider": "fireworks",
+  "scenario": "text",
+  "step": {
+    "model": "accounts/fireworks/models/glm-5p3-flash",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "Answer with exactly one word, in lowercase, and nothing else.",
+    "tools": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Say the word: pong"
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.fireworks.ai/inference/v1/responses",
+    "headers": {
+      "content-type": "application/json",
+      "authorization": "<redacted>"
+    },
+    "body": {
+      "reasoning": {
+        "effort": "low"
+      },
+      "prompt_cache_key": "a-recorded-conversation",
+      "model": "accounts/fireworks/models/glm-5p3-flash",
+      "instructions": "Answer with exactly one word, in lowercase, and nothing else.",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Say the word: pong"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "text": "{\"id\":\"resp_9905227de011467c88191963d0dc8384\",\"object\":\"response\",\"created_at\":1795304389,\"status\":\"completed\",\"model\":\"accounts/fireworks/models/glm-5p3-flash\",\"output\":[{\"id\":\"msg_b5ea77f3a2a8404b945486f7a955b742\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"pong\",\"annotations\":[]}],\"status\":\"completed\"}],\"previous_response_id\":null,\"usage\":{\"input_tokens\":31,\"output_tokens\":3,\"total_tokens\":34,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens_details\":{\"reasoning_tokens\":0}},\"error\":null,\"incomplete_details\":null,\"instructions\":\"Answer with exactly one word, in lowercase, and nothing else.\",\"max_output_tokens\":null,\"max_tool_calls\":null,\"parallel_tool_calls\":true,\"reasoning\":{\"effort\":\"low\"},\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"}},\"tool_choice\":\"auto\",\"tools\":[],\"top_p\":1.0,\"top_logprobs\":null,\"truncation\":\"disabled\",\"user\":null,\"background\":null,\"metadata\":{}}"
+  },
+  "expected": {
+    "answer": {
+      "message": {
+        "role": "assistant",
+        "provider": "fireworks",
+        "api": "openai-responses",
+        "model": "accounts/fireworks/models/glm-5p3-flash",
+        "content": [
+          {
+            "id": "msg_b5ea77f3a2a8404b945486f7a955b742",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "pong",
+                "annotations": []
+              }
+            ],
+            "status": "completed"
+          }
+        ],
+        "id": "resp_9905227de011467c88191963d0dc8384"
+      },
+      "stopReason": "stop",
+      "toolCalls": [],
+      "usage": {
+        "totalInput": 31,
+        "input": 31,
+        "output": 3,
+        "reasoning": 0,
+        "cacheRead": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 0.0000046499999999999995,
+          "output": 0.0000015,
+          "cacheRead": 0,
+          "total": 0.0000061499999999999996
+        }
+      }
+    }
+  }
+}

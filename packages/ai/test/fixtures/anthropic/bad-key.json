@@ -1,0 +1,71 @@
+{
+  "provider": "anthropic",
+  "scenario": "bad-key",
+  "step": {
+    "model": "claude-haiku-5-5",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "",
+    "tools": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello."
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "content-type": "application/json",
+      "x-api-key": "<redacted>",
+      "anthropic-version": "2023-06-01"
+    },
+    "body": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "output_config": {
+        "effort": "low"
+      },
+      "cache_control": {
+        "type": "ephemeral"
+      },
+      "stream": true,
+      "model": "claude-haiku-5-5",
+      "max_tokens": 128000,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Hello."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "x-should-retry": "false"
+    },
+    "text": "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011ChGxQrzFJXgwo9Li4PgB6\"}"
+  },
+  "expected": {
+    "failure": {
+      "kind": "auth",
+      "retryable": false,
+      "status": 401
+    }
+  }
+}

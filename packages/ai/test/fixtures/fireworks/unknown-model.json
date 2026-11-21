@@ -1,0 +1,62 @@
+{
+  "provider": "fireworks",
+  "scenario": "unknown-model",
+  "step": {
+    "model": "no-such-model",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "",
+    "tools": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello."
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.fireworks.ai/inference/v1/responses",
+    "headers": {
+      "content-type": "application/json",
+      "authorization": "<redacted>"
+    },
+    "body": {
+      "reasoning": {
+        "effort": "low"
+      },
+      "prompt_cache_key": "a-recorded-conversation",
+      "model": "no-such-model",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Hello."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "text": "{\"error\":{\"message\":\"Model not found, inaccessible, and/or not deployed\",\"param\":\"model\",\"code\":\"NOT_FOUND\",\"type\":\"error\"},\"request_id\":\"68056068-bde2-43f9-9de2-fc0e6f430050\"}"
+  },
+  "expected": {
+    "failure": {
+      "kind": "not_found",
+      "retryable": false,
+      "status": 404
+    }
+  }
+}

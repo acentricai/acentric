@@ -1,0 +1,67 @@
+{
+  "provider": "openai",
+  "scenario": "bad-key",
+  "step": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "",
+    "tools": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello."
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "content-type": "application/json",
+      "authorization": "<redacted>"
+    },
+    "body": {
+      "reasoning": {
+        "effort": "low",
+        "summary": "auto",
+        "context": "all_turns"
+      },
+      "store": false,
+      "include": ["reasoning.encrypted_content"],
+      "parallel_tool_calls": true,
+      "prompt_cache_key": "a-recorded-conversation",
+      "model": "gpt-6-luna",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Hello."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "text": "{\n  \"error\": {\n    \"code\": \"invalid_api_key\",\n    \"message\": \"Incorrect API key provided: not-a-key. You can find your API key at https://platform.openai.com/account/api-keys.\",\n    \"param\": null,\n    \"type\": \"invalid_request_error\"\n  }\n}"
+  },
+  "expected": {
+    "failure": {
+      "kind": "auth",
+      "retryable": false,
+      "status": 401
+    }
+  }
+}

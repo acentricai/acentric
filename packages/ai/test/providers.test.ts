@@ -1,0 +1,667 @@
+// What each provider does that the recordings do not show: what it sends for what an agent
+// asks of it, what it refuses before it calls, and what it makes of each way a call fails.
+
+import { describe, expect, it } from 'vitest';
+
+import type { Message } from '@acentric/protocol';
+
+import {
+  ModelFailure,
+  Providers,
+  UnknownProvider,
+  builtInProviders,
+  effortOf,
+  estimateCost,
+} from '../src/index.ts';
+import type { ModelStep } from '../src/index.ts';
+import { retryAfter } from '../src/http.ts';
+import { answering, credentialFor, fixture } from './replay.ts';
+
+const providers = builtInProviders();
+const signal = () => new AbortController().signal;
+
+const step = (more: Partial<ModelStep> = {}): ModelStep => ({
+  model: 'a-model',
+  reasoning: 'medium',
+  instructions: 'You answer questions about orders.',
+  tools: [],
+  messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello.' }] }],
+  ...more,
+});
+
+/** What a provider sends for a step, answered with what was recorded for `text`. */
+async function sentBy(id: string, given: ModelStep) {
+  const { fetch, sent } = answering(fixture(id, 'text').response);
+  await providers
+    .get(id)
+    .runner({ credential: credentialFor(id), fetch })
+    .run(given, signal());
+  return sent[0] as (typeof sent)[number];
+}
+
+/** How a provider fails for an answer of `status` and `body`. */
+async function failureOf(
+  id: string,
+  status: number,
+  body: unknown,
+  headers: { [name: string]: string } = {},
+) {
+  const text = typeof body === 'string' ? body : JSON.stringify(body);
+  const { fetch } = answering({
+    status,
+    headers: { 'content-type': 'application/json', ...headers },
+    text,
+  });
+  try {
+    await providers
+      .get(id)
+      .runner({ credential: credentialFor(id), fetch })
+      .run(step(), signal());
+  } catch (error) {
+    return error as ModelFailure;
+  }
+  throw new Error('The call did not fail');
+}
+
+describe('the instructions', () => {
+  it('go first in the input for OpenAI and ChatGPT, where what was read of them is kept', async () => {
+    for (const id of ['openai', 'chatgpt']) {
+      const { body } = await sentBy(id, step());
+      expect(body['instructions'], id).toBeUndefined();
+      expect((body['input'] as unknown[])[0], id).toEqual({
+        type: 'message',
+        role: 'developer',
+        content: [{ type: 'input_text', text: 'You answer questions about orders.' }],
+      });
+    }
+  });
+
+  it('are a field of their own for Fireworks', async () => {
+    const { body } = await sentBy('fireworks', step());
+    expect(body['instructions']).toBe('You answer questions about orders.');
+    expect(body['input']).toHaveLength(1);
+  });
+
+  it('are the system for Anthropic, with a mark to keep them by', async () => {
+    const { body } = await sentBy('anthropic', step());
+    expect(body['system']).toEqual([
+      {
+        type: 'text',
+        text: 'You answer questions about orders.',
+        cache_control: { type: 'ephemeral' },
+      },
+    ]);
+  });
+
+  it('are left out when there are none', async () => {
+    expect((await sentBy('anthropic', step({ instructions: '' }))).body['system']).toBeUndefined();
+    expect((await sentBy('openai', step({ instructions: '' }))).body['input']).toHaveLength(1);
+  });
+});
+
+describe('the reasoning level', () => {
+  it('is sent as itself where the model takes it', async () => {
+    expect((await sentBy('openai', step({ reasoning: 'xhigh' }))).body['reasoning']).toMatchObject({
+      effort: 'xhigh',
+    });
+    expect((await sentBy('anthropic', step({ reasoning: 'max' }))).body['output_config']).toEqual({
+      effort: 'max',
+    });
+  });
+
+  it('is moved to the nearest the model takes, the higher of two as near', async () => {
+    const fireworks = async (model: string, reasoning: ModelStep['reasoning']) =>
+      (
+        (await sentBy('fireworks', step({ model, reasoning }))).body['reasoning'] as {
+          effort: string;
+        }
+      ).effort;
+    expect(await fireworks('accounts/fireworks/models/kimi-k3p1-pro', 'medium')).toBe('high');
+    expect(await fireworks('accounts/fireworks/models/kimi-k3p1-pro', 'xhigh')).toBe('max');
+    expect(await fireworks('accounts/fireworks/models/deepseek-v4p1-flash-1017', 'xhigh')).toBe(
+      'high',
+    );
+    expect(effortOf({ low: 'l', max: 'm' }, 'high')).toBe('m');
+    expect(effortOf({ low: 'l', max: 'm' }, 'medium')).toBe('l');
+  });
+});
+
+describe('what names the conversation', () => {
+  it('is sent as the key the provider keeps what it has read by', async () => {
+    for (const id of ['openai', 'chatgpt', 'fireworks']) {
+      expect((await sentBy(id, step({ session: 'act_1' }))).body['prompt_cache_key'], id).toBe(
+        'act_1',
+      );
+      expect((await sentBy(id, step())).body['prompt_cache_key'], id).toBeUndefined();
+    }
+  });
+});
+
+describe('the provider’s own web search', () => {
+  it('is a tool of OpenAI’s, for the sites asked for', async () => {
+    const openai = providers.get('openai');
+    const all = await sentBy('openai', step({ options: openai.parseOptions({ webSearch: true }) }));
+    expect(all.body['tools']).toEqual([{ type: 'web_search', external_web_access: true }]);
+    const some = await sentBy(
+      'openai',
+      step({ options: openai.parseOptions({ webSearch: { allowedDomains: ['example.com'] } }) }),
+    );
+    expect(some.body['tools']).toEqual([
+      {
+        type: 'web_search',
+        external_web_access: true,
+        filters: { allowed_domains: ['example.com'] },
+      },
+    ]);
+  });
+
+  it('is a tool of Anthropic’s', async () => {
+    const options = providers
+      .get('anthropic')
+      .parseOptions({ webSearch: { blockedDomains: ['example.com'] } });
+    const { body } = await sentBy('anthropic', step({ options }));
+    expect(body['tools']).toEqual([
+      {
+        type: 'web_search_20260318',
+        name: 'web_search',
+        allowed_callers: ['direct'],
+        blocked_domains: ['example.com'],
+      },
+    ]);
+  });
+
+  it('is refused where the provider has none, and when it is asked for wrongly', () => {
+    expect(() => providers.get('fireworks').parseOptions({ webSearch: true })).toThrow(
+      /Fireworks has no webSearch/,
+    );
+    const openai = providers.get('openai');
+    expect(() => openai.parseOptions({ webSearch: { allowedDomains: [] } })).toThrow(
+      /webSearch is true/,
+    );
+    expect(() =>
+      openai.parseOptions({ webSearch: { allowedDomains: ['a.com'], blockedDomains: ['b.com'] } }),
+    ).toThrow(/webSearch is true/);
+    expect(() => openai.parseOptions({ temperature: 2 })).toThrow(/OpenAI has no temperature/);
+    expect(openai.parseOptions(undefined)).toEqual({});
+  });
+});
+
+describe('ChatGPT', () => {
+  it('asks for a stream, keeps nothing, and signs with the token of who signed in', async () => {
+    const { body, headers } = await sentBy('chatgpt', step());
+    expect(body).toMatchObject({ stream: true, store: false });
+    expect(headers).toMatchObject({ authorization: '<redacted>', accept: 'text/event-stream' });
+  });
+
+  it('is not called with an API key, nor OpenAI with a token', () => {
+    const key = { type: 'api_key', apiKey: 'k' } as const;
+    const token = { type: 'access_token', accessToken: 't' } as const;
+    const { fetch } = answering(fixture('chatgpt', 'text').response);
+    const call = (id: string, credential: typeof key | typeof token) =>
+      providers.get(id).runner({ credential, fetch }).run(step(), signal());
+    return Promise.all([
+      expect(call('chatgpt', key)).rejects.toThrow(/signed in with ChatGPT/),
+      expect(call('openai', token)).rejects.toThrow(/API key/),
+    ]);
+  });
+
+  it('says when the plan has no more to give', async () => {
+    const failure = await failureOf('chatgpt', 429, {
+      error: { code: 'subscription_sharing_usage_limit_exceeded', message: 'limit' },
+    });
+    expect(failure).toMatchObject({ kind: 'quota_exceeded', retryable: false });
+    expect(failure.message).toMatch(/plan's limit is reached/);
+  });
+});
+
+describe('what a conversation holds', () => {
+  const assistant = (provider: string, api: string): Message => ({
+    role: 'assistant',
+    provider,
+    api,
+    model: 'a-model',
+    content: [{ type: 'text', text: 'Hi.' }],
+  });
+
+  it('an answer of another provider is refused before any call is made', async () => {
+    for (const [id, other] of [
+      ['openai', assistant('anthropic', 'anthropic-messages')],
+      ['anthropic', assistant('openai', 'openai-responses')],
+      // The same models, and not the same provider: one's answers are not the other's to send.
+      ['chatgpt', assistant('openai', 'openai-responses')],
+    ] as const) {
+      const { fetch, sent } = answering(fixture(id, 'text').response);
+      const run = providers
+        .get(id)
+        .runner({ credential: credentialFor(id), fetch })
+        .run(step({ messages: [...step().messages, other] }), signal());
+      await expect(run, id).rejects.toMatchObject({
+        name: 'ModelFailure',
+        kind: 'invalid_request',
+        retryable: false,
+      });
+      expect(sent, id).toEqual([]);
+    }
+  });
+
+  it('a file is sent where it is read, and refused where it would be dropped', async () => {
+    const file: Message = {
+      role: 'user',
+      content: [
+        {
+          type: 'file',
+          source: { type: 'base64', mediaType: 'application/pdf', data: 'JVBERi0=' },
+          filename: 'a.pdf',
+        },
+      ],
+    };
+    const openai = await sentBy('openai', step({ instructions: '', messages: [file] }));
+    expect(openai.body['input']).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_file',
+            file_data: 'data:application/pdf;base64,JVBERi0=',
+            filename: 'a.pdf',
+          },
+        ],
+      },
+    ]);
+    const anthropic = await sentBy('anthropic', step({ messages: [file] }));
+    expect(anthropic.body['messages']).toEqual([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0=' },
+            title: 'a.pdf',
+          },
+        ],
+      },
+    ]);
+    await expect(sentBy('fireworks', step({ messages: [file] }))).rejects.toMatchObject({
+      kind: 'invalid_request',
+    });
+  });
+
+  it('an image goes as a URL, or as its data', async () => {
+    const image: Message = {
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'url', url: 'https://example.com/a.png' } },
+        { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: 'iVBORw0KGgo=' } },
+      ],
+    };
+    const openai = await sentBy('openai', step({ instructions: '', messages: [image] }));
+    expect(openai.body['input']).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_image', image_url: 'https://example.com/a.png' },
+          { type: 'input_image', image_url: 'data:image/png;base64,iVBORw0KGgo=' },
+        ],
+      },
+    ]);
+    const anthropic = await sentBy('anthropic', step({ messages: [image] }));
+    expect(anthropic.body['messages']).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: 'https://example.com/a.png' } },
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('the application’s own entries are sent to no provider', async () => {
+    const own: Message = { role: 'custom', tag: 'note', data: { by: 'the engine' } };
+    for (const id of ['openai', 'anthropic']) {
+      const { body } = await sentBy(
+        id,
+        step({ instructions: '', messages: [...step().messages, own] }),
+      );
+      expect((body['input'] ?? body['messages']) as unknown[], id).toHaveLength(1);
+    }
+  });
+
+  it('a tool’s result that failed says so where the provider has a word for it', async () => {
+    const result: Message = {
+      role: 'tool_result',
+      toolCallId: 'c1',
+      toolName: 'lookup_order',
+      content: [{ type: 'text', text: 'There is no such order.' }],
+      isError: true,
+      providerOptions: { caller: { type: 'direct' } },
+    };
+    const anthropic = await sentBy('anthropic', step({ messages: [result] }));
+    expect(anthropic.body['messages']).toEqual([
+      {
+        role: 'user',
+        content: [
+          {
+            caller: { type: 'direct' },
+            type: 'tool_result',
+            tool_use_id: 'c1',
+            content: 'There is no such order.',
+            is_error: true,
+          },
+        ],
+      },
+    ]);
+    const openai = await sentBy('openai', step({ instructions: '', messages: [result] }));
+    expect(openai.body['input']).toEqual([
+      {
+        caller: { type: 'direct' },
+        type: 'function_call_output',
+        call_id: 'c1',
+        output: 'There is no such order.',
+      },
+    ]);
+  });
+});
+
+describe('a call that fails', () => {
+  it('for too many calls may pass later, after as long as the provider says', async () => {
+    const openai = await failureOf(
+      'openai',
+      429,
+      { error: { code: 'rate_limit_exceeded', message: 'Slow down' } },
+      { 'retry-after': '7' },
+    );
+    expect(openai).toMatchObject({
+      kind: 'rate_limited',
+      retryable: true,
+      retryAfterMs: 7000,
+      status: 429,
+    });
+    const anthropic = await failureOf(
+      'anthropic',
+      429,
+      { type: 'error', error: { type: 'rate_limit_error', message: 'Slow down' } },
+      { 'retry-after-ms': '1500' },
+    );
+    expect(anthropic).toMatchObject({ kind: 'rate_limited', retryable: true, retryAfterMs: 1500 });
+  });
+
+  it('because the provider is overloaded, or failed, may pass later', async () => {
+    expect(
+      await failureOf('anthropic', 529, {
+        type: 'error',
+        error: { type: 'overloaded_error', message: 'Overloaded' },
+      }),
+    ).toMatchObject({
+      kind: 'overloaded',
+      retryable: true,
+    });
+    expect(
+      await failureOf('openai', 500, { error: { code: 'server_error', message: 'Oops' } }),
+    ).toMatchObject({
+      kind: 'provider_error',
+      retryable: true,
+    });
+    expect(await failureOf('fireworks', 503, 'upstream connect error')).toMatchObject({
+      kind: 'overloaded',
+      retryable: true,
+      message: 'upstream connect error',
+    });
+  });
+
+  it('is read by its status alone when its body says nothing a provider knows', async () => {
+    const kinds: [number, string, boolean][] = [
+      [401, 'auth', false],
+      [403, 'auth', false],
+      [404, 'not_found', false],
+      [408, 'timeout', true],
+      [429, 'rate_limited', true],
+      [500, 'provider_error', true],
+      [503, 'overloaded', true],
+      [504, 'timeout', true],
+      [418, 'invalid_request', false],
+    ];
+    for (const id of ['openai', 'chatgpt', 'fireworks', 'anthropic']) {
+      for (const [status, kind, retryable] of kinds) {
+        expect(
+          await failureOf(id, status, 'something went wrong'),
+          `${id} ${String(status)}`,
+        ).toMatchObject({
+          kind,
+          retryable,
+          status,
+          provider: id,
+        });
+      }
+    }
+  });
+
+  it('is not tried again when the provider says not to, whatever its kind', async () => {
+    const failure = await failureOf(
+      'anthropic',
+      529,
+      { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+      { 'x-should-retry': 'false' },
+    );
+    expect(failure).toMatchObject({ kind: 'overloaded', retryable: false });
+  });
+
+  it('for a conversation too long is that, and will not pass', async () => {
+    const cases: [string, number, unknown][] = [
+      ['openai', 400, { error: { code: 'context_length_exceeded', message: 'Too long' } }],
+      [
+        'openai',
+        400,
+        { error: { message: 'This request exceeds the context window of the model.' } },
+      ],
+      [
+        'anthropic',
+        400,
+        {
+          type: 'error',
+          error: {
+            type: 'invalid_request_error',
+            message: 'prompt is too long: 205024 tokens > 200000 maximum',
+          },
+        },
+      ],
+      ['anthropic', 413, 'Request Entity Too Large'],
+      ['fireworks', 400, { detail: 'The prompt is too long for this model' }],
+    ];
+    for (const [id, status, body] of cases) {
+      expect(await failureOf(id, status, body), `${id} ${String(status)}`).toMatchObject({
+        kind: 'context_overflow',
+        retryable: false,
+      });
+    }
+  });
+
+  it('for an account with no more to spend is that', async () => {
+    expect(
+      await failureOf('openai', 429, {
+        error: { type: 'insufficient_quota', code: 'insufficient_quota', message: 'No credit' },
+      }),
+    ).toMatchObject({
+      kind: 'quota_exceeded',
+      retryable: false,
+    });
+    expect(
+      await failureOf('anthropic', 400, {
+        type: 'error',
+        error: { type: 'invalid_request_error', message: 'Your credit balance is too low' },
+      }),
+    ).toMatchObject({
+      kind: 'quota_exceeded',
+    });
+    expect(
+      await failureOf('fireworks', 402, { error: { message: 'Payment required' } }),
+    ).toMatchObject({ kind: 'quota_exceeded' });
+  });
+
+  it('says what a server wrote of a request it would not take', async () => {
+    const failure = await failureOf('fireworks', 422, {
+      detail: [{ loc: ['body', 'reasoning', 'effort'], msg: 'Input should be low, high or max' }],
+    });
+    expect(failure).toMatchObject({
+      kind: 'invalid_request',
+      message: 'reasoning.effort: Input should be low, high or max',
+    });
+  });
+
+  it('with a response that failed, though it came with HTTP 200', async () => {
+    const failed = await failureOf('openai', 200, {
+      object: 'response',
+      status: 'failed',
+      error: { code: 'server_error', message: 'Oops' },
+    });
+    expect(failed).toMatchObject({ kind: 'provider_error', retryable: true });
+    const invalid = await failureOf('openai', 200, { hello: 'there' });
+    expect(invalid).toMatchObject({ kind: 'invalid_response', retryable: false });
+  });
+
+  it('with a stream that ended before its answer did is worth making again', async () => {
+    const whole = fixture('anthropic', 'text').response.text;
+    const cut = whole.slice(0, whole.indexOf('event: message_delta'));
+    expect(await failureOf('anthropic', 200, cut)).toMatchObject({
+      kind: 'invalid_response',
+      retryable: true,
+    });
+    const stream = fixture('chatgpt', 'text').response.text;
+    const short = stream.slice(0, stream.indexOf('event: response.completed'));
+    expect(await failureOf('chatgpt', 200, short)).toMatchObject({
+      kind: 'invalid_response',
+      retryable: true,
+    });
+  });
+
+  it('with an error in the middle of a stream is the failure that error says', async () => {
+    const stream =
+      'event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}\n\n';
+    expect(await failureOf('anthropic', 200, stream)).toMatchObject({
+      kind: 'overloaded',
+      retryable: true,
+    });
+  });
+
+  it('because it did not get through may pass later', async () => {
+    const runner = providers.get('openai').runner({
+      credential: credentialFor('openai'),
+      fetch: async () => {
+        throw new TypeError('fetch failed');
+      },
+    });
+    await expect(runner.run(step(), signal())).rejects.toMatchObject({
+      kind: 'network',
+      retryable: true,
+    });
+  });
+
+  it('is not a failure of the call when whoever asked for it stopped it', async () => {
+    const stop = new AbortController();
+    const runner = providers.get('anthropic').runner({
+      credential: credentialFor('anthropic'),
+      fetch: (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    });
+    const run = runner.run(step(), stop.signal);
+    stop.abort(new Error('interrupted'));
+    await expect(run).rejects.toThrow('interrupted');
+    await expect(run).rejects.not.toBeInstanceOf(ModelFailure);
+  });
+});
+
+describe('how long to wait', () => {
+  it('is read from what the provider says, in seconds, in milliseconds or as a time', () => {
+    expect(retryAfter(new Headers({ 'retry-after': '2.5' }))).toBe(2500);
+    expect(retryAfter(new Headers({ 'retry-after-ms': '750', 'retry-after': '9' }))).toBe(750);
+    expect(
+      retryAfter(new Headers({ 'retry-after': new Date(Date.now() + 60_000).toUTCString() })),
+    ).toBeGreaterThan(50_000);
+    expect(retryAfter(new Headers())).toBeUndefined();
+    expect(retryAfter(new Headers({ 'retry-after': 'soon' }))).toBeUndefined();
+  });
+});
+
+describe('what a call cost', () => {
+  const pricing = {
+    base: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+    tiers: [
+      { aboveInputTokens: 1000, cost: { input: 4, output: 15, cacheRead: 0.4, cacheWrite: 5 } },
+    ],
+  };
+
+  it('is each part at its price', () => {
+    const cost = estimateCost(
+      { totalInput: 1000, input: 600, cacheRead: 300, cacheWrite: 100, output: 200 },
+      pricing,
+    );
+    expect(cost).toEqual({
+      source: 'estimated',
+      input: 0.0012,
+      output: 0.002,
+      cacheRead: 0.00006,
+      cacheWrite: 0.00025,
+      total: 0.0012 + 0.002 + 0.00006 + 0.00025,
+    });
+  });
+
+  it('is at the prices of the tier the prompt is over, for the whole request', () => {
+    const cost = estimateCost(
+      { totalInput: 1001, input: 1001, cacheRead: 0, cacheWrite: 0, output: 100 },
+      pricing,
+    );
+    expect(cost).toMatchObject({ input: 0.004004, output: 0.0015 });
+  });
+
+  it('is not known without prices, without a count, or for tokens that have no price', () => {
+    expect(estimateCost({ totalInput: 10, input: 10, output: 1 }, undefined)).toBeUndefined();
+    expect(estimateCost({ totalInput: 10, output: 1 }, pricing)).toBeUndefined();
+    expect(
+      estimateCost(
+        { totalInput: 10, input: 5, cacheRead: 5, output: 1 },
+        { base: { input: 1, output: 1 } },
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe('the providers an engine has', () => {
+  it('are found by what an agent calls them', () => {
+    expect(providers.list().map((provider) => provider.id)).toEqual([
+      'openai',
+      'chatgpt',
+      'fireworks',
+      'anthropic',
+    ]);
+    expect(providers.get('anthropic').label).toBe('Anthropic');
+    expect(() => providers.get('claude')).toThrow(UnknownProvider);
+    expect(() => providers.get('claude')).toThrow(
+      /there are openai, chatgpt, fireworks, anthropic/,
+    );
+  });
+
+  it('take another, once', () => {
+    const more = new Providers([providers.get('openai')]);
+    const mine = { ...providers.get('openai'), id: 'my-provider' };
+    expect(more.add(mine).has('my-provider')).toBe(true);
+    expect(() => more.add(mine)).toThrow(/already/);
+  });
+
+  it('each have a default model that is one of its own', () => {
+    for (const provider of providers.list()) {
+      expect(
+        provider.models.map((model) => model.id),
+        provider.id,
+      ).toContain(provider.defaultModel);
+    }
+  });
+});
