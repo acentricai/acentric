@@ -5,6 +5,5 @@
   "fixed": [["@acentric/*", "acentric"]],
   "access": "public",
   "baseBranch": "main",
-  "updateInternalDependencies": "patch",
-  "ignore": ["spike-walking-skeleton"]
+  "updateInternalDependencies": "patch"
 }

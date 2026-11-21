@@ -5,8 +5,9 @@ to an engine. The engine keeps each running agent, an actor, in its database, ru
 calls and tools, and picks up where it was after a crash. Actors can work on machines: your own,
 which connect out to the engine, or ones the engine makes at a sandbox provider.
 
-> **Nothing works yet.** This repository is being built in the open, from its foundation up.
-> Today it has the workspace, the checks and empty packages. There is nothing to install.
+> **There is nothing to install yet.** This repository is being built in the open, from its
+> foundation up. Today it has the contracts, and the engine's core on SQLite, run by a model for
+> tests. It has no server, no real model provider and no command yet.
 
 ## What is here
 

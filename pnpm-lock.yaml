@@ -267,12 +267,6 @@ importers:
         specifier: 'catalog:'
         version: 24.19.2
 
-  spikes/walking-skeleton:
-    dependencies:
-      '@acentric/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-
 packages:
 
   '@changesets/apply-release-plan@8.1.1':

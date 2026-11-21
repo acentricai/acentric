@@ -22,6 +22,7 @@ pnpm install
 | `pnpm check`      | All of the above but `format`: what CI runs for TypeScript.    |
 | `pnpm check:rust` | `cargo fmt`, `clippy` and `test`: what CI runs for the daemon. |
 | `pnpm clean`      | Removes what `build` made.                                     |
+| `pnpm bench`      | Measures how fast the engine turns, on a database on disk.     |
 
 Run `pnpm check`, and `pnpm check:rust` if you changed the daemon, before you open a pull request.
 
@@ -50,6 +51,14 @@ says which of these is missing.
 
 Tests run with vitest, from the root. A test file is `test/<name>.test.ts` in its package.
 `pnpm test` builds first.
+
+Two sets of tests are written against an interface, and run on everything that implements it:
+`packages/core/test/store-suite.ts` is what any store must do, and
+`packages/core/test/engine-suite.ts` what the engine does on any store. A new store runs both.
+
+`packages/store/test/crash.test.ts` runs the engine as a process of its own and kills it at
+every point where an actor's state changes. A change to how a turn is stored is not done until
+it passes.
 
 ## Changesets
 
