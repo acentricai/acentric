@@ -6,7 +6,13 @@
     "suspicious": "error"
   },
   "rules": {
-    "unicorn/require-module-specifiers": "off"
+    "unicorn/require-module-specifiers": "off",
+    "vitest/valid-expect": [
+      "error",
+      {
+        "maxArgs": 2
+      }
+    ]
   },
   "env": {
     "builtin": true

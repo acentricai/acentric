@@ -8,6 +8,7 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "erasableSyntaxOnly": true,
+    "rewriteRelativeImportExtensions": true,
     "types": [],
 
     "strict": true,
