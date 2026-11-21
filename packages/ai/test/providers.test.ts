@@ -332,6 +332,29 @@ describe('what a conversation holds', () => {
     }
   });
 
+  it('a tool’s result is sent as its text when it is one piece of text, and as its parts otherwise', async () => {
+    const result = (content: Extract<Message, { role: 'tool_result' }>['content']): Message => ({
+      role: 'tool_result',
+      toolCallId: 'c1',
+      toolName: 'lookup_order',
+      content,
+    });
+    const text = { type: 'text', text: 'one' } as const;
+    const outputs = async (id: string, content: Parameters<typeof result>[0]) => {
+      const { body } = await sentBy(id, step({ instructions: '', messages: [result(content)] }));
+      const [item] = (body['input'] ?? body['messages']) as {
+        output?: unknown;
+        content?: { content: unknown }[];
+      }[];
+      return item?.output ?? item?.content?.[0]?.content;
+    };
+    for (const id of ['openai', 'anthropic']) {
+      expect(await outputs(id, [text]), id).toBe('one');
+      expect(await outputs(id, []), id).toEqual([]);
+      expect(await outputs(id, [text, text]), id).toHaveLength(2);
+    }
+  });
+
   it('a tool’s result that failed says so where the provider has a word for it', async () => {
     const result: Message = {
       role: 'tool_result',
