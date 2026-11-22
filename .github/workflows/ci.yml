@@ -37,7 +37,11 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm boundaries
+      # The server's tests make sandboxes at the Docker of this runner, from an image they
+      # build: here they are not passed over.
       - run: pnpm test
+        env:
+          ACENTRIC_REQUIRE_DOCKER: '1'
 
   image:
     name: Server image

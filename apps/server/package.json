@@ -33,6 +33,7 @@
     "@acentric/ai": "workspace:*",
     "@acentric/core": "workspace:*",
     "@acentric/executor": "workspace:*",
+    "@acentric/sandbox": "workspace:*",
     "@acentric/protocol": "workspace:*",
     "@acentric/store": "workspace:*",
     "@hono/node-server": "2.1.6",

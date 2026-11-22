@@ -23,6 +23,16 @@
 //   ACENTRIC_DOWNLOADS      a folder with the acentric command (`acentric.mjs`) and the script
 //                           that installs it (`install-cli.sh`), which the server then hands
 //                           out at `/install-cli.sh`. Without it, it hands out neither
+//   ACENTRIC_DOCKER_HOST    where Docker's API is, such as unix:///var/run/docker.sock: with it
+//                           the server makes sandboxes there, as containers. Whoever may make a
+//                           sandbox then has the computer Docker is on. Without it, it makes
+//                           none at Docker
+//   ACENTRIC_DOCKER_IMAGE   with it: the image a sandbox is made from, which has the machine
+//                           program in it (`docker build --target sandbox` builds one)
+//   ACENTRIC_DOCKER_NETWORK the Docker network a sandbox is attached to. Docker's own without it
+//   ACENTRIC_DOCKER_SERVER_URL  where a sandbox at Docker reaches this server, when that is
+//                           not where people do. Without it, where people do, with
+//                           host.docker.internal in place of localhost
 //
 // What a provider's models are called with is not among them: that is a model account, added
 // through the API and kept sealed.
@@ -32,6 +42,8 @@ import { resolve } from 'node:path';
 
 import { secretKeyOf } from '@acentric/core';
 import type { SecretKeys } from '@acentric/core';
+import { checkDockerHost } from '@acentric/sandbox';
+import type { DockerOptions } from '@acentric/sandbox';
 import type { Network } from '@acentric/executor';
 
 export type Settings = {
@@ -47,6 +59,8 @@ export type Settings = {
   readonly codeProcesses: number;
   /** The folder of what the server hands out to be installed elsewhere. */
   readonly downloads: string | undefined;
+  /** The Docker sandboxes are made at, as containers. Undefined when none are. */
+  readonly docker: DockerOptions | undefined;
 };
 
 /** The settings are wrong. The message says which, and how. */
@@ -128,6 +142,40 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
 
   const downloads = given('ACENTRIC_DOWNLOADS');
 
+  const dockerHost = given('ACENTRIC_DOCKER_HOST');
+  const dockerImage = given('ACENTRIC_DOCKER_IMAGE');
+  const dockerNetwork = given('ACENTRIC_DOCKER_NETWORK');
+  const dockerServerUrl = given('ACENTRIC_DOCKER_SERVER_URL')?.replace(/\/+$/, '');
+  if (dockerHost === undefined) {
+    for (const [name, value] of [
+      ['ACENTRIC_DOCKER_IMAGE', dockerImage],
+      ['ACENTRIC_DOCKER_NETWORK', dockerNetwork],
+      ['ACENTRIC_DOCKER_SERVER_URL', dockerServerUrl],
+    ] as const) {
+      if (value !== undefined) {
+        throw new InvalidSettings(`${name} is for a server that has ACENTRIC_DOCKER_HOST`);
+      }
+    }
+  } else {
+    try {
+      checkDockerHost(dockerHost);
+    } catch (error) {
+      throw new InvalidSettings(
+        `ACENTRIC_DOCKER_HOST: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (dockerImage === undefined) {
+      throw new InvalidSettings(
+        'ACENTRIC_DOCKER_IMAGE is the image sandboxes are made from: a server that has ACENTRIC_DOCKER_HOST has it too',
+      );
+    }
+    if (dockerServerUrl !== undefined && !/^https?:\/\/[^/]+/.test(dockerServerUrl)) {
+      throw new InvalidSettings(
+        `ACENTRIC_DOCKER_SERVER_URL is where a sandbox reaches the server, such as http://host.docker.internal:4000, and is ${dockerServerUrl}`,
+      );
+    }
+  }
+
   return {
     port: wholeNumber('ACENTRIC_PORT', 4000, 0, 65_535),
     host: given('ACENTRIC_HOST') ?? '127.0.0.1',
@@ -138,5 +186,14 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
     downloads: downloads === undefined ? undefined : resolve(downloads),
+    docker:
+      dockerHost === undefined || dockerImage === undefined
+        ? undefined
+        : {
+            host: dockerHost,
+            image: dockerImage,
+            ...(dockerNetwork === undefined ? {} : { network: dockerNetwork }),
+            ...(dockerServerUrl === undefined ? {} : { serverUrl: dockerServerUrl }),
+          },
   };
 }

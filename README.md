@@ -37,6 +37,13 @@ docker run -p 4000:4000 -v acentric-data:/data \
   conversations as files in `/data/blobs`. Back both up together.
 - `ACENTRIC_SECRET_KEY` is what agents' secrets and the keys of model accounts are sealed
   with. Without it, the server keeps neither.
+- The server makes machines itself, as sandboxes, at the providers it was set up with. For
+  Docker, build the sandbox image with `docker build --target sandbox -t acentric-sandbox .`
+  and set `ACENTRIC_DOCKER_HOST`, such as `unix:///var/run/docker.sock`, and
+  `ACENTRIC_DOCKER_IMAGE`. Whoever may make a sandbox then has the computer Docker is on. An
+  account at the provider is added with `POST /v1/providers`, and a sandbox is made with
+  `POST /v1/sandboxes`: it is stopped when nothing was run on it for its idle time, and started
+  again for the next command.
 - A provider's models are called with a model account: a key of the provider's, added with
   `acentric accounts add` and checked with the provider before it is kept. No key is read from
   the environment. The first account of a provider is its default, and an agent can be given
