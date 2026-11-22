@@ -331,7 +331,10 @@ describe('the daemon, against a server', () => {
           })
         : says('It timed out.');
     await turn(actor.id, 'Wait for too long.');
-    expect((await results(actor.id)).at(-1)).toMatch(/^waiting\n\[stopped: timed out after \S+\]$/);
+    // On Linux, bash says of a command it was running that it was terminated.
+    expect((await results(actor.id)).at(-1)).toMatch(
+      /^waiting\n(?:Terminated\n)?\[stopped: timed out after \S+\]$/,
+    );
   }, 90_000);
 
   it('is told when its machine is away, runs again when it is back, and not at all once it is removed', async (context) => {
