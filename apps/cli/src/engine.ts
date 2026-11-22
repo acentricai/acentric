@@ -9,6 +9,7 @@ import type { Actor, ActorId, Agent, Principal } from '@acentric/protocol';
 import type { Credentials, Env } from './credentials.ts';
 import { readCredentials } from './credentials.ts';
 import { Fail } from './fail.ts';
+import { noting } from './update.ts';
 
 /** What a command is given of the world: where it runs, what it may read, and where it writes. */
 export type Io = {
@@ -62,7 +63,9 @@ export async function withEngine<T>(
   work: (client: Client) => Promise<T>,
 ): Promise<T> {
   try {
-    return await work(createClient({ baseUrl: credentials.engine, token: credentials.key }));
+    const { engine, key } = credentials;
+    // What the engine says it hands out is kept, for offering its version of the command.
+    return await work(createClient({ baseUrl: engine, token: key, fetch: noting(engine) }));
   } catch (error) {
     throw failOf(credentials.engine, error);
   }

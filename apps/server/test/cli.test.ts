@@ -4,6 +4,7 @@
 // code in workerd. Only the model is a stand-in.
 
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
@@ -30,6 +31,10 @@ import type { Started } from '../src/index.ts';
 const REPO = join(import.meta.dirname, '..', '..', '..');
 const ADMIN = 'the-key-this-engine-was-started-with';
 const MODEL_KEY = 'a-key-the-fake-provider-takes';
+/** The version the command says it is: the one its package has. */
+const { version: VERSION } = JSON.parse(
+  readFileSync(join(REPO, 'apps', 'cli', 'package.json'), 'utf8'),
+) as { version: string };
 const folders: string[] = [];
 let downloads = '';
 
@@ -51,7 +56,11 @@ const model: ModelRunner = {
 };
 
 /** A server with what it hands out, on a folder of its own or one a server had before. */
-const serve = (data: string, runner: ModelRunner = model): Promise<Started> =>
+const serve = (
+  data: string,
+  runner: ModelRunner = model,
+  handsOut: string | null = downloads,
+): Promise<Started> =>
   start(
     readSettings({
       ACENTRIC_PORT: '0',
@@ -59,7 +68,7 @@ const serve = (data: string, runner: ModelRunner = model): Promise<Started> =>
       ACENTRIC_ADMIN_KEY: ADMIN,
       ACENTRIC_SECRET_KEY: 'ab'.repeat(32),
       ACENTRIC_CODE_PROCESSES: '1',
-      ACENTRIC_DOWNLOADS: downloads,
+      ...(handsOut === null ? {} : { ACENTRIC_DOWNLOADS: handsOut }),
     }),
     {
       version: 'test',
@@ -402,5 +411,64 @@ describe('the acentric command', () => {
     const logs = await sh(`acentric actors logs ${String(actor)}`, with2);
     expect(logs.out).toContain('· idle, its last turn ok');
     await second.close();
+  }, 120_000);
+  it('is kept the engine’s own version: it says when they differ, and takes the engine’s', async () => {
+    const first = await serve(folder());
+    const { env, home } = await installed(first.server.url);
+    const file = join(home, '.acentric', 'bin', 'acentric.mjs');
+    const mine = readFileSync(file);
+    const digest = (bytes: Uint8Array) =>
+      createHash('sha256').update(bytes).digest('hex').slice(0, 12);
+
+    // Not signed in, it is of the engine it was installed from.
+    const same = await sh('acentric version', env);
+    expect(same.out.trim().split('\n')).toEqual([
+      `acentric ${VERSION} (${digest(mine)})`,
+      `engine ${first.server.url}: test. It hands out this version of acentric.`,
+    ]);
+    expect((await sh('acentric update', env)).out).toContain(
+      `This is the version the engine at ${first.server.url} hands out (${digest(mine)}).`,
+    );
+    await first.close();
+
+    // An engine of another build: what it hands out is another file.
+    const other = folder();
+    copyFileSync(join(downloads, 'install-cli.sh'), join(other, 'install-cli.sh'));
+    const theirs = Buffer.concat([mine, Buffer.from('\n// another build\n')]);
+    writeFileSync(join(other, 'acentric.mjs'), theirs);
+    const second = await serve(folder(), model, other);
+    const with2 = { ...env, ENGINE_URL: second.server.url, ENGINE_API_KEY: ADMIN };
+
+    // Nobody is there to answer: a command does what it was asked, and nothing else.
+    const used = await sh('acentric whoami', with2);
+    expect(used.code, used.out).toBe(0);
+    expect(used.out).not.toMatch(/different version|Update/);
+    expect(readFileSync(file).equals(mine)).toBe(true);
+    const differs = await sh('acentric version', with2);
+    expect(differs.out).toContain(
+      `engine ${second.server.url}: test. It hands out a different version of acentric (${digest(theirs)}): \`acentric update\` takes it.`,
+    );
+
+    const updated = await sh('acentric update', with2);
+    expect(updated.code, updated.out).toBe(0);
+    expect(updated.out).toContain(
+      `Updated to the version the engine at ${second.server.url} hands out (${digest(mine)} → ${digest(theirs)}).`,
+    );
+    expect(readFileSync(file).equals(theirs)).toBe(true);
+    // The command it now is runs, and is the engine's.
+    expect((await sh('acentric version', with2)).out).toContain(
+      'It hands out this version of acentric.',
+    );
+    await second.close();
+
+    // An engine that hands out no command has none to take.
+    const third = await serve(folder(), model, null);
+    const with3 = { ...env, ENGINE_URL: third.server.url, ENGINE_API_KEY: ADMIN };
+    const none = await sh('acentric update', with3);
+    expect(none.code).toBe(1);
+    expect(none.out).toContain('hands out no command (it answered 404)');
+    expect((await sh('acentric version', with3)).out).toContain('It hands out no command.');
+    expect(readFileSync(file).equals(theirs)).toBe(true);
+    await third.close();
   }, 120_000);
 });
