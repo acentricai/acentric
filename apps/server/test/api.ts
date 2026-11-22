@@ -17,6 +17,7 @@ import {
   Secrets,
   accountRunners,
 } from '@acentric/core';
+import type { TaskKind } from '@acentric/core';
 import { InlineExecutor } from '@acentric/core/testing';
 import type { AgentFunction, InlineAgent } from '@acentric/core/testing';
 import type { ActorId, AgentDefinition, BodyOf, Json } from '@acentric/protocol';
@@ -78,6 +79,8 @@ export async function api(
     readonly account?: boolean;
     /** False for an engine with no blob store: images stay in their messages. */
     readonly blobs?: boolean;
+    /** The kinds of task the engine has. None, without it. */
+    readonly kinds?: readonly TaskKind[];
   } = {},
 ) {
   const store = new MemoryStore();
@@ -109,6 +112,7 @@ export async function api(
     executor: new InlineExecutor(AGENTS),
     secrets,
     ...(options.blobs === false ? {} : { blobs }),
+    ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
   });
   // A hash that is quick to make: these tests are not of how long a password takes to guess.
   const people = new People({ store, audit, passwordCost: 1024 });
