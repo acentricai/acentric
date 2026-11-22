@@ -14,6 +14,7 @@ export * from './manifest.ts';
 export * from './bundle.ts';
 export * from './resources/agents.ts';
 export * from './resources/actors.ts';
+export * from './resources/tasks.ts';
 export * from './resources/people.ts';
 export * from './resources/accounts.ts';
 export * from './routes.ts';

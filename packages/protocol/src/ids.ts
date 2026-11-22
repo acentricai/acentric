@@ -16,7 +16,6 @@ export const ID_PREFIXES = {
   deployment: 'dep',
   actor: 'act',
   input: 'inp',
-  task: 'tsk',
   machine: 'mch',
   account: 'acc',
   user: 'usr',
@@ -38,7 +37,6 @@ export type AgentId = Id<'agent'>;
 export type DeploymentId = Id<'deployment'>;
 export type ActorId = Id<'actor'>;
 export type InputId = Id<'input'>;
-export type TaskId = Id<'task'>;
 export type MachineId = Id<'machine'>;
 export type AccountId = Id<'account'>;
 export type UserId = Id<'user'>;
@@ -138,7 +136,6 @@ export const agentIdSchema = idSchema('agent');
 export const deploymentIdSchema = idSchema('deployment');
 export const actorIdSchema = idSchema('actor');
 export const inputIdSchema = idSchema('input');
-export const taskIdSchema = idSchema('task');
 export const machineIdSchema = idSchema('machine');
 export const accountIdSchema = idSchema('account');
 export const userIdSchema = idSchema('user');
