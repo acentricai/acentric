@@ -32,7 +32,8 @@ docker run -p 4000:4000 -v acentric-data:/data \
 - People are added by invite links an admin makes. The server sends no email. An owner who is
   locked out runs `acentric-server reset-link <email>` on the server itself.
 - Set `ACENTRIC_PUBLIC_URL` to where people reach the server, so that its links start there.
-- It keeps everything it has in `/data`.
+- It keeps everything it has in `/data`: its database, and the images and files of
+  conversations as files in `/data/blobs`. Back both up together.
 - `ACENTRIC_SECRET_KEY` is what agents' secrets and the keys of model accounts are sealed
   with. Without it, the server keeps neither.
 - A provider's models are called with a model account: a key of the provider's, added with
