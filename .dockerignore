@@ -1,0 +1,8 @@
+# What an image is not built from.
+.git
+.notes
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+target

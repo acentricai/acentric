@@ -35,6 +35,23 @@ jobs:
       - run: pnpm boundaries
       - run: pnpm test
 
+  image:
+    name: Server image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build --tag acentric-server .
+      # The image has what the server needs and nothing it was built with: it has to start.
+      - name: The server starts in its image, and says it is up
+        run: |
+          docker run --detach --name server --publish 127.0.0.1:4000:4000 acentric-server
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:4000/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs server
+          exit 1
+
   rust:
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
