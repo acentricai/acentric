@@ -17,6 +17,7 @@ import type { Json, JsonObject, MachineId } from '@acentric/protocol';
 
 import { MachineNotFound, MachineOffline } from './machines.ts';
 import type { CommandEnd, Machines } from './machines.ts';
+import { SandboxAsleep } from './sandboxes.ts';
 import { span } from './tasks.ts';
 import type { TaskEnd, TaskKind } from './tasks.ts';
 
@@ -93,6 +94,11 @@ export function renderCommand(end: CommandEnd, log: string | undefined, most: nu
 }
 
 export type BashOptions = {
+  /**
+   * Before a command is started: has a machine that is a sandbox awake, and rejects with
+   * `SandboxAsleep` when it cannot be had. See `sandboxes.ts`.
+   */
+  readonly wake?: (machine: MachineId) => Promise<void>;
   /**
    * How long a command has to end once it was told to stop, before the task is taken as
    * stopped whatever the machine says. Longer than the machine's own grace before it kills, so
@@ -193,6 +199,14 @@ export function bashKind(machines: Machines, options: BashOptions = {}): TaskKin
       // A task that an engine before this one stored and never started: its machine's daemon
       // may still be on its way back to this one.
       if ((await machines.command(ref)) === undefined) {
+        try {
+          // A sandbox that has gone to sleep is started again, and waited for. First: one that
+          // sleeps is not on its way back by itself, however long it is given.
+          await options.wake?.(input.machine);
+        } catch (error) {
+          if (error instanceof SandboxAsleep) return { status: 'failed', text: error.message };
+          throw error;
+        }
         await machines.settled(input.machine, closing);
         if (closing.aborted) return { status: 'lost', text: '' };
       }

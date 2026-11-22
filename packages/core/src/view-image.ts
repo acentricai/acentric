@@ -7,10 +7,12 @@ import type {
   ContentPart,
   ImagePart,
   JsonObject,
+  MachineId,
 } from '@acentric/protocol';
 
 import { MachineNotFound, MachineOffline, MachineRefused } from './machines.ts';
 import type { Machines } from './machines.ts';
+import { SandboxAsleep } from './sandboxes.ts';
 import type { EngineTool } from './tasks.ts';
 
 /** A tool of the engine's own that answers at once. */
@@ -103,6 +105,8 @@ export const megabytes = (bytes: number): string => `${(bytes / (1024 * 1024)).t
 export function viewImage(
   machines: Machines,
   takesImages: (provider: string, model: string) => boolean,
+  /** Before a file is read: has a machine that is a sandbox awake. See `sandboxes.ts`. */
+  wake: (machine: MachineId) => Promise<void> = async () => {},
 ): OwnTool {
   return {
     tool: {
@@ -135,6 +139,8 @@ export function viewImage(
       if (unknown !== undefined) return failed(`${unknown} is not known`);
       const { id, cwd } = actor.machine;
       try {
+        // A sandbox that has gone to sleep is started again, to be read from.
+        await wake(id);
         // A call that an engine before this one was cut off in: the machine may be on its way back.
         await machines.settled(id);
         // One byte more than the most, so that a larger file is known to be one.
@@ -164,7 +170,9 @@ export function viewImage(
         };
         return { content: [image] };
       } catch (error) {
-        if (error instanceof MachineRefused) return failed(error.message);
+        if (error instanceof MachineRefused || error instanceof SandboxAsleep) {
+          return failed(error.message);
+        }
         if (error instanceof MachineOffline) {
           return failed(`Your machine, ${id}, is not connected: the file could not be read.`);
         }

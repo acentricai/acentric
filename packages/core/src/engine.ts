@@ -33,6 +33,7 @@ import type {
   InputId,
   Json,
   MachineEnv,
+  MachineId,
   Name,
   PrincipalRef,
   Reasoning,
@@ -72,6 +73,9 @@ import { DEFAULT_RULES } from './machine.ts';
 import type { Rules } from './machine.ts';
 import { InvalidMachine, Machines, OWN } from './machines.ts';
 import type { MachineTimes, MachinesOptions } from './machines.ts';
+import type { SandboxProvider } from './sandbox.ts';
+import { Sandboxes } from './sandboxes.ts';
+import type { SandboxTimes } from './sandboxes.ts';
 import { instructionsOf } from './scaffold.ts';
 import { SecretsUnavailable } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
@@ -135,6 +139,16 @@ export type EngineOptions = {
     readonly build?: MachinesOptions['build'];
     /** How long a command has to end once it was told to stop. For tests. */
     readonly stopGraceMs?: number;
+  };
+  /**
+   * Has the engine make machines at providers: sandboxes (see `sandboxes.ts`). Only an engine
+   * that keeps machines makes any.
+   */
+  readonly sandboxes?: {
+    readonly providers: readonly SandboxProvider[];
+    /** Where a sandbox's daemon reaches this engine, when it is not where a request came to. */
+    readonly publicUrl?: string;
+    readonly times?: Partial<SandboxTimes>;
   };
   /** Without it, a bus of this process. */
   readonly bus?: EventBus;
@@ -208,6 +222,8 @@ export class Engine {
   readonly tasks: Tasks;
   /** The machines commands run on. Undefined for an engine that keeps none. */
   readonly machines: Machines | undefined;
+  /** Undefined for an engine that keeps no machines. */
+  readonly sandboxes: Sandboxes | undefined;
   readonly #slots: Semaphore;
   readonly #maxHot: number;
   /** The drivers, the one touched longest ago first. */
@@ -264,6 +280,24 @@ export class Engine {
             ...(kept.times === undefined ? {} : { times: kept.times }),
             ...(kept.build === undefined ? {} : { build: kept.build }),
           });
+    this.sandboxes =
+      this.machines === undefined
+        ? undefined
+        : new Sandboxes({
+            store: options.store,
+            machines: this.machines,
+            providers: options.sandboxes?.providers ?? [],
+            id: (now) => this.#ids.make('sandboxProvider', now),
+            clock: this.#clock,
+            report,
+            ...(options.secrets === undefined ? {} : { secrets: options.secrets }),
+            ...(options.sandboxes?.publicUrl === undefined
+              ? {}
+              : { publicUrl: options.sandboxes.publicUrl }),
+            ...(options.sandboxes?.times === undefined ? {} : { times: options.sandboxes.times }),
+          });
+    // Before anything is asked of a machine: one that is a sandbox, and sleeps, is started again.
+    const wake = async (machine: MachineId): Promise<void> => this.sandboxes?.wake(machine);
     // An engine that keeps machines has what an agent that works on one uses.
     this.#features = [
       ...(options.features ?? []),
@@ -273,10 +307,10 @@ export class Engine {
       this.machines === undefined
         ? []
         : [
-            bashKind(
-              this.machines,
-              kept?.stopGraceMs === undefined ? {} : { stopGraceMs: kept.stopGraceMs },
-            ),
+            bashKind(this.machines, {
+              wake,
+              ...(kept?.stopGraceMs === undefined ? {} : { stopGraceMs: kept.stopGraceMs }),
+            }),
           ];
     // What the engine itself offers a model that answers at once: an image from its machine.
     const ownTools =
@@ -291,6 +325,7 @@ export class Engine {
                   .get(provider)
                   .models.find((info) => info.id === model)
                   ?.input?.includes('image') === true,
+              wake,
             ),
           ];
     this.tasks = new Tasks({
@@ -984,6 +1019,7 @@ export class Engine {
     this.#drivers.clear();
     await this.tasks.close();
     // The daemons' connections are dropped. The commands on the machines go on.
+    this.sandboxes?.close();
     this.machines?.close();
   }
 
@@ -1042,6 +1078,8 @@ export class Engine {
     argument: Json,
     context: CallContext,
     signal: AbortSignal,
+    /** Stops and starts the call's time limit, when it has one. */
+    limit?: { readonly pause: () => void; readonly resume: () => void },
   ): Promise<CallResult> {
     try {
       await this.#ready(deployment);
@@ -1063,7 +1101,21 @@ export class Engine {
     const host: CallHost =
       machine === null || machines === undefined
         ? NO_MACHINE
-        : { file: (request) => machines.file(machine, request) };
+        : {
+            file: async (request) => {
+              // Having its machine there is the engine's time, not the code's: the call's
+              // limit waits for it. A sandbox that sleeps is woken, and a machine on its way
+              // back is waited for.
+              limit?.pause();
+              try {
+                await this.sandboxes?.wake(machine.id);
+                await machines.settled(machine.id, signal);
+              } finally {
+                limit?.resume();
+              }
+              return machines.file(machine, request);
+            },
+          };
     return this.#executor.call(
       deployment,
       path,
@@ -1093,12 +1145,33 @@ export class Engine {
     signal: AbortSignal,
   ): Promise<CallResult> {
     const limit = new AbortController();
-    const timer = setTimeout(() => {
-      limit.abort();
-    }, this.#codeTimeoutMs);
+    // What is left of its time, and since when that runs: it stops while the engine, and not
+    // the code, takes the time.
+    let left = this.#codeTimeoutMs;
+    let since = Date.now();
+    let paused = 0;
+    const run = (): NodeJS.Timeout =>
+      setTimeout(() => {
+        limit.abort();
+      }, left);
+    let timer = run();
+    const clock = {
+      pause: (): void => {
+        paused += 1;
+        if (paused !== 1) return;
+        clearTimeout(timer);
+        left = Math.max(0, left - (Date.now() - since));
+      },
+      resume: (): void => {
+        paused -= 1;
+        if (paused !== 0) return;
+        since = Date.now();
+        timer = run();
+      },
+    };
     try {
       const both = AbortSignal.any([signal, limit.signal]);
-      const result = await this.#call(deployment, path, argument, context, both);
+      const result = await this.#call(deployment, path, argument, context, both, clock);
       if (!limit.signal.aborted || signal.aborted) return result;
       const seconds = String(this.#codeTimeoutMs / 1000);
       const message = `${path} did not return within ${seconds} s, and was given up`;
