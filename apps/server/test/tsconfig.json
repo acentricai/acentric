@@ -14,10 +14,23 @@
     "../../../packages/core/test/fake-daemon.ts"
   ],
   "references": [
-    { "path": ".." },
-    { "path": "../../../packages/ai" },
-    { "path": "../../../packages/client" },
-    { "path": "../../../packages/core" },
-    { "path": "../../../packages/protocol" }
+    {
+      "path": ".."
+    },
+    {
+      "path": "../../../packages/ai"
+    },
+    {
+      "path": "../../../packages/client"
+    },
+    {
+      "path": "../../../packages/core"
+    },
+    {
+      "path": "../../../packages/protocol"
+    },
+    {
+      "path": "../../../packages/sandbox"
+    }
   ]
 }

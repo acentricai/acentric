@@ -15,6 +15,8 @@ describe('a server’s settings', () => {
       network: { reach: 'public', allow: [] },
       codeProcesses: 2,
       downloads: undefined,
+      // It makes sandboxes nowhere until it is told where.
+      docker: undefined,
     });
     expect(settings.data.endsWith('/data')).toBe(true);
   });
@@ -58,6 +60,28 @@ describe('a server’s settings', () => {
     expect(Object.keys(two.secretKeys?.keys ?? {})).toContain(current);
   });
 
+  it('say where sandboxes are made at Docker, and from which image', () => {
+    expect(
+      readSettings({
+        ACENTRIC_DOCKER_HOST: 'unix:///var/run/docker.sock',
+        ACENTRIC_DOCKER_IMAGE: 'acentric-sandbox:1',
+      }).docker,
+    ).toEqual({ host: 'unix:///var/run/docker.sock', image: 'acentric-sandbox:1' });
+    expect(
+      readSettings({
+        ACENTRIC_DOCKER_HOST: 'tcp://10.0.0.5:2375',
+        ACENTRIC_DOCKER_IMAGE: 'acentric-sandbox:1',
+        ACENTRIC_DOCKER_NETWORK: 'acentric',
+        ACENTRIC_DOCKER_SERVER_URL: 'http://server:4000/',
+      }).docker,
+    ).toEqual({
+      host: 'tcp://10.0.0.5:2375',
+      image: 'acentric-sandbox:1',
+      network: 'acentric',
+      serverUrl: 'http://server:4000',
+    });
+  });
+
   it('are refused, with which and why, before anything is started', () => {
     const wrong: [{ [name: string]: string }, RegExp][] = [
       [{ ACENTRIC_PORT: 'eighty' }, /ACENTRIC_PORT is a whole number/],
@@ -72,6 +96,27 @@ describe('a server’s settings', () => {
         /is for ACENTRIC_AGENT_NETWORK=public/,
       ],
       [{ ACENTRIC_CODE_PROCESSES: '0' }, /ACENTRIC_CODE_PROCESSES/],
+      [
+        { ACENTRIC_DOCKER_HOST: 'unix:///var/run/docker.sock' },
+        /ACENTRIC_DOCKER_IMAGE is the image sandboxes are made from/,
+      ],
+      [
+        { ACENTRIC_DOCKER_IMAGE: 'acentric-sandbox' },
+        /ACENTRIC_DOCKER_IMAGE is for a server that has ACENTRIC_DOCKER_HOST/,
+      ],
+      [{ ACENTRIC_DOCKER_NETWORK: 'acentric' }, /is for a server that has ACENTRIC_DOCKER_HOST/],
+      [
+        { ACENTRIC_DOCKER_HOST: 'ssh://box', ACENTRIC_DOCKER_IMAGE: 'acentric-sandbox' },
+        /ACENTRIC_DOCKER_HOST: Docker is reached at unix:\/\/<socket> or http:\/\/<host>:<port>/,
+      ],
+      [
+        {
+          ACENTRIC_DOCKER_HOST: 'unix:///var/run/docker.sock',
+          ACENTRIC_DOCKER_IMAGE: 'acentric-sandbox',
+          ACENTRIC_DOCKER_SERVER_URL: 'server:4000',
+        },
+        /ACENTRIC_DOCKER_SERVER_URL is where a sandbox reaches the server/,
+      ],
     ];
     for (const [env, message] of wrong) {
       expect(() => readSettings(env), JSON.stringify(env)).toThrow(message);

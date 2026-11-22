@@ -10,6 +10,7 @@ import type { ModelRunner, Providers } from '@acentric/ai';
 import { Accounts, Audit, Engine, Keys, People, Secrets, accountRunners } from '@acentric/core';
 import type { EngineOptions, RunnerSource } from '@acentric/core';
 import { IsolateExecutor } from '@acentric/executor';
+import { docker } from '@acentric/sandbox';
 import { FileBlobStore, SqliteStore } from '@acentric/store';
 
 import { machinePrograms } from './downloads.ts';
@@ -82,7 +83,7 @@ export async function start(
     machines: { build: programs.build, ...more.machines },
     // Machines the server makes itself, at the providers it was set up with.
     sandboxes: {
-      providers: [],
+      providers: settings.docker === undefined ? [] : [docker(settings.docker)],
       ...(settings.publicUrl === undefined ? {} : { publicUrl: settings.publicUrl }),
       ...more.sandboxes,
     },
