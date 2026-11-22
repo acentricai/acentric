@@ -65,6 +65,14 @@ import {
   updateMachineRequestSchema,
 } from './resources/machines.ts';
 import {
+  createSandboxProviderRequestSchema,
+  createSandboxRequestSchema,
+  sandboxParam,
+  sandboxProviderParam,
+  sandboxProviderSchema,
+  sandboxSchema,
+} from './resources/sandboxes.ts';
+import {
   abortResponseSchema,
   listTasksQuerySchema,
   taskDetailSchema,
@@ -536,11 +544,11 @@ export const routes = defineRoutes({
     method: 'DELETE',
     path: '/v1/machines/{machine}',
     summary:
-      'Removes a machine. Its daemon is disconnected, and what the engine had running there is lost.',
+      'Removes a machine. Its daemon is disconnected, and what the engine had running there is lost. A sandbox is deleted at its provider first.',
     auth: { on: 'engine', permission: 'machines:manage' },
     params: machineParam,
     status: 204,
-    errors: ['not_found'],
+    errors: ['not_found', 'sandbox_provider_failed'],
   },
   'machines.token': {
     method: 'POST',
@@ -657,6 +665,71 @@ export const routes = defineRoutes({
   },
 
   // Model accounts and usage
+
+  // Sandboxes: machines the engine makes at a provider. Each is a machine like any other once made
+
+  'sandboxProviders.list': {
+    method: 'GET',
+    path: '/v1/providers',
+    summary: 'Lists the accounts at providers of sandboxes, never their keys.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    response: z
+      .object({ items: z.array(sandboxProviderSchema) })
+      .meta({ id: 'SandboxProviderList' }),
+    status: 200,
+    errors: [],
+  },
+  'sandboxProviders.create': {
+    method: 'POST',
+    path: '/v1/providers',
+    summary:
+      'Adds an account at a provider of sandboxes. Its key is checked with the provider before it is kept.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    body: createSandboxProviderRequestSchema,
+    response: sandboxProviderSchema,
+    status: 201,
+    errors: ['name_taken', 'sandbox_provider_failed', 'unavailable'],
+  },
+  'sandboxProviders.delete': {
+    method: 'DELETE',
+    path: '/v1/providers/{provider}',
+    summary: 'Forgets an account and its key. Not while it has sandboxes.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: sandboxProviderParam,
+    status: 204,
+    errors: ['not_found', 'conflict'],
+  },
+  'sandboxProviders.sandboxes': {
+    method: 'GET',
+    path: '/v1/providers/{provider}/sandboxes',
+    summary: "Lists an account's sandboxes, with how each stands at the provider.",
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: sandboxProviderParam,
+    response: z.object({ items: z.array(sandboxSchema) }).meta({ id: 'SandboxList' }),
+    status: 200,
+    errors: ['not_found'],
+  },
+  'sandboxes.create': {
+    method: 'POST',
+    path: '/v1/sandboxes',
+    summary:
+      'Makes a sandbox, as a machine. Answers once its daemon has connected, or after the wait.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    body: createSandboxRequestSchema,
+    response: sandboxSchema,
+    status: 201,
+    errors: ['not_found', 'name_taken', 'sandbox_provider_failed', 'unavailable'],
+  },
+  'sandboxes.delete': {
+    method: 'DELETE',
+    path: '/v1/sandboxes/{machine}',
+    summary:
+      'Deletes a sandbox at its provider, disk and all, and removes its machine. Nothing is removed when the provider cannot be asked.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: sandboxParam,
+    status: 204,
+    errors: ['not_found', 'sandbox_provider_failed'],
+  },
 
   'accounts.create': {
     method: 'POST',

@@ -3584,7 +3584,7 @@
       },
       "delete": {
         "operationId": "machines.delete",
-        "summary": "Removes a machine. Its daemon is disconnected, and what the engine had running there is lost.",
+        "summary": "Removes a machine. Its daemon is disconnected, and what the engine had running there is lost. A sandbox is deleted at its provider first.",
         "tags": [
           "machines"
         ],
@@ -3663,6 +3663,16 @@
           },
           "500": {
             "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Failed: sandbox_provider_failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4849,6 +4859,628 @@
           },
           "500": {
             "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/providers": {
+      "get": {
+        "operationId": "sandboxProviders.list",
+        "summary": "Lists the accounts at providers of sandboxes, never their keys.",
+        "tags": [
+          "sandboxProviders"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxProviderList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "sandboxProviders.create",
+        "summary": "Adds an account at a provider of sandboxes. Its key is checked with the provider before it is kept.",
+        "tags": [
+          "sandboxProviders"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSandboxProviderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxProvider"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: name_taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Failed: sandbox_provider_failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Failed: unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/providers/{provider}": {
+      "delete": {
+        "operationId": "sandboxProviders.delete",
+        "summary": "Forgets an account and its key. Not while it has sandboxes.",
+        "tags": [
+          "sandboxProviders"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/providers/{provider}/sandboxes": {
+      "get": {
+        "operationId": "sandboxProviders.sandboxes",
+        "summary": "Lists an account's sandboxes, with how each stands at the provider.",
+        "tags": [
+          "sandboxProviders"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sandboxes": {
+      "post": {
+        "operationId": "sandboxes.create",
+        "summary": "Makes a sandbox, as a machine. Answers once its daemon has connected, or after the wait.",
+        "tags": [
+          "sandboxes"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSandboxRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sandbox"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: name_taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Failed: sandbox_provider_failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Failed: unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sandboxes/{machine}": {
+      "delete": {
+        "operationId": "sandboxes.delete",
+        "summary": "Deletes a sandbox at its provider, disk and all, and removes its machine. Nothing is removed when the provider cannot be asked.",
+        "tags": [
+          "sandboxes"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind machine, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Failed: sandbox_provider_failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9286,6 +9918,100 @@
         ],
         "additionalProperties": false
       },
+      "CreateSandboxProviderRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "What people call it. Unique among its kind, and can be changed.",
+            "examples": [
+              "support"
+            ]
+          },
+          "apiKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "CreateSandboxRequest": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "examples": [
+              "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          },
+          "vcpu": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "memoryGB": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "What people call it. Unique among its kind, and can be changed.",
+            "examples": [
+              "support"
+            ]
+          },
+          "agents": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "*"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^agt_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "description": "An ID of kind agent, made by the engine.",
+                  "examples": [
+                    "agt_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                  ]
+                }
+              }
+            ]
+          },
+          "idleTimeoutSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 2592000
+          },
+          "wait": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 120
+          }
+        },
+        "required": [
+          "provider",
+          "vcpu",
+          "memoryGB"
+        ],
+        "additionalProperties": false
+      },
       "DeployRequest": {
         "type": "object",
         "properties": {
@@ -11111,6 +11837,144 @@
           "command"
         ],
         "additionalProperties": false
+      },
+      "Sandbox": {
+        "type": "object",
+        "properties": {
+          "machine": {
+            "$ref": "#/components/schemas/Machine"
+          },
+          "provider": {
+            "type": "string",
+            "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "examples": [
+              "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "providerSandboxId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vcpu": {
+            "type": "number"
+          },
+          "memoryGB": {
+            "type": "number"
+          },
+          "idleTimeoutSeconds": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "starting",
+              "running",
+              "stopping",
+              "stopped",
+              "error",
+              "gone",
+              "unknown"
+            ]
+          }
+        },
+        "required": [
+          "machine",
+          "provider",
+          "kind",
+          "providerSandboxId",
+          "vcpu",
+          "memoryGB",
+          "idleTimeoutSeconds",
+          "state"
+        ]
+      },
+      "SandboxList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sandbox"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "SandboxProvider": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "examples": [
+              "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "What people call it. Unique among its kind, and can be changed.",
+            "examples": [
+              "support"
+            ]
+          },
+          "account": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sandboxes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch.",
+            "examples": [
+              1795305600000
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "account",
+          "sandboxes",
+          "createdAt"
+        ]
+      },
+      "SandboxProviderList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SandboxProvider"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
       },
       "Scope": {
         "oneOf": [
