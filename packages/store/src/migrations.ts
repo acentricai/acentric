@@ -43,6 +43,17 @@ const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (agent_id, name)
   ) STRICT, WITHOUT ROWID;
 
+  -- An API key. The key itself is not here: only what tells a key that is sent is the one.
+  CREATE TABLE keys (
+    id TEXT PRIMARY KEY,
+    -- JSON: the key as the API shows it.
+    key TEXT NOT NULL,
+    -- The SHA-256 of its secret part, in hex.
+    hash TEXT NOT NULL,
+    -- The key that made it, which it is revoked with.
+    parent TEXT
+  ) STRICT;
+
   -- An actor, and where its turn stands.
   CREATE TABLE actors (
     id TEXT PRIMARY KEY,
@@ -83,6 +94,8 @@ const MIGRATIONS: readonly string[] = [
   CREATE UNIQUE INDEX actors_external_id ON actors (agent_id, external_id)
     WHERE external_id IS NOT NULL;
   CREATE UNIQUE INDEX actors_name ON actors (agent_id, name) WHERE name IS NOT NULL;
+  -- An agent's actors, as a list of them is read.
+  CREATE INDEX actors_agent ON actors (agent_id, id);
   CREATE INDEX actors_owed ON actors (id) WHERE owed = 1;
 
   -- A conversation: one row a message, in order.
@@ -109,8 +122,10 @@ const MIGRATIONS: readonly string[] = [
   -- An external ID is one input's among its actor's: sending it again stores nothing.
   CREATE UNIQUE INDEX inputs_external_id ON inputs (actor_id, external_id)
     WHERE external_id IS NOT NULL;
-  -- What waits: the only inputs anything looks for.
+  -- What waits: what a turn looks for.
   CREATE INDEX inputs_pending ON inputs (actor_id) WHERE delivered_at IS NULL;
+  -- An actor's inputs, as a list of them is read.
+  CREATE INDEX inputs_actor ON inputs (actor_id, id);
   `,
 ];
 

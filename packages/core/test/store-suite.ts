@@ -12,10 +12,11 @@ import type {
   ConversationEntry,
   Deployment,
   Input,
+  KeyId,
 } from '@acentric/protocol';
 
 import type { Change } from '../src/state.ts';
-import type { Store } from '../src/store.ts';
+import type { Paged, Store, StoredKey } from '../src/store.ts';
 
 const NOW = 1_795_305_600_000;
 
@@ -318,7 +319,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         const { agent, one, two } = await deployed();
         expect(await store.loadAgent(agent.id)).toEqual(agent);
         expect(await store.findAgent('orders')).toEqual(agent);
-        expect(await store.listAgents()).toEqual([agent]);
+        expect(await store.listAgents()).toEqual({ items: [agent], nextCursor: null });
         expect(await store.loadDeployment(one.id)).toEqual({ deployment: one, code: 'v1' });
         expect(await store.loadDeployment(two.id)).toEqual({ deployment: two, code: 'v2' });
         expect(await store.findDeployment(agent.id, 2)).toEqual(two);
@@ -478,6 +479,189 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         // A step that made no call leaves both.
         await store.commit(actor.id, 2, change());
         expect(await store.loadActor(actor.id)).toMatchObject({ sent: 'abc', reasoningFrom: 5 });
+      });
+    });
+
+    describe('lists', () => {
+      /** Every page of a list, read `limit` at a time. */
+      const pages = async <T>(
+        read: (page: { limit: number; cursor?: string }) => Promise<Paged<T>>,
+        limit: number,
+      ): Promise<T[][]> => {
+        const all: T[][] = [];
+        let cursor: string | undefined;
+        do {
+          const page = await read({ limit, ...(cursor === undefined ? {} : { cursor }) });
+          all.push(page.items);
+          cursor = page.nextCursor ?? undefined;
+        } while (cursor !== undefined);
+        return all;
+      };
+
+      it('give actors newest first, a page at a time, with no page after the last', async () => {
+        const agent = agentId();
+        const created = [];
+        for (let index = 0; index < 5; index += 1) created.push(await create({}, agent));
+        const newestFirst = created.map((actor) => actor.id).toReversed();
+
+        const read = await pages((page) => store.listActors({ ...page, agent }), 2);
+        expect(read.map((page) => page.map((actor) => actor.id))).toEqual([
+          newestFirst.slice(0, 2),
+          newestFirst.slice(2, 4),
+          newestFirst.slice(4),
+        ]);
+        // A page that ends where the list does says so, and is not followed by an empty one.
+        expect((await store.listActors({ limit: 5, agent })).nextCursor).toBeNull();
+      });
+
+      it('narrow actors by their agent, themselves, where they stand, their name and the caller’s ID', async () => {
+        const [mine, other] = [agentId(), agentId()];
+        const named = await create({ name: 'eu-desk', externalId: 'telegram:1' }, mine);
+        const working = await create({}, mine);
+        const elsewhere = await create({ name: 'eu-desk' }, other);
+        await store.commit(working.id, 0, change());
+        await store.addInput(inputOf(named, 'hello'));
+        const ids = async (query: Parameters<Store['listActors']>[0]) =>
+          (await store.listActors(query)).items.map((actor) => actor.id);
+
+        expect(await ids({ limit: 10, agent: mine })).toEqual([working.id, named.id]);
+        expect(await ids({ limit: 10, actor: named.id })).toEqual([named.id]);
+        expect(await ids({ limit: 10, status: 'working' })).toEqual([working.id]);
+        expect(await ids({ limit: 10, name: 'eu-desk' })).toEqual([elsewhere.id, named.id]);
+        expect(await ids({ limit: 10, agent: mine, externalId: 'telegram:1' })).toEqual([named.id]);
+        expect(await ids({ limit: 10, agent: other, actor: named.id })).toEqual([]);
+        // What it lists is the actor as it stands, with what waits for it.
+        const [listed] = (await store.listActors({ limit: 10, actor: named.id })).items;
+        expect(listed).toEqual((await store.loadActor(named.id))?.actor);
+        expect(listed?.pendingInputs).toBe(1);
+      });
+
+      it('give what an actor was sent, newest first: all of it, what waits, or what a turn took', async () => {
+        const actor = await create();
+        const inputs = [];
+        for (const text of ['one', 'two', 'three']) {
+          const input = inputOf(actor, text);
+          inputs.push(input);
+          await store.addInput(input);
+        }
+        const [first, second, third] = inputs.map((input) => input.id);
+        await store.commit(actor.id, 0, change({ deliver: [first as never] }));
+        const ids = async (query: Parameters<Store['listInputs']>[1]) =>
+          (await store.listInputs(actor.id, query)).items.map((input) => input.id);
+
+        expect(await ids({ limit: 10 })).toEqual([third, second, first]);
+        expect(await ids({ limit: 10, pending: true })).toEqual([third, second]);
+        expect(await ids({ limit: 10, pending: false })).toEqual([first]);
+        const page = await store.listInputs(actor.id, { limit: 2 });
+        expect(page.items.map((input) => input.id)).toEqual([third, second]);
+        expect(await ids({ limit: 2, cursor: page.nextCursor ?? '' })).toEqual([first]);
+      });
+
+      it('read a conversation from either end, and between two places', async () => {
+        const actor = await create();
+        await store.commit(
+          actor.id,
+          0,
+          change({ append: [1, 2, 3, 4, 5].map((seq) => said(seq, `message ${String(seq)}`)) }),
+        );
+        const seqs = async (part: Parameters<Store['conversation']>[1]) =>
+          (await store.conversation(actor.id, part)).map((entry) => entry.seq);
+
+        expect(await seqs({ order: 'desc', limit: 2 })).toEqual([5, 4]);
+        expect(await seqs({ order: 'desc', before: 4, limit: 2 })).toEqual([3, 2]);
+        expect(await seqs({ after: 1, before: 5 })).toEqual([2, 3, 4]);
+        expect(await seqs({ after: 3 })).toEqual([4, 5]);
+      });
+    });
+
+    describe('deleting an agent', () => {
+      it('removes everything of it and nothing of another, and says what went', async () => {
+        const id = agentId();
+        const deployment: Deployment = {
+          id: makeId('deployment', { now: NOW, random: random() }),
+          agent: id,
+          version: 1,
+          hash: 'a'.repeat(64),
+          manifest: { protocol: 1, sdk: '0.15.0' },
+          definition: {
+            provider: 'fake',
+            instructions: '',
+            configuration: null,
+            tools: [],
+            inputs: [],
+          },
+          createdBy: { type: 'system' },
+          createdAt: NOW,
+        };
+        const ref = { id: deployment.id, version: 1 };
+        const agent: Agent = {
+          id,
+          name: 'orders',
+          provider: 'fake',
+          activeDeployment: ref,
+          latestDeployment: ref,
+          createdAt: NOW,
+        };
+        await store.addDeployment({ agent, deployment, code: 'v1' });
+        await store.setSecret({ agent: id, name: 'KEY', sealed: 's', updatedAt: NOW });
+        const actor = await create({}, id);
+        await store.addInput(inputOf(actor, 'hello'));
+        await store.commit(actor.id, 0, change({ append: [said(1, 'hello')] }));
+        const other = await create();
+        await store.addInput(inputOf(other, 'still here'));
+
+        expect(await store.deleteAgent(id)).toEqual({
+          deployments: [deployment.id],
+          actors: [actor.id],
+        });
+        expect(await store.loadAgent(id)).toBeUndefined();
+        expect(await store.findAgent('orders')).toBeUndefined();
+        expect(await store.loadDeployment(deployment.id)).toBeUndefined();
+        expect(await store.secretNames(id)).toEqual([]);
+        expect(await store.loadActor(actor.id)).toBeUndefined();
+        expect(await store.conversation(actor.id)).toEqual([]);
+        expect(await store.unfinished()).toEqual([other.id]);
+        // Its name is free again, and there is no agent of it to delete twice.
+        expect(await store.deleteAgent(id)).toBeUndefined();
+        await store.addDeployment({ agent, deployment, code: 'v1' });
+      });
+    });
+
+    describe('API keys', () => {
+      const keyOf = (parent: KeyId | null = null): StoredKey => {
+        const id = makeId('key', { now: NOW, random: random() });
+        return {
+          key: {
+            id,
+            label: 'for the support service',
+            owner: null,
+            scope: { type: 'engine' },
+            permissions: ['actors:read'],
+            expiresAt: null,
+            createdBy: parent === null ? { type: 'system' } : { type: 'key', id: parent },
+            createdAt: NOW,
+            lastUsedAt: null,
+          },
+          hash: 'b'.repeat(64),
+          parent,
+        };
+      };
+
+      it('are kept as they were given, noted when they are used, and gone when they are removed', async () => {
+        const first = keyOf();
+        const second = keyOf(first.key.id);
+        await store.addKey(first);
+        await store.addKey(second);
+        expect(await store.loadKey(first.key.id)).toEqual(first);
+        expect(await store.listKeys()).toEqual([first, second]);
+
+        await store.touchKey(first.key.id, NOW + 5);
+        expect((await store.loadKey(first.key.id))?.key.lastUsedAt).toBe(NOW + 5);
+        expect((await store.loadKey(second.key.id))?.key.lastUsedAt).toBeNull();
+
+        await store.removeKeys([first.key.id, second.key.id]);
+        expect(await store.loadKey(first.key.id)).toBeUndefined();
+        expect(await store.listKeys()).toEqual([]);
       });
     });
   });

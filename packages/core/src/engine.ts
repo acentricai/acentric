@@ -21,6 +21,7 @@ import type {
   AgentDefinition,
   AgentId,
   BundleManifest,
+  ConversationEntry,
   Deployment,
   DeploymentId,
   DeploymentRef,
@@ -56,7 +57,7 @@ import { Semaphore } from './limits.ts';
 import { DEFAULT_RULES } from './machine.ts';
 import type { Rules } from './machine.ts';
 import type { Secrets } from './secrets.ts';
-import type { Store } from './store.ts';
+import type { ActorsQuery, PageOf, Paged, Store } from './store.ts';
 
 /** Gives an actor the runner of its model. It is asked at every call, so it is quick to answer. */
 export type RunnerSource = (actor: Actor, definition: AgentDefinition) => ModelRunner;
@@ -399,6 +400,45 @@ export class Engine {
     return this.#store.findAgent(name);
   }
 
+  /** Agents, newest first. */
+  listAgents(page?: PageOf): Promise<Paged<Agent>> {
+    return this.#store.listAgents(page);
+  }
+
+  /** An agent's deployments, newest first. */
+  async listDeployments(agent: AgentId, page?: PageOf): Promise<Paged<Deployment>> {
+    await this.getAgent(agent);
+    return this.#store.listDeployments(agent, page);
+  }
+
+  /**
+   * Deletes an agent, with its deployments, its secrets and its actors. An actor of it that is
+   * in a turn has the turn ended first. Its name is free again.
+   */
+  async deleteAgent(id: AgentId): Promise<void> {
+    if (this.#closing) throw new Unavailable();
+    await this.getAgent(id);
+    // Nothing of the agent's goes on while it is taken away: what its actors are in is ended.
+    const hot = [...this.#drivers.values()].filter((driver) => driver.record.actor.agent === id);
+    await Promise.all(hot.map((driver) => driver.interrupt().catch(() => {})));
+    const gone = await this.#store.deleteAgent(id);
+    this.#agents.delete(id);
+    if (gone === undefined) return;
+    for (const actor of gone.actors) {
+      const driver = this.#drivers.get(actor);
+      if (driver === undefined) continue;
+      // Whatever it would store now has nowhere to go.
+      driver.dead = true;
+      driver.abandon(new ActorNotFound(actor));
+      this.#drivers.delete(actor);
+    }
+    for (const deployment of gone.deployments) {
+      this.#deployments.delete(deployment);
+      this.#loaded.delete(deployment);
+      await this.#executor.unload(deployment);
+    }
+  }
+
   /** A deployment, with what its code said of itself. */
   async getDeployment(id: DeploymentId): Promise<Deployment> {
     return this.#deployment(id);
@@ -505,6 +545,29 @@ export class Engine {
 
   async getActor(id: ActorId): Promise<Actor> {
     return (await this.#driver(id)).record.actor;
+  }
+
+  /** Actors, newest first, as they stand. */
+  listActors(query?: ActorsQuery): Promise<Paged<Actor>> {
+    return this.#store.listActors(query);
+  }
+
+  /** What an actor was sent, newest first. */
+  async listInputs(
+    actor: ActorId,
+    query?: PageOf & { readonly pending?: boolean },
+  ): Promise<Paged<Input>> {
+    await this.getActor(actor);
+    return this.#store.listInputs(actor, query);
+  }
+
+  /** A part of an actor's conversation. */
+  async conversation(
+    actor: ActorId,
+    part?: Parameters<Store['conversation']>[1],
+  ): Promise<ConversationEntry[]> {
+    await this.getActor(actor);
+    return this.#store.conversation(actor, part);
   }
 
   /**

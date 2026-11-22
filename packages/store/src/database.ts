@@ -4,7 +4,17 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { SQLInputValue, StatementSync } from 'node:sqlite';
 
-import type { ActorRecord, Change, SealedSecret, StoredDeployment, Turn } from '@acentric/core';
+import type {
+  ActorRecord,
+  ActorsQuery,
+  Change,
+  PageOf,
+  Paged,
+  SealedSecret,
+  StoredDeployment,
+  StoredKey,
+  Turn,
+} from '@acentric/core';
 import type {
   Actor,
   ActorId,
@@ -16,6 +26,8 @@ import type {
   Input,
   InputId,
   Json,
+  Key,
+  KeyId,
 } from '@acentric/protocol';
 
 /** What the store refuses, in a form that crosses to the engine's thread. */
@@ -49,6 +61,16 @@ function agentOf(row: AgentRow): Agent {
     latestDeployment: { id: row.latest_id, version: row.latest_version },
     createdAt: row.created_at,
   } as Agent;
+}
+
+type KeyRow = { id: string; key: string; hash: string; parent: string | null };
+
+function keyOf(row: KeyRow): StoredKey {
+  return {
+    key: JSON.parse(row.key) as Key,
+    hash: row.hash,
+    parent: row.parent as KeyId | null,
+  };
 }
 
 type SecretRow = { agent_id: string; name: string; sealed: string; updated_at: number };
@@ -149,6 +171,10 @@ export type Operation = keyof Operations;
 export const WRITES: ReadonlySet<Operation> = new Set([
   'addDeployment',
   'setActive',
+  'deleteAgent',
+  'addKey',
+  'removeKeys',
+  'touchKey',
   'setSecret',
   'deleteSecret',
   'createActor',
@@ -185,6 +211,28 @@ export function operations(db: DatabaseSync) {
   const get = <T>(sql: string, ...values: SQLInputValue[]) =>
     statement(sql).get(...values) as T | undefined;
   const all = <T>(sql: string, ...values: SQLInputValue[]) => statement(sql).all(...values) as T[];
+
+  /**
+   * A page of rows read one more than was asked for, to know whether there is a next: the
+   * items, and the cursor `key` gives of the last of them.
+   */
+  const paged = <R, T>(
+    rows: R[],
+    limit: number,
+    item: (row: R) => T,
+    key: (row: R) => string | number,
+  ): Paged<T> => {
+    const kept = rows.slice(0, limit);
+    const last = kept.at(-1);
+    return {
+      items: kept.map(item),
+      nextCursor: rows.length > limit && last !== undefined ? String(key(last)) : null,
+    };
+  };
+  /** As SQLite takes a limit: one more than asked for, and none for none. */
+  const onePast = (page: PageOf | undefined): number =>
+    page === undefined || !Number.isFinite(page.limit) ? -1 : page.limit + 1;
+  const limitOf = (page: PageOf | undefined): number => page?.limit ?? Number.POSITIVE_INFINITY;
 
   const nameTaken = (actor: ActorId | null, agent: string, name: string): boolean =>
     get(
@@ -260,8 +308,73 @@ export function operations(db: DatabaseSync) {
       return row === undefined ? undefined : agentOf(row);
     },
 
-    listAgents(): Agent[] {
-      return all<AgentRow>('SELECT * FROM agents ORDER BY rowid').map(agentOf);
+    listAgents(page?: PageOf): Paged<Agent> {
+      const rows = all<AgentRow>(
+        'SELECT * FROM agents WHERE id < ? ORDER BY id DESC LIMIT ?',
+        // Above every ID there is, for the first page.
+        page?.cursor ?? '~',
+        onePast(page),
+      );
+      return paged(rows, limitOf(page), agentOf, (row) => row.id);
+    },
+
+    listDeployments(agent: AgentId, page?: PageOf): Paged<Deployment> {
+      const rows = all<{ deployment: string; version: number }>(
+        `SELECT deployment, version FROM deployments WHERE agent_id = ? AND version < ?
+         ORDER BY version DESC LIMIT ?`,
+        agent,
+        page?.cursor === undefined ? Number.MAX_SAFE_INTEGER : Number(page.cursor),
+        onePast(page),
+      );
+      return paged(
+        rows,
+        limitOf(page),
+        (row) => JSON.parse(row.deployment) as Deployment,
+        (row) => row.version,
+      );
+    },
+
+    deleteAgent(id: AgentId): { deployments: DeploymentId[]; actors: ActorId[] } | undefined {
+      if (run('DELETE FROM agents WHERE id = ?', id) === 0) return undefined;
+      const deployments = all<{ id: DeploymentId }>(
+        'DELETE FROM deployments WHERE agent_id = ? RETURNING id',
+        id,
+      ).map((row) => row.id);
+      run('DELETE FROM secrets WHERE agent_id = ?', id);
+      run('DELETE FROM messages WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
+      run('DELETE FROM inputs WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
+      const actors = all<{ id: ActorId }>(
+        'DELETE FROM actors WHERE agent_id = ? RETURNING id',
+        id,
+      ).map((row) => row.id);
+      return { deployments, actors };
+    },
+
+    addKey(stored: StoredKey): void {
+      run(
+        'INSERT INTO keys (id, key, hash, parent) VALUES (?, ?, ?, ?)',
+        stored.key.id,
+        JSON.stringify(stored.key),
+        stored.hash,
+        stored.parent,
+      );
+    },
+
+    loadKey(id: KeyId): StoredKey | undefined {
+      const row = get<KeyRow>('SELECT * FROM keys WHERE id = ?', id);
+      return row === undefined ? undefined : keyOf(row);
+    },
+
+    listKeys(): StoredKey[] {
+      return all<KeyRow>('SELECT * FROM keys ORDER BY id').map(keyOf);
+    },
+
+    removeKeys(ids: readonly KeyId[]): void {
+      for (const id of ids) run('DELETE FROM keys WHERE id = ?', id);
+    },
+
+    touchKey(id: KeyId, at: number): void {
+      run(`UPDATE keys SET key = json_set(key, '$.lastUsedAt', ?) WHERE id = ?`, at, id);
     },
 
     loadDeployment(id: DeploymentId): StoredDeployment | undefined {
@@ -385,6 +498,32 @@ export function operations(db: DatabaseSync) {
       return row === undefined ? undefined : recordOf(row);
     },
 
+    listActors(query: ActorsQuery = { limit: Number.POSITIVE_INFINITY }): Paged<Actor> {
+      const where: string[] = ['id < ?'];
+      const values: SQLInputValue[] = [query.cursor ?? '~'];
+      const only = (column: string, value: string | undefined) => {
+        if (value === undefined) return;
+        where.push(`${column} = ?`);
+        values.push(value);
+      };
+      only('agent_id', query.agent);
+      only('id', query.actor);
+      only('status', query.status);
+      only('name', query.name);
+      only('external_id', query.externalId);
+      const rows = all<ActorRow>(
+        `${ACTOR} WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT ?`,
+        ...values,
+        onePast(query),
+      );
+      return paged(
+        rows,
+        limitOf(query),
+        (row) => recordOf(row).actor,
+        (row) => row.id,
+      );
+    },
+
     commit(id: ActorId, epoch: number, change: Change): void {
       // What of the actor itself changes, each as the column it is and what goes in it.
       const { set, sent } = change;
@@ -497,14 +636,35 @@ export function operations(db: DatabaseSync) {
       ).map(inputOf);
     },
 
+    listInputs(
+      actor: ActorId,
+      query: PageOf & { pending?: boolean } = { limit: Number.POSITIVE_INFINITY },
+    ): Paged<Input> {
+      const which =
+        query.pending === undefined
+          ? ''
+          : query.pending
+            ? ' AND delivered_at IS NULL'
+            : ' AND delivered_at IS NOT NULL';
+      const rows = all<InputRow>(
+        `SELECT * FROM inputs WHERE actor_id = ? AND id < ?${which} ORDER BY id DESC LIMIT ?`,
+        actor,
+        query.cursor ?? '~',
+        onePast(query),
+      );
+      return paged(rows, limitOf(query), inputOf, (row) => row.id);
+    },
+
     conversation(
       actor: ActorId,
-      part: { after?: number; limit?: number } = {},
+      part: { after?: number; before?: number; limit?: number; order?: 'asc' | 'desc' } = {},
     ): ConversationEntry[] {
       return all<{ entry: string }>(
-        'SELECT entry FROM messages WHERE actor_id = ? AND seq > ? ORDER BY seq LIMIT ?',
+        `SELECT entry FROM messages WHERE actor_id = ? AND seq > ? AND seq < ?
+         ORDER BY seq ${part.order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
         actor,
         part.after ?? 0,
+        part.before ?? Number.MAX_SAFE_INTEGER,
         // SQLite reads a limit below zero as none.
         part.limit ?? -1,
       ).map((row) => JSON.parse(row.entry) as ConversationEntry);
