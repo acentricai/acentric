@@ -64,7 +64,8 @@ export type Asked<I extends RouteId> = Granted & {
   readonly request: Request;
 };
 
-type Answered<I extends RouteId> = (typeof routes)[I] extends { readonly stream: true }
+type Answered<I extends RouteId> = (typeof routes)[I] extends
+  { readonly stream: true } | { readonly bytes: true }
   ? Response
   : (typeof routes)[I] extends { readonly response: z.ZodType }
     ? ResponseOf<I>
@@ -299,6 +300,32 @@ export const handlers: Handlers = {
     const header = asked.request.headers.get('last-event-id');
     const seen = header !== null && /^\d+$/.test(header) ? Number(header) : undefined;
     return streams.follow(engine, actorOf(asked), seen ?? asked.query.after, asked.request);
+  },
+
+  'blobs.get': async (asked, { engine }) => {
+    const { digest } = asked.params;
+    const found = await engine.blobs.read(actorOf(asked).id, digest);
+    if (found === undefined) {
+      throw new ApiFailure('not_found', `The actor has no blob ${digest}`);
+    }
+    const { blob, bytes } = found;
+    // What an agent's code said the bytes are is not to be trusted with the dashboard's
+    // origin: nothing in them runs, a browser does not guess at what they are, and only an
+    // image is shown in place.
+    const shown = /^image\/(png|jpeg|gif|webp|avif)$/.test(blob.mediaType);
+    return new Response(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), {
+      status: 200,
+      headers: {
+        'content-type': blob.mediaType,
+        'content-length': String(bytes.byteLength),
+        'content-disposition': shown ? 'inline' : 'attachment',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
+        // The name is the digest of the bytes: what it names never changes.
+        'cache-control': 'private, max-age=31536000, immutable',
+        etag: `"${digest}"`,
+      },
+    });
   },
 
   // API keys

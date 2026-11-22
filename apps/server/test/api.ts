@@ -11,6 +11,7 @@ import {
   Audit,
   Engine,
   Keys,
+  MemoryBlobStore,
   MemoryStore,
   People,
   Secrets,
@@ -44,6 +45,9 @@ const definition: AgentDefinition = {
 
 const functions: { [path: string]: AgentFunction } = {
   'inputs.message.handler': (payload: Json) => {
+    // A message that is content already, such as one with an image, is what the model reads.
+    const { content } = (payload ?? {}) as { content?: Json };
+    if (Array.isArray(content)) return content;
     const text = (payload as { text?: unknown } | null)?.text;
     if (typeof text !== 'string') throw new Error('text is required');
     return text;
@@ -72,9 +76,12 @@ export async function api(
     readonly secretKey?: boolean;
     /** False for an engine that was added no model account. */
     readonly account?: boolean;
+    /** False for an engine with no blob store: images stay in their messages. */
+    readonly blobs?: boolean;
   } = {},
 ) {
   const store = new MemoryStore();
+  const blobs = new MemoryBlobStore();
   const runner = new ScriptedRunner(script);
   const sealing = options.secretKey !== false;
   const secrets = new Secrets({
@@ -101,6 +108,7 @@ export async function api(
     providers,
     executor: new InlineExecutor(AGENTS),
     secrets,
+    ...(options.blobs === false ? {} : { blobs }),
   });
   // A hash that is quick to make: these tests are not of how long a password takes to guess.
   const people = new People({ store, audit, passwordCost: 1024 });
@@ -158,6 +166,7 @@ export async function api(
   return {
     app,
     store,
+    blobs,
     engine,
     keys,
     people,

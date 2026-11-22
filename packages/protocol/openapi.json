@@ -2713,6 +2713,118 @@
         }
       }
     },
+    "/v1/actors/{actor}/blobs/{digest}": {
+      "get": {
+        "operationId": "blobs.get",
+        "summary": "Reads the bytes of an image or file of an actor's conversation.",
+        "tags": [
+          "blobs"
+        ],
+        "x-acentric-auth": {
+          "on": "actor",
+          "permission": "actors:read",
+          "param": "actor"
+        },
+        "parameters": [
+          {
+            "name": "actor",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind actor, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^act_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "act_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "digest",
+            "in": "path",
+            "required": true,
+            "description": "A blob's name: the SHA-256 of its bytes, in hex.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The bytes.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/accounts": {
       "post": {
         "operationId": "accounts.create",

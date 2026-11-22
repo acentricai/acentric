@@ -92,6 +92,12 @@ function operationOf(id: string, route: Route): JsonObject {
         content: { 'text/event-stream': { schema: { $ref: `${REF}ActorEvent` } } },
       };
     }
+    if (route.bytes === true) {
+      return {
+        description,
+        content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
+      };
+    }
     if (route.response === undefined) return { description };
     const name = nameOf(route.response, `The answer of ${id}`);
     return { description, content: { 'application/json': { schema: { $ref: `${REF}${name}` } } } };
@@ -122,7 +128,13 @@ function operationOf(id: string, route: Route): JsonObject {
         }),
     responses: {
       ...(route.existing === undefined ? {} : { '200': answer('It was there already.') }),
-      [String(route.status)]: answer(route.stream === true ? 'A stream of events.' : 'Done.'),
+      [String(route.status)]: answer(
+        route.stream === true
+          ? 'A stream of events.'
+          : route.bytes === true
+            ? 'The bytes.'
+            : 'Done.',
+      ),
       ...failuresOf(route),
     },
   };

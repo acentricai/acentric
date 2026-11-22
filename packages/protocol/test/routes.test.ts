@@ -63,7 +63,7 @@ describe('the route table', () => {
 
   it('answers 204 exactly when it answers with nothing', () => {
     for (const [id, route] of all) {
-      const nothing = route.response === undefined && route.stream !== true;
+      const nothing = route.response === undefined && route.stream !== true && route.bytes !== true;
       expect(route.status === 204, id).toBe(nothing);
     }
   });
