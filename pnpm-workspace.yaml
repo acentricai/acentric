@@ -7,3 +7,8 @@ packages:
 catalog:
   '@types/node': ^24.19.2
   zod: ^4.6.7
+  esbuild: 0.28.2
+
+# esbuild works without its install script: its binary is a package of its own.
+allowBuilds:
+  esbuild: false
