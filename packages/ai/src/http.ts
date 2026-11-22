@@ -130,3 +130,48 @@ async function read(
     }
   }
 }
+
+/** The longest a provider is waited for when a credential is checked, in milliseconds. */
+const CHECK_MS = 30_000;
+
+/**
+ * Asks a provider whether it takes a credential, by a request that costs nothing: its list of
+ * models. Rejects with a `ModelFailure` of kind `auth` when it does not, and of another kind
+ * when the provider could not be asked.
+ */
+export async function checkCredential(request: {
+  readonly label: string;
+  readonly provider: string;
+  readonly url: string;
+  readonly headers: { readonly [name: string]: string };
+  readonly fetch?: typeof fetch;
+}): Promise<void> {
+  const { label, provider } = request;
+  let response: Response;
+  try {
+    response = await (request.fetch ?? fetch)(request.url, {
+      headers: request.headers,
+      signal: AbortSignal.timeout(CHECK_MS),
+    });
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    throw new ModelFailure(`${label} could not be reached to check the key: ${why}`, 'network', {
+      provider,
+    });
+  }
+  // The body is not wanted: the status says it.
+  await response.body?.cancel().catch(() => {});
+  if (response.status === 401 || response.status === 403) {
+    throw new ModelFailure(`${label} refused the key: it is not one it takes`, 'auth', {
+      provider,
+      status: response.status,
+    });
+  }
+  if (!response.ok) {
+    throw new ModelFailure(
+      `${label} answered ${String(response.status)} when the key was checked`,
+      'provider_error',
+      { provider, status: response.status },
+    );
+  }
+}

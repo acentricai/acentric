@@ -140,6 +140,7 @@ export const openAiProfile: ResponsesProfile = {
   ...SHARED,
   id: 'openai',
   label: 'OpenAI',
+  modelsUrl: 'https://api.openai.com/v1/models',
   streams: false,
   headers(credential: Credential) {
     if (credential.type !== 'api_key') throw new TypeError('OpenAI is called with an API key');

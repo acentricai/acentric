@@ -6,7 +6,7 @@ import { outputText, reasoningSummary, toolCalls } from '../anthropic/read.ts';
 import { LABEL, PROVIDER, betasOf, buildBody } from '../anthropic/request.ts';
 import { readAnswer } from '../anthropic/response.ts';
 import { assemble } from '../anthropic/stream.ts';
-import { post } from '../http.ts';
+import { checkCredential, post } from '../http.ts';
 import { effortOf, onlyOptions, readWebSearch, withoutTypes } from '../provider.ts';
 import type { Provider } from '../provider.ts';
 
@@ -110,6 +110,18 @@ export const anthropic: Provider = {
         return readAnswer(step, assemble(answer.text), ANTHROPIC_MODELS);
       },
     };
+  },
+
+  check(settings) {
+    const { credential } = settings;
+    if (credential.type !== 'api_key') throw new TypeError('Anthropic is called with an API key');
+    return checkCredential({
+      label: LABEL,
+      provider: PROVIDER,
+      url: 'https://api.anthropic.com/v1/models?limit=1',
+      headers: { 'x-api-key': credential.apiKey, 'anthropic-version': VERSION },
+      ...(settings.fetch === undefined ? {} : { fetch: settings.fetch }),
+    });
   },
 
   withoutReasoning: (message) => withoutTypes(message, ['thinking', 'redacted_thinking']),

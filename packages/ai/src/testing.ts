@@ -1,5 +1,6 @@
 // A model for tests: it says what a test told it to. No provider is called.
 
+import { ModelFailure } from './failure.ts';
 import { withoutTypes } from './provider.ts';
 import type { Provider } from './provider.ts';
 import type { ModelAnswer, ModelRunner, ModelStep, ToolCall } from './runner.ts';
@@ -36,8 +37,12 @@ export function reasoned(reasoning: string, answer: ModelAnswer): ModelAnswer {
  */
 export function fakeProvider(
   runner: ModelRunner,
-  /** Whether its reasoning level can be changed from a place in a conversation on. */
-  options: { readonly changesReasoningInPlace?: boolean } = {},
+  options: {
+    /** Whether its reasoning level can be changed from a place in a conversation on. */
+    readonly changesReasoningInPlace?: boolean;
+    /** The keys it takes when a key is checked. Every key, without it. */
+    readonly keys?: readonly string[];
+  } = {},
 ): Provider {
   return {
     ...(options.changesReasoningInPlace === true
@@ -59,6 +64,15 @@ export function fakeProvider(
     ],
     defaultModel: 'fake-1',
     bindsReasoning: true,
+    async check({ credential }) {
+      const key = credential.type === 'api_key' ? credential.apiKey : credential.accessToken;
+      if (key === 'unreachable') {
+        throw new ModelFailure('Fake could not be reached to check the key', 'network');
+      }
+      if (options.keys !== undefined && !options.keys.includes(key)) {
+        throw new ModelFailure('Fake refused the key: it is not one it takes', 'auth');
+      }
+    },
     parseOptions: (given) => (given ?? {}) as ReturnType<Provider['parseOptions']>,
     runner: () => runner,
     read: (message) => ({

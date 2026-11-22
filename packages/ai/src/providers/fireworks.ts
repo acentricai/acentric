@@ -71,6 +71,7 @@ export const fireworksProfile: ResponsesProfile = {
   id: 'fireworks',
   label: 'Fireworks',
   url: 'https://api.fireworks.ai/inference/v1/responses',
+  modelsUrl: 'https://api.fireworks.ai/inference/v1/models',
   models: FIREWORKS_MODELS,
   systemRole: 'system',
   // It drops a file without an error, and has no storage to name one in.

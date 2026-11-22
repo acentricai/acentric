@@ -2,7 +2,7 @@
 
 import type { ProviderFields } from '@acentric/protocol';
 
-import { post } from '../http.ts';
+import { checkCredential, post } from '../http.ts';
 import { withoutTypes } from '../provider.ts';
 import type { CredentialType, Provider, RunnerSettings } from '../provider.ts';
 import type { ModelRunner } from '../runner.ts';
@@ -45,6 +45,7 @@ export function responsesProvider(
   },
 ): Provider {
   const change = profile.reasoningChange?.bind(profile);
+  const { modelsUrl } = profile;
   return {
     id: profile.id,
     label: profile.label,
@@ -53,6 +54,18 @@ export function responsesProvider(
     defaultModel: more.defaultModel,
     bindsReasoning: more.bindsReasoning,
     withoutReasoning: (message) => withoutTypes(message, ['reasoning']),
+    ...(modelsUrl === undefined
+      ? {}
+      : {
+          check: (settings) =>
+            checkCredential({
+              label: profile.label,
+              provider: profile.id,
+              url: modelsUrl,
+              headers: profile.headers(settings.credential),
+              ...(settings.fetch === undefined ? {} : { fetch: settings.fetch }),
+            }),
+        }),
     ...(change === undefined
       ? {}
       : {
