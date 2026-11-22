@@ -9,6 +9,12 @@
     "directory": "apps/server"
   },
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "bin": {
     "acentric-server": "./dist/bin.js"
   },
@@ -23,7 +29,18 @@
     "access": "public",
     "provenance": true
   },
+  "dependencies": {
+    "@acentric/ai": "workspace:*",
+    "@acentric/core": "workspace:*",
+    "@acentric/executor": "workspace:*",
+    "@acentric/protocol": "workspace:*",
+    "@acentric/store": "workspace:*",
+    "@hono/node-server": "2.1.6",
+    "hono": "4.13.17",
+    "zod": "catalog:"
+  },
   "devDependencies": {
+    "@acentric/client": "workspace:*",
     "@types/node": "catalog:"
   }
 }
