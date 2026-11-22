@@ -374,7 +374,9 @@ describe('the daemon, against a server', () => {
     const stopped = await client.call('machineCommands.stop', {
       params: { ...params, command: 'c3' },
     });
-    expect(stopped).toMatchObject({ status: 'stopped', stoppedBy: 'stop', tail: 'started\n' });
+    expect(stopped).toMatchObject({ status: 'stopped', stoppedBy: 'stop' });
+    // On Linux, bash says of a command it was running that it was terminated.
+    expect(stopped.tail).toMatch(/^started\n(?:Terminated\n)?$/);
 
     // At its timeout it is stopped by the machine, and where there is no such folder it is not run.
     expect(
