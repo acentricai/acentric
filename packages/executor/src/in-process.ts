@@ -5,7 +5,7 @@
 //
 // It can stop waiting for a call, and cannot stop the call: the code runs on.
 
-import type { Bundle, CallContext, CallResult, Executor } from '@acentric/core';
+import type { Bundle, CallContext, CallHost, CallResult, Executor } from '@acentric/core';
 import {
   BUNDLE_ENTRY,
   SUPPORTED_BUNDLE_PROTOCOLS,
@@ -97,6 +97,7 @@ export class InProcessExecutor implements Executor {
     argument: Json,
     context: CallContext,
     signal: AbortSignal,
+    host: CallHost,
   ): Promise<CallResult> {
     const { entry, agent } = this.#get(deployment);
     const stopped: CallResult = {
@@ -111,7 +112,10 @@ export class InProcessExecutor implements Executor {
         path,
         structuredClone(argument),
         { ...context, agentName: agent.name },
-        { secret: async (name) => this.#secrets(agent.id, name) },
+        {
+          secret: async (name) => this.#secrets(agent.id, name),
+          file: async (request) => host.file(request),
+        },
       )
       // What comes back is the code's own: the engine is given a copy that is JSON.
       .then((outcome): CallResult => structuredClone(outcome))

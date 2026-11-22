@@ -670,32 +670,94 @@ export function machinesSuite(name: string, open: () => Promise<Store>): void {
         ).rejects.toBeInstanceOf(MachineNotFound);
       });
 
-      it('is moved whole for an agent’s code, in as many requests as it takes', async () => {
+      it('is read and written a part at a time for an agent’s code, from its working directory', async () => {
         const machines = machinesOf();
         const { id, daemon } = await connected(machines);
+        const at = { id, cwd: '~/work' };
         const bytes = Buffer.alloc((8 << 20) + 1000, 7);
         bytes[bytes.length - 1] = 9;
-        await machines.file(
-          { id, cwd: '~/work' },
-          { op: 'write', path: 'big.bin', data: bytes.toString('base64') },
-        );
+        const part = (from: number) => bytes.subarray(from, from + (8 << 20)).toString('base64');
+        const write = (from: number) =>
+          machines.file(at, {
+            op: 'write',
+            path: 'big.bin',
+            from,
+            size: bytes.length,
+            data: part(from),
+          });
+        expect(await write(0)).toBeUndefined();
+        await write(8 << 20);
         expect(daemon.asked('write').map(({ from, cwd }) => [from, cwd])).toEqual([
           [0, '~/work'],
           [8 << 20, '~/work'],
         ]);
-        const read = await machines.file({ id, cwd: '~/work' }, { op: 'read', path: 'big.bin' });
-        expect(Buffer.from(read ?? '', 'base64').equals(bytes)).toBe(true);
-        expect(daemon.asked('read')).toHaveLength(2);
+        expect(daemon.files.get('big.bin')?.equals(bytes)).toBe(true);
 
-        // An empty file is one request, and is written as empty.
-        await machines.file({ id, cwd: '~' }, { op: 'write', path: 'empty', data: '' });
+        // A read gives how large the file is with each part, and no more than a part of it.
+        const first = await machines.file(at, { op: 'read', path: 'big.bin', from: 0 });
+        expect(first?.size).toBe(bytes.length);
+        expect(first?.data).toBe(part(0));
+        expect(await machines.file(at, { op: 'read', path: 'big.bin', from: 8 << 20 })).toEqual({
+          size: bytes.length,
+          data: part(8 << 20),
+        });
+        expect(daemon.asked('read').map(({ from, max, cwd }) => [from, max, cwd])).toEqual([
+          [0, 8 << 20, '~/work'],
+          [8 << 20, 8 << 20, '~/work'],
+        ]);
+
+        // An empty file is written as empty, and read as nothing.
+        await machines.file(at, { op: 'write', path: 'empty', from: 0, size: 0, data: '' });
         expect(daemon.files.get('empty')?.length).toBe(0);
-        expect(await machines.file({ id, cwd: '~' }, { op: 'read', path: 'empty' })).toBe('');
+        expect(await machines.file(at, { op: 'read', path: 'empty', from: 0 })).toEqual({
+          size: 0,
+          data: '',
+        });
+      });
 
-        const tooLarge = Buffer.alloc((32 << 20) + 1).toString('base64');
+      it('is refused an agent’s code when it is larger than its code may move, before any of it is written', async () => {
+        const machines = machinesOf();
+        const { id, daemon } = await connected(machines);
+        const at = { id, cwd: '~' };
+        const most = 32 << 20;
+        const data = Buffer.alloc(8 << 20).toString('base64');
+        const refusal =
+          /^huge is 33554433 bytes: an agent's code reads and writes files of at most 32 MiB$/;
+
+        // As large as its code says the whole is to be, whatever this part is.
         await expect(
-          machines.file({ id, cwd: '~' }, { op: 'write', path: 'huge', data: tooLarge }),
-        ).rejects.toThrow(/at most 32 MiB/);
+          machines.file(at, { op: 'write', path: 'huge', from: 0, size: most + 1, data: '' }),
+        ).rejects.toThrow(refusal);
+        // And no smaller than what it has sent of it, whatever its code says.
+        await expect(
+          machines.file(at, {
+            op: 'write',
+            path: 'huge',
+            from: most - (8 << 20) + 1,
+            size: 5,
+            data,
+          }),
+        ).rejects.toThrow(refusal);
+        expect(daemon.asked('write')).toEqual([]);
+        // The largest it may move is moved: its last part ends where the most does.
+        await machines.file(at, {
+          op: 'write',
+          path: 'huge',
+          from: most - (8 << 20),
+          size: most,
+          data,
+        });
+        expect(daemon.asked('write')).toHaveLength(1);
+
+        daemon.files.set('huge', Buffer.alloc(most + 1));
+        const refused = await machines
+          .file(at, { op: 'read', path: 'huge', from: 0 })
+          .catch((error: unknown) => error);
+        expect(refused).toBeInstanceOf(MachineRefused);
+        expect(refused).toMatchObject({
+          reason: 'invalid',
+          message: expect.stringMatching(refusal),
+        });
       });
     });
 

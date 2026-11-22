@@ -8,9 +8,11 @@ import type { Scripted } from '@acentric/ai/testing';
 import type { ActorId, ConversationEntry, Json, MachineId } from '@acentric/protocol';
 
 import type { EngineOptions } from '../src/engine.ts';
+import type { CallContext } from '../src/executor.ts';
 import { Secrets } from '../src/secrets.ts';
 import type { Store } from '../src/store.ts';
 import type { TaskTimes } from '../src/tasks.ts';
+import type { AgentFunction } from '../src/testing.ts';
 import { FakeDaemon } from './fake-daemon.ts';
 import { eventually, told, world } from './world.ts';
 import type { World } from './world.ts';
@@ -40,8 +42,13 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
     let secrets: Secrets;
     let engines: ReturnType<World['engine']>[];
 
-    const engine = (script: readonly Scripted[], options: Partial<EngineOptions> = {}) => {
+    const engine = (
+      script: readonly Scripted[],
+      options: Partial<EngineOptions> = {},
+      code: { readonly lookup?: AgentFunction; readonly handler?: AgentFunction } = {},
+    ) => {
       const one = w.engine(script, {
+        ...code,
         versions: VERSIONS,
         options: {
           clock: Date.now,
@@ -61,9 +68,20 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
       more: {
         readonly env?: { readonly [name: string]: string };
         readonly modelId?: string;
+        /** The agent's tool, and what makes of what it is sent, as its code has them. */
+        readonly lookup?: AgentFunction;
+        readonly handler?: AgentFunction;
       } = {},
     ) => {
-      const one = engine(script);
+      const { lookup, handler } = more;
+      const one = engine(
+        script,
+        {},
+        {
+          ...(lookup === undefined ? {} : { lookup }),
+          ...(handler === undefined ? {} : { handler }),
+        },
+      );
       await one.deploy(ON_MACHINE);
       const machines = one.it.machines;
       if (machines === undefined) throw new Error('The engine keeps no machines');
@@ -496,6 +514,179 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
         expect(textOf((await results(actor.id)).at(-1))).toBe(
           `Your machine, ${machine}, is not connected: the file could not be read.`,
         );
+      });
+    });
+
+    describe('an agent’s code', () => {
+      const tool = (id: string, args: { [name: string]: Json } = {}) =>
+        calls({ id, name: 'lookup_order', arguments: args });
+      const base64 = (text: string) => Buffer.from(text).toString('base64');
+      /** A tool that writes what it is given to a file, and answers with what the file then has. */
+      const keeps: AgentFunction = async (args, _context, _signal, host) => {
+        const { path, text } = args as { path: string; text: string };
+        const data = base64(text);
+        await host.file({ op: 'write', path, from: 0, size: text.length, data });
+        const read = await host.file({ op: 'read', path, from: 0 });
+        return `${String(read?.size)}: ${Buffer.from(read?.data ?? '', 'base64').toString()}`;
+      };
+
+      it('reads and writes the files of its actor’s machine, from the actor’s working directory', async () => {
+        const { one, actor, daemon } = await setup(
+          [tool('c1', { path: 'notes/today.txt', text: 'buy bolts' }), says('Done.')],
+          { lookup: keeps },
+        );
+        await one.say(actor.id, 'Keep a note.');
+        await one.it.settled(actor.id);
+        expect(textOf((await results(actor.id))[0])).toBe('9: buy bolts');
+        expect(daemon.asked('write')).toEqual([
+          { path: 'notes/today.txt', cwd: '~/work', from: 0, data: base64('buy bolts') },
+        ]);
+        expect(daemon.asked('read')).toEqual([
+          { path: 'notes/today.txt', cwd: '~/work', from: 0, max: 8 << 20 },
+        ]);
+      });
+
+      it('does so where it turns what an actor is sent into what its model reads', async () => {
+        const { one, actor, daemon } = await setup([says('Got it.')], {
+          handler: async (payload, _context, _signal, host) => {
+            const { text } = payload as { text: string };
+            await host.file({
+              op: 'write',
+              path: 'inbox/a.txt',
+              from: 0,
+              size: 2,
+              data: base64(text),
+            });
+            return `A file is in inbox/a.txt.`;
+          },
+        });
+        await one.say(actor.id, 'hi');
+        await one.it.settled(actor.id);
+        expect(daemon.files.get('inbox/a.txt')?.toString()).toBe('hi');
+        expect(textOf((await store.conversation(actor.id))[0])).toBe('A file is in inbox/a.txt.');
+      });
+
+      it('is told what is wrong: no such file, a file too large for it, a machine that is not connected', async () => {
+        const reads: AgentFunction = async (args, _context, _signal, host) => {
+          const read = await host.file({
+            op: 'read',
+            path: (args as { path: string }).path,
+            from: 0,
+          });
+          return String(read?.size);
+        };
+        const { one, actor, daemon, machines, machine } = await setup(
+          [
+            tool('c1', { path: 'missing.txt' }),
+            tool('c2', { path: 'huge.bin' }),
+            says('Oh.'),
+            tool('c3', { path: 'missing.txt' }),
+            says('Oh.'),
+          ],
+          { lookup: reads },
+        );
+        daemon.files.set('huge.bin', Buffer.alloc((32 << 20) + 1));
+        daemon.refuse = (_method, params) =>
+          params['path'] === 'missing.txt'
+            ? { code: 'not_found', message: 'There is no file /home/u/work/missing.txt' }
+            : undefined;
+        await one.say(actor.id, 'Read.');
+        await one.it.settled(actor.id);
+        daemon.drop();
+        await machines.whenOffline(machine);
+        await one.say(actor.id, 'Again.');
+        await one.it.settled(actor.id);
+
+        const answered = await results(actor.id);
+        expect(answered.map((entry) => (entry.message as { isError?: boolean }).isError)).toEqual([
+          true,
+          true,
+          true,
+        ]);
+        expect(textOf(answered[0])).toContain('There is no file /home/u/work/missing.txt');
+        expect(textOf(answered[1])).toContain(
+          "huge.bin is 33554433 bytes: an agent's code reads and writes files of at most 32 MiB",
+        );
+        expect(textOf(answered[2])).toContain(`The machine ${machine} is not connected`);
+      });
+
+      it('is given its actor’s machine: where it is, and the variables its commands are run with, as they are now', async () => {
+        const seen: CallContext['machine'][] = [];
+        const { one, actor, machine } = await setup(
+          [tool('c1'), says('One.'), tool('c2'), says('Two.'), tool('c3'), says('Three.')],
+          {
+            env: { ORDERS_API_KEY: 'sk-secret-value' },
+            lookup: (_args, context) => {
+              seen.push(context.machine);
+              return 'ok';
+            },
+          },
+        );
+        await one.say(actor.id, 'Go.');
+        await one.it.settled(actor.id);
+        await one.it.setEnv(actor.id, { A: '1', B: '2' });
+        await one.say(actor.id, 'Again.');
+        await one.it.settled(actor.id);
+        await one.it.setEnv(actor.id, {});
+        await one.say(actor.id, 'Once more.');
+        await one.it.settled(actor.id);
+        expect(seen).toEqual([
+          { id: machine, cwd: '~/work', env: { ORDERS_API_KEY: 'sk-secret-value' } },
+          { id: machine, cwd: '~/work', env: { A: '1', B: '2' } },
+          // With none, it is given none: its machine is where it is and no more.
+          { id: machine, cwd: '~/work' },
+        ]);
+      });
+
+      it('has no machine, and no files, for an actor that has none', async () => {
+        const seen: CallContext['machine'][] = [];
+        const one = engine(
+          [tool('c1'), says('Oh.')],
+          {},
+          {
+            lookup: async (_args, context, _signal, host) => {
+              seen.push(context.machine);
+              await host.file({ op: 'read', path: 'a.txt', from: 0 });
+              return 'read';
+            },
+          },
+        );
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Read.');
+        await one.it.settled(actor.id);
+        expect(seen).toEqual([null]);
+        expect(textOf((await results(actor.id))[0])).toContain('The actor has no machine');
+      });
+
+      it('has none where its schema says what an actor may be created with: there is no actor yet', async () => {
+        const seen: CallContext['machine'][] = [];
+        const one = w.engine([], {
+          versions: {
+            [ON_MACHINE]: {
+              definition: { features: ['machine'], configuration: { schema: null } },
+              functions: {
+                'configuration.validate': async (given, context, _signal, host) => {
+                  seen.push(context.machine);
+                  await expect(host.file({ op: 'read', path: 'a', from: 0 })).rejects.toThrow(
+                    'The actor has no machine',
+                  );
+                  return given;
+                },
+              },
+            },
+          },
+          options: { clock: Date.now, taskTimes: TIMES, secrets, machines: {} },
+        });
+        engines.push(one);
+        await one.deploy(ON_MACHINE);
+        const added = await one.it.machines?.add({ name: 'box', agents: '*' });
+        const id = added?.machine.id as MachineId;
+        const actor = await one.createActor({
+          machine: { id, cwd: '~', env: { A: '1' } },
+          configuration: { region: 'eu' },
+        });
+        expect(actor.configuration).toEqual({ region: 'eu' });
+        expect(seen).toEqual([null]);
       });
     });
 

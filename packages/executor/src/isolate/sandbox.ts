@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { promisify } from 'node:util';
 
-import type { Json } from '@acentric/protocol';
+import type { MachineFilePart, MachineFileRequest, Json } from '@acentric/protocol';
 
 import { BundleError, CallFailed, SandboxLost } from '../errors.ts';
 import { renderConfig } from './config.ts';
@@ -21,6 +21,12 @@ import type { Network } from './config.ts';
 
 /** Gives the value of a secret for one call, or undefined when none is set by that name. */
 export type CallSecrets = (name: string) => Promise<string | undefined>;
+
+/** Reads or writes a part of a file for one call: of the machine of the actor it is for. */
+export type CallFiles = (request: MachineFileRequest) => Promise<MachineFilePart | undefined>;
+
+/** What the engine does for one call's code while it runs. */
+export type CallAsks = { readonly secrets?: CallSecrets; readonly files?: CallFiles };
 
 const PART = 256 * 1024;
 
@@ -65,7 +71,7 @@ export type LossKind = 'stall' | 'exit' | 'connection' | 'drain';
 type Pending = {
   readonly resolve: (value: Json) => void;
   readonly reject: (error: unknown) => void;
-  readonly secrets: CallSecrets | undefined;
+  readonly asks: CallAsks;
   /** Sends the call; with `withCode`, with its bundle's code whatever this side believes. */
   readonly send: (withCode: boolean) => void;
   /** Whether the call has gone to the process. */
@@ -238,7 +244,7 @@ export class Sandbox {
     hash: string,
     code: () => Promise<string>,
     body: { readonly [key: string]: Json },
-    secrets?: CallSecrets,
+    asks: CallAsks = {},
   ): Request {
     const id = ++this.#ids;
     this.lastCallAt = Date.now();
@@ -271,7 +277,7 @@ export class Sandbox {
       this.#calls.set(id, {
         resolve,
         reject: rejectResult,
-        secrets,
+        asks,
         send,
         sent: false,
       });
@@ -295,8 +301,8 @@ export class Sandbox {
   /**
    * Sends a ping, unless one is out. A process is stuck only when it has sent
    * nothing at all for `stallMs` while the ping waits: one thread serves every
-   * isolate, so a ping may queue behind loads and calls, and any answer, load
-   * or secret request in the meantime shows it is working.
+   * isolate, so a ping may queue behind loads and calls, and any answer, load,
+   * or question of a call's in the meantime shows it is working.
    */
   probe(stallMs: number): void {
     if (this.#gone || this.#ping !== undefined) return;
@@ -458,6 +464,8 @@ export class Sandbox {
         return this.#calls.get(id)?.send(true);
       case 'secret':
         return void this.#secret(id, Number(message['sid']), String(message['name']));
+      case 'file':
+        return void this.#file(id, Number(message['sid']), message['request'] ?? null);
       default:
         return;
     }
@@ -466,7 +474,7 @@ export class Sandbox {
   /** Answers a call's question for a secret, with what the engine has or why it has not. */
   async #secret(id: number, sid: number, name: string): Promise<void> {
     try {
-      const secrets = this.#calls.get(id)?.secrets;
+      const secrets = this.#calls.get(id)?.asks.secrets;
       if (secrets === undefined) {
         throw new Error(this.#calls.has(id) ? 'The call has no secrets' : 'The call is over');
       }
@@ -475,6 +483,22 @@ export class Sandbox {
       const { name: errorName, message } =
         error instanceof Error ? error : { name: 'Error', message: String(error) };
       this.#send({ t: 'secret', id, sid, error: { name: errorName, message } });
+    }
+  }
+
+  /** Answers a call's question for a part of a file, with the part or why there is none. */
+  async #file(id: number, sid: number, request: Json): Promise<void> {
+    try {
+      const files = this.#calls.get(id)?.asks.files;
+      if (files === undefined) {
+        throw new Error(this.#calls.has(id) ? 'The actor has no machine' : 'The call is over');
+      }
+      const part = await files(request as unknown as MachineFileRequest);
+      this.#send({ t: 'file', id, sid, ...(part === undefined ? {} : { value: part }) });
+    } catch (error) {
+      const { name: errorName, message } =
+        error instanceof Error ? error : { name: 'Error', message: String(error) };
+      this.#send({ t: 'file', id, sid, error: { name: errorName, message } });
     }
   }
 }

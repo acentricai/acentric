@@ -55,11 +55,13 @@ export default class Shim extends WorkerEntrypoint {
 
   /**
    * Calls the function `path` names, and gives how the call ended. `host` belongs to this
-   * call alone: its `secret` asks the engine for a secret of the agent's.
+   * call alone: its `secret` asks the engine for a secret of the agent's, and its `file` for a
+   * part of a file of the actor's machine.
    */
   call(path, argument, context, host) {
     return entryOf().call(path, argument, context, {
       secret: async (name) => answered(await host.secret(String(name))),
+      file: async (request) => answered(await host.file(request)),
     });
   }
 }

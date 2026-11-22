@@ -8,6 +8,7 @@
 
 import { performance } from 'node:perf_hooks';
 
+import { NO_MACHINE } from '@acentric/core';
 import type { CallContext } from '@acentric/core';
 import { makeId } from '@acentric/protocol';
 import type { DeploymentId } from '@acentric/protocol';
@@ -38,6 +39,7 @@ const context: CallContext = {
   configuration: null,
   modelId: 'fake-1',
   reasoning: 'medium',
+  machine: null,
 };
 const signal = () => new AbortController().signal;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -53,7 +55,7 @@ console.log(`The agent's code is ${String(Math.round(code.length / 1024))} KB.`)
 
 const executor = await IsolateExecutor.start({ processes: 1, log: () => {}, maxRssMb: 8192 });
 const echo = (deployment: DeploymentId) =>
-  executor.call(deployment, 'tools.echo.execute', { text: 'hello' }, context, signal());
+  executor.call(deployment, 'tools.echo.execute', { text: 'hello' }, context, signal(), NO_MACHINE);
 /** The memory of the process that runs agents, once the watchdog has read it afresh. */
 const rss = async (): Promise<number> => {
   await sleep(2500);
@@ -110,7 +112,7 @@ console.log(
 const spinning = deployments[0] as DeploymentId;
 const other = deployments[1] as DeploymentId;
 const spun = performance.now();
-const spin = executor.call(spinning, 'tools.spin.execute', {}, context, signal());
+const spin = executor.call(spinning, 'tools.spin.execute', {}, context, signal(), NO_MACHINE);
 await sleep(50);
 const waiting = await echo(other);
 await spin;

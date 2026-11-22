@@ -63,9 +63,9 @@ import {
   UnsupportedFeature,
   UnsupportedProtocol,
 } from './errors.ts';
-import { contextOf, issuesText } from './executor.ts';
+import { NO_MACHINE, contextOf, issuesText } from './executor.ts';
 import { familyOf } from './families.ts';
-import type { CallContext, CallResult, Executor } from './executor.ts';
+import type { CallContext, CallHost, CallResult, Executor } from './executor.ts';
 import { Semaphore } from './limits.ts';
 import { IdSource } from './ids.ts';
 import { DEFAULT_RULES } from './machine.ts';
@@ -1049,7 +1049,39 @@ export class Engine {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, kind: 'error', error: { name: 'Error', message } };
     }
-    return this.#executor.call(deployment, path, argument, context, signal);
+    // A schema says what an actor may be created with, before there is one: it has no machine.
+    const machine = path === 'configuration.validate' ? null : context.machine;
+    let env: MachineEnv = {};
+    try {
+      // The code is given the variables too, as they are now.
+      if (machine !== null) env = await this.#envOf(context.actor);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, kind: 'error', error: { name: 'Error', message } };
+    }
+    const { machines } = this;
+    const host: CallHost =
+      machine === null || machines === undefined
+        ? NO_MACHINE
+        : { file: (request) => machines.file(machine, request) };
+    return this.#executor.call(
+      deployment,
+      path,
+      argument,
+      {
+        ...context,
+        machine:
+          machine === null
+            ? null
+            : {
+                id: machine.id,
+                cwd: machine.cwd,
+                ...(Object.keys(env).length === 0 ? {} : { env }),
+              },
+      },
+      signal,
+      host,
+    );
   }
 
   /** A call that is given up, and fails, when it takes longer than code that is no tool may. */

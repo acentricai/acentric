@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { NO_MACHINE } from '@acentric/core';
 import type { CallContext, CallResult } from '@acentric/core';
 import { BUNDLE_PROTOCOL, makeId } from '@acentric/protocol';
 import type { DeploymentId, Json } from '@acentric/protocol';
@@ -31,6 +32,7 @@ const context: CallContext = {
   configuration: null,
   modelId: 'fake-1',
   reasoning: 'medium',
+  machine: null,
 };
 let made = 0;
 const deploymentId = (): DeploymentId => {
@@ -78,7 +80,7 @@ async function start(options: IsolateOptions = {}) {
     argument: Json = {},
     on: DeploymentId = deployment,
     stop: AbortSignal = signal(),
-  ) => executor.call(on, `tools.${name}.execute`, argument, context, stop);
+  ) => executor.call(on, `tools.${name}.execute`, argument, context, stop, NO_MACHINE);
   return { executor, deployment, load, tool };
 }
 

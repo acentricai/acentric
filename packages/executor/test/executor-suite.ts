@@ -3,6 +3,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { NO_MACHINE } from '@acentric/core';
 import type { CallContext, Executor } from '@acentric/core';
 import { agentDefinitionSchema, makeId } from '@acentric/protocol';
 import type { AgentId, DeploymentId } from '@acentric/protocol';
@@ -40,6 +41,7 @@ export function executorSuite(
       configuration: { region: 'eu' },
       modelId: 'fake-1',
       reasoning: 'medium',
+      machine: null,
     };
     const signal = () => new AbortController().signal;
     let code: string;
@@ -80,7 +82,14 @@ export function executorSuite(
 
     it('calls a tool, which reads a secret of its agent’s', async () => {
       expect(
-        await executor.call(first, 'tools.lookup_order.execute', { id: 4411 }, context, signal()),
+        await executor.call(
+          first,
+          'tools.lookup_order.execute',
+          { id: 4411 },
+          context,
+          signal(),
+          NO_MACHINE,
+        ),
       ).toEqual({
         ok: true,
         value: 'Order 4411 was refunded twice, one second apart. (asked with k-1)',
@@ -88,7 +97,14 @@ export function executorSuite(
     });
 
     it('tells the code what its agent is called, and of the actor it runs for', async () => {
-      const outcome = await executor.call(first, 'tools.whoami.execute', {}, context, signal());
+      const outcome = await executor.call(
+        first,
+        'tools.whoami.execute',
+        {},
+        context,
+        signal(),
+        NO_MACHINE,
+      );
       expect(outcome).toMatchObject({ ok: true });
       expect((outcome as { value: string }).value).toMatch(
         /^support\/eu-desk\/telegram:4411 in eu, /,
@@ -102,12 +118,15 @@ export function executorSuite(
         { id: 'many' },
         context,
         signal(),
+        NO_MACHINE,
       );
       expect(outcome).toMatchObject({ ok: false, kind: 'invalid', issues: [{ path: ['id'] }] });
     });
 
     it('says what the code threw', async () => {
-      expect(await executor.call(first, 'tools.broken.execute', {}, context, signal())).toEqual({
+      expect(
+        await executor.call(first, 'tools.broken.execute', {}, context, signal(), NO_MACHINE),
+      ).toEqual({
         ok: false,
         kind: 'error',
         error: { name: 'RangeError', message: 'The order is out of range' },
@@ -116,7 +135,14 @@ export function executorSuite(
 
     it('fails a call that reads a secret that is not set, by a name the code can tell', async () => {
       expect(
-        await bare.call(first, 'tools.lookup_order.execute', { id: 1 }, context, signal()),
+        await bare.call(
+          first,
+          'tools.lookup_order.execute',
+          { id: 1 },
+          context,
+          signal(),
+          NO_MACHINE,
+        ),
       ).toMatchObject({
         ok: false,
         kind: 'error',
@@ -126,17 +152,33 @@ export function executorSuite(
 
     it('calls an input’s handler, and checks a configuration', async () => {
       expect(
-        await executor.call(first, 'inputs.message.handler', { text: 'Hello.' }, context, signal()),
+        await executor.call(
+          first,
+          'inputs.message.handler',
+          { text: 'Hello.' },
+          context,
+          signal(),
+          NO_MACHINE,
+        ),
       ).toEqual({
         ok: true,
         value: 'Hello.',
       });
-      expect(await executor.call(first, 'configuration.validate', {}, context, signal())).toEqual({
+      expect(
+        await executor.call(first, 'configuration.validate', {}, context, signal(), NO_MACHINE),
+      ).toEqual({
         ok: true,
         value: { region: 'eu' },
       });
       expect(
-        await executor.call(first, 'configuration.validate', { region: 5 }, context, signal()),
+        await executor.call(
+          first,
+          'configuration.validate',
+          { region: 5 },
+          context,
+          signal(),
+          NO_MACHINE,
+        ),
       ).toMatchObject({
         ok: false,
         kind: 'invalid',
@@ -151,12 +193,27 @@ export function executorSuite(
           {},
           context,
           signal(),
+          NO_MACHINE,
         );
         return Number(/(\d+) lookups$/.exec((outcome as { value: string }).value)?.[1]);
       };
       const before = [await lookups(first), await lookups(second)];
-      await executor.call(second, 'tools.lookup_order.execute', { id: 1 }, context, signal());
-      await executor.call(second, 'tools.lookup_order.execute', { id: 2 }, context, signal());
+      await executor.call(
+        second,
+        'tools.lookup_order.execute',
+        { id: 1 },
+        context,
+        signal(),
+        NO_MACHINE,
+      );
+      await executor.call(
+        second,
+        'tools.lookup_order.execute',
+        { id: 2 },
+        context,
+        signal(),
+        NO_MACHINE,
+      );
       expect([await lookups(first), await lookups(second)]).toEqual([
         before[0],
         (before[1] ?? 0) + 2,
@@ -165,7 +222,14 @@ export function executorSuite(
 
     it('stops waiting for a call when it is told to', async () => {
       const stop = new AbortController();
-      const call = executor.call(first, 'tools.never.execute', {}, context, stop.signal);
+      const call = executor.call(
+        first,
+        'tools.never.execute',
+        {},
+        context,
+        stop.signal,
+        NO_MACHINE,
+      );
       stop.abort();
       expect(await call).toMatchObject({ ok: false, kind: 'error' });
     });
@@ -173,7 +237,7 @@ export function executorSuite(
     it('has nothing for a deployment it was not given', async () => {
       const unknown = makeId('deployment', source(9));
       await expect(
-        executor.call(unknown, 'tools.whoami.execute', {}, context, signal()),
+        executor.call(unknown, 'tools.whoami.execute', {}, context, signal(), NO_MACHINE),
       ).rejects.toThrow(/not loaded/);
     });
   });
