@@ -53,6 +53,10 @@ export const ERROR_STATUS = {
   machine_offline: 409,
   /** The machine's daemon refused what was asked of it. */
   machine_refused: 400,
+  /** A provider of sandboxes refused or failed what was asked of it for this request. */
+  sandbox_provider_failed: 502,
+  /** The machine is a sandbox that sleeps, and could not be started. Nothing was sent to it. */
+  sandbox_asleep: 503,
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_STATUS;

@@ -17,6 +17,7 @@ import type {
   Json,
   KeyId,
   MachineId,
+  SandboxProviderId,
   Session,
   SessionId,
   UsageGroup,
@@ -36,6 +37,8 @@ import type {
   NewCommand,
   StoredCommand,
   StoredMachine,
+  StoredSandbox,
+  StoredSandboxProvider,
   PageOf,
   Paged,
   Redeem,
@@ -113,6 +116,7 @@ export class MemoryStore implements Store {
   /** The variables of actors' commands, sealed. */
   readonly #envs = new Map<ActorId, string>();
   readonly #machines = new Map<MachineId, StoredMachine>();
+  readonly #sandboxProviders = new Map<SandboxProviderId, StoredSandboxProvider>();
   /** By `actor/task`. */
   readonly #commands = new Map<string, StoredCommand>();
   readonly #inputs = new Map<ActorId, Input[]>();
@@ -775,6 +779,35 @@ export class MemoryStore implements Store {
       });
     }
     return open;
+  }
+
+  async addSandboxProvider(provider: StoredSandboxProvider): Promise<void> {
+    if ([...this.#sandboxProviders.values()].some((one) => one.name === provider.name)) {
+      throw new NameTaken(provider.name, 'provider account');
+    }
+    this.#sandboxProviders.set(provider.id, copy(provider));
+  }
+
+  async loadSandboxProvider(id: SandboxProviderId): Promise<StoredSandboxProvider | undefined> {
+    return copy(this.#sandboxProviders.get(id));
+  }
+
+  async listSandboxProviders(): Promise<StoredSandboxProvider[]> {
+    return copy([...this.#sandboxProviders.values()]);
+  }
+
+  async removeSandboxProvider(id: SandboxProviderId): Promise<'removed' | 'in_use' | 'missing'> {
+    if (!this.#sandboxProviders.has(id)) return 'missing';
+    if ([...this.#machines.values()].some((one) => one.sandbox?.provider === id)) return 'in_use';
+    this.#sandboxProviders.delete(id);
+    return 'removed';
+  }
+
+  async setSandbox(id: MachineId, sandbox: StoredSandbox): Promise<boolean> {
+    const machine = this.#machines.get(id);
+    if (machine === undefined || !this.#sandboxProviders.has(sandbox.provider)) return false;
+    this.#machines.set(id, { ...machine, sandbox: copy(sandbox) });
+    return true;
   }
 
   async addCommand(command: NewCommand): Promise<{ command: StoredCommand; created: boolean }> {

@@ -307,6 +307,7 @@ export class Machines {
       createdAt: now,
       enrolledAt: null,
       lastSeenAt: null,
+      sandbox: null,
     };
     await this.#store.addMachine(stored);
     return { machine: this.#info(stored), token, expiresAt: tokenExpiresAt };
@@ -418,6 +419,11 @@ export class Machines {
     const session = this.#sessions.get(id);
     if (session !== undefined) this.#drop(session);
     for (const command of lost) this.#notify(keyOf(command));
+  }
+
+  /** How many commands have not ended on a machine. */
+  async busy(id: MachineId): Promise<number> {
+    return (await this.#store.openCommands(id)).length;
   }
 
   /**
@@ -1161,6 +1167,7 @@ export class Machines {
       hostname: stored.hostname,
       version: stored.version,
       current: stored.build === null || handedOut === undefined ? null : stored.build === handedOut,
+      provider: stored.sandbox?.provider ?? null,
       createdAt: stored.createdAt,
       enrolledAt: stored.enrolledAt,
       lastSeenAt: stored.lastSeenAt,

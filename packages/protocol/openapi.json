@@ -9548,7 +9548,9 @@
                   "actor_archived",
                   "provider_failed",
                   "machine_offline",
-                  "machine_refused"
+                  "machine_refused",
+                  "sandbox_provider_failed",
+                  "sandbox_asleep"
                 ]
               },
               "message": {
@@ -10032,6 +10034,21 @@
               "null"
             ]
           },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                "description": "An ID of kind sandboxProvider, made by the engine.",
+                "examples": [
+                  "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "integer",
             "minimum": 0,
@@ -10086,6 +10103,7 @@
           "hostname",
           "version",
           "current",
+          "provider",
           "createdAt",
           "enrolledAt",
           "lastSeenAt"

@@ -188,6 +188,7 @@ describe('a machine', () => {
     hostname: 'box',
     version: '0.1.0',
     current: null,
+    provider: null,
     createdAt: NOW,
     enrolledAt: NOW,
     lastSeenAt: null,

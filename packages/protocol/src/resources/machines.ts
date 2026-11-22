@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 
-import { agentIdSchema, machineIdSchema } from '../ids.ts';
+import { agentIdSchema, machineIdSchema, sandboxProviderIdSchema } from '../ids.ts';
 import { FILE_BYTES, stoppedOnMachineSchema } from '../machine.ts';
 import { nameSchema } from '../names.ts';
 import { timestampSchema } from '../primitives.ts';
@@ -38,6 +38,8 @@ export const machineSchema = z
      * not known: it has not connected, or the engine hands out none for it.
      */
     current: z.boolean().nullable(),
+    /** For a sandbox: the provider account it was made in. Null for a machine someone enrolled. */
+    provider: sandboxProviderIdSchema.nullable(),
     createdAt: timestampSchema,
     enrolledAt: timestampSchema.nullable(),
     lastSeenAt: timestampSchema.nullable(),

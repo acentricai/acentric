@@ -17,6 +17,8 @@ import type {
   NewCommand,
   StoredCommand,
   StoredMachine,
+  StoredSandbox,
+  StoredSandboxProvider,
   PageOf,
   Paged,
   Redeem,
@@ -50,6 +52,7 @@ import type {
   Json,
   KeyId,
   MachineId,
+  SandboxProviderId,
   Session,
   SessionId,
   UsageGroup,
@@ -146,7 +149,10 @@ class Line {
       waiting.reject(new StaleEpoch(actor, read, now));
     } else if (refused?.kind === 'NameTaken') {
       const said = refused.args[1];
-      const of = said === 'agent' || said === 'account' || said === 'machine' ? said : 'actor';
+      const of =
+        said === 'agent' || said === 'account' || said === 'machine' || said === 'provider account'
+          ? said
+          : 'actor';
       waiting.reject(new NameTaken(String(refused.args[0]), of));
     } else if (refused?.kind === 'EmailTaken') {
       waiting.reject(new EmailTaken(String(refused.args[0])));
@@ -339,6 +345,26 @@ export class SqliteStore implements Store {
 
   loadCommand(actor: string, task: string): Promise<StoredCommand | undefined> {
     return this.#write.ask('loadCommand' satisfies Operation, actor, task);
+  }
+
+  addSandboxProvider(provider: StoredSandboxProvider): Promise<void> {
+    return this.#write.ask('addSandboxProvider' satisfies Operation, provider);
+  }
+
+  loadSandboxProvider(id: SandboxProviderId): Promise<StoredSandboxProvider | undefined> {
+    return this.#write.ask('loadSandboxProvider' satisfies Operation, id);
+  }
+
+  listSandboxProviders(): Promise<StoredSandboxProvider[]> {
+    return this.#write.ask('listSandboxProviders' satisfies Operation);
+  }
+
+  removeSandboxProvider(id: SandboxProviderId): Promise<'removed' | 'in_use' | 'missing'> {
+    return this.#write.ask('removeSandboxProvider' satisfies Operation, id);
+  }
+
+  setSandbox(id: MachineId, sandbox: StoredSandbox): Promise<boolean> {
+    return this.#write.ask('setSandbox' satisfies Operation, id, sandbox);
   }
 
   openCommands(machine: MachineId): Promise<StoredCommand[]> {
