@@ -7463,6 +7463,10 @@
                 "type": "null"
               }
             ]
+          },
+          "quiet": {
+            "type": "boolean",
+            "const": true
           }
         },
         "required": [

@@ -165,6 +165,11 @@ export const inputSchema = z
     receivedAt: timestampSchema,
     /** When a turn took it into the conversation. Null while it waits. */
     deliveredAt: timestampSchema.nullable(),
+    /**
+     * It starts no turn: it waits for one that something else starts, and joins that. So is
+     * what waited when its actor was aborted, and the endings of what the abort stopped.
+     */
+    quiet: z.literal(true).optional(),
   })
   .meta({ id: 'Input' });
 export type Input = z.infer<typeof inputSchema>;
