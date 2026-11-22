@@ -16,7 +16,20 @@ export type ProviderFields = z.infer<typeof providerFieldsSchema>;
 export const metadataSchema = z.record(z.string(), jsonSchema);
 export type Metadata = z.infer<typeof metadataSchema>;
 
-/** Where an image or file comes from. */
+/** The name of a blob: the SHA-256 of its bytes, as 64 hex characters. */
+export const blobDigestSchema = z
+  .string()
+  .regex(/^[0-9a-f]{64}$/, 'A blob is named by the SHA-256 of its bytes, as 64 hex characters')
+  .meta({ description: "A blob's name: the SHA-256 of its bytes, in hex." });
+export type BlobDigest = z.infer<typeof blobDigestSchema>;
+
+/**
+ * Where an image or file comes from.
+ *
+ * An agent's code gives bytes as `base64`. An engine that has a blob store keeps them apart
+ * from the conversation, and the message has a `blob` in their place: the bytes are read from
+ * the actor they are of (see the route `blobs.get`), and put back when the model is called.
+ */
 export const mediaSourceSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('url'), url: z.url() }),
   z.object({
@@ -24,6 +37,14 @@ export const mediaSourceSchema = z.discriminatedUnion('type', [
     /** An IANA media type, such as `image/png` or `application/pdf`. */
     mediaType: z.string().min(1),
     data: z.string(),
+  }),
+  z.object({
+    /** Bytes the engine keeps, named by their digest. An actor names only blobs of its own. */
+    type: z.literal('blob'),
+    digest: blobDigestSchema,
+    mediaType: z.string().min(1),
+    /** How many bytes it is. */
+    size: z.number().int().nonnegative(),
   }),
   z.object({
     /** A file in the provider's own storage. Works only with the provider that issued it. */

@@ -69,6 +69,14 @@ const support = new Agent({
       },
     },
     {
+      name: 'show_again',
+      description: 'Gives back an image the conversation has, by its name.',
+      parameters: z.object({ digest: z.string() }),
+      execute: ({ digest }) => [
+        { type: 'image', source: { type: 'blob', digest, mediaType: 'image/png', size: 300 } },
+      ],
+    },
+    {
       name: 'not_content',
       description: 'Returns what is not content.',
       parameters: z.object({}),
@@ -104,6 +112,7 @@ describe('what a bundle says it is', () => {
       ['lookup_order', true],
       ['whoami', false],
       ['broken', false],
+      ['show_again', false],
       ['not_content', false],
     ]);
     expect(definition.tools[0]?.parameters).toMatchObject({
@@ -261,6 +270,16 @@ describe('a call of a tool', () => {
       ok: false,
       kind: 'error',
       error: { name: 'SecretNotSet', message: 'The agent has no secret named ORDERS_API_KEY' },
+    });
+  });
+
+  it('takes content that names a blob: whether the actor has it is the engine’s to say', async () => {
+    const digest = 'ab'.repeat(32);
+    expect(await entry.call('tools.show_again.execute', { digest }, context, host())).toEqual({
+      ok: true,
+      value: [
+        { type: 'image', source: { type: 'blob', digest, mediaType: 'image/png', size: 300 } },
+      ],
     });
   });
 

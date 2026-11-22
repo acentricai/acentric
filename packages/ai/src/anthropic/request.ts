@@ -10,7 +10,7 @@ import type {
 } from '@acentric/protocol';
 
 import type { ModelInfo } from '../catalog.ts';
-import { ModelFailure } from '../failure.ts';
+import { ModelFailure, unfilled } from '../failure.ts';
 import { effortOf } from '../provider.ts';
 import type { WebSearch } from '../provider.ts';
 import type { ModelStep } from '../runner.ts';
@@ -181,6 +181,7 @@ function parts(content: readonly ContentPart[], where: string): JsonObject[] {
 function sourceOf(source: MediaSource, at: string, document: boolean): JsonObject {
   if (source.type === 'url') return { type: 'url', url: source.url };
   if (source.type === 'file_id') return { type: 'file', file_id: source.id };
+  if (source.type === 'blob') return refuse(unfilled(at));
   if (document && source.mediaType === 'text/plain') {
     try {
       const bytes = Uint8Array.from(atob(source.data), (char) => char.codePointAt(0) ?? 0);

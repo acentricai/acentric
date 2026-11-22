@@ -243,10 +243,15 @@ async function validate(
 /** What a tool or a handler returned, checked to be content. */
 function content(value: unknown, what: string): Json {
   if (typeof value === 'string') return value;
-  // Where an image or a file comes from: a URL, base64 with its media type, or a provider's file.
+  // Where an image or a file comes from: a URL, base64 with its media type, a provider's file,
+  // or a blob the actor's conversation has already, which the engine checks that it has.
   const isSource = (source: unknown): boolean =>
     isDict(source) &&
     ((source['type'] === 'url' && typeof source['url'] === 'string') ||
+      (source['type'] === 'blob' &&
+        typeof source['digest'] === 'string' &&
+        typeof source['mediaType'] === 'string' &&
+        typeof source['size'] === 'number') ||
       (source['type'] === 'base64' &&
         typeof source['mediaType'] === 'string' &&
         typeof source['data'] === 'string') ||
