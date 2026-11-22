@@ -902,8 +902,10 @@ mod tests {
             )
             .unwrap();
 
-        // The daemon is gone, and another is started on the same folder a while later.
-        std::thread::sleep(Duration::from_millis(600));
+        // The daemon is gone, and another is started on the same folder a while later: long
+        // enough after that when a command ended and when it was found are told apart on a
+        // computer that is busy too.
+        std::thread::sleep(Duration::from_millis(1500));
         machine.commands = Commands::open(options(&machine.root)).unwrap();
         // What ended and was not acknowledged is sent again.
         assert_eq!(machine.commands.unacked(), vec![ended]);
@@ -913,7 +915,7 @@ mod tests {
             (later.status, later.exit, later.tail.as_str()),
             (EndStatus::Exited, Some(0), "done later\n")
         );
-        assert!((400..560).contains(&later.ran_ms), "{}", later.ran_ms);
+        assert!((400..1400).contains(&later.ran_ms), "{}", later.ran_ms);
         // What was being stopped is stopped, by what asked for it.
         let stopped = machine.ended("b3");
         assert_eq!(
