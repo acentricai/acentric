@@ -13,6 +13,7 @@ import { add, deploy, init, login, logout, whoami } from './commands.ts';
 import { readCredentials } from './credentials.ts';
 import type { Io } from './engine.ts';
 import { Fail } from './fail.ts';
+import { addMachine, listMachines, removeMachine, updateMachines } from './machines.ts';
 import { listSecrets, removeSecret, setSecret } from './secrets.ts';
 import { installedFile, offerUpdate, update, version } from './update.ts';
 
@@ -40,11 +41,21 @@ const USAGE = `acentric: sign in to an engine, start a project of agents, deploy
   acentric actors [--agent <agent>]       the actors of the engine, or of one agent
   acentric actors create <agent> [--name <name>] [--external-id <id>] [--model <model>]
                          [--reasoning <level>] [--configuration <json>]
-                                          make an actor of an agent
+                         [--machine <machine> [--cwd <dir>] [--env NAME=value]...]
+                                          make an actor of an agent, on a machine when its
+                                          agent's actors work on one
   acentric actors send <actor> <text> [--follow]
   acentric actors send <actor> --type <type> --payload <json> [--follow]
                                           send an actor a message, or another input
   acentric actors logs <actor> [--follow] an actor's conversation, and as it grows
+
+  acentric machines                       the computers actors' commands run on
+  acentric machines add <name> --agent <agent>... | --all-agents
+                                          add one, for those agents: it gives the command to
+                                          run on that computer
+  acentric machines remove <name>         remove one
+  acentric machines update <name> | --all have one, or every one that is connected, take the
+                                          machine program the engine hands out
 
   acentric version                        this command's version, and the engine's
   acentric update                         take the version the engine hands out
@@ -198,6 +209,34 @@ async function main(argv: readonly string[], signal: AbortSignal): Promise<void>
       throw new Fail(`accounts has no ${sub}`, 'see `acentric help`');
     }
 
+    case 'machines': {
+      const [sub, ...more] = rest;
+      if (sub === 'add') {
+        const { values, positionals } = args(
+          { agent: { type: 'string', multiple: true }, 'all-agents': { type: 'boolean' } },
+          more,
+        );
+        const [name] = exactly(positionals, ['a name for the machine'], 'machines add');
+        const agents = values['agent'];
+        return addMachine(io, {
+          name: name ?? '',
+          agents: Array.isArray(agents) ? agents.map(String) : [],
+          allAgents: values['all-agents'] === true,
+        });
+      }
+      if (sub === 'remove') {
+        const [machine] = exactly(args({}, more).positionals, ['the machine'], 'machines remove');
+        return removeMachine(io, { machine: machine ?? '' });
+      }
+      if (sub === 'update') {
+        const { values, positionals } = args({ all: { type: 'boolean' } }, more);
+        if (positionals.length > 1) throw new Fail('machines update takes one machine, or `--all`');
+        return updateMachines(io, { machine: positionals[0], all: values['all'] === true });
+      }
+      if (sub === undefined || sub === 'list') return listMachines(io);
+      throw new Fail(`machines has no ${sub}`, 'see `acentric help`');
+    }
+
     case 'secrets': {
       const [sub, ...more] = rest;
       if (sub === 'set') {
@@ -240,10 +279,14 @@ async function main(argv: readonly string[], signal: AbortSignal): Promise<void>
             model: { type: 'string' },
             reasoning: { type: 'string' },
             configuration: { type: 'string' },
+            machine: { type: 'string' },
+            cwd: { type: 'string' },
+            env: { type: 'string', multiple: true },
           },
           more,
         );
         const [agent] = exactly(positionals, ['an agent'], 'actors create');
+        const env = values['env'];
         return createActor(io, {
           agent: agent ?? '',
           name: text(values['name']),
@@ -251,6 +294,9 @@ async function main(argv: readonly string[], signal: AbortSignal): Promise<void>
           model: text(values['model']),
           reasoning: text(values['reasoning']),
           configuration: text(values['configuration']),
+          machine: text(values['machine']),
+          cwd: text(values['cwd']),
+          env: Array.isArray(env) ? env.map(String) : [],
         });
       }
       if (sub === 'send') {

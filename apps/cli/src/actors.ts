@@ -6,6 +6,7 @@ import { REASONING_LEVELS } from '@acentric/protocol';
 import type { Actor, Json, Reasoning } from '@acentric/protocol';
 
 import { actorOf, agentOf, signedIn, withEngine } from './engine.ts';
+import { machineOf } from './machines.ts';
 import type { Io } from './engine.ts';
 import { Fail } from './fail.ts';
 import { entryLines, table, turnText } from './render.ts';
@@ -74,9 +75,23 @@ export async function createActor(
     readonly model?: string | undefined;
     readonly reasoning?: string | undefined;
     readonly configuration?: string | undefined;
+    /** The machine it works on, by name or ID, and its working directory there. */
+    readonly machine?: string | undefined;
+    readonly cwd?: string | undefined;
+    /** Variables its commands are run with, each as `NAME=value`. */
+    readonly env?: readonly string[];
   },
 ): Promise<void> {
   const { reasoning } = given;
+  if (given.machine === undefined && (given.cwd !== undefined || (given.env ?? []).length > 0)) {
+    throw new Fail('`--cwd` and `--env` go with `--machine`, the machine the actor works on');
+  }
+  const env: { [name: string]: string } = {};
+  for (const one of given.env ?? []) {
+    const at = one.indexOf('=');
+    if (at < 1) throw new Fail(`${one} is not a variable`, 'give it as `--env NAME=value`');
+    env[one.slice(0, at)] = one.slice(at + 1);
+  }
   if (reasoning !== undefined && !(REASONING_LEVELS as readonly string[]).includes(reasoning)) {
     throw new Fail(`${reasoning} is no reasoning level`, `one of ${REASONING_LEVELS.join(', ')}`);
   }
@@ -86,9 +101,21 @@ export async function createActor(
       : jsonOf(given.configuration, 'the configuration');
   await withEngine(signedIn(io), async (client) => {
     const agent = await agentOf(client, given.agent);
+    const machine =
+      given.machine === undefined ? undefined : await machineOf(client, given.machine);
     const { actor, created } = await client.call('actors.create', {
       params: { agent: agent.id },
       body: {
+        ...(machine === undefined
+          ? {}
+          : {
+              machine: {
+                id: machine.id,
+                // Its user's home folder there, unless another is said.
+                cwd: given.cwd ?? '~',
+                ...(Object.keys(env).length === 0 ? {} : { env }),
+              },
+            }),
         ...(given.name === undefined ? {} : { name: given.name }),
         ...(given.externalId === undefined ? {} : { externalId: given.externalId }),
         ...(given.model === undefined ? {} : { modelId: given.model }),
@@ -99,7 +126,11 @@ export async function createActor(
     const version = `v${String(actor.deployment.version)}`;
     io.out(
       created
-        ? `Made the actor ${actor.id} of ${agent.name} ${version}, on ${actor.modelId}.`
+        ? `Made the actor ${actor.id} of ${agent.name} ${version}, on ${actor.modelId}${
+            machine === undefined || actor.machine === null
+              ? ''
+              : `, working on ${machine.name} in ${actor.machine.cwd}`
+          }.`
         : `The actor ${actor.id} of ${agent.name} has that external ID already: nothing was made.`,
     );
     io.out(`Send it something: \`acentric actors send ${actor.id} "Hello"\`.`);
