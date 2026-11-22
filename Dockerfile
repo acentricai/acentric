@@ -39,6 +39,32 @@ RUN cargo zigbuild --release --locked --package acentric-machine \
     && cp target/x86_64-apple-darwin/release/acentric-machine /out/darwin-x64 \
     && cp target/aarch64-apple-darwin/release/acentric-machine /out/darwin-arm64
 
+# The machine program for the system an image is built for, and no other.
+FROM machine AS machine-here
+ARG TARGETARCH
+RUN cp "/out/linux-$([ "$TARGETARCH" = amd64 ] && echo x64 || echo "$TARGETARCH")" /machine
+
+# A sandbox: what a server makes machines from at Docker. It is not part of the server's
+# image, and is built by naming it:
+#
+#   docker build --target sandbox -t acentric-sandbox .
+#
+# and given to the server as ACENTRIC_DOCKER_IMAGE. It is a small Debian with the machine
+# program, which enrols with what the server puts in the sandbox, and connects. An image of
+# your own does as well, built FROM this one, or any that has a user `user` of ID 1000 whose
+# home is /home/user, the machine program as `acentric-machine`, and this start-up.
+FROM debian:stable-slim AS sandbox
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates curl git \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 --shell /bin/bash user
+COPY --from=machine-here --chmod=755 /machine /usr/local/bin/acentric-machine
+COPY --chmod=755 deploy/sandbox/boot /usr/local/lib/acentric/boot
+USER user
+ENV HOME=/home/user
+WORKDIR /home/user
+CMD ["/usr/local/lib/acentric/boot"]
+
 FROM node:26-slim AS build
 WORKDIR /repo
 RUN npm install --global pnpm@12.15.0

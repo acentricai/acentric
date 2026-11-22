@@ -1,0 +1,17 @@
+#!/bin/sh
+# What a sandbox runs when it starts, and every time it is started again: the machine program,
+# as the user `user`. The server that made the sandbox put what its daemon enrols with in
+# $provision: the daemon enrols once, and from then on only connects. A sandbox made by hand
+# from the same image is given nothing to enrol with, and this ends after a minute.
+set -u
+provision="$HOME/.acentric-provision.json"
+waited=0
+while [ ! -e "$HOME/.acentric/machine.json" ] && [ ! -e "$provision" ]; do
+  waited=$((waited + 1))
+  [ "$waited" -ge 1200 ] && exit 0
+  sleep 0.05
+done
+if [ -e "$provision" ]; then
+  acentric-machine provision "$provision" || exit 1
+fi
+exec acentric-machine connect
