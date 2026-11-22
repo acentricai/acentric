@@ -35,6 +35,7 @@ import {
   ActorArchived,
   ActorBusy,
   AgentNotFound,
+  CodeUnavailable,
   Conflict,
   InvalidConfiguration,
   Unavailable,
@@ -148,7 +149,13 @@ export type ActorUpdate = {
 /** How an actor fits a deployment: with what configuration, or why it does not. */
 type Fit =
   | { readonly ok: true; readonly configuration: Json | null; readonly given: Json | null }
-  | { readonly ok: false; readonly reason: string; readonly error: InvalidConfiguration };
+  /** `passing`: it could not be checked just now, which says nothing of whether it fits. */
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly error: Error;
+      readonly passing: boolean;
+    };
 
 /**
  * What a person is refused, which is no failure of the actor's driver: anything that says the
@@ -354,6 +361,7 @@ export class ActorDriver {
     const { actor, configurationGiven } = this.record;
     const refused = (reason: string, issues?: Parameters<typeof issuesText>[0]): Fit => ({
       ok: false,
+      passing: false,
       reason,
       error: new InvalidConfiguration(
         `The configuration is not one of version ${String(deployment.version)} of the agent. ${reason}`,
@@ -378,6 +386,10 @@ export class ActorDriver {
       new AbortController().signal,
     );
     if (checked.ok) return { ok: true, configuration: checked.value, given: from };
+    if (checked.kind === 'lost') {
+      const error = new CodeUnavailable(checked.reason);
+      return { ok: false, passing: true, reason: checked.reason, error };
+    }
     return checked.kind === 'invalid'
       ? refused(issuesText(checked.issues), checked.issues)
       : refused(checked.error.message);
@@ -399,6 +411,8 @@ export class ActorDriver {
     // The same deployment and the same configuration fit no better the second time.
     if (actor.behind?.deployment.id === active.id) return undefined;
     const fit = await this.#fit(active);
+    // Not checked this time: it stays where it is for this turn, and is checked at the next.
+    if (!fit.ok && fit.passing) return undefined;
     if (!fit.ok) return { behind: { deployment: active, reason: fit.reason } };
     return {
       deployment: active,
@@ -626,14 +640,23 @@ export class ActorDriver {
       return answer([{ type: 'text', text }], true);
     }
 
-    const result = await this.#host.call(
-      actor.deployment.id,
-      `tools.${call.name}.execute`,
-      call.arguments,
-      callContextOf(actor),
-      signal,
-    );
+    const run = () =>
+      this.#host.call(
+        actor.deployment.id,
+        `tools.${call.name}.execute`,
+        call.arguments,
+        callContextOf(actor),
+        signal,
+      );
+    let result = await run();
+    // What ran the tool died with the call in it, as a restart of the engine would have cut it
+    // off: it may or may not have run. One that is safe to make again is made again, once.
+    if (!result.ok && result.kind === 'lost' && tool.retrySafe) result = await run();
     if (result.ok) return answer(contentOf(result.value), false);
+    if (result.kind === 'lost') {
+      const text = `The call of ${call.name} was lost: ${result.reason}. It may or may not have run.`;
+      return answer([{ type: 'text', text }], true);
+    }
     // The model reads what was wrong with what it gave, and may give it again, right.
     const text =
       result.kind === 'invalid'

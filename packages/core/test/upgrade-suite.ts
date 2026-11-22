@@ -11,6 +11,7 @@ import type { Json } from '@acentric/protocol';
 
 import { Secrets } from '../src/secrets.ts';
 import type { Store } from '../src/store.ts';
+import { Lost } from '../src/testing.ts';
 import { AGENT, CODE, MANIFEST, deferred, world } from './world.ts';
 import type { World } from './world.ts';
 
@@ -468,6 +469,40 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
           deployment: { version: 3 },
           configuration: null,
           behind: null,
+        });
+      });
+
+      it('stays for a turn, and is not said to be behind, when the new version could not be asked just now', async () => {
+        let asked = 0;
+        const one = w.engine([says('One.'), says('Two.')], {
+          versions: {
+            'orders@2': {
+              definition: { instructions: KIND, configuration: { schema: null } },
+              functions: {
+                'configuration.validate': () => {
+                  asked += 1;
+                  if (asked === 1) throw new Lost('workerd exited with SIGKILL');
+                  return { region: 'eu' };
+                },
+              },
+            },
+          },
+        });
+        const actor = await one.createActor();
+        await one.deploy('orders@2');
+        await one.say(actor.id, 'First.');
+        await one.it.settled(actor.id);
+        expect(await one.it.getActor(actor.id)).toMatchObject({
+          deployment: { version: 1 },
+          behind: null,
+          lastTurn: { end: 'ok' },
+        });
+        // It is asked again at the next turn, and moves.
+        await one.say(actor.id, 'Second.');
+        await one.it.settled(actor.id);
+        expect(await one.it.getActor(actor.id)).toMatchObject({
+          deployment: { version: 2 },
+          configuration: { region: 'eu' },
         });
       });
 

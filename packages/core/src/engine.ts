@@ -41,6 +41,7 @@ import {
   ActorArchived,
   ActorNotFound,
   AgentNotFound,
+  CodeUnavailable,
   InvalidAgent,
   InvalidConfiguration,
   InvalidInput,
@@ -89,6 +90,12 @@ export type EngineOptions = {
   readonly entropy?: Entropy;
   readonly timer?: Timer;
   readonly rules?: Rules;
+  /**
+   * How long a function of an agent's code that is no tool may take: an input's handler, or a
+   * check of a configuration. One that takes longer is given up, and fails. 30 seconds
+   * without it. A tool has no limit: it ends when it ends, or when its turn is interrupted.
+   */
+  readonly codeTimeoutMs?: number;
   /** How many actors are in a turn at once. The rest wait their turn, in order. 100 without it. */
   readonly maxConcurrentTurns?: number;
   /** How many actors with nothing to do keep their driver, for when they are next sent something. 1000 without it. */
@@ -127,6 +134,7 @@ export class Engine {
   readonly #providers: Providers;
   readonly #features: readonly string[];
   readonly #secrets: Secrets | undefined;
+  readonly #codeTimeoutMs: number;
   /** The agents, as they were last read or written here. An engine is its store's only writer. */
   readonly #agents = new Map<AgentId, Agent>();
   /** Each deployment that was asked for, as it is stored. It never changes, so it is read once. */
@@ -150,6 +158,7 @@ export class Engine {
     this.#providers = options.providers ?? builtInProviders();
     this.#features = options.features ?? [];
     this.#secrets = options.secrets;
+    this.#codeTimeoutMs = options.codeTimeoutMs ?? 30_000;
     const { runner } = options;
     const report =
       options.report ??
@@ -160,7 +169,10 @@ export class Engine {
       store: options.store,
       runnerFor: typeof runner === 'function' ? runner : () => runner,
       call: (deployment, path, argument, context, signal) =>
-        this.#call(deployment, path, argument, context, signal),
+        // A tool takes as long as it takes. Anything else of an agent's is to be quick.
+        path.startsWith('tools.')
+          ? this.#call(deployment, path, argument, context, signal)
+          : this.#timed(deployment, path, argument, context, signal),
       bus: options.bus ?? new MemoryBus(),
       clock: this.#clock,
       timer: this.#timer,
@@ -454,7 +466,7 @@ export class Engine {
     const configurationGiven = given.configuration ?? null;
     let configuration: Json | null = null;
     if (definition.configuration !== null || configurationGiven !== null) {
-      const checked = await this.#call(
+      const checked = await this.#timed(
         deployment.id,
         'configuration.validate',
         configurationGiven,
@@ -462,6 +474,7 @@ export class Engine {
         new AbortController().signal,
       );
       if (!checked.ok) {
+        if (checked.kind === 'lost') throw new CodeUnavailable(checked.reason);
         throw checked.kind === 'invalid'
           ? new InvalidConfiguration(
               `The configuration is not one of the agent. ${issuesText(checked.issues)}`,
@@ -518,7 +531,7 @@ export class Engine {
       throw new UnknownInput(sent.type);
     }
     // The agent's own code turns what was sent into what the model reads.
-    const handled = await this.#call(
+    const handled = await this.#timed(
       actor.deployment.id,
       `inputs.${sent.type}.handler`,
       sent.payload ?? null,
@@ -526,6 +539,7 @@ export class Engine {
       new AbortController().signal,
     );
     if (!handled.ok) {
+      if (handled.kind === 'lost') throw new CodeUnavailable(handled.reason);
       if (handled.kind === 'error') throw new InvalidInput(handled.error.message);
       throw new InvalidInput(
         `The input is not what ${sent.type} takes. ${issuesText(handled.issues)}`,
@@ -686,6 +700,30 @@ export class Engine {
       return { ok: false, kind: 'error', error: { name: 'Error', message } };
     }
     return this.#executor.call(deployment, path, argument, context, signal);
+  }
+
+  /** A call that is given up, and fails, when it takes longer than code that is no tool may. */
+  async #timed(
+    deployment: DeploymentId,
+    path: string,
+    argument: Json,
+    context: CallContext,
+    signal: AbortSignal,
+  ): Promise<CallResult> {
+    const limit = new AbortController();
+    const timer = setTimeout(() => {
+      limit.abort();
+    }, this.#codeTimeoutMs);
+    try {
+      const both = AbortSignal.any([signal, limit.signal]);
+      const result = await this.#call(deployment, path, argument, context, both);
+      if (!limit.signal.aborted || signal.aborted) return result;
+      const seconds = String(this.#codeTimeoutMs / 1000);
+      const message = `${path} did not return within ${seconds} s, and was given up`;
+      return { ok: false, kind: 'error', error: { name: 'TimeoutError', message } };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
