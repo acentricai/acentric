@@ -13,6 +13,8 @@ import { Hono } from 'hono';
 import type { z } from 'zod';
 
 import { authenticate, authorize } from './auth.ts';
+import { serveDownloads } from './downloads.ts';
+import type { Downloads } from './downloads.ts';
 import { ApiFailure, failureOf } from './errors.ts';
 import { Reply, handlers } from './handlers.ts';
 import type { Parts } from './handlers.ts';
@@ -28,6 +30,8 @@ export type AppOptions = Omit<Parts, 'streams'> & {
    * fails the request. For tests: it holds the server to its own contract.
    */
   readonly checkAnswers?: boolean;
+  /** What the server hands out to be installed elsewhere: the command. Nothing, without it. */
+  readonly downloads?: Downloads;
 };
 
 /** The most a request's body is, in bytes: a deploy's code, and what goes around it. */
@@ -85,6 +89,7 @@ export function createApp(options: AppOptions): Hono {
   app.get('/health', (context) => context.json({ ok: true, version: options.version }));
   const openApi = buildOpenApi(routes, { title: 'Acentric', version: API_VERSION });
   app.get('/v1/openapi.json', (context) => context.json(openApi));
+  if (options.downloads !== undefined) serveDownloads(app, options.downloads);
 
   for (const [id, route] of Object.entries(routes) as [RouteId, Route][]) {
     const handler = handlers[id] as ((asked: unknown, parts: Parts) => unknown) | undefined;

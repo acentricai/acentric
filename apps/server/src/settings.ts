@@ -20,6 +20,9 @@
 //   ACENTRIC_AGENT_NETWORK_ALLOW  with `public`: private addresses and ranges agents' code
 //                           may reach as well, separated by commas, such as 10.0.0.0/8
 //   ACENTRIC_CODE_PROCESSES how many processes agents' code runs in. 2 without it
+//   ACENTRIC_DOWNLOADS      a folder with the acentric command (`acentric.mjs`) and the script
+//                           that installs it (`install-cli.sh`), which the server then hands
+//                           out at `/install-cli.sh`. Without it, it hands out neither
 //
 // What a provider's models are called with is not among them: that is a model account, added
 // through the API and kept sealed.
@@ -42,6 +45,8 @@ export type Settings = {
   readonly secretKeys: SecretKeys | undefined;
   readonly network: Network;
   readonly codeProcesses: number;
+  /** The folder of what the server hands out to be installed elsewhere. */
+  readonly downloads: string | undefined;
 };
 
 /** The settings are wrong. The message says which, and how. */
@@ -121,6 +126,8 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     );
   }
 
+  const downloads = given('ACENTRIC_DOWNLOADS');
+
   return {
     port: wholeNumber('ACENTRIC_PORT', 4000, 0, 65_535),
     host: given('ACENTRIC_HOST') ?? '127.0.0.1',
@@ -130,5 +137,6 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     secretKeys,
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
+    downloads: downloads === undefined ? undefined : resolve(downloads),
   };
 }

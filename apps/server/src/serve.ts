@@ -7,6 +7,7 @@ import { serve as listen } from '@hono/node-server';
 import type { Accounts, Audit, Engine, Keys, People, Secrets } from '@acentric/core';
 
 import { createApp } from './app.ts';
+import type { Downloads } from './downloads.ts';
 import { Streams } from './events.ts';
 
 export type ServerOptions = {
@@ -23,6 +24,7 @@ export type ServerOptions = {
   readonly host?: string;
   readonly report?: (error: unknown, requestId: string) => void;
   readonly checkAnswers?: boolean;
+  readonly downloads?: Downloads;
 };
 
 export type Server = {

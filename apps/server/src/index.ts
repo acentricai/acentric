@@ -5,6 +5,8 @@ export type { AppOptions } from './app.ts';
 export { startServer } from './serve.ts';
 export type { Server, ServerOptions } from './serve.ts';
 export { Streams } from './events.ts';
+export { DOWNLOADS } from './downloads.ts';
+export type { Downloads } from './downloads.ts';
 export { readSettings } from './settings.ts';
 export type { Settings } from './settings.ts';
 export { resetLink, start } from './start.ts';

@@ -14,6 +14,7 @@ describe('a server’s settings', () => {
       secretKeys: undefined,
       network: { reach: 'public', allow: [] },
       codeProcesses: 2,
+      downloads: undefined,
     });
     expect(settings.data.endsWith('/data')).toBe(true);
   });
