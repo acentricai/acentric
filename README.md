@@ -7,9 +7,9 @@ which connect out to the engine, or ones the engine makes at a sandbox provider.
 
 > **There is nothing to install yet.** This repository is being built in the open, from its
 > foundation up. Today it has the contracts, the engine's core on SQLite, four model providers
-> (OpenAI, ChatGPT, Fireworks and Anthropic), the framework an agent is written with, and
-> deploying an agent as versions that its running actors follow. It has no server and no
-> command yet.
+> (OpenAI, ChatGPT, Fireworks and Anthropic), the framework an agent is written with,
+> deploying an agent as versions that its running actors follow, and running an agent's code
+> apart from the engine, in isolates of `workerd`. It has no server and no command yet.
 
 ## What is here
 

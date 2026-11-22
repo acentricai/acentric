@@ -7,7 +7,7 @@
     "tsBuildInfoFile": "tsconfig.tsbuildinfo",
     "types": ["node"]
   },
-  "include": ["."],
+  "include": [".", "../bench"],
   "references": [
     { "path": ".." },
     { "path": "../../agent" },

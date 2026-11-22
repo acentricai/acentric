@@ -13,6 +13,7 @@
     "typecheck": "tsc -b",
     "test": "tsc -b && vitest run",
     "bench": "tsc -b && node packages/store/bench/turns.ts",
+    "bench:isolates": "tsc -b && node packages/executor/bench/isolates.ts",
     "lint": "oxlint --deny-warnings",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
