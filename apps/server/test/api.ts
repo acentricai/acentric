@@ -17,7 +17,7 @@ import {
   Secrets,
   accountRunners,
 } from '@acentric/core';
-import type { TaskKind } from '@acentric/core';
+import type { EngineOptions, TaskKind } from '@acentric/core';
 import { InlineExecutor } from '@acentric/core/testing';
 import type { AgentFunction, InlineAgent } from '@acentric/core/testing';
 import type { ActorId, AgentDefinition, BodyOf, Json } from '@acentric/protocol';
@@ -83,6 +83,8 @@ export async function api(
     readonly kinds?: readonly TaskKind[];
     /** True for an engine that keeps machines. */
     readonly machines?: boolean;
+    /** The providers its sandboxes are made at, for an engine that keeps machines. */
+    readonly sandboxes?: NonNullable<EngineOptions['sandboxes']>;
   } = {},
 ) {
   const store = new MemoryStore();
@@ -116,6 +118,7 @@ export async function api(
     ...(options.blobs === false ? {} : { blobs }),
     ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
     ...(options.machines === true ? { machines: {} } : {}),
+    ...(options.sandboxes === undefined ? {} : { sandboxes: options.sandboxes }),
   });
   // A hash that is quick to make: these tests are not of how long a password takes to guess.
   const people = new People({ store, audit, passwordCost: 1024 });

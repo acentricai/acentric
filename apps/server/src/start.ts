@@ -47,6 +47,8 @@ export async function start(
     readonly passwordCost?: number;
     /** How long machines and their daemons are given, and the like. Tests ask for less. */
     readonly machines?: NonNullable<EngineOptions['machines']>;
+    /** The providers sandboxes are made at, and the times they are kept by. For tests. */
+    readonly sandboxes?: Partial<NonNullable<EngineOptions['sandboxes']>>;
   },
 ): Promise<Started> {
   await mkdir(settings.data, { recursive: true });
@@ -78,6 +80,12 @@ export async function start(
     // The computers actors' commands run on: their daemons connect to this server. A daemon
     // is asked to take the machine program this server hands out, by its digest.
     machines: { build: programs.build, ...more.machines },
+    // Machines the server makes itself, at the providers it was set up with.
+    sandboxes: {
+      providers: [],
+      ...(settings.publicUrl === undefined ? {} : { publicUrl: settings.publicUrl }),
+      ...more.sandboxes,
+    },
   });
   const people = new People({
     store,

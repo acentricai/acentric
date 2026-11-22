@@ -7,7 +7,12 @@
     "tsBuildInfoFile": "tsconfig.tsbuildinfo",
     "types": ["node"]
   },
-  "include": [".", "../../../packages/executor/test/bundle.ts"],
+  "include": [
+    ".",
+    "../../../packages/executor/test/bundle.ts",
+    "../../../packages/core/test/fake-provider.ts",
+    "../../../packages/core/test/fake-daemon.ts"
+  ],
   "references": [
     { "path": ".." },
     { "path": "../../../packages/ai" },

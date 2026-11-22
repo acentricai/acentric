@@ -9,6 +9,7 @@ import type {
   Keys,
   Machines,
   People,
+  Sandboxes,
   Secrets,
   SignedIn,
   StoredCommand,
@@ -21,6 +22,7 @@ import type {
   Deployment,
   DeploymentSummary,
   MachineCommand,
+  MachineId,
   Page,
   PrincipalRef,
   ResponseOf,
@@ -126,6 +128,23 @@ function machinesOf(engine: Engine): Machines {
     throw new ApiFailure('not_found', 'This engine keeps no machines');
   }
   return engine.machines;
+}
+
+/** The engine's sandboxes. An engine that keeps no machines makes none. */
+function sandboxesOf(engine: Engine): Sandboxes {
+  if (engine.sandboxes === undefined) {
+    throw new ApiFailure('not_found', 'This engine keeps no machines');
+  }
+  return engine.sandboxes;
+}
+
+/**
+ * Has a machine there to be reached, as before an actor's command: a sandbox that sleeps is
+ * woken, and one on its way back to an engine that just started is given the time.
+ */
+async function ready(engine: Engine, machine: MachineId, signal: AbortSignal): Promise<void> {
+  await engine.sandboxes?.wake(machine);
+  await machinesOf(engine).settled(machine, signal);
 }
 
 /** How long a call waits for a command it started, without being told: in seconds. */
@@ -423,7 +442,9 @@ export const handlers: Handlers = {
   'machines.delete': async (asked, { engine, audit }) => {
     const machines = machinesOf(engine);
     const machine = await machines.get(asked.params.machine);
-    await machines.remove(machine.id);
+    // A sandbox is deleted at its provider with it.
+    if (machine.provider === null) await machines.remove(machine.id);
+    else await sandboxesOf(engine).remove(machine.id);
     await audit.record({
       by: refOf(asked),
       action: 'machine.delete',
@@ -458,8 +479,7 @@ export const handlers: Handlers = {
 
   'machineCommands.run': async ({ params, body, request }, { engine }) => {
     const machines = machinesOf(engine);
-    // A machine that is on its way back to an engine that just started is given the time.
-    await machines.settled(params.machine, request.signal);
+    await ready(engine, params.machine, request.signal);
     const started = await machines.startOwn(params.machine, {
       command: body.command,
       cwd: body.cwd ?? '~',
@@ -484,7 +504,7 @@ export const handlers: Handlers = {
   'machineFiles.read': async ({ params, query, request }, { engine }) => {
     const machines = machinesOf(engine);
     try {
-      await machines.settled(params.machine, request.signal);
+      await ready(engine, params.machine, request.signal);
       const read = await machines.read(params.machine, {
         path: query.path,
         from: query.from ?? 0,
@@ -517,7 +537,7 @@ export const handlers: Handlers = {
     const bytes = Buffer.from(await request.arrayBuffer());
     if (bytes.length > FILE_BYTES) throw tooLarge();
     try {
-      await machines.settled(params.machine, request.signal);
+      await ready(engine, params.machine, request.signal);
       return await machines.write(params.machine, {
         path: query.path,
         from: query.from ?? 0,
@@ -529,6 +549,60 @@ export const handlers: Handlers = {
   },
 
   // A daemon's own: its machine's token is what lets it.
+  // Sandboxes: machines the engine makes at a provider
+
+  'sandboxProviders.list': async (_asked, { engine }) => ({
+    items: await sandboxesOf(engine).providers(),
+  }),
+  'sandboxProviders.create': async (asked, { engine, audit }) => {
+    const added = await sandboxesOf(engine).addProvider(defined(asked.body));
+    await audit.record({
+      by: refOf(asked),
+      action: 'sandbox_provider.create',
+      target: { type: 'sandbox_provider', id: added.id },
+      detail: { name: added.name, kind: added.kind },
+    });
+    return added;
+  },
+  'sandboxProviders.delete': async (asked, { engine, audit }) => {
+    const sandboxes = sandboxesOf(engine);
+    const provider = (await sandboxes.providers()).find((one) => one.id === asked.params.provider);
+    await sandboxes.removeProvider(asked.params.provider);
+    await audit.record({
+      by: refOf(asked),
+      action: 'sandbox_provider.delete',
+      target: { type: 'sandbox_provider', id: asked.params.provider },
+      detail: { name: provider?.name ?? null },
+    });
+    return undefined;
+  },
+  'sandboxProviders.sandboxes': async ({ params }, { engine }) => ({
+    items: await sandboxesOf(engine).list(params.provider),
+  }),
+  'sandboxes.create': async (asked, { engine, audit }) => {
+    // Where the request came to: where its daemon dials, for a server not told where it is reached.
+    const origin = new URL(asked.request.url).origin;
+    const made = await sandboxesOf(engine).create(defined(asked.body), origin);
+    await audit.record({
+      by: refOf(asked),
+      action: 'sandbox.create',
+      target: { type: 'machine', id: made.machine.id },
+      detail: { name: made.machine.name, provider: made.provider, kind: made.kind },
+    });
+    return made;
+  },
+  'sandboxes.delete': async (asked, { engine, audit }) => {
+    const machine = await machinesOf(engine).get(asked.params.machine);
+    await sandboxesOf(engine).remove(machine.id);
+    await audit.record({
+      by: refOf(asked),
+      action: 'sandbox.delete',
+      target: { type: 'machine', id: machine.id },
+      detail: { name: machine.name },
+    });
+    return undefined;
+  },
+
   'machines.enrol': async ({ params, body }, { engine, audit }) => {
     const machine = await machinesOf(engine).enrol(params.machine, body);
     await audit.record({
