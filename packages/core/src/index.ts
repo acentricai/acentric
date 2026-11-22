@@ -23,6 +23,7 @@ export * from './blobs.ts';
 export * from './tasks.ts';
 export * from './machines.ts';
 export * from './bash.ts';
+export * from './view-image.ts';
 export * from './scaffold.ts';
 export * from './families.ts';
 export { NOTICE_TAG, asSent } from './sent.ts';

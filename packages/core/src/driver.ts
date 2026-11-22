@@ -54,6 +54,7 @@ import type { MachineEvent, Rules } from './machine.ts';
 import { applyChange } from './state.ts';
 import type { ActorPatch, ActorRecord, Change, OwedCall, Turn } from './state.ts';
 import type { Store } from './store.ts';
+import type { OwnTool } from './view-image.ts';
 
 /** The time, in milliseconds. */
 export type Clock = () => number;
@@ -92,6 +93,8 @@ export type Host = {
   active(agent: AgentId): Promise<DeploymentRef | undefined>;
   /** The deployment of an agent with a version. Undefined when it has none. */
   version(agent: AgentId, version: number): Promise<DeploymentRef | undefined>;
+  /** The engine's own tools that answer at once, which an actor's model is offered. */
+  ownTools(actor: Actor, definition: AgentDefinition): readonly OwnTool[];
   /**
    * The instructions an actor's model is sent: the harness's own, for what the actor has, and
    * then its agent's. `own` is the engine's tools the actor is offered.
@@ -825,7 +828,27 @@ export class ActorDriver {
       return answer(content, told.isError === true);
     }
 
-    const { tools } = await this.#host.definition(actor.deployment.id);
+    const definition = await this.#host.definition(actor.deployment.id);
+    // A tool of the engine's own that answers at once. It is safe to make again.
+    const ownTool = this.#host
+      .ownTools(actor, definition)
+      .find((one) => one.tool.name === call.name);
+    if (ownTool !== undefined) {
+      const given = withoutEmpty(call.arguments, ownTool.tool);
+      if (typeof given !== 'object' || given === null || Array.isArray(given)) {
+        return answer(
+          [{ type: 'text', text: `The arguments of ${call.name} are an object` }],
+          true,
+        );
+      }
+      const told = await ownTool.run(actor, definition, given, { id: call.id });
+      const parts: ContentPart[] =
+        typeof told.content === 'string'
+          ? [{ type: 'text', text: told.content }]
+          : [...told.content];
+      return answer(await this.#host.blobs.keep(actor.id, parts), told.isError === true);
+    }
+    const { tools } = definition;
     const tool = tools.find((declared) => declared.name === call.name);
     if (tool === undefined) {
       return answer([{ type: 'text', text: `There is no tool ${call.name}` }], true);
@@ -889,7 +912,10 @@ export class ActorDriver {
     const { actor, nextSeq } = this.record;
     const definition = await this.#host.definition(actor.deployment.id);
     // The engine's own tools, after the agent's.
-    const own = this.#host.tasks.tools(actor);
+    const own = [
+      ...this.#host.tasks.tools(actor),
+      ...this.#host.ownTools(actor, definition).map((one) => one.tool),
+    ];
     const instructions = this.#host.instructions(actor, definition, own);
     const fingerprint = this.#host.fingerprint(definition, own, instructions);
     const changed = this.record.sent !== null && this.record.sent !== fingerprint;

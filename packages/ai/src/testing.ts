@@ -33,7 +33,7 @@ export function reasoned(reasoning: string, answer: ModelAnswer): ModelAnswer {
 
 /**
  * The provider of the models of tests, `fake`. Its model `fake-1` does not tie its reasoning
- * to what came before it, and `fake-bound` does.
+ * to what came before it, and `fake-bound` does. `fake-eyes` is one that reads images.
  */
 export function fakeProvider(
   runner: ModelRunner,
@@ -61,6 +61,7 @@ export function fakeProvider(
     models: [
       { id: 'fake-1', name: 'Fake 1', bindsReasoning: false },
       { id: 'fake-bound', name: 'Fake Bound', bindsReasoning: true },
+      { id: 'fake-eyes', name: 'Fake Eyes', bindsReasoning: false, input: ['text', 'image'] },
     ],
     defaultModel: 'fake-1',
     bindsReasoning: true,
