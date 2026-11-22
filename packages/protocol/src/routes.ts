@@ -14,6 +14,7 @@ import { principalSchema } from './auth.ts';
 import type { Permission } from './auth.ts';
 import type { ErrorCode } from './errors.ts';
 import {
+  accountIdSchema,
   actorIdSchema,
   agentIdSchema,
   deploymentIdSchema,
@@ -24,6 +25,13 @@ import {
 } from './ids.ts';
 import { secretNameSchema } from './manifest.ts';
 import { pageQuerySchema, pageSchema } from './primitives.ts';
+import {
+  accountSchema,
+  createAccountRequestSchema,
+  updateAccountRequestSchema,
+  usageQuerySchema,
+  usageReportSchema,
+} from './resources/accounts.ts';
 import {
   actorSchema,
   conversationEntrySchema,
@@ -178,13 +186,13 @@ export const routes = defineRoutes({
   'agents.update': {
     method: 'PATCH',
     path: '/v1/agents/{agent}',
-    summary: "Makes one of an agent's deployments the active one.",
+    summary: "Makes one of an agent's deployments the active one, or gives it a model account.",
     auth: onAgent('agents:deploy'),
     params: agentParam,
     body: updateAgentRequestSchema,
     response: agentSchema,
     status: 200,
-    errors: ['not_found'],
+    errors: ['not_found', 'conflict'],
   },
   'agents.delete': {
     method: 'DELETE',
@@ -396,6 +404,79 @@ export const routes = defineRoutes({
     status: 200,
     errors: ['not_found'],
     stream: true,
+  },
+
+  // Model accounts and usage
+
+  'accounts.create': {
+    method: 'POST',
+    path: '/v1/accounts',
+    summary: 'Adds a model account. Its key is checked with its provider first.',
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    body: createAccountRequestSchema,
+    response: accountSchema,
+    status: 201,
+    errors: ['name_taken', 'provider_failed', 'unavailable'],
+  },
+  'accounts.list': {
+    method: 'GET',
+    path: '/v1/accounts',
+    summary: 'Lists model accounts. Never their keys.',
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    query: pageQuerySchema,
+    response: page('AccountPage', accountSchema),
+    status: 200,
+    errors: [],
+  },
+  'accounts.get': {
+    method: 'GET',
+    path: '/v1/accounts/{account}',
+    summary: 'Reads a model account, without its key.',
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    params: z.object({ account: accountIdSchema }),
+    response: accountSchema,
+    status: 200,
+    errors: ['not_found'],
+  },
+  'accounts.update': {
+    method: 'PATCH',
+    path: '/v1/accounts/{account}',
+    summary: "Changes a model account's name or key, or makes it its provider's default.",
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    params: z.object({ account: accountIdSchema }),
+    body: updateAccountRequestSchema,
+    response: accountSchema,
+    status: 200,
+    errors: ['not_found', 'name_taken', 'provider_failed', 'unavailable'],
+  },
+  'accounts.delete': {
+    method: 'DELETE',
+    path: '/v1/accounts/{account}',
+    summary: 'Removes a model account that no agent is given.',
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    params: z.object({ account: accountIdSchema }),
+    status: 204,
+    errors: ['not_found', 'conflict'],
+  },
+  'usage.get': {
+    method: 'GET',
+    path: '/v1/usage',
+    summary: 'Adds up what was used: every call of a model, or those a filter leaves.',
+    auth: { on: 'reach', permission: 'usage:read' },
+    query: usageQuerySchema,
+    response: usageReportSchema,
+    status: 200,
+    errors: [],
+  },
+  'usage.actor': {
+    method: 'GET',
+    path: '/v1/actors/{actor}/usage',
+    summary: 'Adds up what one actor used.',
+    auth: onActor('actors:read'),
+    params: actorParam,
+    response: usageReportSchema,
+    status: 200,
+    errors: ['not_found'],
   },
 
   // Signing in
