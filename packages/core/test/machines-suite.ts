@@ -727,6 +727,40 @@ export function machinesSuite(name: string, open: () => Promise<Store>): void {
         expect(daemon.asked('update')).toHaveLength(1);
       });
 
+      it('is waited for as the new program, though that connects before the old connection is seen to go', async () => {
+        const machines = machinesOf({ build: () => 'build-2', times: { returnMs: 2000 } });
+        const { id, daemon } = await connected(machines);
+        const before = daemon.link;
+        daemon.onUpdate = (digest) => {
+          setTimeout(() => {
+            daemon.facts.build = digest;
+            // The new connection first: the engine itself ends the one before it.
+            void daemon.connect(machines, id);
+          }, 5);
+          return { updated: true, build: digest };
+        };
+        expect(await machines.upgrade(id)).toMatchObject({
+          updated: true,
+          machine: { online: true, current: true },
+        });
+        expect(before?.open).toBe(false);
+      });
+
+      it('is said to be updated, and as it stands, when it does not come back in time', async () => {
+        const machines = machinesOf({ build: () => 'build-2', times: { returnMs: 60 } });
+        const { id, daemon } = await connected(machines);
+        daemon.onUpdate = (digest) => {
+          setTimeout(() => {
+            daemon.drop();
+          }, 5);
+          return { updated: true, build: digest };
+        };
+        expect(await machines.upgrade(id)).toMatchObject({
+          updated: true,
+          machine: { online: false, current: false },
+        });
+      });
+
       it('is not replaced when the engine hands out none for its system, or it is not connected', async () => {
         const machines = machinesOf({ build: () => undefined });
         const { id, daemon } = await connected(machines);
