@@ -390,3 +390,96 @@ describe('a process', () => {
     expect(executor.stats().processes).toEqual([]);
   });
 });
+
+describe('many deployments, and replacing a process', () => {
+  const running = (executor: IsolateExecutor) =>
+    executor.stats().processes.filter((one) => one.slot >= 0);
+
+  it('replaces a process that has more calls given up, and still running, than it may', async () => {
+    const { executor, tool } = await start({ maxAbandoned: 2 });
+    await tool('echo', { text: 'loaded' });
+    const [before] = running(executor);
+    const stop = new AbortController();
+    const sleeps = Array.from({ length: 3 }, () =>
+      tool('sleep', { ms: 5000 }, undefined, stop.signal),
+    );
+    await waitFor(() => running(executor)[0]?.inFlight === 3);
+    stop.abort();
+    await Promise.all(sleeps);
+    expect(running(executor)[0]?.abandoned).toBe(3);
+
+    expect(text(await tool('echo', { text: 'after' }))).toBe('after');
+    // Nothing waited for the old process's calls: it was killed at once.
+    const after = running(executor);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ abandoned: 0, restarts: 1 });
+    expect(after[0]?.pid).not.toBe(before?.pid);
+    expect(alive(before?.pid ?? 0)).toBe(false);
+  });
+
+  it('keeps a process that is busy loading the code of 40 deployments at once', async () => {
+    const { executor, load, tool } = await start({ probeMs: 100, stallMs: 500 });
+    const deployments = await Promise.all(
+      Array.from({ length: 40 }, (_, index) => load(`// burst ${String(index)}`)),
+    );
+    const answers = await Promise.all(
+      deployments.map((deployment) => tool('echo', { text: 'hello' }, deployment)),
+    );
+    expect(answers.map(text)).toEqual(Array.from({ length: 40 }, () => 'hello'));
+    const [one] = running(executor);
+    expect(one).toMatchObject({ bundles: 40, restarts: 0, loading: 0, queuedLoads: 0 });
+    // Loading takes longer than a process may be silent for. It was not taken for stuck: each
+    // load that ends is a sign of life.
+    expect(one?.kills.stall).toBe(0);
+  }, 30_000);
+
+  it('replaces a process again and again under steady calls without losing one', async () => {
+    const { executor, load, tool } = await start({ maxBundles: 3, minRecycleMs: 0, drainMs: 5000 });
+    const deployments = await Promise.all(
+      Array.from({ length: 6 }, (_, index) => load(`// steady ${String(index)}`)),
+    );
+    const until = Date.now() + 1500;
+    const worker = async (offset: number): Promise<number> => {
+      let done = 0;
+      for (let n = offset; Date.now() < until; n += 1) {
+        const answer = await tool('sleep', { ms: 50 }, deployments[n % 6]);
+        expect(text(answer)).toBe('slept');
+        done += 1;
+      }
+      return done;
+    };
+    const counts = await Promise.all([0, 2, 4].map(worker));
+    expect(counts.every((count) => count > 5)).toBe(true);
+    const stats = executor.stats();
+    expect(running(executor)[0]?.recycles.bundles).toBeGreaterThan(1);
+    expect(Object.values(stats.lost).every((count) => count === 0)).toBe(true);
+  });
+
+  it('puts replacing off when it would be too often, and says it has too little room', async () => {
+    const { executor, load, tool } = await start({ maxBundles: 2, minRecycleMs: 60_000 });
+    for (let n = 1; n <= 5; n += 1) {
+      const deployment = await load(`// backoff ${String(n)}`);
+      expect(text(await tool('echo', { text: 'hello' }, deployment))).toBe('hello');
+    }
+    const stats = executor.stats();
+    const [one] = running(executor).filter((process) => process.state === 'live');
+    // Replaced once, at the third. After that it went over its count, not round again.
+    expect(one?.recycles.bundles).toBe(1);
+    expect(one?.deferredRecycles).toBeGreaterThan(0);
+    expect(stats.capacity.ok).toBe(false);
+    expect(stats.capacity.problems[0]).toMatch(/slot 0 wanted to recycle for bundles/);
+  });
+
+  it('spreads deployments over its processes, and keeps each where it went', async () => {
+    const { executor, load, tool } = await start({ processes: 2 });
+    const deployments = await Promise.all(
+      Array.from({ length: 4 }, (_, index) => load(`// spread ${String(index)}`)),
+    );
+    for (let round = 0; round < 2; round += 1) {
+      for (const deployment of deployments) {
+        expect(text(await tool('echo', { text: 'hello' }, deployment))).toBe('hello');
+      }
+    }
+    expect(running(executor).map((one) => one.bundles)).toEqual([2, 2]);
+  });
+});
