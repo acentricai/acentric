@@ -1,6 +1,6 @@
 // What the engine refuses, each with the code the API answers it with.
 
-import type { ActorId, CallIssue, ErrorCode } from '@acentric/protocol';
+import type { ActorId, AgentId, CallIssue, ErrorCode } from '@acentric/protocol';
 
 /** Something the engine was asked that it does not do. `code` is what the API says of it. */
 export abstract class EngineError extends Error {
@@ -12,6 +12,57 @@ export class ActorNotFound extends EngineError {
   readonly code = 'not_found';
   constructor(actor: ActorId) {
     super(`There is no actor ${actor}`);
+  }
+}
+
+export class AgentNotFound extends EngineError {
+  override readonly name = 'AgentNotFound';
+  readonly code = 'not_found';
+  constructor(agent: AgentId | string, version?: number) {
+    super(
+      version === undefined
+        ? `There is no agent ${agent}`
+        : `The agent ${agent} has no version ${String(version)}`,
+    );
+  }
+}
+
+/** The code that was deployed is not an agent's, or not one this agent can become. */
+export class InvalidAgent extends EngineError {
+  override readonly name = 'InvalidAgent';
+  readonly code = 'invalid_agent';
+}
+
+/** The code was built for a bundle protocol this engine does not run. */
+export class UnsupportedProtocol extends EngineError {
+  override readonly name = 'UnsupportedProtocol';
+  readonly code = 'unsupported_protocol';
+}
+
+/** The code uses what this engine does not have: a provider, or a feature. */
+export class UnsupportedFeature extends EngineError {
+  override readonly name = 'UnsupportedFeature';
+  readonly code = 'unsupported_feature';
+}
+
+/** An actor's configuration failed its agent's schema. */
+export class InvalidConfiguration extends EngineError {
+  override readonly name = 'InvalidConfiguration';
+  readonly code = 'invalid_configuration';
+  /** What the schema found wrong with it. Absent when the agent's code threw. */
+  readonly issues: readonly CallIssue[] | undefined;
+  constructor(message: string, issues?: readonly CallIssue[]) {
+    super(message);
+    this.issues = issues;
+  }
+}
+
+/** The actor is in a turn, and this is done only between turns. */
+export class ActorBusy extends EngineError {
+  override readonly name = 'ActorBusy';
+  readonly code = 'actor_busy';
+  constructor(actor: ActorId) {
+    super(`The actor ${actor} is in a turn: this is done between turns`);
   }
 }
 

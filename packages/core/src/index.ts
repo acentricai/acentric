@@ -11,6 +11,7 @@ export * from './errors.ts';
 export * from './memory-store.ts';
 export * from './limits.ts';
 export { ActorDriver } from './driver.ts';
-export type { Clock, Timer } from './driver.ts';
+export type { ActorUpdate, Clock, Timer } from './driver.ts';
+export * from './secrets.ts';
 export * from './engine.ts';
 export * from './runners.ts';

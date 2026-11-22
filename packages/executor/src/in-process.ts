@@ -5,7 +5,7 @@
 //
 // It can stop waiting for a call, and cannot stop the call: the code runs on.
 
-import type { CallContext, CallResult, Executor } from '@acentric/core';
+import type { Bundle, CallContext, CallResult, Executor } from '@acentric/core';
 import {
   BUNDLE_ENTRY,
   SUPPORTED_BUNDLE_PROTOCOLS,
@@ -21,13 +21,6 @@ export type SecretSource = (
   agent: AgentId,
   name: string,
 ) => Promise<string | undefined> | string | undefined;
-
-/** The code of a deployment, and the agent it is a deployment of. */
-export type Bundle = {
-  /** One ES module, with everything it needs inside it. */
-  readonly code: string;
-  readonly agent: { readonly id: AgentId; readonly name: string };
-};
 
 type Loaded = {
   readonly entry: BundleEntry;
@@ -84,7 +77,7 @@ export class InProcessExecutor implements Executor {
       throw new BundleError(messageOf(error), { cause: error });
     }
     this.#loaded.set(deployment, { entry, definition, agent: bundle.agent });
-    return definition;
+    return structuredClone(definition);
   }
 
   /** Forgets a deployment. Its code stays in the process's memory: a module cannot be unloaded. */
@@ -96,10 +89,6 @@ export class InProcessExecutor implements Executor {
     const loaded = this.#loaded.get(deployment);
     if (loaded === undefined) throw new Error(`The deployment ${deployment} is not loaded`);
     return loaded;
-  }
-
-  async describe(deployment: DeploymentId): Promise<AgentDefinition> {
-    return structuredClone(this.#get(deployment).definition);
   }
 
   async call(

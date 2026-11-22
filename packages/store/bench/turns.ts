@@ -15,10 +15,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
-import { echoRunner } from '@acentric/ai/testing';
+import { Providers } from '@acentric/ai';
+import { echoRunner, fakeProvider } from '@acentric/ai/testing';
 import { Engine } from '@acentric/core';
 import { InlineExecutor } from '@acentric/core/testing';
-import { makeId } from '@acentric/protocol';
 import type { AgentDefinition } from '@acentric/protocol';
 
 import { SqliteStore } from '../src/index.ts';
@@ -32,9 +32,6 @@ const ACTORS = numberOf('actors', 200);
 const TURNS = numberOf('turns', 5);
 const FULL_FSYNC = args.includes('--full-fsync');
 
-const FIXED = { now: 1_795_305_600_000, random: new Uint8Array(10).fill(7) };
-const agent = makeId('agent', FIXED);
-const deployment = { id: makeId('deployment', FIXED), version: 1 };
 const definition: AgentDefinition = {
   provider: 'fake',
   instructions: 'You look things up.',
@@ -56,30 +53,30 @@ async function run(groupCommit: boolean) {
     groupCommit,
     fullFsync: FULL_FSYNC,
   });
-  const executor = new InlineExecutor(
-    new Map([
-      [
-        deployment.id,
-        {
-          definition,
-          functions: {
-            'inputs.message.handler': (payload) => (payload as { text: string }).text,
-            'tools.lookup.execute': (asked) => `looked up ${JSON.stringify(asked)}`,
-          },
-        },
-      ],
-    ]),
-  );
+  const executor = new InlineExecutor({
+    'lookups@1': {
+      definition,
+      functions: {
+        'inputs.message.handler': (payload) => (payload as { text: string }).text,
+        'tools.lookup.execute': (asked) => `looked up ${JSON.stringify(asked)}`,
+      },
+    },
+  });
+  const runner = echoRunner('lookup');
   const engine = new Engine({
     store,
-    runner: echoRunner('lookup'),
+    runner,
+    providers: new Providers([fakeProvider(runner)]),
     executor,
     maxConcurrentTurns: ACTORS,
   });
+  const { agent } = await engine.deploy({
+    agent: 'lookups',
+    manifest: { protocol: 1, sdk: '0.15.0' },
+    code: 'lookups@1',
+  });
   const actors = await Promise.all(
-    Array.from({ length: ACTORS }, () =>
-      engine.createActor({ agent, deployment, modelId: 'fake-1' }),
-    ),
+    Array.from({ length: ACTORS }, () => engine.createActor({ agent: agent.id })),
   );
   const before = await store.stats();
 

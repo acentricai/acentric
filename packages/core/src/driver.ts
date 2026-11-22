@@ -17,23 +17,35 @@ import type {
   Actor,
   ActorId,
   AgentDefinition,
+  AgentId,
+  AssistantMessage,
   ContentPart,
   DeploymentId,
+  DeploymentRef,
   Input,
   Json,
   Message,
+  Name,
+  Reasoning,
   ToolResultMessage,
 } from '@acentric/protocol';
 
 import type { EventBus } from './bus.ts';
-import { Conflict, Unavailable } from './errors.ts';
+import {
+  ActorArchived,
+  ActorBusy,
+  AgentNotFound,
+  Conflict,
+  InvalidConfiguration,
+  Unavailable,
+} from './errors.ts';
 import { contextOf as callContextOf, issuesText } from './executor.ts';
-import type { Executor } from './executor.ts';
+import type { CallContext, CallResult } from './executor.ts';
 import type { Semaphore } from './limits.ts';
 import { OutOfTurn, decide } from './machine.ts';
 import type { MachineEvent, Rules } from './machine.ts';
 import { applyChange } from './state.ts';
-import type { ActorRecord, OwedCall, Turn } from './state.ts';
+import type { ActorPatch, ActorRecord, Change, OwedCall, Turn } from './state.ts';
 import type { Store } from './store.ts';
 
 /** The time, in milliseconds. */
@@ -47,7 +59,14 @@ export type Host = {
   readonly store: Store;
   /** The runner of an actor's model: its agent says which provider's. */
   runnerFor(actor: Actor, definition: AgentDefinition): ModelRunner;
-  readonly executor: Executor;
+  /** Calls a function of a deployment's code. The code is loaded first, if it is not. */
+  call(
+    deployment: DeploymentId,
+    path: string,
+    argument: Json,
+    context: CallContext,
+    signal: AbortSignal,
+  ): Promise<CallResult>;
   readonly bus: EventBus;
   readonly clock: Clock;
   readonly timer: Timer;
@@ -55,6 +74,16 @@ export type Host = {
   /** How many turns go on at once: a driver holds one of these while its actor is in a turn. */
   readonly slots: Semaphore;
   definition(deployment: DeploymentId): Promise<AgentDefinition>;
+  /** The active deployment of an agent. Undefined when there is no such agent. */
+  active(agent: AgentId): Promise<DeploymentRef | undefined>;
+  /** The deployment of an agent with a version. Undefined when it has none. */
+  version(agent: AgentId, version: number): Promise<DeploymentRef | undefined>;
+  /** What names the instructions and tools the model is sent for a definition. */
+  fingerprint(definition: AgentDefinition): string;
+  /** Whether the reasoning of the actor's model is tied to what came before it. */
+  bindsReasoning(actor: Actor, definition: AgentDefinition): boolean;
+  /** An answer of the definition's provider, without its reasoning. */
+  withoutReasoning(definition: AgentDefinition, message: AssistantMessage): AssistantMessage;
   /** Whether the engine is shutting down: nothing new is begun. */
   closing(): boolean;
   report(error: unknown): void;
@@ -99,7 +128,35 @@ export function contentOf(value: Json): ContentPart[] {
   return parts.success ? parts.data : [{ type: 'text', text: JSON.stringify(value) }];
 }
 
-type Command = { readonly run: () => Promise<void>; readonly abandon: (error: Error) => void };
+type Command = {
+  readonly run: () => Promise<void>;
+  readonly abandon: (error: Error) => void;
+  /** Done between turns or not at all: it is refused when a turn starts before it is done. */
+  readonly betweenTurns: boolean;
+};
+
+/** What of an actor a person changes. */
+export type ActorUpdate = {
+  readonly name?: Name | null;
+  readonly modelId?: string;
+  readonly reasoning?: Reasoning;
+  readonly configuration?: Json;
+  /** A number pins it to that version of its agent. `active` has it follow the active one. */
+  readonly version?: number | 'active';
+};
+
+/** How an actor fits a deployment: with what configuration, or why it does not. */
+type Fit =
+  | { readonly ok: true; readonly configuration: Json | null; readonly given: Json | null }
+  | { readonly ok: false; readonly reason: string; readonly error: InvalidConfiguration };
+
+/**
+ * What a person is refused, which is no failure of the actor's driver: anything that says the
+ * code the API answers it with. It is told by that and not by its class, since a store may
+ * have been built apart from this engine.
+ */
+const isRefusal = (error: unknown): boolean =>
+  error instanceof Error && typeof (error as { code?: unknown }).code === 'string';
 
 export class ActorDriver {
   /** Where the actor stands, as of the last step that was stored. */
@@ -110,8 +167,13 @@ export class ActorDriver {
   dead = false;
 
   readonly #host: Host;
-  /** The conversation as the model is sent it. Read from the store the first time it is needed. */
-  #conversation: Message[] | null = null;
+  /**
+   * The conversation, but for what was left out of it. Read from the store the first time it
+   * is needed.
+   */
+  #conversation: { readonly seq: number; readonly message: Message }[] | null = null;
+  /** The conversation as the model is sent it: without its reasoning from before `from`. */
+  #view: { readonly from: number; readonly messages: Message[] } | null = null;
   #running: Promise<void> | null = null;
   /** Something came while the driver was running: it looks once more before it stops. */
   #woken = false;
@@ -205,20 +267,38 @@ export class ActorDriver {
   }
 
   retry(): Promise<Actor> {
-    return this.#command({ type: 'retry' });
+    return this.#command('retry', async () => {
+      // A turn that is tried again starts where any turn does: on the deployment it is to be on.
+      const set = await this.#follow();
+      await this.#apply({ type: 'retry', ...(set === undefined ? {} : { set }) });
+    });
+  }
+
+  /**
+   * Changes what the actor was created with. Only between turns: it is refused at once for an
+   * actor in a turn. Nothing is changed when its configuration does not fit.
+   */
+  update(changes: ActorUpdate): Promise<Actor> {
+    const { actor, turn } = this.record;
+    if (actor.status === 'archived') return Promise.reject(new ActorArchived(actor.id));
+    if (turn.phase !== 'idle') return Promise.reject(new ActorBusy(actor.id));
+    const update = async () => {
+      await this.#apply({ type: 'update', set: await this.#changed(changes) });
+    };
+    return this.#command('update', update, true);
   }
 
   /** Puts the actor away. A turn it is in is ended first. */
   async archive(): Promise<Actor> {
     // Asked for before the interrupt, so that it is done before any mail starts another turn.
-    const archived = this.#command({ type: 'archive' });
+    const archived = this.#command('archive', () => this.#apply({ type: 'archive' }));
     archived.catch(() => {});
     if (this.record.turn.phase !== 'idle') await this.interrupt();
     return archived;
   }
 
   unarchive(): Promise<Actor> {
-    return this.#command({ type: 'unarchive' });
+    return this.#command('unarchive', () => this.#apply({ type: 'unarchive' }));
   }
 
   /** The engine is shutting down: a wait for a later try is given up, a call goes on. */
@@ -237,25 +317,130 @@ export class ActorDriver {
     for (const resolve of this.#interrupted.splice(0)) resolve();
   }
 
-  #command(event: MachineEvent): Promise<Actor> {
+  /** Has `act` done when the actor is next between turns, and gives the actor as it then is. */
+  #command(what: string, act: () => Promise<void>, betweenTurns = false): Promise<Actor> {
     if (this.#host.closing()) return Promise.reject(new Unavailable());
     return new Promise<Actor>((resolve, reject) => {
       this.#commands.push({
         abandon: reject,
+        betweenTurns,
         run: async () => {
           try {
-            await this.#apply(event);
+            await act();
             resolve(this.record.actor);
           } catch (error) {
-            if (!(error instanceof OutOfTurn)) throw error;
-            const { status, lastTurn } = this.record.actor;
-            const stands = `${status}, its last turn ${lastTurn?.end ?? 'none'}`;
-            reject(new Conflict(`The actor cannot ${event.type} as it stands: ${stands}`));
+            if (error instanceof OutOfTurn) {
+              const { status, lastTurn } = this.record.actor;
+              const stands = `${status}, its last turn ${lastTurn?.end ?? 'none'}`;
+              reject(new Conflict(`The actor cannot ${what} as it stands: ${stands}`));
+              return;
+            }
+            // Whoever asked is told, whatever it was. Only what was no refusal ends the driver.
+            reject(error as Error);
+            if (!isRefusal(error)) throw error;
           }
         },
       });
       this.wake();
     });
+  }
+
+  /**
+   * How the actor fits a deployment of its agent. Its configuration as it was given is checked
+   * by that deployment's schema, or `given` is when a person gives another. A deployment that
+   * takes no configuration drops the one the actor has, and refuses one a person gives.
+   */
+  async #fit(deployment: DeploymentRef, given?: Json): Promise<Fit> {
+    const { actor, configurationGiven } = this.record;
+    const refused = (reason: string, issues?: Parameters<typeof issuesText>[0]): Fit => ({
+      ok: false,
+      reason,
+      error: new InvalidConfiguration(
+        `The configuration is not one of version ${String(deployment.version)} of the agent. ${reason}`,
+        issues,
+      ),
+    });
+    let definition: AgentDefinition;
+    try {
+      definition = await this.#host.definition(deployment.id);
+    } catch (error) {
+      return refused(error instanceof Error ? error.message : String(error));
+    }
+    if (definition.configuration === null && given === undefined) {
+      return { ok: true, configuration: null, given: null };
+    }
+    const from = given === undefined ? configurationGiven : given;
+    const checked = await this.#host.call(
+      deployment.id,
+      'configuration.validate',
+      from,
+      { ...callContextOf(actor), configuration: null },
+      new AbortController().signal,
+    );
+    if (checked.ok) return { ok: true, configuration: checked.value, given: from };
+    return checked.kind === 'invalid'
+      ? refused(issuesText(checked.issues), checked.issues)
+      : refused(checked.error.message);
+  }
+
+  /**
+   * What moves the actor to its agent's active deployment as a turn starts, or says why it
+   * stays behind. Undefined for an actor that is where it is to be, or is pinned, or was
+   * found not to fit that deployment already.
+   */
+  async #follow(): Promise<ActorPatch | undefined> {
+    const { actor } = this.record;
+    if (actor.pinned) return undefined;
+    const active = await this.#host.active(actor.agent);
+    if (active === undefined) return undefined;
+    if (active.id === actor.deployment.id) {
+      return actor.behind === null ? undefined : { behind: null };
+    }
+    // The same deployment and the same configuration fit no better the second time.
+    if (actor.behind?.deployment.id === active.id) return undefined;
+    const fit = await this.#fit(active);
+    if (!fit.ok) return { behind: { deployment: active, reason: fit.reason } };
+    return {
+      deployment: active,
+      configuration: fit.configuration,
+      configurationGiven: fit.given,
+      behind: null,
+    };
+  }
+
+  /** What a person's changes come to, or a throw that says why they are refused. */
+  async #changed(changes: ActorUpdate): Promise<ActorPatch> {
+    const { actor } = this.record;
+    const { version } = changes;
+    let target = actor.deployment;
+    if (version !== undefined) {
+      const found =
+        version === 'active'
+          ? await this.#host.active(actor.agent)
+          : await this.#host.version(actor.agent, version);
+      if (found === undefined) {
+        throw new AgentNotFound(actor.agent, version === 'active' ? undefined : version);
+      }
+      target = found;
+    }
+    const moves = target.id !== actor.deployment.id;
+    let fitted: ActorPatch = {};
+    if (moves || changes.configuration !== undefined) {
+      const fit = await this.#fit(target, changes.configuration);
+      if (!fit.ok) throw fit.error;
+      fitted = {
+        configuration: fit.configuration,
+        configurationGiven: fit.given,
+        ...(moves ? { deployment: target } : {}),
+      };
+    }
+    return {
+      ...(changes.name === undefined ? {} : { name: changes.name }),
+      ...(changes.modelId === undefined ? {} : { modelId: changes.modelId }),
+      ...(changes.reasoning === undefined ? {} : { reasoning: changes.reasoning }),
+      ...fitted,
+      ...(version === undefined ? {} : { pinned: version !== 'active', behind: null }),
+    };
   }
 
   async #loop(): Promise<void> {
@@ -286,7 +471,17 @@ export class ActorDriver {
         }
         if (actor.status !== 'idle' || this.mail.length === 0) return;
         if (!(await this.#hold())) return;
-        await this.#apply(() => ({ type: 'wake', inputs: [...this.mail] }));
+        // A turn starts on the deployment the actor is to be on, and ends on it.
+        const set = await this.#follow();
+        await this.#apply(() => ({
+          type: 'wake',
+          inputs: [...this.mail],
+          ...(set === undefined ? {} : { set }),
+        }));
+        // What was asked for between turns while this one was starting waits for no turn.
+        const waiting = this.#commands.filter((queued) => queued.betweenTurns);
+        this.#commands = this.#commands.filter((queued) => !queued.betweenTurns);
+        for (const queued of waiting) queued.abandon(new ActorBusy(actor.id));
         continue;
       }
 
@@ -343,10 +538,10 @@ export class ActorDriver {
 
       let event: MachineEvent;
       try {
-        const { step, runner } = await this.#step();
+        const { step, runner, sent } = await this.#step();
         const answer = await untilAborted(runner.run(step, controller.signal), controller.signal);
         if (answer === ABORTED) return;
-        event = { type: 'answered', answer };
+        event = { type: 'answered', answer, sent };
       } catch (error) {
         if (controller.signal.aborted) return;
         event =
@@ -356,6 +551,12 @@ export class ActorDriver {
                 reason: error.message,
                 retryable: error.retryable,
                 ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+                // Reasoning the engine did not know to leave out: it is left out, once. When
+                // none is being sent and the provider still says so, it is a failure like any.
+                ...(error.kind === 'stale_reasoning' &&
+                this.record.reasoningFrom < this.record.nextSeq
+                  ? { staleReasoning: true }
+                  : {}),
               }
             : {
                 type: 'model_failed',
@@ -401,7 +602,6 @@ export class ActorDriver {
   }
 
   async #runTool(call: OwedCall, cutOff: boolean, signal: AbortSignal): Promise<ToolResultMessage> {
-    const { executor } = this.#host;
     const { actor } = this.record;
     const answer = (content: ContentPart[], isError: boolean): ToolResultMessage => ({
       role: 'tool_result',
@@ -426,7 +626,7 @@ export class ActorDriver {
       return answer([{ type: 'text', text }], true);
     }
 
-    const result = await executor.call(
+    const result = await this.#host.call(
       actor.deployment.id,
       `tools.${call.name}.execute`,
       call.arguments,
@@ -442,15 +642,43 @@ export class ActorDriver {
     return answer([{ type: 'text', text }], true);
   }
 
-  /** What the model is called with: the agent's definition, and the conversation so far. */
-  async #step(): Promise<{ readonly step: ModelStep; readonly runner: ModelRunner }> {
-    const { actor } = this.record;
+  /**
+   * What the model is called with: the agent's definition, and the conversation so far.
+   *
+   * `sent` is what the answer is stored with: what names the instructions and tools of this
+   * call, and the place the model's reasoning is sent from. When the instructions or the
+   * tools are not those of the last call the model answered, and the model's reasoning is
+   * tied to them, none of the reasoning there is so far is sent: its provider would refuse
+   * it, or throw it away.
+   */
+  async #step(): Promise<{
+    readonly step: ModelStep;
+    readonly runner: ModelRunner;
+    readonly sent: NonNullable<Change['sent']>;
+  }> {
+    const { actor, nextSeq } = this.record;
     const definition = await this.#host.definition(actor.deployment.id);
+    const fingerprint = this.#host.fingerprint(definition);
+    const changed = this.record.sent !== null && this.record.sent !== fingerprint;
+    const from =
+      changed && this.#host.bindsReasoning(actor, definition) ? nextSeq : this.record.reasoningFrom;
+
     if (this.#conversation === null) {
       const entries = await this.#host.store.conversation(actor.id);
       this.#conversation = entries
         .filter((entry) => entry.leftOut !== true)
-        .map((entry) => entry.message);
+        .map(({ seq, message }) => ({ seq, message }));
+      this.#view = null;
+    }
+    if (this.#view?.from !== from) {
+      this.#view = {
+        from,
+        messages: this.#conversation.map(({ seq, message }) =>
+          seq < from && message.role === 'assistant'
+            ? this.#host.withoutReasoning(definition, message)
+            : message,
+        ),
+      };
     }
     const step: ModelStep = {
       model: actor.modelId,
@@ -462,13 +690,17 @@ export class ActorDriver {
         description: tool.description,
         parameters: tool.parameters,
       })),
-      messages: [...this.#conversation],
+      messages: [...this.#view.messages],
       // The same at every call of this actor's: a provider finds what it has read of the
       // conversation by it.
       session: actor.id,
       ...(definition.providerOptions === undefined ? {} : { options: definition.providerOptions }),
     };
-    return { step, runner: this.#host.runnerFor(actor, definition) };
+    return {
+      step,
+      runner: this.#host.runnerFor(actor, definition),
+      sent: { fingerprint, reasoningFrom: from },
+    };
   }
 
   /**
@@ -495,12 +727,16 @@ export class ActorDriver {
     this.record = applyChange(before, change, this.mail.length);
     if (this.#conversation !== null) {
       if (change.leaveOutFrom === null) {
-        for (const entry of change.append) {
-          if (entry.leftOut !== true) this.#conversation.push(entry.message);
+        for (const { seq, message, leftOut } of change.append) {
+          if (leftOut === true) continue;
+          this.#conversation.push({ seq, message });
+          // What is new is from after the place reasoning is sent from: it is sent whole.
+          this.#view?.messages.push(message);
         }
       } else {
         // Messages already held are left out now: it is read again when it is next needed.
         this.#conversation = null;
+        this.#view = null;
       }
     }
 

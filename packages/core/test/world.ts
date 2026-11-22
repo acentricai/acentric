@@ -1,18 +1,33 @@
 // What the engine's tests stand on: one agent with one tool and one input, a store, a clock a
 // test moves, and as many engines over the store as a test wants. An engine is a process.
 
+import { Providers } from '@acentric/ai';
 import type { ModelRunner } from '@acentric/ai';
-import { ScriptedRunner } from '@acentric/ai/testing';
+import { ScriptedRunner, fakeProvider } from '@acentric/ai/testing';
 import type { Scripted } from '@acentric/ai/testing';
-import { makeId } from '@acentric/protocol';
-import type { ActorEvent, ActorId, AgentDefinition, DeploymentRef, Json } from '@acentric/protocol';
+import type { ActorEvent, ActorId, AgentDefinition, Json } from '@acentric/protocol';
 
 import { Engine } from '../src/engine.ts';
 import type { EngineOptions } from '../src/engine.ts';
 import { MemoryStore } from '../src/memory-store.ts';
 import type { Store } from '../src/store.ts';
 import { InlineExecutor } from '../src/testing.ts';
-import type { AgentFunction } from '../src/testing.ts';
+import type { AgentFunction, InlineAgent } from '../src/testing.ts';
+
+/**
+ * A store that does what `store` does, but for what `own` does in its place: for a test that
+ * counts, or stops, what an engine asks of its store.
+ */
+export function over(store: Store, own: Partial<Store>): Store {
+  const made: { [name: string]: unknown } = {};
+  for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(store))) {
+    const value = (store as unknown as { [name: string]: unknown })[name];
+    if (name !== 'constructor' && typeof value === 'function') {
+      made[name] = (value as (...args: unknown[]) => unknown).bind(store);
+    }
+  }
+  return { ...made, ...own } as Store;
+}
 
 /** A promise a test settles when it chooses to. */
 export function deferred<T>(): {
@@ -41,6 +56,11 @@ export async function eventually(check: () => boolean | Promise<boolean>): Promi
 
 export const LOOKUP = 'tools.lookup_order.execute';
 export const HANDLER = 'inputs.message.handler';
+/** What a deploy says of code a test wrote. */
+export const MANIFEST = { protocol: 1, sdk: '0.15.0' };
+/** The name the tests' agent is deployed under, and what stands for its code. */
+export const AGENT = 'orders';
+export const CODE = 'orders@1';
 
 export type World = ReturnType<typeof world>;
 
@@ -54,11 +74,6 @@ export function world(given: { readonly store?: Store; readonly retrySafe?: bool
     );
   };
 
-  const agent = makeId('agent', { now, random: entropy() });
-  const deployment: DeploymentRef = {
-    id: makeId('deployment', { now, random: entropy() }),
-    version: 1,
-  };
   const definition: AgentDefinition = {
     provider: 'fake',
     instructions: 'You answer questions about orders.',
@@ -84,6 +99,16 @@ export function world(given: { readonly store?: Store; readonly retrySafe?: bool
     more: {
       readonly lookup?: AgentFunction;
       readonly handler?: AgentFunction;
+      /**
+       * Other code the engine can be given to deploy, by what stands for it: the agent with
+       * some of its definition changed, and some of its functions.
+       */
+      readonly versions?: {
+        readonly [code: string]: {
+          readonly definition?: Partial<AgentDefinition>;
+          readonly functions?: { readonly [path: string]: AgentFunction };
+        };
+      };
       readonly options?: Partial<EngineOptions>;
     } = {},
   ) => {
@@ -94,11 +119,19 @@ export function world(given: { readonly store?: Store; readonly retrySafe?: bool
         more.lookup ??
         ((order: Json) => `Order ${String((order as { id: number }).id)} was refunded twice.`),
     };
-    const executor = new InlineExecutor(new Map([[deployment.id, { definition, functions }]]));
+    const versions: { [code: string]: InlineAgent } = {};
+    for (const [code, changed] of Object.entries(more.versions ?? {})) {
+      versions[code] = {
+        definition: { ...definition, ...changed.definition },
+        functions: { ...functions, ...changed.functions },
+      };
+    }
+    const executor = new InlineExecutor({ [CODE]: { definition, functions }, ...versions });
     const failures: unknown[] = [];
     const it = new Engine({
       store,
       runner,
+      providers: new Providers([fakeProvider(runner)]),
       executor,
       clock: () => now,
       entropy,
@@ -111,16 +144,29 @@ export function world(given: { readonly store?: Store; readonly retrySafe?: bool
       ...more.options,
     });
     const events: ActorEvent[] = [];
+    // The agent is deployed the first time it is needed. A second engine on the store finds
+    // it deployed, and makes nothing.
+    let deployed: ReturnType<Engine['deploy']> | undefined;
+    const agent = async () => {
+      deployed ??= it.deploy({ agent: AGENT, manifest: MANIFEST, code: CODE });
+      return (await deployed).agent;
+    };
     return {
       it,
+      agent,
+      /** Deploys other code as the agent: one of `versions`. */
+      deploy: async (code: string, activate = true) => {
+        await agent();
+        return it.deploy({ agent: AGENT, manifest: MANIFEST, code, activate });
+      },
       /** What the scripted model was called with. Empty for a model that is not scripted. */
       steps: runner instanceof ScriptedRunner ? runner.steps : [],
       executor,
       events,
       failures,
       follow: (actor: ActorId) => it.bus.subscribe(actor, (event) => events.push(event)),
-      createActor: async () =>
-        (await it.createActor({ agent, deployment, modelId: 'fake-1' })).actor,
+      createActor: async (as: Partial<Parameters<Engine['createActor']>[0]> = {}) =>
+        (await it.createActor({ agent: (await agent()).id, ...as })).actor,
       say: (actor: ActorId, text: string, externalId?: string) =>
         it.send(actor, {
           type: 'message',
@@ -136,8 +182,7 @@ export function world(given: { readonly store?: Store; readonly retrySafe?: bool
   return {
     store,
     engine,
-    agent,
-    deployment,
+    definition,
     waits,
     roles,
     /** Moves the clock on. */

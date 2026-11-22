@@ -7,6 +7,42 @@ import type { DatabaseSync } from 'node:sqlite';
 
 const MIGRATIONS: readonly string[] = [
   `
+  -- An agent: what was deployed under a name.
+  CREATE TABLE agents (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    provider TEXT NOT NULL,
+    -- The deployment a new actor is created on, and actors that are not pinned move to.
+    active_id TEXT NOT NULL,
+    active_version INTEGER NOT NULL,
+    -- Its newest deployment.
+    latest_id TEXT NOT NULL,
+    latest_version INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  ) STRICT;
+
+  -- A deployment of an agent. A row is never changed.
+  CREATE TABLE deployments (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    -- JSON: the deployment, with what its code said of itself.
+    deployment TEXT NOT NULL,
+    -- The code: one ES module.
+    code TEXT NOT NULL
+  ) STRICT;
+
+  CREATE UNIQUE INDEX deployments_version ON deployments (agent_id, version);
+
+  -- An agent's secrets. A value is sealed with a key the database never has.
+  CREATE TABLE secrets (
+    agent_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    sealed TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (agent_id, name)
+  ) STRICT, WITHOUT ROWID;
+
   -- An actor, and where its turn stands.
   CREATE TABLE actors (
     id TEXT PRIMARY KEY,
@@ -23,6 +59,12 @@ const MIGRATIONS: readonly string[] = [
     reasoning TEXT NOT NULL,
     -- JSON, or NULL for an actor that has none.
     configuration TEXT,
+    -- JSON: the configuration as it was given, which a move to another deployment checks.
+    configuration_given TEXT,
+    -- What names the instructions and tools of the last call its model answered.
+    sent TEXT,
+    -- The model's reasoning from before this place in the conversation is not sent to it.
+    reasoning_from INTEGER NOT NULL,
     status TEXT NOT NULL,
     -- JSON, or NULL until it has had a turn.
     last_turn TEXT,

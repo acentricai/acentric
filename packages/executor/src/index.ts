@@ -3,5 +3,5 @@
 // from the engine is to come.
 
 export { InProcessExecutor } from './in-process.ts';
-export type { Bundle, SecretSource } from './in-process.ts';
+export type { SecretSource } from './in-process.ts';
 export { BundleError, UnsupportedProtocol } from './errors.ts';

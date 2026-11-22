@@ -4,18 +4,62 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { SQLInputValue, StatementSync } from 'node:sqlite';
 
-import type { ActorRecord, Change, Turn } from '@acentric/core';
-import type { Actor, ActorId, ConversationEntry, Input, InputId } from '@acentric/protocol';
+import type { ActorRecord, Change, SealedSecret, StoredDeployment, Turn } from '@acentric/core';
+import type {
+  Actor,
+  ActorId,
+  Agent,
+  AgentId,
+  ConversationEntry,
+  Deployment,
+  DeploymentId,
+  Input,
+  InputId,
+  Json,
+} from '@acentric/protocol';
 
 /** What the store refuses, in a form that crosses to the engine's thread. */
 export class Refused extends Error {
-  readonly kind: 'StaleEpoch' | 'NameTaken';
+  readonly kind: 'StaleEpoch' | 'NameTaken' | 'OutOfOrder';
   readonly args: readonly (string | number)[];
   constructor(kind: Refused['kind'], args: readonly (string | number)[]) {
     super(kind);
     this.kind = kind;
     this.args = args;
   }
+}
+
+type AgentRow = {
+  id: string;
+  name: string;
+  provider: string;
+  active_id: string;
+  active_version: number;
+  latest_id: string;
+  latest_version: number;
+  created_at: number;
+};
+
+function agentOf(row: AgentRow): Agent {
+  return {
+    id: row.id,
+    name: row.name,
+    provider: row.provider,
+    activeDeployment: { id: row.active_id, version: row.active_version },
+    latestDeployment: { id: row.latest_id, version: row.latest_version },
+    createdAt: row.created_at,
+  } as Agent;
+}
+
+type SecretRow = { agent_id: string; name: string; sealed: string; updated_at: number };
+
+function secretOf(row: SecretRow): SealedSecret {
+  return {
+    agent: row.agent_id as AgentId,
+    name: row.name,
+    sealed: row.sealed,
+    updatedAt: row.updated_at,
+  };
 }
 
 type ActorRow = {
@@ -30,6 +74,9 @@ type ActorRow = {
   model: string;
   reasoning: string;
   configuration: string | null;
+  configuration_given: string | null;
+  sent: string | null;
+  reasoning_from: number;
   status: string;
   last_turn: string | null;
   turn: string;
@@ -76,6 +123,10 @@ function recordOf(row: ActorRow): ActorRecord {
     turn: JSON.parse(row.turn) as Turn,
     epoch: row.epoch,
     nextSeq: row.next_seq,
+    configurationGiven:
+      row.configuration_given === null ? null : (JSON.parse(row.configuration_given) as Json),
+    sent: row.sent,
+    reasoningFrom: row.reasoning_from,
   };
 }
 
@@ -95,7 +146,15 @@ function inputOf(row: InputRow): Input {
 export type Operations = ReturnType<typeof operations>;
 export type Operation = keyof Operations;
 
-export const WRITES: ReadonlySet<Operation> = new Set(['createActor', 'commit', 'addInput']);
+export const WRITES: ReadonlySet<Operation> = new Set([
+  'addDeployment',
+  'setActive',
+  'setSecret',
+  'deleteSecret',
+  'createActor',
+  'commit',
+  'addInput',
+]);
 
 export function open(path: string, readOnly: boolean, fullFsync = false): DatabaseSync {
   const db = new DatabaseSync(path, { readOnly });
@@ -127,8 +186,142 @@ export function operations(db: DatabaseSync) {
     statement(sql).get(...values) as T | undefined;
   const all = <T>(sql: string, ...values: SQLInputValue[]) => statement(sql).all(...values) as T[];
 
+  const nameTaken = (actor: ActorId | null, agent: string, name: string): boolean =>
+    get(
+      'SELECT 1 FROM actors WHERE agent_id = ? AND name = ? AND id IS NOT ?',
+      agent,
+      name,
+      actor,
+    ) !== undefined;
+
   return {
-    createActor(actor: Actor): { record: ActorRecord; created: boolean } {
+    addDeployment(given: { agent: Agent; deployment: Deployment; code: string }): void {
+      const { agent, deployment, code } = given;
+      const there = get<AgentRow>('SELECT * FROM agents WHERE id = ?', agent.id);
+      if (
+        there === undefined &&
+        get('SELECT 1 FROM agents WHERE name = ?', agent.name) !== undefined
+      ) {
+        throw new Refused('NameTaken', [agent.name, 'agent']);
+      }
+      if (deployment.version !== (there?.latest_version ?? 0) + 1) {
+        throw new Refused('OutOfOrder', [agent.id, deployment.version]);
+      }
+      run(
+        'INSERT INTO deployments (id, agent_id, version, deployment, code) VALUES (?, ?, ?, ?, ?)',
+        deployment.id,
+        agent.id,
+        deployment.version,
+        JSON.stringify(deployment),
+        code,
+      );
+      run(
+        `INSERT INTO agents (id, name, provider, active_id, active_version, latest_id,
+           latest_version, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET active_id = excluded.active_id,
+           active_version = excluded.active_version, latest_id = excluded.latest_id,
+           latest_version = excluded.latest_version`,
+        agent.id,
+        agent.name,
+        agent.provider,
+        agent.activeDeployment.id,
+        agent.activeDeployment.version,
+        agent.latestDeployment.id,
+        agent.latestDeployment.version,
+        agent.createdAt,
+      );
+    },
+
+    setActive(agent: AgentId, version: number): Agent | undefined {
+      const deployment = get<{ id: string }>(
+        'SELECT id FROM deployments WHERE agent_id = ? AND version = ?',
+        agent,
+        version,
+      );
+      if (deployment === undefined) return undefined;
+      run(
+        'UPDATE agents SET active_id = ?, active_version = ? WHERE id = ?',
+        deployment.id,
+        version,
+        agent,
+      );
+      const row = get<AgentRow>('SELECT * FROM agents WHERE id = ?', agent);
+      return row === undefined ? undefined : agentOf(row);
+    },
+
+    loadAgent(id: AgentId): Agent | undefined {
+      const row = get<AgentRow>('SELECT * FROM agents WHERE id = ?', id);
+      return row === undefined ? undefined : agentOf(row);
+    },
+
+    findAgent(name: string): Agent | undefined {
+      const row = get<AgentRow>('SELECT * FROM agents WHERE name = ?', name);
+      return row === undefined ? undefined : agentOf(row);
+    },
+
+    listAgents(): Agent[] {
+      return all<AgentRow>('SELECT * FROM agents ORDER BY rowid').map(agentOf);
+    },
+
+    loadDeployment(id: DeploymentId): StoredDeployment | undefined {
+      const row = get<{ deployment: string; code: string }>(
+        'SELECT deployment, code FROM deployments WHERE id = ?',
+        id,
+      );
+      if (row === undefined) return undefined;
+      return { deployment: JSON.parse(row.deployment) as Deployment, code: row.code };
+    },
+
+    findDeployment(agent: AgentId, version: number): Deployment | undefined {
+      const row = get<{ deployment: string }>(
+        'SELECT deployment FROM deployments WHERE agent_id = ? AND version = ?',
+        agent,
+        version,
+      );
+      return row === undefined ? undefined : (JSON.parse(row.deployment) as Deployment);
+    },
+
+    setSecret(secret: SealedSecret): void {
+      run(
+        `INSERT INTO secrets (agent_id, name, sealed, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (agent_id, name) DO UPDATE SET sealed = excluded.sealed,
+           updated_at = excluded.updated_at`,
+        secret.agent,
+        secret.name,
+        secret.sealed,
+        secret.updatedAt,
+      );
+    },
+
+    getSecret(agent: AgentId, name: string): SealedSecret | undefined {
+      const row = get<SecretRow>(
+        'SELECT * FROM secrets WHERE agent_id = ? AND name = ?',
+        agent,
+        name,
+      );
+      return row === undefined ? undefined : secretOf(row);
+    },
+
+    secretNames(agent: AgentId): string[] {
+      return all<{ name: string }>(
+        'SELECT name FROM secrets WHERE agent_id = ? ORDER BY name',
+        agent,
+      ).map((row) => row.name);
+    },
+
+    deleteSecret(agent: AgentId, name: string): boolean {
+      return run('DELETE FROM secrets WHERE agent_id = ? AND name = ?', agent, name) > 0;
+    },
+
+    allSecrets(): SealedSecret[] {
+      return all<SecretRow>('SELECT * FROM secrets ORDER BY agent_id, name').map(secretOf);
+    },
+
+    createActor(
+      actor: Actor,
+      configurationGiven: Json | null = null,
+    ): { record: ActorRecord; created: boolean } {
       if (actor.externalId !== null) {
         const there = get<ActorRow>(
           `${ACTOR} WHERE agent_id = ? AND external_id = ?`,
@@ -137,19 +330,15 @@ export function operations(db: DatabaseSync) {
         );
         if (there !== undefined) return { record: recordOf(there), created: false };
       }
-      if (
-        actor.name !== null &&
-        get('SELECT 1 FROM actors WHERE agent_id = ? AND name = ?', actor.agent, actor.name) !==
-          undefined
-      ) {
-        throw new Refused('NameTaken', [actor.name]);
+      if (actor.name !== null && nameTaken(null, actor.agent, actor.name)) {
+        throw new Refused('NameTaken', [actor.name, 'actor']);
       }
       const turn: Turn = { phase: 'idle' };
       run(
         `INSERT INTO actors (id, agent_id, deployment_id, deployment_version, pinned, behind, name, external_id,
-           model, reasoning, configuration, status, last_turn, turn, owed, epoch, next_seq,
-           created_at, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 1, ?, ?)`,
+           model, reasoning, configuration, configuration_given, sent, reasoning_from, status,
+           last_turn, turn, owed, epoch, next_seq, created_at, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?)`,
         actor.id,
         actor.agent,
         actor.deployment.id,
@@ -161,6 +350,7 @@ export function operations(db: DatabaseSync) {
         actor.modelId,
         actor.reasoning,
         actor.configuration === null ? null : JSON.stringify(actor.configuration),
+        configurationGiven === null ? null : JSON.stringify(configurationGiven),
         actor.status,
         actor.lastTurn === null ? null : JSON.stringify(actor.lastTurn),
         JSON.stringify(turn),
@@ -168,7 +358,15 @@ export function operations(db: DatabaseSync) {
         actor.archivedAt,
       );
       return {
-        record: { actor: { ...actor, pendingInputs: 0 }, turn, epoch: 0, nextSeq: 1 },
+        record: {
+          actor: { ...actor, pendingInputs: 0 },
+          turn,
+          epoch: 0,
+          nextSeq: 1,
+          configurationGiven,
+          sent: null,
+          reasoningFrom: 1,
+        },
         created: true,
       };
     },
@@ -178,10 +376,53 @@ export function operations(db: DatabaseSync) {
       return row === undefined ? undefined : recordOf(row);
     },
 
+    findActor(agent: AgentId, externalId: string): ActorRecord | undefined {
+      const row = get<ActorRow>(
+        `${ACTOR} WHERE agent_id = ? AND external_id = ?`,
+        agent,
+        externalId,
+      );
+      return row === undefined ? undefined : recordOf(row);
+    },
+
     commit(id: ActorId, epoch: number, change: Change): void {
+      // What of the actor itself changes, each as the column it is and what goes in it.
+      const { set, sent } = change;
+      const json = (value: Json | null | undefined) =>
+        value === null || value === undefined ? null : JSON.stringify(value);
+      const more: [string, SQLInputValue][] = [];
+      if (set !== null) {
+        if (set.name !== undefined) more.push(['name', set.name]);
+        if (set.modelId !== undefined) more.push(['model', set.modelId]);
+        if (set.reasoning !== undefined) more.push(['reasoning', set.reasoning]);
+        if (set.configuration !== undefined) more.push(['configuration', json(set.configuration)]);
+        if (set.configurationGiven !== undefined) {
+          more.push(['configuration_given', json(set.configurationGiven)]);
+        }
+        if (set.deployment !== undefined) {
+          more.push(['deployment_id', set.deployment.id]);
+          more.push(['deployment_version', set.deployment.version]);
+        }
+        if (set.pinned !== undefined) more.push(['pinned', set.pinned ? 1 : 0]);
+        if (set.behind !== undefined) more.push(['behind', json(set.behind)]);
+      }
+      if (sent !== null) {
+        more.push(['sent', sent.fingerprint]);
+        more.push(['reasoning_from', sent.reasoningFrom]);
+      }
+      if (typeof set?.name === 'string') {
+        const named = get<{ agent_id: string; epoch: number }>(
+          'SELECT agent_id, epoch FROM actors WHERE id = ?',
+          id,
+        );
+        // Only of a step that would be stored: one that read an epoch since passed is told that.
+        if (named?.epoch === epoch && nameTaken(id, named.agent_id, set.name)) {
+          throw new Refused('NameTaken', [set.name, 'actor']);
+        }
+      }
       const changed = run(
         `UPDATE actors SET status = ?, last_turn = ?, archived_at = ?, turn = ?, owed = ?,
-           epoch = epoch + 1, next_seq = next_seq + ?
+           epoch = epoch + 1, next_seq = next_seq + ?${more.map(([column]) => `, ${column} = ?`).join('')}
          WHERE id = ? AND epoch = ?`,
         change.status,
         change.lastTurn === null ? null : JSON.stringify(change.lastTurn),
@@ -189,6 +430,7 @@ export function operations(db: DatabaseSync) {
         JSON.stringify(change.turn),
         change.turn.phase === 'idle' ? 0 : 1,
         change.append.length,
+        ...more.map(([, value]) => value),
         id,
         epoch,
       );

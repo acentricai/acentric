@@ -16,12 +16,12 @@
 
 import { appendFileSync } from 'node:fs';
 
+import { Providers } from '@acentric/ai';
 import type { ModelRunner } from '@acentric/ai';
-import { echoRunner } from '@acentric/ai/testing';
+import { echoRunner, fakeProvider } from '@acentric/ai/testing';
 import { Engine } from '@acentric/core';
 import type { Store } from '@acentric/core';
 import { InlineExecutor } from '@acentric/core/testing';
-import { makeId } from '@acentric/protocol';
 import type { AgentDefinition, ToolResultMessage } from '@acentric/protocol';
 
 import { SqliteStore } from '../src/index.ts';
@@ -45,10 +45,6 @@ function point(kind: string): void {
   if (kind === where && count === Number(nth)) process.kill(process.pid, 'SIGKILL');
 }
 
-// The same in every run: the agent is found again by what it was called.
-const FIXED = { now: 1_795_305_600_000, random: new Uint8Array(10).fill(7) };
-const agent = makeId('agent', FIXED);
-const deployment = { id: makeId('deployment', FIXED), version: 1 };
 const definition: AgentDefinition = {
   provider: 'fake',
   instructions: 'You look things up.',
@@ -60,24 +56,25 @@ const definition: AgentDefinition = {
 };
 
 const real = await SqliteStore.open(db);
-const store: Store = {
-  createActor: (actor) => real.createActor(actor),
-  loadActor: (id) => real.loadActor(id),
-  commit: async (id, epoch, change) => {
-    point('before-commit');
-    await real.commit(id, epoch, change);
-    point('after-commit');
-  },
-  addInput: async (input) => {
-    const status = await real.addInput(input);
-    if (status === 'accepted') point('after-input');
-    return status;
-  },
-  findInput: (actor, externalId) => real.findInput(actor, externalId),
-  pendingInputs: (actor) => real.pendingInputs(actor),
-  conversation: (actor, part) => real.conversation(actor, part),
-  unfinished: () => real.unfinished(),
-  close: () => real.close(),
+// The store, with a point before and after what it stores.
+const store = Object.create(real) as Store;
+for (const name of Object.getOwnPropertyNames(SqliteStore.prototype)) {
+  const method = (real as unknown as { [name: string]: unknown })[name];
+  if (name !== 'constructor' && typeof method === 'function') {
+    (store as unknown as { [name: string]: unknown })[name] = (
+      method as (...args: unknown[]) => unknown
+    ).bind(real);
+  }
+}
+store.commit = async (id, epoch, change) => {
+  point('before-commit');
+  await real.commit(id, epoch, change);
+  point('after-commit');
+};
+store.addInput = async (input) => {
+  const status = await real.addInput(input);
+  if (status === 'accepted') point('after-input');
+  return status;
 };
 
 const echo = echoRunner('lookup');
@@ -88,33 +85,35 @@ const runner: ModelRunner = {
   },
 };
 
-const executor = new InlineExecutor(
-  new Map([
-    [
-      deployment.id,
-      {
-        definition,
-        functions: {
-          'inputs.message.handler': (payload) => (payload as { text: string }).text,
-          'tools.lookup.execute': (asked) => {
-            // What the tool does outside the engine: written down before anything can stop it.
-            appendFileSync(ledger, `${JSON.stringify(asked)}\n`);
-            point('in-tool');
-            return `looked up ${JSON.stringify(asked)}`;
-          },
-        },
+const executor = new InlineExecutor({
+  'lookups@1': {
+    definition,
+    functions: {
+      'inputs.message.handler': (payload) => (payload as { text: string }).text,
+      'tools.lookup.execute': (asked) => {
+        // What the tool does outside the engine: written down before anything can stop it.
+        appendFileSync(ledger, `${JSON.stringify(asked)}\n`);
+        point('in-tool');
+        return `looked up ${JSON.stringify(asked)}`;
       },
-    ],
-  ]),
-);
-
-const engine = new Engine({ store, runner, executor });
-const { actor } = await engine.createActor({
-  agent,
-  deployment,
-  modelId: 'fake-1',
-  externalId: 'the-one-actor',
+    },
+  },
 });
+
+const engine = new Engine({
+  store,
+  runner,
+  executor,
+  providers: new Providers([fakeProvider(runner)]),
+});
+// The same in every run: the agent is found again by what it was called, and its code is its
+// newest already, so nothing is made after the first.
+const { agent } = await engine.deploy({
+  agent: 'lookups',
+  manifest: { protocol: 1, sdk: '0.15.0' },
+  code: 'lookups@1',
+});
+const { actor } = await engine.createActor({ agent: agent.id, externalId: 'the-one-actor' });
 
 const recovered = await engine.recover();
 for (const text of ['first', 'second']) {

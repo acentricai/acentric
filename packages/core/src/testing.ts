@@ -3,7 +3,7 @@
 
 import type { AgentDefinition, DeploymentId, Json } from '@acentric/protocol';
 
-import type { CallContext, CallResult, Executor } from './executor.ts';
+import type { Bundle, CallContext, CallResult, Executor } from './executor.ts';
 
 /** A function of an agent, as its code would have it. */
 export type AgentFunction = (
@@ -18,26 +18,42 @@ export type InlineAgent = {
   readonly functions: { readonly [path: string]: AgentFunction };
 };
 
+/**
+ * It has its agents from the start, each under a name, and no code: a deploy gives the name of
+ * the agent it is to be in place of code, such as `orders@1`.
+ */
 export class InlineExecutor implements Executor {
-  readonly #agents: ReadonlyMap<DeploymentId, InlineAgent>;
+  readonly #agents: ReadonlyMap<string, InlineAgent>;
+  readonly #loaded = new Map<DeploymentId, InlineAgent>();
   /** Every call that was made, in order. */
   readonly made: { readonly path: string; readonly argument: Json }[] = [];
-  /** How many times each deployment was asked what it is. */
-  described = 0;
+  /** How many times code was loaded. */
+  loads = 0;
 
-  constructor(agents: ReadonlyMap<DeploymentId, InlineAgent>) {
-    this.#agents = agents;
+  constructor(agents: { readonly [code: string]: InlineAgent }) {
+    this.#agents = new Map(Object.entries(agents));
   }
 
   #agent(deployment: DeploymentId): InlineAgent {
-    const agent = this.#agents.get(deployment);
-    if (agent === undefined) throw new Error(`There is no deployment ${deployment}`);
+    const agent = this.#loaded.get(deployment);
+    if (agent === undefined) throw new Error(`The deployment ${deployment} is not loaded`);
     return agent;
   }
 
-  async describe(deployment: DeploymentId): Promise<AgentDefinition> {
-    this.described += 1;
-    return structuredClone(this.#agent(deployment).definition);
+  async load(deployment: DeploymentId, bundle: Bundle): Promise<AgentDefinition> {
+    const agent = this.#agents.get(bundle.code);
+    if (agent === undefined) {
+      throw Object.assign(new Error(`The code does not load: there is no ${bundle.code}`), {
+        code: 'invalid_agent',
+      });
+    }
+    this.loads += 1;
+    this.#loaded.set(deployment, agent);
+    return structuredClone(agent.definition);
+  }
+
+  unload(deployment: DeploymentId): void {
+    this.#loaded.delete(deployment);
   }
 
   async call(

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { calls, says } from '@acentric/ai/testing';
-import { ScriptedRunner } from '@acentric/ai/testing';
-import { Engine, InvalidInput, MemoryStore } from '@acentric/core';
+import { Providers } from '@acentric/ai';
+import { ScriptedRunner, calls, fakeProvider, says } from '@acentric/ai/testing';
+import { Engine, InvalidConfiguration, InvalidInput, MemoryStore } from '@acentric/core';
 import { BUNDLE_PROTOCOL, makeId } from '@acentric/protocol';
 
 import { BundleError, InProcessExecutor, UnsupportedProtocol } from '../src/index.ts';
@@ -92,17 +92,21 @@ describe('a turn, with a real agent’s code', () => {
     calls({ id: 'c1', name: 'lookup_order', arguments: argument as never });
   const world = async (script: Parameters<typeof calls>[0][] | ReturnType<typeof says>[]) => {
     const executor = new InProcessExecutor({ secrets: () => 'k-1' });
-    await executor.load(deployment, { code: await bundle('orders'), agent });
     const store = new MemoryStore();
     const runner = new ScriptedRunner(script as never);
-    const engine = new Engine({ store, executor, runner });
+    const providers = new Providers([fakeProvider(runner)]);
+    const engine = new Engine({ store, executor, runner, providers });
+    // The code is deployed as the command will deploy it: built, and sent with what built it.
+    const deployed = await engine.deploy({
+      agent: 'support',
+      manifest: { protocol: BUNDLE_PROTOCOL, sdk: '0.15.0' },
+      code: await bundle('orders'),
+    });
     const { actor } = await engine.createActor({
-      agent: agent.id,
-      deployment: { id: deployment, version: 1 },
-      modelId: 'fake-1',
+      agent: deployed.agent.id,
       configuration: { region: 'eu' },
     });
-    return { engine, store, runner, actor };
+    return { engine, store, runner, actor, deployed };
   };
 
   it('takes a message, runs the agent’s tool, and ends with the model’s answer', async () => {
@@ -178,5 +182,61 @@ describe('a turn, with a real agent’s code', () => {
       issues: [{ path: ['text'] }],
     });
     expect(await store.pendingInputs(actor.id)).toEqual([]);
+  });
+
+  it('is deployed as an agent, with what its code said, and the secrets it still lacks', async () => {
+    const { engine, deployed } = await world([]);
+    expect(deployed.created).toBe(true);
+    expect(deployed.agent).toMatchObject({ name: 'support', provider: 'fake' });
+    expect(deployed.deployment).toMatchObject({ version: 1, createdBy: { type: 'system' } });
+    expect(deployed.deployment.definition.tools.map((tool) => tool.name)).toContain('lookup_order');
+    expect(deployed.missingSecrets).toEqual(['ORDERS_API_KEY']);
+    // The same code again is the same deployment.
+    const again = await engine.deploy({
+      agent: 'support',
+      manifest: { protocol: BUNDLE_PROTOCOL, sdk: '0.15.0' },
+      code: await bundle('orders'),
+    });
+    expect(again).toMatchObject({ created: false, deployment: { id: deployed.deployment.id } });
+  });
+
+  it('has an actor’s configuration as the agent’s schema returned it, and refuses one it refuses', async () => {
+    const { engine, actor, deployed } = await world([]);
+    expect(actor.configuration).toEqual({ region: 'eu' });
+    // What the schema fills in is part of it.
+    const filled = await engine.createActor({ agent: deployed.agent.id, configuration: {} });
+    expect(filled.actor.configuration).toEqual({ region: 'eu' });
+    // With none given, the schema is asked what it makes of none: this one takes an object.
+    await expect(engine.createActor({ agent: deployed.agent.id })).rejects.toBeInstanceOf(
+      InvalidConfiguration,
+    );
+
+    const refused = engine.createActor({
+      agent: deployed.agent.id,
+      configuration: { region: 5 },
+    });
+    await expect(refused).rejects.toBeInstanceOf(InvalidConfiguration);
+    await expect(refused).rejects.toMatchObject({
+      code: 'invalid_configuration',
+      issues: [{ path: ['region'] }],
+    });
+  });
+
+  it('is not deployed when it is not an agent, and nothing is kept of it', async () => {
+    const { engine, store } = await world([]);
+    const refused = engine.deploy({
+      agent: 'broken',
+      manifest: { protocol: BUNDLE_PROTOCOL, sdk: '0.15.0' },
+      code: 'export default { not: "an agent" };',
+    });
+    await expect(refused).rejects.toMatchObject({ code: 'invalid_agent' });
+    expect(await store.findAgent('broken')).toBeUndefined();
+
+    const old = engine.deploy({
+      agent: 'broken',
+      manifest: { protocol: BUNDLE_PROTOCOL + 1, sdk: '9.0.0' },
+      code: await bundle('orders'),
+    });
+    await expect(old).rejects.toMatchObject({ code: 'unsupported_protocol' });
   });
 });
