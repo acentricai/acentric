@@ -540,9 +540,26 @@ export class Machines {
       throw error;
     }
     if (answer.updated) {
-      // It starts again as the new program, and connects again.
-      await this.whenOffline(id);
-      await this.online(id, this.#times.returnMs);
+      // It starts again as the new program, and connects again: waited for until it has, on
+      // another connection than the one it was asked on, whichever of the two is seen first to
+      // go and to come.
+      const deadline = Date.now() + this.#times.returnMs;
+      for (;;) {
+        const now = this.#sessions.get(id);
+        const back = now !== undefined && now !== session && now.online;
+        const left = deadline - Date.now();
+        if (back || left <= 0 || this.#closing) break;
+        const waiting = this.#listen(`machine:${id}`);
+        let timer: NodeJS.Timeout | undefined;
+        await Promise.race([
+          waiting.heard,
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, Math.min(left, 250));
+          }),
+        ]);
+        clearTimeout(timer);
+        waiting.done();
+      }
     }
     return { machine: await this.get(id), updated: answer.updated };
   }
