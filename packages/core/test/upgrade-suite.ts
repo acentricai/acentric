@@ -158,7 +158,7 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         const features = deploy(one, 'machines', 'machines@1');
         await expect(features).rejects.toMatchObject({ code: 'unsupported_feature' });
         await expect(features).rejects.toThrow(/machine, schedule/);
-        expect(await store.listAgents()).toEqual([]);
+        expect((await store.listAgents()).items).toEqual([]);
 
         // An engine that has them takes it.
         const two = w.engine([], { versions, options: { features: ['machine', 'schedule'] } });
@@ -173,7 +173,7 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         await expect(
           one.it.deploy({ agent: AGENT, manifest: MANIFEST, code: 'nothing@1' }),
         ).rejects.toMatchObject({ code: 'invalid_agent' });
-        expect(await store.listAgents()).toEqual([]);
+        expect((await store.listAgents()).items).toEqual([]);
       });
 
       it('keeps what the agent asks of its provider as the provider read it, and refuses what it has not', async () => {
@@ -222,6 +222,52 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         ]);
         await secrets.set(agent.id, 'ORDERS_API_KEY', 'k-1');
         expect((await one.deploy('orders@3')).missingSecrets).toEqual(['BILLING_KEY']);
+      });
+    });
+
+    describe('an agent is deleted', () => {
+      it('with its deployments, its secrets and its actors, and its name is free again', async () => {
+        const one = w.engine([says('One.')]);
+        const agent = await one.agent();
+        const actor = await one.createActor();
+        await one.say(actor.id, 'First.');
+        await one.it.settled(actor.id);
+        await store.setSecret({ agent: agent.id, name: 'KEY', sealed: 's', updatedAt: 1 });
+
+        await one.it.deleteAgent(agent.id);
+        await expect(one.it.getAgent(agent.id)).rejects.toMatchObject({ code: 'not_found' });
+        await expect(one.it.getActor(actor.id)).rejects.toMatchObject({ code: 'not_found' });
+        await expect(one.say(actor.id, 'Second.')).rejects.toMatchObject({ code: 'not_found' });
+        expect(await store.secretNames(agent.id)).toEqual([]);
+        expect((await one.it.listActors({ limit: 10 })).items).toEqual([]);
+        await expect(one.it.deleteAgent(agent.id)).rejects.toMatchObject({ code: 'not_found' });
+
+        // Deployed again under the same name, it is a new agent, at its first version.
+        const again = await one.it.deploy({ agent: AGENT, manifest: MANIFEST, code: CODE });
+        expect(again).toMatchObject({ created: true, deployment: { version: 1 } });
+        expect(again.agent.id).not.toBe(agent.id);
+      });
+
+      it('with the turn one of its actors is in ended first', async () => {
+        const inTool = deferred<Json>();
+        const called = deferred<undefined>();
+        const one = w.engine([lookup], {
+          lookup: () => {
+            called.resolve(undefined);
+            return inTool.promise;
+          },
+        });
+        const agent = await one.agent();
+        const actor = await one.createActor();
+        await one.say(actor.id, 'First.');
+        await called.promise;
+
+        await one.it.deleteAgent(agent.id);
+        await one.it.settled();
+        expect(await store.loadActor(actor.id)).toBeUndefined();
+        expect(await store.unfinished()).toEqual([]);
+        expect(one.failures).toEqual([]);
+        expect(one.it.hot).toBe(0);
       });
     });
 

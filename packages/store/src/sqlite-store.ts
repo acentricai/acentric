@@ -7,7 +7,17 @@
 import { Worker } from 'node:worker_threads';
 
 import { NameTaken, OutOfOrder, StaleEpoch } from '@acentric/core';
-import type { ActorRecord, Change, SealedSecret, Store, StoredDeployment } from '@acentric/core';
+import type {
+  ActorRecord,
+  ActorsQuery,
+  Change,
+  PageOf,
+  Paged,
+  SealedSecret,
+  Store,
+  StoredDeployment,
+  StoredKey,
+} from '@acentric/core';
 import type {
   Actor,
   ActorId,
@@ -19,6 +29,7 @@ import type {
   Input,
   InputId,
   Json,
+  KeyId,
 } from '@acentric/protocol';
 
 import type { Operation } from './database.ts';
@@ -168,8 +179,40 @@ export class SqliteStore implements Store {
     return this.#write.ask('findAgent' satisfies Operation, name);
   }
 
-  listAgents(): Promise<Agent[]> {
-    return this.#read.ask('listAgents' satisfies Operation);
+  listAgents(page?: PageOf): Promise<Paged<Agent>> {
+    return this.#read.ask('listAgents' satisfies Operation, page);
+  }
+
+  listDeployments(agent: AgentId, page?: PageOf): Promise<Paged<Deployment>> {
+    return this.#read.ask('listDeployments' satisfies Operation, agent, page);
+  }
+
+  deleteAgent(
+    id: AgentId,
+  ): Promise<{ deployments: DeploymentId[]; actors: ActorId[] } | undefined> {
+    return this.#write.ask('deleteAgent' satisfies Operation, id);
+  }
+
+  addKey(key: StoredKey): Promise<void> {
+    return this.#write.ask('addKey' satisfies Operation, key);
+  }
+
+  // A key is read at every request it comes with: where it was written, so that one just
+  // made, or just revoked, is so at once.
+  loadKey(id: KeyId): Promise<StoredKey | undefined> {
+    return this.#write.ask('loadKey' satisfies Operation, id);
+  }
+
+  listKeys(): Promise<StoredKey[]> {
+    return this.#write.ask('listKeys' satisfies Operation);
+  }
+
+  removeKeys(ids: readonly KeyId[]): Promise<void> {
+    return this.#write.ask('removeKeys' satisfies Operation, ids);
+  }
+
+  touchKey(id: KeyId, at: number): Promise<void> {
+    return this.#write.ask('touchKey' satisfies Operation, id, at);
   }
 
   loadDeployment(id: DeploymentId): Promise<StoredDeployment | undefined> {
@@ -211,6 +254,10 @@ export class SqliteStore implements Store {
     return this.#write.ask('findActor' satisfies Operation, agent, externalId);
   }
 
+  listActors(query?: ActorsQuery): Promise<Paged<Actor>> {
+    return this.#read.ask('listActors' satisfies Operation, query);
+  }
+
   // What a driver is made from is read where it was written, so that it is never behind.
   loadActor(id: ActorId): Promise<ActorRecord | undefined> {
     return this.#write.ask('loadActor' satisfies Operation, id);
@@ -232,9 +279,21 @@ export class SqliteStore implements Store {
     return this.#write.ask('pendingInputs' satisfies Operation, actor);
   }
 
+  listInputs(
+    actor: ActorId,
+    query?: PageOf & { readonly pending?: boolean },
+  ): Promise<Paged<Input>> {
+    return this.#read.ask('listInputs' satisfies Operation, actor, query);
+  }
+
   conversation(
     actor: ActorId,
-    part?: { readonly after?: number; readonly limit?: number },
+    part?: {
+      readonly after?: number;
+      readonly before?: number;
+      readonly limit?: number;
+      readonly order?: 'asc' | 'desc';
+    },
   ): Promise<ConversationEntry[]> {
     return this.#read.ask('conversation' satisfies Operation, actor, part);
   }

@@ -12,12 +12,45 @@ import type {
   Input,
   InputId,
   Json,
+  KeyId,
 } from '@acentric/protocol';
 
 import { patched } from './state.ts';
 import type { ActorRecord, Change, Turn } from './state.ts';
 import { NameTaken, OutOfOrder, StaleEpoch } from './store.ts';
-import type { SealedSecret, Store, StoredDeployment } from './store.ts';
+import type {
+  ActorsQuery,
+  PageOf,
+  Paged,
+  SealedSecret,
+  Store,
+  StoredDeployment,
+  StoredKey,
+} from './store.ts';
+
+/**
+ * A page of what is in `all`, newest first: those whose `key` is below the cursor, `limit` at
+ * most. `key` orders them, and is what the cursor of the next page is.
+ */
+function pageOf<T>(
+  all: readonly T[],
+  key: (item: T) => string,
+  page: PageOf | undefined,
+): Paged<T> {
+  const limit = page?.limit ?? Number.POSITIVE_INFINITY;
+  const cursor = page?.cursor;
+  const sorted = all.toSorted((a, b) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0));
+  const from = cursor === undefined ? sorted : sorted.filter((item) => key(item) < cursor);
+  const items = from.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor: from.length > items.length && last !== undefined ? key(last) : null,
+  };
+}
+
+/** A whole number as text that sorts as the number does. */
+const ordered = (value: number): string => String(value).padStart(12, '0');
 
 type Kept = {
   actor: Actor;
@@ -36,6 +69,7 @@ export class MemoryStore implements Store {
   readonly #agents = new Map<AgentId, Agent>();
   readonly #deployments = new Map<DeploymentId, StoredDeployment>();
   readonly #secrets = new Map<string, SealedSecret>();
+  readonly #keys = new Map<KeyId, StoredKey>();
   readonly #actors = new Map<ActorId, Kept>();
   readonly #inputs = new Map<ActorId, Input[]>();
   readonly #entries = new Map<ActorId, ConversationEntry[]>();
@@ -84,8 +118,56 @@ export class MemoryStore implements Store {
     return copy([...this.#agents.values()].find((agent) => agent.name === name));
   }
 
-  async listAgents(): Promise<Agent[]> {
-    return copy([...this.#agents.values()]);
+  async listAgents(page?: PageOf): Promise<Paged<Agent>> {
+    return copy(pageOf([...this.#agents.values()], (agent) => agent.id, page));
+  }
+
+  async listDeployments(agent: AgentId, page?: PageOf): Promise<Paged<Deployment>> {
+    const all = [...this.#deployments.values()]
+      .map((stored) => stored.deployment)
+      .filter((deployment) => deployment.agent === agent);
+    return copy(pageOf(all, (deployment) => ordered(deployment.version), page));
+  }
+
+  async deleteAgent(
+    id: AgentId,
+  ): Promise<{ deployments: DeploymentId[]; actors: ActorId[] } | undefined> {
+    if (!this.#agents.delete(id)) return undefined;
+    const deployments = [...this.#deployments.values()]
+      .filter(({ deployment }) => deployment.agent === id)
+      .map(({ deployment }) => deployment.id);
+    for (const deployment of deployments) this.#deployments.delete(deployment);
+    for (const [key, secret] of this.#secrets) if (secret.agent === id) this.#secrets.delete(key);
+    const actors = [...this.#actors.values()]
+      .filter((kept) => kept.actor.agent === id)
+      .map((kept) => kept.actor.id);
+    for (const actor of actors) {
+      this.#actors.delete(actor);
+      this.#inputs.delete(actor);
+      this.#entries.delete(actor);
+    }
+    return { deployments, actors };
+  }
+
+  async addKey(key: StoredKey): Promise<void> {
+    this.#keys.set(key.key.id, copy(key));
+  }
+
+  async loadKey(id: KeyId): Promise<StoredKey | undefined> {
+    return copy(this.#keys.get(id));
+  }
+
+  async listKeys(): Promise<StoredKey[]> {
+    return copy([...this.#keys.values()]);
+  }
+
+  async removeKeys(ids: readonly KeyId[]): Promise<void> {
+    for (const id of ids) this.#keys.delete(id);
+  }
+
+  async touchKey(id: KeyId, at: number): Promise<void> {
+    const kept = this.#keys.get(id);
+    if (kept !== undefined) this.#keys.set(id, { ...kept, key: { ...kept.key, lastUsedAt: at } });
   }
 
   async loadDeployment(id: DeploymentId): Promise<StoredDeployment | undefined> {
@@ -159,6 +241,22 @@ export class MemoryStore implements Store {
     return found === undefined ? undefined : this.#record(found);
   }
 
+  async listActors(
+    query: ActorsQuery = { limit: Number.POSITIVE_INFINITY },
+  ): Promise<Paged<Actor>> {
+    const all = [...this.#actors.values()]
+      .map((kept) => this.#record(kept).actor)
+      .filter(
+        (actor) =>
+          (query.agent === undefined || actor.agent === query.agent) &&
+          (query.actor === undefined || actor.id === query.actor) &&
+          (query.status === undefined || actor.status === query.status) &&
+          (query.name === undefined || actor.name === query.name) &&
+          (query.externalId === undefined || actor.externalId === query.externalId),
+      );
+    return pageOf(all, (actor) => actor.id, query);
+  }
+
   async commit(id: ActorId, epoch: number, change: Change): Promise<void> {
     const kept = this.#actors.get(id);
     if (kept === undefined) throw new Error(`There is no actor ${id}`);
@@ -219,12 +317,31 @@ export class MemoryStore implements Store {
     return copy(this.#pending(actor));
   }
 
+  async listInputs(
+    actor: ActorId,
+    query: PageOf & { readonly pending?: boolean } = { limit: Number.POSITIVE_INFINITY },
+  ): Promise<Paged<Input>> {
+    const all = (this.#inputs.get(actor) ?? []).filter(
+      (input) => query.pending === undefined || (input.deliveredAt === null) === query.pending,
+    );
+    return copy(pageOf(all, (input) => input.id, query));
+  }
+
   async conversation(
     actor: ActorId,
-    part: { readonly after?: number; readonly limit?: number } = {},
+    part: {
+      readonly after?: number;
+      readonly before?: number;
+      readonly limit?: number;
+      readonly order?: 'asc' | 'desc';
+    } = {},
   ): Promise<ConversationEntry[]> {
-    const after = (this.#entries.get(actor) ?? []).filter((entry) => entry.seq > (part.after ?? 0));
-    return copy(part.limit === undefined ? after : after.slice(0, part.limit));
+    const within = (this.#entries.get(actor) ?? []).filter(
+      (entry) =>
+        entry.seq > (part.after ?? 0) && entry.seq < (part.before ?? Number.POSITIVE_INFINITY),
+    );
+    const inOrder = part.order === 'desc' ? within.toReversed() : within;
+    return copy(part.limit === undefined ? inOrder : inOrder.slice(0, part.limit));
   }
 
   async unfinished(): Promise<ActorId[]> {

@@ -20,6 +20,8 @@ import type {
   Input,
   InputId,
   Json,
+  Key,
+  KeyId,
 } from '@acentric/protocol';
 
 import type { ActorRecord, Change } from './state.ts';
@@ -53,6 +55,30 @@ export class OutOfOrder extends Error {
   }
 }
 
+/** A page of a list: its items, and what names the next page, or null on the last. */
+export type Paged<T> = { readonly items: T[]; readonly nextCursor: string | null };
+
+/** Which page of a list is asked for: so many, after where the page before ended. */
+export type PageOf = { readonly limit: number; readonly cursor?: string };
+
+/** An API key as the store keeps it: never the key itself, only what tells it is the one. */
+export type StoredKey = {
+  readonly key: Key;
+  /** The SHA-256 of the key's secret part, in hex. */
+  readonly hash: string;
+  /** The key that made it: it is revoked with that one. Null for one no key made. */
+  readonly parent: KeyId | null;
+};
+
+/** Which actors a list gives. Each filter narrows it. */
+export type ActorsQuery = PageOf & {
+  readonly agent?: AgentId;
+  readonly actor?: ActorId;
+  readonly status?: Actor['status'];
+  readonly name?: string;
+  readonly externalId?: string;
+};
+
 /** A deployment with the code it runs. */
 export type StoredDeployment = { readonly deployment: Deployment; readonly code: string };
 
@@ -85,11 +111,32 @@ export interface Store {
   setActive(agent: AgentId, version: number): Promise<Agent | undefined>;
   loadAgent(id: AgentId): Promise<Agent | undefined>;
   findAgent(name: string): Promise<Agent | undefined>;
-  /** Every agent, in the order they were made. */
-  listAgents(): Promise<Agent[]>;
+  /** Agents, newest first. */
+  listAgents(page?: PageOf): Promise<Paged<Agent>>;
   loadDeployment(id: DeploymentId): Promise<StoredDeployment | undefined>;
   /** The deployment of an agent with this version, without its code. */
   findDeployment(agent: AgentId, version: number): Promise<Deployment | undefined>;
+  /** An agent's deployments, newest first, without their code. */
+  listDeployments(agent: AgentId, page?: PageOf): Promise<Paged<Deployment>>;
+  /**
+   * Removes an agent with everything of it: its deployments and their code, its secrets, and
+   * its actors with their conversations and their mailboxes. All of it, or none. It gives the
+   * deployments and the actors that went, or undefined when there is no such agent.
+   */
+  deleteAgent(
+    id: AgentId,
+  ): Promise<{ readonly deployments: DeploymentId[]; readonly actors: ActorId[] } | undefined>;
+
+  // API keys
+
+  addKey(key: StoredKey): Promise<void>;
+  loadKey(id: KeyId): Promise<StoredKey | undefined>;
+  /** Every key, in the order they were made. */
+  listKeys(): Promise<StoredKey[]>;
+  /** Removes keys: from then on they are not known. */
+  removeKeys(ids: readonly KeyId[]): Promise<void>;
+  /** Notes when a request last came with a key. */
+  touchKey(id: KeyId, at: number): Promise<void>;
 
   // Secrets
 
@@ -118,6 +165,8 @@ export interface Store {
   loadActor(id: ActorId): Promise<ActorRecord | undefined>;
   /** The actor of an agent with this external ID, if it has one. */
   findActor(agent: AgentId, externalId: string): Promise<ActorRecord | undefined>;
+  /** Actors, newest first. */
+  listActors(query?: ActorsQuery): Promise<Paged<Actor>>;
   /**
    * Stores `change`, if the actor is still at `epoch`. Rejects with `StaleEpoch` when it is
    * not, and with `NameTaken` when the change names the actor as another of its agent is.
@@ -133,11 +182,27 @@ export interface Store {
   findInput(actor: ActorId, externalId: string): Promise<InputId | undefined>;
   /** What waits in the mailbox, oldest first. */
   pendingInputs(actor: ActorId): Promise<Input[]>;
+  /**
+   * What an actor was sent, newest first: only what waits with `pending` true, only what a
+   * turn took with it false, and both without it.
+   */
+  listInputs(
+    actor: ActorId,
+    query?: PageOf & { readonly pending?: boolean },
+  ): Promise<Paged<Input>>;
 
-  /** A part of the conversation, in order: the messages after `after`, `limit` at most. */
+  /**
+   * A part of the conversation: the messages after `after` and before `before`, `limit` at
+   * most, in order, or from the newest back with `order` `desc`.
+   */
   conversation(
     actor: ActorId,
-    part?: { readonly after?: number; readonly limit?: number },
+    part?: {
+      readonly after?: number;
+      readonly before?: number;
+      readonly limit?: number;
+      readonly order?: 'asc' | 'desc';
+    },
   ): Promise<ConversationEntry[]>;
 
   /** The actors with something owed: a turn under way, or mail that waits. */
