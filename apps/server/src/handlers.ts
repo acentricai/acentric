@@ -263,6 +263,7 @@ export const handlers: Handlers = {
   'actors.archive': (asked, { engine }) => engine.archive(actorOf(asked).id),
   'actors.unarchive': (asked, { engine }) => engine.unarchive(actorOf(asked).id),
   'actors.interrupt': (asked, { engine }) => engine.interrupt(actorOf(asked).id),
+  'actors.abort': (asked, { engine }) => engine.abort(actorOf(asked).id),
   'actors.retry': (asked, { engine }) => engine.retry(actorOf(asked).id),
 
   // Inputs, the conversation and its events
@@ -301,6 +302,14 @@ export const handlers: Handlers = {
     const seen = header !== null && /^\d+$/.test(header) ? Number(header) : undefined;
     return streams.follow(engine, actorOf(asked), seen ?? asked.query.after, asked.request);
   },
+
+  // Tasks
+
+  'tasks.list': async (asked, { engine }) => ({
+    items: await engine.tasks.list(actorOf(asked).id, defined(asked.query)),
+  }),
+  'tasks.get': (asked, { engine }) => engine.tasks.get(actorOf(asked).id, asked.params.task),
+  'tasks.stop': (asked, { engine }) => engine.tasks.stop(actorOf(asked).id, asked.params.task),
 
   'blobs.get': async (asked, { engine }) => {
     const { digest } = asked.params;

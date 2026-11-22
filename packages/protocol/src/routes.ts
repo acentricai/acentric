@@ -47,6 +47,13 @@ import {
   updateActorRequestSchema,
 } from './resources/actors.ts';
 import {
+  abortResponseSchema,
+  listTasksQuerySchema,
+  taskDetailSchema,
+  taskIdSchema,
+  taskSchema,
+} from './resources/tasks.ts';
+import {
   agentSchema,
   deployRequestSchema,
   deployResponseSchema,
@@ -346,6 +353,17 @@ export const routes = defineRoutes({
     status: 200,
     errors: ['not_found', 'actor_archived'],
   },
+  'actors.abort': {
+    method: 'POST',
+    path: '/v1/actors/{actor}/abort',
+    summary:
+      'Stops everything an actor is doing: its turn and its tasks. What waited in its mailbox starts no turn.',
+    auth: onActor('actors:stop'),
+    params: actorParam,
+    response: abortResponseSchema,
+    status: 200,
+    errors: ['not_found', 'actor_archived'],
+  },
   'actors.retry': {
     method: 'POST',
     path: '/v1/actors/{actor}/retry',
@@ -407,6 +425,40 @@ export const routes = defineRoutes({
     status: 200,
     errors: ['not_found'],
     stream: true,
+  },
+
+  // Tasks: work an actor's model started that may go on after the call that started it
+
+  'tasks.list': {
+    method: 'GET',
+    path: '/v1/actors/{actor}/tasks',
+    summary: "Lists an actor's tasks, newest first.",
+    auth: onActor('actors:read'),
+    params: actorParam,
+    query: listTasksQuerySchema,
+    response: z.object({ items: z.array(taskSchema) }).meta({ id: 'TaskList' }),
+    status: 200,
+    errors: ['not_found'],
+  },
+  'tasks.get': {
+    method: 'GET',
+    path: '/v1/actors/{actor}/tasks/{task}',
+    summary: 'Reads a task, with what it was started with and what it came to.',
+    auth: onActor('actors:read'),
+    params: z.object({ actor: actorIdSchema, task: taskIdSchema }),
+    response: taskDetailSchema,
+    status: 200,
+    errors: ['not_found'],
+  },
+  'tasks.stop': {
+    method: 'POST',
+    path: '/v1/actors/{actor}/tasks/{task}/stop',
+    summary: 'Stops a task, and answers once it has ended.',
+    auth: onActor('actors:stop'),
+    params: z.object({ actor: actorIdSchema, task: taskIdSchema }),
+    response: taskSchema,
+    status: 200,
+    errors: ['not_found'],
   },
 
   'blobs.get': {
