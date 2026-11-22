@@ -175,9 +175,12 @@ describe('a machine, from the acentric command to a program that is connected', 
     const handed = await fetch(`${up.server.url}/machine/${SYSTEM}`);
     expect(handed.status).toBe(200);
     expect(handed.headers.get('content-type')).toBe('application/octet-stream');
-    expect(Buffer.from(await handed.arrayBuffer())).toEqual(
-      readFileSync(join(downloads, 'machine', SYSTEM)),
-    );
+    // Compared as bytes, not shown: a program that was not built small is tens of megabytes.
+    expect(
+      Buffer.from(await handed.arrayBuffer()).equals(
+        readFileSync(join(downloads, 'machine', SYSTEM)),
+      ),
+    ).toBe(true);
     const none = await fetch(`${up.server.url}/machine/plan9-mips`);
     expect(none.status).toBe(404);
     expect(await none.json()).toMatchObject({
@@ -187,7 +190,7 @@ describe('a machine, from the acentric command to a program that is connected', 
       },
     });
     expect((await fetch(`${up.server.url}/machine/..%2Facentric.mjs`)).status).toBe(404);
-  });
+  }, 30_000);
 
   it('is added with a command to run on it, which installs the program and enrols it', async (context) => {
     if (program === undefined) return context.skip();
@@ -222,7 +225,7 @@ describe('a machine, from the acentric command to a program that is connected', 
     const bin = join(machineHome, '.acentric', 'bin', 'machine');
     expect(installed.out).toContain(`Installed ${bin}, version acentric-machine `);
     expect(installed.out).toContain(`Run \`${bin} connect\` to connect it.`);
-    expect(readFileSync(bin)).toEqual(readFileSync(join(downloads, 'machine', SYSTEM)));
+    expect(readFileSync(bin).equals(readFileSync(join(downloads, 'machine', SYSTEM)))).toBe(true);
     expect(existsSync(join(machineHome, '.acentric', 'machine.json'))).toBe(true);
     expect((await acentric('machines')).out).toMatch(/build-box\s+offline\s+1\s+mch_/);
 
@@ -257,7 +260,7 @@ describe('a machine, from the acentric command to a program that is connected', 
     expect(updated.code, updated.out).toBe(0);
     expect(updated.out).toMatch(/^build-box: updated to \d+\.\d+\.\d+/m);
     // The program on the machine is the engine's now, and it is running as it.
-    expect(readFileSync(bin)).toEqual(readFileSync(join(downloads, 'machine', SYSTEM)));
+    expect(readFileSync(bin).equals(readFileSync(join(downloads, 'machine', SYSTEM)))).toBe(true);
     expect((await machines())[0]).toMatchObject({ online: true, current: true });
     expect((await acentric('machines')).out).not.toContain('update available');
     expect(daemon.exitCode).toBeNull();
@@ -283,7 +286,7 @@ describe('a machine, from the acentric command to a program that is connected', 
       machineEnv,
     );
     expect(again.code, again.out).toBe(0);
-    expect(readFileSync(bin)).toEqual(readFileSync(join(downloads, 'machine', SYSTEM)));
+    expect(readFileSync(bin).equals(readFileSync(join(downloads, 'machine', SYSTEM)))).toBe(true);
   }, 90_000);
 
   it('is removed, and its program is taken off the computer by the script', async (context) => {
