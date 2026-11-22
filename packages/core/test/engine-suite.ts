@@ -23,7 +23,17 @@ import {
 import { MemoryBlobStore } from '../src/blobs.ts';
 import type { Store } from '../src/store.ts';
 import { Lost } from '../src/testing.ts';
-import { CODE, HANDLER, LOOKUP, MANIFEST, deferred, eventually, over, world } from './world.ts';
+import {
+  CODE,
+  HANDLER,
+  LOOKUP,
+  MANIFEST,
+  deferred,
+  eventually,
+  over,
+  world,
+  told,
+} from './world.ts';
 import type { World } from './world.ts';
 
 const lookup = calls({ id: 'c1', name: 'lookup_order', arguments: { id: 4411 } });
@@ -91,7 +101,8 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         expect(one.steps).toHaveLength(2);
         expect(one.steps[0]).toMatchObject({
           model: 'fake-1',
-          instructions: 'You answer questions about orders.',
+          // What the harness tells every actor, and then the agent's own.
+          instructions: told('You answer questions about orders.'),
           tools: [{ type: 'function', name: 'lookup_order' }],
           messages: [{ role: 'user', content: [{ type: 'text', text: 'Why two refunds?' }] }],
         });

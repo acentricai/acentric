@@ -93,10 +93,19 @@ export type Host = {
   /** The deployment of an agent with a version. Undefined when it has none. */
   version(agent: AgentId, version: number): Promise<DeploymentRef | undefined>;
   /**
-   * What names the instructions and tools the model is sent for a definition, with the
-   * engine's own tools the actor is offered.
+   * The instructions an actor's model is sent: the harness's own, for what the actor has, and
+   * then its agent's. `own` is the engine's tools the actor is offered.
    */
-  fingerprint(definition: AgentDefinition, own: readonly EngineTool[]): string;
+  instructions(actor: Actor, definition: AgentDefinition, own: readonly EngineTool[]): string;
+  /**
+   * What names the instructions and tools the model is sent for a definition, with the
+   * engine's own tools the actor is offered and the instructions as they are sent.
+   */
+  fingerprint(
+    definition: AgentDefinition,
+    own: readonly EngineTool[],
+    instructions: string,
+  ): string;
   /** Whether the reasoning of the actor's model is tied to what came before it. */
   bindsReasoning(actor: Actor, definition: AgentDefinition): boolean;
   /** An answer of the definition's provider, without its reasoning. */
@@ -187,6 +196,24 @@ export type ActorUpdate = {
 };
 
 /** How an actor fits a deployment: with what configuration, or why it does not. */
+/**
+ * What is wrong with an actor having a machine or not, against what its agent's definition
+ * says: undefined when nothing is. `version` is given when it is a version it is to move to.
+ */
+export function machineRuleUnmet(
+  definition: AgentDefinition,
+  hasMachine: boolean,
+  version?: number,
+): string | undefined {
+  const of = version === undefined ? 'of the agent' : `of version ${String(version)} of the agent`;
+  const works = definition.features?.includes('machine') === true;
+  if (works && !hasMachine) return `An actor ${of} works on a machine: give machine { id, cwd }`;
+  if (!works && hasMachine) {
+    return `An actor ${of} has no machine: its agent does not say machine: true`;
+  }
+  return undefined;
+}
+
 type Fit =
   | { readonly ok: true; readonly configuration: Json | null; readonly given: Json | null }
   /** `passing`: it could not be checked just now, which says nothing of whether it fits. */
@@ -236,6 +263,8 @@ export class ActorDriver {
   #held = false;
   #commands: Command[] = [];
   #applying: Promise<unknown> = Promise.resolve();
+  /** The names of its variables, when they were changed while this driver had it. */
+  #envNames: string[] | undefined;
 
   constructor(host: Host, record: ActorRecord, mail: Input[]) {
     this.#host = host;
@@ -342,6 +371,23 @@ export class ActorDriver {
   }
 
   /**
+   * The variables its commands are run with were changed, in the store: these are their names
+   * from now on. They are no part of a turn, and are changed while one goes on.
+   */
+  envNamed(names: readonly string[]): Actor {
+    this.#envNames = [...names];
+    this.record = this.#withEnv(this.record);
+    return this.record.actor;
+  }
+
+  /** A record with the names of its variables as they were last changed here. */
+  #withEnv(record: ActorRecord): ActorRecord {
+    const { machine } = record.actor;
+    if (this.#envNames === undefined || machine === null) return record;
+    return { ...record, actor: { ...record.actor, machine: { ...machine, env: this.#envNames } } };
+  }
+
+  /**
    * Changes what the actor was created with. Only between turns: it is refused at once for an
    * actor in a turn. Nothing is changed when its configuration does not fit.
    */
@@ -437,6 +483,11 @@ export class ActorDriver {
       definition = await this.#host.definition(deployment.id);
     } catch (error) {
       return refused(error instanceof Error ? error.message : String(error));
+    }
+    // Whether its actors work on a machine is the agent's to say, and an actor is as it was made.
+    const unmet = machineRuleUnmet(definition, actor.machine !== null, deployment.version);
+    if (unmet !== undefined) {
+      return { ok: false, passing: false, reason: unmet, error: new Conflict(unmet) };
     }
     if (definition.configuration === null && given === undefined) {
       return { ok: true, configuration: null, given: null };
@@ -839,7 +890,8 @@ export class ActorDriver {
     const definition = await this.#host.definition(actor.deployment.id);
     // The engine's own tools, after the agent's.
     const own = this.#host.tasks.tools(actor);
-    const fingerprint = this.#host.fingerprint(definition, own);
+    const instructions = this.#host.instructions(actor, definition, own);
+    const fingerprint = this.#host.fingerprint(definition, own, instructions);
     const changed = this.record.sent !== null && this.record.sent !== fingerprint;
     const from =
       changed && this.#host.bindsReasoning(actor, definition) ? nextSeq : this.record.reasoningFrom;
@@ -865,7 +917,7 @@ export class ActorDriver {
       model: actor.modelId,
       // Where its level was changed in its conversation, the call's own stays what it was.
       reasoning: this.record.reasoningSent ?? actor.reasoning,
-      instructions: definition.instructions,
+      instructions,
       tools: [
         ...definition.tools.map((tool): EngineTool => ({
           type: 'function',
@@ -910,7 +962,8 @@ export class ActorDriver {
       const taken = new Set(change.deliver);
       this.mail = this.mail.filter((input) => !taken.has(input.id));
     }
-    this.record = applyChange(before, change, this.mail.length);
+    // A step that was being stored while the actor's variables were changed read the old names.
+    this.record = this.#withEnv(applyChange(before, change, this.mail.length));
     if (this.#conversation !== null) {
       if (change.leaveOutFrom === null) {
         for (const { seq, message, leftOut } of change.append) {

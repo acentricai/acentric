@@ -5,7 +5,13 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { Providers } from '@acentric/ai';
 import { ScriptedRunner, calls, fakeProvider, says } from '@acentric/ai/testing';
-import { Engine, InvalidConfiguration, InvalidInput, MemoryStore } from '@acentric/core';
+import {
+  Engine,
+  InvalidConfiguration,
+  InvalidInput,
+  MemoryStore,
+  instructionsOf,
+} from '@acentric/core';
 import type { Executor } from '@acentric/core';
 import { BUNDLE_PROTOCOL } from '@acentric/protocol';
 
@@ -73,7 +79,9 @@ export function turnSuite(
         ],
       });
       // The model was offered the agent's tools, by what their schemas say.
-      expect(runner.steps[0]?.instructions).toBe('You answer questions about orders.');
+      expect(runner.steps[0]?.instructions).toBe(
+        instructionsOf({ tools: [], machine: null }, 'You answer questions about orders.'),
+      );
       expect(runner.steps[0]?.tools.map((tool) => tool.name)).toEqual([
         'lookup_order',
         'whoami',
