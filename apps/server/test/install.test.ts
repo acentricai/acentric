@@ -262,10 +262,17 @@ describe('a machine, from the acentric command to a program that is connected', 
     expect((await acentric('machines')).out).not.toContain('update available');
     expect(daemon.exitCode).toBeNull();
 
-    // There is nothing more to take.
+    // There is nothing more to take. With `--all`, one that is away is passed over, and said.
+    expect((await acentric('machines add spare --all-agents')).code).toBe(0);
     const all = await acentric('machines update --all');
     expect(all.code, all.out).toBe(0);
     expect(all.out).toMatch(/^build-box: up to date \(/m);
+    expect(all.out).toMatch(/^spare: not installed, not updated$/m);
+    // Asked for by name, one that is away is a failure to do what was asked.
+    const away = await acentric('machines update spare');
+    expect(away.code).toBe(1);
+    expect(away.out).toContain('is not connected');
+    expect((await acentric('machines remove spare')).code).toBe(0);
     const neither = await acentric('machines update');
     expect(neither.code).toBe(1);
 

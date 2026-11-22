@@ -22,7 +22,8 @@ FROM rust:1.97-slim AS machine
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends python3-pip \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --break-system-packages cargo-zigbuild==0.24.0 ziglang==0.16.0
+    && pip install --no-cache-dir --break-system-packages --resume-retries 5 \
+         cargo-zigbuild==0.24.0 ziglang==0.16.0
 WORKDIR /repo
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 RUN rustup target add \
