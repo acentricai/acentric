@@ -4,7 +4,8 @@
     "noEmit": true,
     "rewriteRelativeImportExtensions": false,
     "allowImportingTsExtensions": true,
-    "tsBuildInfoFile": "tsconfig.tsbuildinfo"
+    "tsBuildInfoFile": "tsconfig.tsbuildinfo",
+    "types": ["node"]
   },
   "include": ["."],
   "references": [{ "path": ".." }]
