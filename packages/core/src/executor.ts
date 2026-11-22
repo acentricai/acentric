@@ -1,6 +1,6 @@
-// What runs an agent's code. The engine asks two things of it: what the code says of itself,
-// and to call one of its functions. Where the code runs, and how it is kept from the engine,
-// is the executor's own.
+// What runs an agent's code. The engine gives it the code of a deployment, which it loads and
+// asks what it is, and then has it call the code's functions. Where the code runs, and how it
+// is kept from the engine, is the executor's own.
 
 import type {
   Actor,
@@ -58,9 +58,23 @@ export function issuesText(issues: readonly CallIssue[]): string {
     .join('; ');
 }
 
+/** The code of a deployment, and the agent it is a deployment of. */
+export type Bundle = {
+  /** One ES module, with everything it needs inside it. */
+  readonly code: string;
+  readonly agent: { readonly id: AgentId; readonly name: string };
+};
+
 export interface Executor {
-  /** What the deployment's code says of itself. It never changes for a deployment. */
-  describe(deployment: DeploymentId): Promise<AgentDefinition>;
+  /**
+   * Takes the code of a deployment, and gives what the code says of itself. It is asked
+   * before a deployment is first called, and may be asked again for one it has. Rejects, with
+   * why, when the code is not an agent: an error whose `code` is `invalid_agent` or
+   * `unsupported_protocol`.
+   */
+  load(deployment: DeploymentId, bundle: Bundle): Promise<AgentDefinition>;
+  /** Forgets a deployment: one that was refused after it was loaded, or whose agent is gone. */
+  unload(deployment: DeploymentId): void | Promise<void>;
   /**
    * Calls a function of the deployment's code by its path, such as
    * `tools.lookup_order.execute`. It answers as soon as it can when `signal` is aborted.

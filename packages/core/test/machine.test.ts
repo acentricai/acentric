@@ -36,6 +36,9 @@ function at(turn: Turn, said = 0, lastTurn: TurnEnd | null = null): ActorRecord 
     turn,
     epoch: 0,
     nextSeq: said + 1,
+    configurationGiven: null,
+    sent: null,
+    reasoningFrom: 1,
   };
 }
 
@@ -318,5 +321,84 @@ describe('what does not follow from where the actor stands', () => {
         `${event.type} at ${record.actor.status}, ${record.turn.phase}`,
       ).toThrow(OutOfTurn);
     }
+  });
+});
+
+describe('an actor moves, and is changed', () => {
+  const next = { id: makeId('deployment', source(9)), version: 2 };
+
+  it('to another deployment as a turn starts, in the step that starts it', () => {
+    const set = { deployment: next, configuration: { region: 'eu' }, behind: null };
+    const before = at(IDLE, 4);
+    const change = decide(before, { type: 'wake', inputs: [input(10, 'one')], set }, NOW);
+    expect(change.set).toEqual(set);
+    expect(change.turn).toEqual(model({ startSeq: 5 }));
+    const after = applyChange(before, change, 0);
+    expect(after.actor).toMatchObject({ deployment: next, configuration: { region: 'eu' } });
+    // A turn that starts with nothing to move changes nothing of the actor.
+    expect(decide(before, { type: 'wake', inputs: [input(10, 'one')] }, NOW).set).toBeNull();
+  });
+
+  it('or stays where it is, with why it could not move', () => {
+    const behind = { deployment: next, reason: 'region: Required' };
+    const before = at(IDLE);
+    const change = decide(
+      before,
+      { type: 'wake', inputs: [input(10, 'one')], set: { behind } },
+      NOW,
+    );
+    const after = applyChange(before, change, 0);
+    expect(after.actor.behind).toEqual(behind);
+    expect(after.actor.deployment).toEqual(before.actor.deployment);
+  });
+
+  it('by a person between turns, and at no other time', () => {
+    const set = { name: 'eu-desk', modelId: 'fake-2', configurationGiven: { region: 'eu' } };
+    const before = at(IDLE, 3, { end: 'ok', at: NOW });
+    const change = decide(before, { type: 'update', set }, NOW + 5);
+    expect(change).toMatchObject({ status: 'idle', turn: IDLE, append: [], deliver: [] });
+    // It is no turn: how the last one ended stays as it was.
+    expect(change.lastTurn).toEqual({ end: 'ok', at: NOW });
+    const after = applyChange(before, change, 0);
+    expect(after.actor).toMatchObject({ name: 'eu-desk', modelId: 'fake-2' });
+    // What it was given is kept beside the actor, not in it.
+    expect(after.configurationGiven).toEqual({ region: 'eu' });
+    expect(after.actor).not.toHaveProperty('configurationGiven');
+
+    expect(() => decide(at(model()), { type: 'update', set }, NOW)).toThrow(OutOfTurn);
+    expect(() => decide(owing(), { type: 'update', set }, NOW)).toThrow(OutOfTurn);
+  });
+});
+
+describe('the model’s reasoning', () => {
+  it('is sent from a place, which an answer is stored with', () => {
+    const before = at(model(), 6);
+    expect(before.reasoningFrom).toBe(1);
+    const sent = { fingerprint: 'abc', reasoningFrom: 7 };
+    for (const answer of [says('Twice.'), two]) {
+      const change = decide(before, { type: 'answered', answer, sent }, NOW);
+      expect(change.sent).toEqual(sent);
+      expect(applyChange(before, change, 0)).toMatchObject({ sent: 'abc', reasoningFrom: 7 });
+    }
+    // A step that is no answer leaves it as it was.
+    const other = decide(before, { type: 'model_failed', reason: 'x', retryable: true }, NOW);
+    expect(other.sent).toBeNull();
+    expect(applyChange(before, other, 0)).toMatchObject({ sent: null, reasoningFrom: 1 });
+  });
+
+  it('is left out from here on when the provider refuses it, and the call is made again at once', () => {
+    const before = { ...at(model(), 6), sent: 'abc' };
+    const event: MachineEvent = {
+      type: 'model_failed',
+      reason: 'The block is bound to a different conversation',
+      retryable: false,
+      staleReasoning: true,
+    };
+    const change = decide(before, event, NOW);
+    expect(change.turn).toEqual(model({ attempt: 2, retryAt: null }));
+    expect(change.sent).toEqual({ fingerprint: 'abc', reasoningFrom: 7 });
+    // Not for ever: it is a try like any other, and the tries run out.
+    const last = { ...at(model({ attempt: 4 }), 6), sent: 'abc' };
+    expect(decide(last, event, NOW)).toMatchObject({ status: 'idle', lastTurn: { end: 'failed' } });
   });
 });

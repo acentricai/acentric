@@ -57,7 +57,8 @@ export function executorSuite(
     });
 
     it('says what the code is', async () => {
-      const definition = await executor.describe(first);
+      // Asked again for a deployment it has, it says the same.
+      const definition = await executor.load(first, { code, agent });
       expect(agentDefinitionSchema.parse(definition)).toEqual(definition);
       expect(definition).toMatchObject({
         provider: 'fake',
@@ -167,7 +168,6 @@ export function executorSuite(
 
     it('has nothing for a deployment it was not given', async () => {
       const unknown = makeId('deployment', source(9));
-      await expect(executor.describe(unknown)).rejects.toThrow(/not loaded/);
       await expect(
         executor.call(unknown, 'tools.whoami.execute', {}, context, signal()),
       ).rejects.toThrow(/not loaded/);

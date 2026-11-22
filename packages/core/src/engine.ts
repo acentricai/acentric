@@ -4,13 +4,24 @@
 // an actor is in the store. When the process stops, with or without warning, nothing is lost
 // that was stored: the next engine on the store picks up what is owed.
 
-import type { ModelRunner } from '@acentric/ai';
-import { makeId } from '@acentric/protocol';
+import { createHash } from 'node:crypto';
+
+import { bindsReasoning, builtInProviders } from '@acentric/ai';
+import type { ModelRunner, Providers } from '@acentric/ai';
+import {
+  SUPPORTED_BUNDLE_PROTOCOLS,
+  agentDefinitionSchema,
+  makeId,
+  supportsBundleProtocol,
+} from '@acentric/protocol';
 import type {
   Actor,
   ActorId,
+  Agent,
   AgentDefinition,
   AgentId,
+  BundleManifest,
+  Deployment,
   DeploymentId,
   DeploymentRef,
   ExternalId,
@@ -18,19 +29,32 @@ import type {
   InputId,
   Json,
   Name,
+  PrincipalRef,
   Reasoning,
 } from '@acentric/protocol';
 
 import { MemoryBus } from './bus.ts';
 import type { EventBus } from './bus.ts';
 import { ActorDriver, contentOf } from './driver.ts';
-import type { Clock, Host, Timer } from './driver.ts';
-import { ActorArchived, ActorNotFound, InvalidInput, Unavailable, UnknownInput } from './errors.ts';
+import type { ActorUpdate, Clock, Host, Timer } from './driver.ts';
+import {
+  ActorArchived,
+  ActorNotFound,
+  AgentNotFound,
+  InvalidAgent,
+  InvalidConfiguration,
+  InvalidInput,
+  Unavailable,
+  UnknownInput,
+  UnsupportedFeature,
+  UnsupportedProtocol,
+} from './errors.ts';
 import { contextOf, issuesText } from './executor.ts';
-import type { Executor } from './executor.ts';
+import type { CallContext, CallResult, Executor } from './executor.ts';
 import { Semaphore } from './limits.ts';
 import { DEFAULT_RULES } from './machine.ts';
 import type { Rules } from './machine.ts';
+import type { Secrets } from './secrets.ts';
 import type { Store } from './store.ts';
 
 /** Gives an actor the runner of its model. It is asked at every call, so it is quick to answer. */
@@ -47,6 +71,18 @@ export type EngineOptions = {
    */
   readonly runner: ModelRunner | RunnerSource;
   readonly executor: Executor;
+  /**
+   * The providers an agent may name. Those there are, without it. An agent of a provider that
+   * is not among them is refused when it is deployed.
+   */
+  readonly providers?: Providers;
+  /**
+   * What an agent may use that not every engine has, by name, such as `machine`. An agent
+   * that uses one that is not here is refused when it is deployed. None, without it.
+   */
+  readonly features?: readonly string[];
+  /** The agents' secrets, for saying which of those a deploy names are not set. */
+  readonly secrets?: Secrets;
   /** Without it, a bus of this process. */
   readonly bus?: EventBus;
   readonly clock?: Clock;
@@ -88,8 +124,19 @@ export class Engine {
   /** The drivers, the one touched longest ago first. */
   readonly #drivers = new Map<ActorId, ActorDriver>();
   readonly #loading = new Map<ActorId, Promise<ActorDriver>>();
-  /** What each deployment's code says of itself. It never changes, so it is asked once. */
-  readonly #definitions = new Map<DeploymentId, Promise<AgentDefinition>>();
+  readonly #providers: Providers;
+  readonly #features: readonly string[];
+  readonly #secrets: Secrets | undefined;
+  /** The agents, as they were last read or written here. An engine is its store's only writer. */
+  readonly #agents = new Map<AgentId, Agent>();
+  /** Each deployment that was asked for, as it is stored. It never changes, so it is read once. */
+  readonly #deployments = new Map<DeploymentId, Promise<Deployment>>();
+  /** The deployments whose code the executor has been given. */
+  readonly #loaded = new Map<DeploymentId, Promise<void>>();
+  /** What names the instructions and tools of a definition, worked out once for each. */
+  readonly #fingerprints = new WeakMap<AgentDefinition, string>();
+  /** The deploys of each agent's name go one after another. */
+  readonly #deploying = new Map<string, Promise<unknown>>();
   #closing = false;
 
   constructor(options: EngineOptions) {
@@ -100,6 +147,9 @@ export class Engine {
     this.#timer = options.timer ?? wait;
     this.#slots = new Semaphore(options.maxConcurrentTurns ?? 100);
     this.#maxHot = options.maxHotActors ?? 1000;
+    this.#providers = options.providers ?? builtInProviders();
+    this.#features = options.features ?? [];
+    this.#secrets = options.secrets;
     const { runner } = options;
     const report =
       options.report ??
@@ -109,13 +159,27 @@ export class Engine {
     this.#host = {
       store: options.store,
       runnerFor: typeof runner === 'function' ? runner : () => runner,
-      executor: options.executor,
+      call: (deployment, path, argument, context, signal) =>
+        this.#call(deployment, path, argument, context, signal),
       bus: options.bus ?? new MemoryBus(),
       clock: this.#clock,
       timer: this.#timer,
       rules: options.rules ?? DEFAULT_RULES,
       slots: this.#slots,
       definition: (deployment) => this.#definition(deployment),
+      active: async (agent) => (await this.#agent(agent))?.activeDeployment,
+      version: async (agent, version) => {
+        const found = await this.#store.findDeployment(agent, version);
+        return found === undefined ? undefined : { id: found.id, version };
+      },
+      fingerprint: (definition) => this.#fingerprint(definition),
+      bindsReasoning: (actor, definition) =>
+        this.#providers.has(definition.provider) &&
+        bindsReasoning(this.#providers.get(definition.provider), actor.modelId),
+      withoutReasoning: (definition, message) =>
+        this.#providers.has(definition.provider)
+          ? this.#providers.get(definition.provider).withoutReasoning(message)
+          : message,
       closing: () => this.#closing,
       report,
       rested: (driver) => {
@@ -135,38 +199,295 @@ export class Engine {
   }
 
   /**
-   * Creates an actor on a deployment of its agent. With an external ID an actor of the agent
-   * has already, that actor is given back and none is made.
+   * Deploys an agent: its code becomes a new deployment of the agent of that name, which is
+   * made when there is none. The code is loaded and asked what it is before anything is kept,
+   * and refused, with why, when it is not an agent this engine can run. Code that is the
+   * agent's newest already makes no new deployment.
+   *
+   * The deployment becomes the active one unless `activate` is false. Actors that follow the
+   * active deployment move to it as their next turns start.
+   */
+  deploy(given: {
+    readonly agent: Name;
+    readonly manifest: BundleManifest;
+    readonly code: string;
+    readonly activate?: boolean;
+    readonly by?: PrincipalRef;
+  }): Promise<{
+    readonly agent: Agent;
+    readonly deployment: Deployment;
+    readonly created: boolean;
+    readonly missingSecrets: string[];
+  }> {
+    if (this.#closing) return Promise.reject(new Unavailable());
+    // One deploy of a name at a time: each is a version, counted from the one before it.
+    const before = this.#deploying.get(given.agent) ?? Promise.resolve();
+    const deployed = before.then(() => this.#deploy(given));
+    const settled = deployed.catch(() => {});
+    this.#deploying.set(given.agent, settled);
+    void settled.then(() => {
+      if (this.#deploying.get(given.agent) === settled) this.#deploying.delete(given.agent);
+    });
+    return deployed;
+  }
+
+  async #deploy(given: Parameters<Engine['deploy']>[0]) {
+    const { manifest, code } = given;
+    const activate = given.activate ?? true;
+    if (!supportsBundleProtocol(manifest.protocol)) {
+      throw new UnsupportedProtocol(
+        `The code was built for bundle protocol ${String(manifest.protocol)}, and this engine runs ${SUPPORTED_BUNDLE_PROTOCOLS.join(', ')}`,
+      );
+    }
+    const hash = createHash('sha256').update(code).digest('hex');
+    const existing = await this.#store.findAgent(given.agent);
+    const missing = async (agent: AgentId, definition: AgentDefinition) => {
+      const named = definition.secrets ?? [];
+      if (named.length === 0) return [];
+      const set = new Set(await (this.#secrets?.names(agent) ?? this.#store.secretNames(agent)));
+      return named.filter((name) => !set.has(name));
+    };
+
+    if (existing !== undefined) {
+      const latest = await this.#deployment(existing.latestDeployment.id);
+      if (latest.hash === hash) {
+        // Nothing new: the agent's newest is this code. It is made active when that is asked.
+        const agent =
+          activate && existing.activeDeployment.id !== latest.id
+            ? await this.activate(existing.id, latest.version)
+            : existing;
+        this.#agents.set(agent.id, agent);
+        return {
+          agent,
+          deployment: latest,
+          created: false,
+          missingSecrets: await missing(agent.id, latest.definition),
+        };
+      }
+    }
+
+    const now = this.#clock();
+    const agentId = existing?.id ?? makeId('agent', { now, random: this.#entropy() });
+    const id = makeId('deployment', { now, random: this.#entropy() });
+    const refuse = async (error: Error): Promise<never> => {
+      await this.#executor.unload(id);
+      throw error;
+    };
+
+    let definition: AgentDefinition;
+    try {
+      const said = await this.#executor.load(id, {
+        code,
+        agent: { id: agentId, name: given.agent },
+      });
+      definition = agentDefinitionSchema.parse(said);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const unsupported = (error as { code?: unknown }).code === 'unsupported_protocol';
+      return refuse(unsupported ? new UnsupportedProtocol(message) : new InvalidAgent(message));
+    }
+
+    if (!this.#providers.has(definition.provider)) {
+      const has = this.#providers.list().map((provider) => provider.id);
+      return refuse(
+        new UnsupportedFeature(
+          `The agent is of the provider ${definition.provider}, which this engine has not: it has ${has.join(', ')}`,
+        ),
+      );
+    }
+    if (existing !== undefined && existing.provider !== definition.provider) {
+      return refuse(
+        new InvalidAgent(
+          `The agent ${existing.name} is of the provider ${existing.provider}, and this code is of ${definition.provider}: an agent's provider does not change`,
+        ),
+      );
+    }
+    const lacking = (definition.features ?? []).filter(
+      (feature) => !this.#features.includes(feature),
+    );
+    if (lacking.length > 0) {
+      return refuse(
+        new UnsupportedFeature(
+          `The agent uses ${lacking.join(', ')}, which this engine does not have yet`,
+        ),
+      );
+    }
+    try {
+      // What the agent asks of its provider is kept as the provider read it.
+      const options = this.#providers
+        .get(definition.provider)
+        .parseOptions(definition.providerOptions);
+      const { providerOptions: _asked, ...rest } = definition;
+      definition = Object.keys(options).length > 0 ? { ...rest, providerOptions: options } : rest;
+    } catch (error) {
+      return refuse(new InvalidAgent(error instanceof Error ? error.message : String(error)));
+    }
+
+    const version = (existing?.latestDeployment.version ?? 0) + 1;
+    const ref: DeploymentRef = { id, version };
+    const deployment: Deployment = {
+      id,
+      agent: agentId,
+      version,
+      hash,
+      manifest,
+      definition,
+      createdBy: given.by ?? { type: 'system' },
+      createdAt: now,
+    };
+    const agent: Agent = {
+      id: agentId,
+      name: given.agent,
+      provider: definition.provider,
+      activeDeployment: activate || existing === undefined ? ref : existing.activeDeployment,
+      latestDeployment: ref,
+      createdAt: existing?.createdAt ?? now,
+    };
+    try {
+      await this.#store.addDeployment({ agent, deployment, code });
+    } catch (error) {
+      return refuse(error instanceof Error ? error : new Error(String(error)));
+    }
+    this.#agents.set(agentId, agent);
+    this.#deployments.set(id, Promise.resolve(deployment));
+    this.#loaded.set(id, Promise.resolve());
+    return {
+      agent,
+      deployment,
+      created: true,
+      missingSecrets: await missing(agentId, definition),
+    };
+  }
+
+  /**
+   * Makes a version of an agent its active deployment: what a new actor is created on, and
+   * what the actors that follow it move to as their next turns start. It is how a deploy is
+   * taken back.
+   */
+  async activate(id: AgentId, version: number): Promise<Agent> {
+    if (this.#closing) throw new Unavailable();
+    const agent = await this.#store.setActive(id, version);
+    if (agent === undefined) {
+      throw (await this.#store.loadAgent(id)) === undefined
+        ? new AgentNotFound(id)
+        : new AgentNotFound(id, version);
+    }
+    this.#agents.set(id, agent);
+    return agent;
+  }
+
+  async getAgent(id: AgentId): Promise<Agent> {
+    const agent = await this.#agent(id);
+    if (agent === undefined) throw new AgentNotFound(id);
+    return agent;
+  }
+
+  /** The agent of a name, if there is one. */
+  findAgent(name: string): Promise<Agent | undefined> {
+    return this.#store.findAgent(name);
+  }
+
+  /** A deployment, with what its code said of itself. */
+  async getDeployment(id: DeploymentId): Promise<Deployment> {
+    return this.#deployment(id);
+  }
+
+  /**
+   * Creates an actor of an agent. It is created on the agent's active deployment, which it
+   * then follows, or on the version given, which it is then pinned to. Its configuration is
+   * checked by that deployment's schema, and the actor is not made when it fails. With an
+   * external ID an actor of the agent has already, that actor is given back and none is made.
    */
   async createActor(given: {
     readonly agent: AgentId;
-    readonly deployment: DeploymentRef;
-    readonly modelId: string;
+    readonly version?: number;
+    /** Without it, the default model of the agent's provider. */
+    readonly modelId?: string;
     readonly reasoning?: Reasoning;
     readonly configuration?: Json;
     readonly name?: Name;
     readonly externalId?: ExternalId;
   }): Promise<{ readonly actor: Actor; readonly created: boolean }> {
     if (this.#closing) throw new Unavailable();
+    const agent = await this.getAgent(given.agent);
+    if (given.externalId !== undefined) {
+      // Asked for again: nothing of the agent's is run, and nothing is checked.
+      const there = await this.#store.findActor(agent.id, given.externalId);
+      if (there !== undefined) return { actor: there.actor, created: false };
+    }
+
+    let deployment = agent.activeDeployment;
+    if (given.version !== undefined) {
+      const found = await this.#store.findDeployment(agent.id, given.version);
+      if (found === undefined) throw new AgentNotFound(agent.id, given.version);
+      deployment = { id: found.id, version: found.version };
+    }
+    const definition = await this.#definition(deployment.id);
     const now = this.#clock();
-    const { record, created } = await this.#store.createActor({
+    const actor: Actor = {
       id: makeId('actor', { now, random: this.#entropy() }),
       name: given.name ?? null,
       externalId: given.externalId ?? null,
-      agent: given.agent,
-      deployment: given.deployment,
-      pinned: false,
+      agent: agent.id,
+      deployment,
+      pinned: given.version !== undefined,
       behind: null,
-      modelId: given.modelId,
+      modelId:
+        given.modelId ??
+        (this.#providers.has(definition.provider)
+          ? this.#providers.get(definition.provider).defaultModel
+          : ''),
       reasoning: given.reasoning ?? 'medium',
-      configuration: given.configuration ?? null,
+      configuration: null,
       status: 'idle',
       lastTurn: null,
       pendingInputs: 0,
       createdAt: now,
       archivedAt: null,
-    });
+    };
+    if (actor.modelId === '') {
+      throw new UnsupportedFeature(
+        `The agent is of the provider ${definition.provider}, which this engine has not`,
+      );
+    }
+
+    const configurationGiven = given.configuration ?? null;
+    let configuration: Json | null = null;
+    if (definition.configuration !== null || configurationGiven !== null) {
+      const checked = await this.#call(
+        deployment.id,
+        'configuration.validate',
+        configurationGiven,
+        contextOf(actor),
+        new AbortController().signal,
+      );
+      if (!checked.ok) {
+        throw checked.kind === 'invalid'
+          ? new InvalidConfiguration(
+              `The configuration is not one of the agent. ${issuesText(checked.issues)}`,
+              checked.issues,
+            )
+          : new InvalidConfiguration(checked.error.message);
+      }
+      configuration = checked.value;
+    }
+    const { record, created } = await this.#store.createActor(
+      { ...actor, configuration },
+      configurationGiven,
+    );
     return { actor: record.actor, created };
+  }
+
+  /**
+   * Changes what an actor was created with: its name, its model, its reasoning, its
+   * configuration, and the version of its agent it is on. Only between turns. A version pins
+   * it there, and `active` has it follow its agent's active deployment again. Its
+   * configuration is checked by the schema of the version it ends up on, and nothing is
+   * changed when that fails.
+   */
+  async updateActor(id: ActorId, changes: ActorUpdate): Promise<Actor> {
+    if (this.#closing) throw new Unavailable();
+    return (await this.#driver(id)).update(changes);
   }
 
   async getActor(id: ActorId): Promise<Actor> {
@@ -197,7 +518,7 @@ export class Engine {
       throw new UnknownInput(sent.type);
     }
     // The agent's own code turns what was sent into what the model reads.
-    const handled = await this.#executor.call(
+    const handled = await this.#call(
       actor.deployment.id,
       `inputs.${sent.type}.handler`,
       sent.payload ?? null,
@@ -302,15 +623,92 @@ export class Engine {
     this.#drivers.clear();
   }
 
-  #definition(deployment: DeploymentId): Promise<AgentDefinition> {
-    let definition = this.#definitions.get(deployment);
-    if (definition === undefined) {
-      definition = this.#executor.describe(deployment);
-      this.#definitions.set(deployment, definition);
+  /** An agent, as it was last read or written here. */
+  async #agent(id: AgentId): Promise<Agent | undefined> {
+    const known = this.#agents.get(id);
+    if (known !== undefined) return known;
+    const read = await this.#store.loadAgent(id);
+    // One that was written while this was read is the newer.
+    if (read !== undefined && !this.#agents.has(id)) this.#agents.set(id, read);
+    return this.#agents.get(id);
+  }
+
+  #deployment(id: DeploymentId): Promise<Deployment> {
+    let deployment = this.#deployments.get(id);
+    if (deployment === undefined) {
+      deployment = this.#store.loadDeployment(id).then((stored) => {
+        if (stored === undefined) throw new Error(`There is no deployment ${id}`);
+        return stored.deployment;
+      });
+      this.#deployments.set(id, deployment);
       // One that could not be read is asked for again the next time.
-      definition.catch(() => this.#definitions.delete(deployment));
+      deployment.catch(() => this.#deployments.delete(id));
     }
-    return definition;
+    return deployment;
+  }
+
+  /** What a deployment's code said of itself when it was deployed. */
+  async #definition(id: DeploymentId): Promise<AgentDefinition> {
+    return (await this.#deployment(id)).definition;
+  }
+
+  /** Gives the executor a deployment's code, once: a process that starts has none of it. */
+  #ready(id: DeploymentId): Promise<void> {
+    let loaded = this.#loaded.get(id);
+    if (loaded === undefined) {
+      loaded = (async () => {
+        const stored = await this.#store.loadDeployment(id);
+        if (stored === undefined) throw new Error(`There is no deployment ${id}`);
+        const agent = await this.#agent(stored.deployment.agent);
+        await this.#executor.load(id, {
+          code: stored.code,
+          agent: { id: stored.deployment.agent, name: agent?.name ?? '' },
+        });
+      })();
+      this.#loaded.set(id, loaded);
+      loaded.catch(() => this.#loaded.delete(id));
+    }
+    return loaded;
+  }
+
+  /** Calls a function of a deployment's code. Code that does not load fails the call. */
+  async #call(
+    deployment: DeploymentId,
+    path: string,
+    argument: Json,
+    context: CallContext,
+    signal: AbortSignal,
+  ): Promise<CallResult> {
+    try {
+      await this.#ready(deployment);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, kind: 'error', error: { name: 'Error', message } };
+    }
+    return this.#executor.call(deployment, path, argument, context, signal);
+  }
+
+  /**
+   * What names the instructions and tools the model is sent for a definition: the same for
+   * the same ones, and another when anything of them differs.
+   */
+  #fingerprint(definition: AgentDefinition): string {
+    let fingerprint = this.#fingerprints.get(definition);
+    if (fingerprint === undefined) {
+      const tools = definition.tools.map(({ name, description, parameters }) => [
+        name,
+        description,
+        parameters,
+      ]);
+      const sent = JSON.stringify([
+        definition.instructions,
+        tools,
+        definition.providerOptions ?? null,
+      ]);
+      fingerprint = createHash('sha256').update(sent).digest('hex').slice(0, 32);
+      this.#fingerprints.set(definition, fingerprint);
+    }
+    return fingerprint;
   }
 
   /** The actor's driver: the one it has, or one made from the store. */

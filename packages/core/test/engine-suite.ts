@@ -17,7 +17,7 @@ import {
   UnknownInput,
 } from '../src/errors.ts';
 import type { Store } from '../src/store.ts';
-import { HANDLER, LOOKUP, deferred, eventually, world } from './world.ts';
+import { HANDLER, LOOKUP, deferred, eventually, over, world } from './world.ts';
 import type { World } from './world.ts';
 
 const lookup = calls({ id: 'c1', name: 'lookup_order', arguments: { id: 4411 } });
@@ -122,22 +122,14 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         expect(one.events.at(-1)).toMatchObject({ status: 'idle', lastTurn: { end: 'ok' } });
       });
 
-      it('asks what the agent is once, and reads the conversation from the store once', async () => {
+      it('loads the agent’s code once, and reads the conversation from the store once', async () => {
         let read = 0;
-        const counted: Store = {
-          createActor: (actor) => store.createActor(actor),
-          loadActor: (id) => store.loadActor(id),
-          commit: (id, epoch, change) => store.commit(id, epoch, change),
-          addInput: (input) => store.addInput(input),
-          findInput: (actor, externalId) => store.findInput(actor, externalId),
-          pendingInputs: (actor) => store.pendingInputs(actor),
+        const counted = over(store, {
           conversation: (actor, part) => {
             read += 1;
             return store.conversation(actor, part);
           },
-          unfinished: () => store.unfinished(),
-          close: () => store.close(),
-        };
+        });
         w = world({ store: counted });
         const one = w.engine([lookup, says('Twice.'), says('Yes.'), says('No.')]);
         const actor = await one.createActor();
@@ -148,7 +140,7 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
 
         expect(await w.roles(actor.id)).toHaveLength(8);
         expect(one.steps.at(-1)?.messages).toHaveLength(7);
-        expect(one.executor.described).toBe(1);
+        expect(one.executor.loads).toBe(1);
         expect(read).toBe(1 + 1);
       });
     });

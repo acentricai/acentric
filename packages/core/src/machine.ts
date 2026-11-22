@@ -13,7 +13,7 @@ import type {
   TurnEnd,
 } from '@acentric/protocol';
 
-import type { ActorRecord, Change, OwedCall, Turn } from './state.ts';
+import type { ActorPatch, ActorRecord, Change, OwedCall, Turn } from './state.ts';
 
 /** How a call of the model that failed is made again. */
 export type RetryPolicy = {
@@ -41,12 +41,24 @@ export const DEFAULT_RULES: Rules = {
 };
 
 export type MachineEvent =
-  /** The actor is idle and has mail: a turn starts with it. */
-  | { readonly type: 'wake'; readonly inputs: readonly Input[] }
+  /**
+   * The actor is idle and has mail: a turn starts with it. `set` moves the actor to another
+   * deployment of its agent as the turn starts, or says why it could not move.
+   */
+  | { readonly type: 'wake'; readonly inputs: readonly Input[]; readonly set?: ActorPatch }
   /** A person asks that a turn that failed be tried again, with nothing new. */
-  | { readonly type: 'retry' }
-  /** The model answered. */
-  | { readonly type: 'answered'; readonly answer: ModelAnswer }
+  | { readonly type: 'retry'; readonly set?: ActorPatch }
+  /** A person changes what the actor was created with. Only between turns. */
+  | { readonly type: 'update'; readonly set: ActorPatch }
+  /**
+   * The model answered. `sent` names the instructions and tools the call was made with, and
+   * the place its reasoning was sent from.
+   */
+  | {
+      readonly type: 'answered';
+      readonly answer: ModelAnswer;
+      readonly sent?: NonNullable<Change['sent']>;
+    }
   /** The call of the model failed. */
   | {
       readonly type: 'model_failed';
@@ -55,6 +67,11 @@ export type MachineEvent =
       readonly retryable: boolean;
       /** How long the provider said to wait, when it said. */
       readonly retryAfterMs?: number;
+      /**
+       * The provider refused the conversation for reasoning tied to what has since changed.
+       * The call is made again at once without the reasoning there is so far.
+       */
+      readonly staleReasoning?: boolean;
     }
   /** A restart found the call of the model owed: it may have been under way. */
   | { readonly type: 'cut_off' }
@@ -128,6 +145,8 @@ export function decide(
     append,
     deliver: inputs.map((input) => input.id),
     leaveOutFrom: null,
+    set: null,
+    sent: null,
   });
   /** The step that ends a turn. */
   const ends = (
@@ -143,25 +162,41 @@ export function decide(
     append,
     deliver: [],
     leaveOutFrom: null,
+    set: null,
+    sent: null,
   });
   switch (event.type) {
     case 'wake': {
       if (actor.status !== 'idle' || turn.phase !== 'idle' || event.inputs.length === 0) {
         return refuse();
       }
-      return goesOn(model(record.nextSeq), mail(event.inputs), event.inputs);
+      return {
+        ...goesOn(model(record.nextSeq), mail(event.inputs), event.inputs),
+        set: event.set ?? null,
+      };
     }
 
     case 'retry': {
       if (actor.status !== 'idle' || turn.phase !== 'idle' || actor.lastTurn?.end !== 'failed') {
         return refuse();
       }
-      return goesOn(model(record.nextSeq));
+      return { ...goesOn(model(record.nextSeq)), set: event.set ?? null };
+    }
+
+    case 'update': {
+      if (actor.status === 'working' || turn.phase !== 'idle') return refuse();
+      return {
+        ...ends('ok'),
+        status: actor.status,
+        lastTurn: actor.lastTurn,
+        set: event.set,
+      };
     }
 
     case 'answered': {
       if (turn.phase !== 'model') return refuse();
       const { answer } = event;
+      const sent = event.sent ?? null;
       const completion = {
         stopReason: answer.stopReason,
         ...(answer.usage === undefined ? {} : { usage: answer.usage }),
@@ -174,23 +209,32 @@ export function decide(
             entry(answer.message, { completion, leftOut: true }),
           ]),
           leaveOutFrom: turn.startSeq,
+          sent,
         };
       }
       const said = entry(answer.message, { completion });
       if (answer.toolCalls.length === 0) {
         // The provider paused in the middle of its own work: sent its answer back, it goes on.
-        if (answer.stopReason === 'pause_turn') return goesOn(model(turn.startSeq), [said]);
-        return ends('ok', undefined, [said]);
+        if (answer.stopReason === 'pause_turn') {
+          return { ...goesOn(model(turn.startSeq), [said]), sent };
+        }
+        return { ...ends('ok', undefined, [said]), sent };
       }
       const calls: OwedCall[] = answer.toolCalls.map((call) => ({ ...call, result: null }));
-      return goesOn({ phase: 'tools', startSeq: turn.startSeq, calls }, [said]);
+      return { ...goesOn({ phase: 'tools', startSeq: turn.startSeq, calls }, [said]), sent };
     }
 
     case 'model_failed': {
       if (turn.phase !== 'model') return refuse();
       const { retry } = rules;
-      if (!event.retryable || turn.attempt >= retry.maxAttempts) {
-        return ends('failed', event.reason);
+      const again = event.retryable || event.staleReasoning === true;
+      if (!again || turn.attempt >= retry.maxAttempts) return ends('failed', event.reason);
+      if (event.staleReasoning === true) {
+        // Not a wait for the provider: the same call, without the reasoning that was refused.
+        return {
+          ...goesOn({ ...turn, attempt: turn.attempt + 1, retryAt: null }),
+          sent: { fingerprint: record.sent, reasoningFrom: record.nextSeq },
+        };
       }
       const backoff = Math.min(
         retry.initialDelayMs * retry.factor ** (turn.attempt - 1),

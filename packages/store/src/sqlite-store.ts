@@ -6,9 +6,20 @@
 
 import { Worker } from 'node:worker_threads';
 
-import { NameTaken, StaleEpoch } from '@acentric/core';
-import type { ActorRecord, Change, Store } from '@acentric/core';
-import type { Actor, ActorId, ConversationEntry, Input, InputId } from '@acentric/protocol';
+import { NameTaken, OutOfOrder, StaleEpoch } from '@acentric/core';
+import type { ActorRecord, Change, SealedSecret, Store, StoredDeployment } from '@acentric/core';
+import type {
+  Actor,
+  ActorId,
+  Agent,
+  AgentId,
+  ConversationEntry,
+  Deployment,
+  DeploymentId,
+  Input,
+  InputId,
+  Json,
+} from '@acentric/protocol';
 
 import type { Operation } from './database.ts';
 import type { Reply, Request, Settings } from './worker.ts';
@@ -97,7 +108,11 @@ class Line {
       const [actor, read, now] = refused.args as [ActorId, number, number];
       waiting.reject(new StaleEpoch(actor, read, now));
     } else if (refused?.kind === 'NameTaken') {
-      waiting.reject(new NameTaken(String(refused.args[0])));
+      const of = refused.args[1] === 'agent' ? 'agent' : 'actor';
+      waiting.reject(new NameTaken(String(refused.args[0]), of));
+    } else if (refused?.kind === 'OutOfOrder') {
+      const [agent, version] = refused.args as [AgentId, number];
+      waiting.reject(new OutOfOrder(agent, version));
     } else {
       waiting.reject(new Error(reply.message));
     }
@@ -132,8 +147,68 @@ export class SqliteStore implements Store {
     return new SqliteStore(write, read);
   }
 
-  createActor(actor: Actor): Promise<{ readonly record: ActorRecord; readonly created: boolean }> {
-    return this.#write.ask('createActor' satisfies Operation, actor);
+  addDeployment(given: {
+    readonly agent: Agent;
+    readonly deployment: Deployment;
+    readonly code: string;
+  }): Promise<void> {
+    return this.#write.ask('addDeployment' satisfies Operation, given);
+  }
+
+  setActive(agent: AgentId, version: number): Promise<Agent | undefined> {
+    return this.#write.ask('setActive' satisfies Operation, agent, version);
+  }
+
+  // What the engine acts on is read where it was written, so that it is never behind.
+  loadAgent(id: AgentId): Promise<Agent | undefined> {
+    return this.#write.ask('loadAgent' satisfies Operation, id);
+  }
+
+  findAgent(name: string): Promise<Agent | undefined> {
+    return this.#write.ask('findAgent' satisfies Operation, name);
+  }
+
+  listAgents(): Promise<Agent[]> {
+    return this.#read.ask('listAgents' satisfies Operation);
+  }
+
+  loadDeployment(id: DeploymentId): Promise<StoredDeployment | undefined> {
+    return this.#write.ask('loadDeployment' satisfies Operation, id);
+  }
+
+  findDeployment(agent: AgentId, version: number): Promise<Deployment | undefined> {
+    return this.#write.ask('findDeployment' satisfies Operation, agent, version);
+  }
+
+  setSecret(secret: SealedSecret): Promise<void> {
+    return this.#write.ask('setSecret' satisfies Operation, secret);
+  }
+
+  getSecret(agent: AgentId, name: string): Promise<SealedSecret | undefined> {
+    return this.#write.ask('getSecret' satisfies Operation, agent, name);
+  }
+
+  secretNames(agent: AgentId): Promise<string[]> {
+    return this.#write.ask('secretNames' satisfies Operation, agent);
+  }
+
+  deleteSecret(agent: AgentId, name: string): Promise<boolean> {
+    return this.#write.ask('deleteSecret' satisfies Operation, agent, name);
+  }
+
+  allSecrets(): Promise<SealedSecret[]> {
+    return this.#write.ask('allSecrets' satisfies Operation);
+  }
+
+  createActor(
+    actor: Actor,
+    configurationGiven: Json | null = null,
+  ): Promise<{ readonly record: ActorRecord; readonly created: boolean }> {
+    return this.#write.ask('createActor' satisfies Operation, actor, configurationGiven);
+  }
+
+  findActor(agent: AgentId, externalId: string): Promise<ActorRecord | undefined> {
+    return this.#write.ask('findActor' satisfies Operation, agent, externalId);
   }
 
   // What a driver is made from is read where it was written, so that it is never behind.
