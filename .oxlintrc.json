@@ -19,5 +19,10 @@
   "env": {
     "builtin": true
   },
-  "ignorePatterns": ["dist", "target"]
+  "ignorePatterns": [
+    "dist",
+    "target",
+    "packages/agent/src/schema.ts",
+    "packages/agent/test/types.ts"
+  ]
 }

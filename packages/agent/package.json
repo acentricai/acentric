@@ -26,5 +26,11 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "dependencies": {
+    "@acentric/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "zod": "catalog:"
   }
 }
