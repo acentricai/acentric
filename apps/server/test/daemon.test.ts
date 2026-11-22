@@ -337,6 +337,122 @@ describe('the daemon, against a server', () => {
     );
   }, 90_000);
 
+  it('runs commands of the machine’s own from outside, and reads and writes its files', async (context) => {
+    if (program === undefined) return context.skip();
+    const params = { machine: machineId };
+    const ran = await client.call('machineCommands.run', {
+      params,
+      body: { command: 'echo hi; pwd' },
+    });
+    expect(ran).toMatchObject({
+      id: 'c1',
+      machine: machineId,
+      cwd: '~',
+      status: 'exited',
+      exit: 0,
+      tail: `hi\n${process.env['HOME'] ?? ''}\n`,
+    });
+
+    // One that outlasts its wait goes on, and is read, waited for and stopped by its ID.
+    const slow = await client.call('machineCommands.run', {
+      params,
+      body: { command: 'echo begun; sleep 0.6; echo late', cwd: work, wait: 0.2 },
+    });
+    expect(slow).toMatchObject({ id: 'c2', status: 'running', output: 'begun\n' });
+    const later = await client.call('machineCommands.get', {
+      params: { ...params, command: 'c2' },
+      query: { wait: 10 },
+    });
+    expect(later).toMatchObject({ status: 'exited', tail: 'begun\nlate\n' });
+    expect(later).not.toHaveProperty('output');
+
+    const long = await client.call('machineCommands.run', {
+      params,
+      body: { command: 'echo started; sleep 300', wait: 0.3 },
+    });
+    expect(long).toMatchObject({ id: 'c3', status: 'running' });
+    const stopped = await client.call('machineCommands.stop', {
+      params: { ...params, command: 'c3' },
+    });
+    expect(stopped).toMatchObject({ status: 'stopped', stoppedBy: 'stop', tail: 'started\n' });
+
+    // At its timeout it is stopped by the machine, and where there is no such folder it is not run.
+    expect(
+      await client.call('machineCommands.run', {
+        params,
+        body: { command: 'sleep 300', timeout: 0.3 },
+      }),
+    ).toMatchObject({ status: 'stopped', stoppedBy: 'timeout' });
+    const nowhere = await client.call('machineCommands.run', {
+      params,
+      body: { command: 'true', cwd: '/no/such/folder' },
+    });
+    expect(nowhere).toMatchObject({ id: 'c5', status: 'failed' });
+    expect(nowhere.error).toContain('/no/such/folder');
+
+    const listed = await client.call('machineCommands.list', { params, query: { limit: 3 } });
+    expect(listed.items.map((command) => command.id)).toEqual(['c5', 'c4', 'c3']);
+    const code = (call: Promise<unknown>) =>
+      call.then(
+        () => 'answered',
+        (error: unknown) => (error as { code: string }).code,
+      );
+    expect(
+      await code(client.call('machineCommands.get', { params: { ...params, command: 'c99' } })),
+    ).toBe('not_found');
+    expect(
+      await code(client.call('machineCommands.run', { params, body: { command: '  ' } })),
+    ).toBe('invalid_request');
+
+    // Files: the bytes sent, folders and all, and read back as they are.
+    const headers = { authorization: `Bearer ${up.firstKey ?? ''}` };
+    const file = join(dir, 'files', 'deep', 'a.bin');
+    const url = (query: string) =>
+      `${up.server.url}/v1/machines/${machineId}/files?path=${encodeURIComponent(file)}${query}`;
+    const bytes = Buffer.from([0, 1, 2, 255, 10, 13, 7]);
+    const written = await fetch(url(''), { method: 'PUT', headers, body: bytes });
+    expect(written.status).toBe(200);
+    expect(await written.json()).toEqual({ path: file, size: 7 });
+    expect(await readFile(file)).toEqual(bytes);
+    // More, after its end.
+    const more = await fetch(url('&from=7'), { method: 'PUT', headers, body: Buffer.from('xyz') });
+    expect(await more.json()).toEqual({ path: file, size: 10 });
+
+    const read = await fetch(url(''), { headers });
+    expect(read.status).toBe(200);
+    expect(read.headers.get('x-file-size')).toBe('10');
+    expect(Buffer.from(await read.arrayBuffer())).toEqual(
+      Buffer.concat([bytes, Buffer.from('xyz')]),
+    );
+    const part = await fetch(url('&from=7&max=2'), { headers });
+    expect(await part.text()).toBe('xy');
+    expect(part.headers.get('x-file-from')).toBe('7');
+
+    const missing = await fetch(
+      `${up.server.url}/v1/machines/${machineId}/files?path=${encodeURIComponent(join(dir, 'none'))}`,
+      { headers },
+    );
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: 'not_found' } });
+    const large = await fetch(url(''), {
+      method: 'PUT',
+      headers,
+      body: Buffer.alloc((8 << 20) + 1),
+    });
+    expect(large.status).toBe(413);
+    expect((await fetch(url(''))).status).toBe(401);
+
+    // They are for a key of the whole engine that has machines:run.
+    const made = await client.call('keys.create', {
+      body: { label: 'reads', scope: { type: 'engine' }, permissions: ['machines:manage'] },
+    });
+    const keeper = createClient({ baseUrl: up.server.url, token: made.token });
+    expect(await code(keeper.call('machineCommands.list', { params }))).toBe('forbidden');
+    expect(
+      (await fetch(url(''), { headers: { authorization: `Bearer ${made.token}` } })).status,
+    ).toBe(403);
+  }, 90_000);
+
   it('is told when its machine is away, runs again when it is back, and not at all once it is removed', async (context) => {
     if (program === undefined) return context.skip();
     const { actor } = await client.call('actors.create', {

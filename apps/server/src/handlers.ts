@@ -1,7 +1,7 @@
 // What each route does, once a request has been read and let through. A handler is given what
 // its route takes, checked, and answers with what its route answers.
 
-import { AgentNotFound, reaches, reportOf } from '@acentric/core';
+import { AgentNotFound, MachineRefused, reaches, reportOf } from '@acentric/core';
 import type {
   Accounts,
   Audit,
@@ -11,13 +11,16 @@ import type {
   People,
   Secrets,
   SignedIn,
+  StoredCommand,
   UsageFilter,
 } from '@acentric/core';
+import { FILE_BYTES } from '@acentric/protocol';
 import type {
   Actor,
   Agent,
   Deployment,
   DeploymentSummary,
+  MachineCommand,
   Page,
   PrincipalRef,
   ResponseOf,
@@ -123,6 +126,66 @@ function machinesOf(engine: Engine): Machines {
     throw new ApiFailure('not_found', 'This engine keeps no machines');
   }
   return engine.machines;
+}
+
+/** How long a call waits for a command it started, without being told: in seconds. */
+const COMMAND_WAIT_S = 30;
+/** How long a call that stops a command waits for it to have ended. */
+const STOP_WAIT_S = 20;
+/** The most of a running command's output a call is given: the end of it. */
+const RUNNING_TAIL_BYTES = 64 << 10;
+
+/** A command of a machine's own, as a caller is given it. */
+function commandView(command: StoredCommand): MachineCommand {
+  const { actor: _actor, task, stopWanted: _wanted, ...rest } = command;
+  return { id: task, ...rest };
+}
+
+/**
+ * A command of a machine's own once it has ended, or as it stands after `seconds`, or when the
+ * caller goes. One that has not ended is given with the end of what it has written so far.
+ */
+async function waited(
+  machines: Machines,
+  request: Request,
+  command: StoredCommand,
+  seconds: number,
+): Promise<MachineCommand> {
+  const ref = { actor: command.actor, task: command.task };
+  const open = (one: StoredCommand) => one.status === 'starting' || one.status === 'running';
+  let now = command;
+  if (seconds > 0 && open(now)) {
+    const signal = AbortSignal.any([AbortSignal.timeout(seconds * 1000), request.signal]);
+    now = (await machines.ended(ref, signal)) ?? (await machines.command(ref)) ?? now;
+  } else {
+    now = (await machines.command(ref)) ?? now;
+  }
+  if (!open(now)) return commandView(now);
+  // The end of its output is kept once it ends: until then, it is read from its log.
+  let output: string | null = null;
+  if (now.log !== null) {
+    try {
+      const { size } = await machines.read(now.machine, { path: now.log, max: 1 });
+      const from = Math.max(0, size - RUNNING_TAIL_BYTES);
+      const read = await machines.read(now.machine, {
+        path: now.log,
+        from,
+        max: RUNNING_TAIL_BYTES,
+      });
+      output = Buffer.from(read.data, 'base64').toString('utf8');
+    } catch {
+      // Not there yet, or the machine went: it has no output to give now.
+    }
+  }
+  return { ...commandView(now), output };
+}
+
+/** What a file of a machine could not be read or written for, as the API says it. */
+function fileFailure(error: unknown): unknown {
+  if (error instanceof MachineRefused && error.reason === 'not_found') {
+    return new ApiFailure('not_found', error.message);
+  }
+  return error;
 }
 
 /** A list that is all on one page. */
@@ -391,6 +454,80 @@ export const handlers: Handlers = {
     }
     return upgraded;
   },
+  // A machine's own commands and files, for setting it up from outside
+
+  'machineCommands.run': async ({ params, body, request }, { engine }) => {
+    const machines = machinesOf(engine);
+    // A machine that is on its way back to an engine that just started is given the time.
+    await machines.settled(params.machine, request.signal);
+    const started = await machines.startOwn(params.machine, {
+      command: body.command,
+      cwd: body.cwd ?? '~',
+      ...(body.timeout === undefined ? {} : { timeout: body.timeout }),
+    });
+    return waited(machines, request, started, body.wait ?? COMMAND_WAIT_S);
+  },
+  'machineCommands.list': async ({ params, query }, { engine }) => ({
+    items: (await machinesOf(engine).owns(params.machine, query.limit)).map(commandView),
+  }),
+  'machineCommands.get': async ({ params, query, request }, { engine }) => {
+    const machines = machinesOf(engine);
+    const command = await machines.own(params.machine, params.command);
+    return waited(machines, request, command, query.wait ?? 0);
+  },
+  'machineCommands.stop': async ({ params, request }, { engine }) => {
+    const machines = machinesOf(engine);
+    const command = await machines.own(params.machine, params.command);
+    await machines.stop({ actor: command.actor, task: command.task });
+    return waited(machines, request, command, STOP_WAIT_S);
+  },
+  'machineFiles.read': async ({ params, query, request }, { engine }) => {
+    const machines = machinesOf(engine);
+    try {
+      await machines.settled(params.machine, request.signal);
+      const read = await machines.read(params.machine, {
+        path: query.path,
+        from: query.from ?? 0,
+        max: query.max ?? FILE_BYTES,
+      });
+      const bytes = Buffer.from(read.data, 'base64');
+      return new Response(new Uint8Array(bytes), {
+        status: 200,
+        headers: {
+          'content-type': 'application/octet-stream',
+          'content-length': String(bytes.length),
+          'x-content-type-options': 'nosniff',
+          'cache-control': 'no-store',
+          'x-file-size': String(read.size),
+          'x-file-from': String(read.from),
+        },
+      });
+    } catch (error) {
+      throw fileFailure(error);
+    }
+  },
+  'machineFiles.write': async ({ params, query, request }, { engine }) => {
+    const machines = machinesOf(engine);
+    const tooLarge = () =>
+      new ApiFailure(
+        'too_large',
+        'A file is written 8 MiB at a time at most: write the rest with `from`',
+      );
+    if (Number(request.headers.get('content-length') ?? 0) > FILE_BYTES) throw tooLarge();
+    const bytes = Buffer.from(await request.arrayBuffer());
+    if (bytes.length > FILE_BYTES) throw tooLarge();
+    try {
+      await machines.settled(params.machine, request.signal);
+      return await machines.write(params.machine, {
+        path: query.path,
+        from: query.from ?? 0,
+        data: bytes.toString('base64'),
+      });
+    } catch (error) {
+      throw fileFailure(error);
+    }
+  },
+
   // A daemon's own: its machine's token is what lets it.
   'machines.enrol': async ({ params, body }, { engine, audit }) => {
     const machine = await machinesOf(engine).enrol(params.machine, body);
