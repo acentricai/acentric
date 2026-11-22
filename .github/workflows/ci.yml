@@ -30,6 +30,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The server's tests run the machine daemon itself, which they build: the toolchain is
+      # rust-toolchain.toml's.
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm boundaries

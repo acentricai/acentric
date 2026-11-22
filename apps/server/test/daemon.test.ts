@@ -1,0 +1,389 @@
+// The daemon itself, the program, against the whole server as it runs: it enrols with a token,
+// connects, and runs the commands an actor's model asks for with `bash`, on this computer.
+// Only the model is a stand-in.
+//
+// The daemon is built here when it is not given: `cargo build`, which is quick when it is
+// built already. Where there is no cargo and no daemon, these tests are passed over, but for
+// CI, where one of the two is always there.
+
+import { execFile, spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { Providers } from '@acentric/ai';
+import type { ModelAnswer, ModelRunner, ModelStep } from '@acentric/ai';
+import { calls, fakeProvider, says } from '@acentric/ai/testing';
+import { createClient } from '@acentric/client';
+import type { Client } from '@acentric/client';
+import type { ActorId, ConversationEntry, MachineId } from '@acentric/protocol';
+
+import { bundle } from '../../../packages/executor/test/bundle.ts';
+import { readSettings, start } from '../src/index.ts';
+import type { Started } from '../src/index.ts';
+
+const run = promisify(execFile);
+const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+const BUILT = join(ROOT, 'target', 'debug', 'acentric-machine');
+const MODEL_KEY = 'a-key-the-fake-provider-takes';
+
+/** The daemon to run: the one that was given, or the one built here. Undefined when there is none to be had. */
+async function daemonProgram(): Promise<string | undefined> {
+  const given = process.env['ACENTRIC_MACHINE_BINARY'];
+  if (given !== undefined && given !== '') return given;
+  try {
+    await run('cargo', ['build', '--package', 'acentric-machine'], { cwd: ROOT });
+  } catch (error) {
+    // No cargo on this computer: the daemon as it was last built, if it was.
+    if ((error as { code?: unknown }).code !== 'ENOENT') throw error;
+    if (process.env['CI'] !== undefined) {
+      throw new Error('CI has no cargo to build the daemon with', { cause: error });
+    }
+  }
+  return existsSync(BUILT) ? BUILT : undefined;
+}
+
+/** What the model does next, by what it was last told: a test writes one of these for each turn. */
+type Plan = (step: ModelStep, told: string) => ModelAnswer;
+let plan: Plan = () => says('Nothing to do.');
+const model: ModelRunner = {
+  async run(step) {
+    const told = partsOf(step.messages.at(-1))
+      .map((part) => part.text ?? '')
+      .join('');
+    return plan(step, told);
+  },
+};
+
+/** The parts of a message that has content. */
+const partsOf = (message: object | undefined): readonly { type: string; text?: string }[] =>
+  (message as { content?: readonly { type: string; text?: string }[] } | undefined)?.content ?? [];
+
+const textOf = (entry: ConversationEntry | undefined): string =>
+  partsOf(entry?.message)
+    .map((part) => part.text ?? '')
+    .join('');
+
+let program: string | undefined;
+let dir: string;
+let work: string;
+let up: Started;
+let client: Client;
+let agentId: string;
+let machineId: MachineId;
+let daemon: ChildProcess | undefined;
+let daemonLog = '';
+
+/** Starts the daemon's `connect`, as its service would. */
+function connect(): ChildProcess {
+  const child = spawn(program as string, ['connect'], {
+    env: {
+      ...process.env,
+      MACHINE_DIR: join(dir, 'machine'),
+      MACHINE_SHELL: '/bin/sh',
+      MACHINE_PING_MS: '200',
+      MACHINE_RECONNECT_MS: '100',
+      MACHINE_STOP_GRACE_MS: '300',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stdout?.on('data', (chunk: Buffer) => (daemonLog += String(chunk)));
+  child.stderr?.on('data', (chunk: Buffer) => (daemonLog += String(chunk)));
+  return child;
+}
+
+async function stopDaemon(): Promise<void> {
+  const child = daemon;
+  daemon = undefined;
+  if (child === undefined || child.exitCode !== null) return;
+  const gone = new Promise((resolve) => child.once('exit', resolve));
+  child.kill('SIGTERM');
+  await gone;
+}
+
+const online = async (): Promise<boolean> =>
+  (await client.call('machines.get', { params: { machine: machineId } })).online;
+
+/** Sends an actor a message, and waits until its turn has ended. */
+async function turn(actor: ActorId, text: string): Promise<void> {
+  const before = (await client.call('actors.get', { params: { actor } })).lastTurn?.at ?? 0;
+  await client.call('inputs.send', {
+    params: { actor },
+    body: { type: 'message', payload: { text } },
+  });
+  await expect
+    .poll(
+      async () => {
+        const now = await client.call('actors.get', { params: { actor } });
+        return now.status === 'idle' && (now.lastTurn?.at ?? 0) > before;
+      },
+      { timeout: 20_000, interval: 25 },
+    )
+    .toBe(true);
+}
+
+const conversation = async (actor: ActorId) =>
+  (await client.call('messages.list', { params: { actor }, query: { limit: 200 } })).items;
+
+const results = async (actor: ActorId) =>
+  (await conversation(actor)).filter((entry) => entry.message.role === 'tool_result').map(textOf);
+
+beforeAll(async () => {
+  program = await daemonProgram();
+  if (program === undefined) return;
+  dir = await realpath(await mkdtemp(join(tmpdir(), 'acentric-daemon-')));
+  work = join(dir, 'work');
+  await mkdir(work);
+  up = await start(
+    readSettings({
+      ACENTRIC_PORT: '0',
+      ACENTRIC_DATA: join(dir, 'data'),
+      ACENTRIC_SECRET_KEY: 'ab'.repeat(32),
+      ACENTRIC_CODE_PROCESSES: '1',
+    }),
+    {
+      version: 'test',
+      providers: new Providers([fakeProvider(model, { keys: [MODEL_KEY] })]),
+      log: () => {},
+      checkAnswers: true,
+    },
+  );
+  client = createClient({ baseUrl: up.server.url, token: up.firstKey as string });
+  await client.call('accounts.create', {
+    body: { provider: 'fake', name: 'main', apiKey: MODEL_KEY },
+  });
+  const deployed = await client.call('deployments.create', {
+    body: {
+      agent: 'worker',
+      manifest: { protocol: 1, sdk: '0.15.0' },
+      code: await bundle('worker'),
+    },
+  });
+  agentId = deployed.agent.id;
+}, 300_000);
+
+afterAll(async () => {
+  if (program === undefined) return;
+  await stopDaemon();
+  await up.close({ graceMs: 100 });
+  await rm(dir, { recursive: true, force: true });
+});
+
+describe('the daemon, against a server', () => {
+  it('enrols with its machine’s token, connects, and says what the machine is', async (context) => {
+    if (program === undefined) return context.skip();
+    const added = await client.call('machines.create', {
+      body: { name: 'this-computer', agents: [agentId as never] },
+    });
+    machineId = added.machine.id;
+    const env = { ...process.env, MACHINE_DIR: join(dir, 'machine') };
+    const enrol = (token: string) =>
+      run(
+        program as string,
+        ['enrol', '--server', up.server.url, '--id', machineId, '--token', token],
+        {
+          env,
+        },
+      );
+    // With what is not its token, it is refused, and is told so.
+    await expect(enrol('not-the-token')).rejects.toMatchObject({ code: 1 });
+    await enrol(added.token);
+    expect(await client.call('machines.get', { params: { machine: machineId } })).toMatchObject({
+      enrolled: true,
+      online: false,
+    });
+
+    daemon = connect();
+    await expect.poll(online, { timeout: 10_000, interval: 25 }).toBe(true);
+    const machine = await client.call('machines.get', { params: { machine: machineId } });
+    expect(machine).toMatchObject({
+      os: process.platform,
+      arch: process.arch,
+      home: process.env['HOME'],
+      // This engine hands out no daemon: whether this one is the newest is not known.
+      current: null,
+    });
+    expect(machine.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(machine.hostname).not.toBe('');
+  });
+
+  it('runs an actor’s commands with bash: where it works, with its variables, and says how each ended', async (context) => {
+    if (program === undefined) return context.skip();
+    const { actor } = await client.call('actors.create', {
+      params: { agent: agentId as never },
+      body: { machine: { id: machineId, cwd: work, env: { GREETING: 'hello', HOME_OF: 'tests' } } },
+    });
+
+    plan = (step, told) => {
+      const asked = step.messages.filter((message) => message.role === 'tool_result').length;
+      if (asked === 0) {
+        return calls({
+          id: 'c1',
+          name: 'bash',
+          arguments: { command: 'echo "$GREETING from $(pwd)"; echo kept > note.txt' },
+        });
+      }
+      if (asked === 1)
+        return calls({ id: 'c2', name: 'bash', arguments: { command: 'cat note.txt; exit 3' } });
+      if (asked === 2) {
+        return calls({ id: 'c3', name: 'bash', arguments: { command: 'pwd', cwd: '..' } });
+      }
+      return says(`Done: ${told}`);
+    };
+    await turn(actor.id, 'Work.');
+    const [first, second, third] = await results(actor.id);
+    expect(first).toBe(`hello from ${work}`);
+    expect(second).toMatch(/^kept\n\[exit 3 · \d+ms\]$/);
+    expect(third).toBe(dir);
+    expect(await readFile(join(work, 'note.txt'), 'utf8')).toBe('kept\n');
+
+    // The model was told where it works, by what the daemon said of the machine.
+    const system = process.platform === 'darwin' ? 'macOS' : 'Linux';
+    const arch = process.arch;
+    const tasks = await client.call('tasks.list', { params: { actor: actor.id } });
+    expect(tasks.items.map((task) => [task.id, task.kind, task.status])).toEqual([
+      ['b3', 'bash', 'done'],
+      ['b2', 'bash', 'done'],
+      ['b1', 'bash', 'done'],
+    ]);
+    plan = (step) => {
+      expect(step.instructions).toContain(
+        `It runs ${system} (${arch}), and your working directory is ${work}.`,
+      );
+      return says('I know where I am.');
+    };
+    await turn(actor.id, 'Where are you?');
+    expect(textOf((await conversation(actor.id)).at(-1))).toBe('I know where I am.');
+  }, 60_000);
+
+  it('lets a command go on in the background, tells of its ending, and stops one when asked', async (context) => {
+    if (program === undefined) return context.skip();
+    const { actor } = await client.call('actors.create', {
+      params: { agent: agentId as never },
+      body: { machine: { id: machineId, cwd: work } },
+    });
+
+    // It starts a command without waiting, ends its turn, and is woken by the ending.
+    let woken = '';
+    plan = (step, told) => {
+      const last = step.messages.at(-1);
+      if (last?.role === 'user' && told === 'Build.') {
+        return calls({
+          id: 'c1',
+          name: 'bash',
+          arguments: { command: 'sleep 0.3; echo built > out.txt; echo finished', wait: 0 },
+        });
+      }
+      if (last?.role === 'tool_result') return says('It is building.');
+      woken = told;
+      return says('It built.');
+    };
+    await turn(actor.id, 'Build.');
+    expect((await results(actor.id))[0]).toMatch(/b1/);
+    await expect
+      .poll(async () => textOf((await conversation(actor.id)).at(-1)), { timeout: 20_000 })
+      .toBe('It built.');
+    expect(woken).toMatch(
+      /<task id="b1" kind="bash" status="done" ran="[^"]+">\n\$ sleep 0\.3; echo built > out\.txt; echo finished\nfinished\n<\/task>/,
+    );
+    expect(await readFile(join(work, 'out.txt'), 'utf8')).toBe('built\n');
+
+    // One that would run for long is stopped, with everything it started.
+    plan = (step) => {
+      const before = step.messages.findLastIndex((message) => message.role === 'user');
+      const inTurn = step.messages.slice(before + 1).filter((m) => m.role === 'tool_result').length;
+      if (inTurn === 0) {
+        return calls({
+          id: 'c2',
+          name: 'bash',
+          arguments: { command: 'echo started; sleep 300 & wait', wait: 0 },
+        });
+      }
+      // Time for it to have said something.
+      if (inTurn === 1)
+        return calls({ id: 'c3', name: 'bash', arguments: { command: 'sleep 0.5' } });
+      if (inTurn === 2) return calls({ id: 'c4', name: 'stop', arguments: { task: 'b2' } });
+      return says('Stopped.');
+    };
+    await turn(actor.id, 'Start something long, then stop it.');
+    const stopped = (await results(actor.id)).at(-1) ?? '';
+    expect(stopped).toMatch(/^stopped b2 after /);
+    expect(stopped).toContain('started');
+    expect(
+      await client.call('tasks.get', { params: { actor: actor.id, task: 'b2' } }),
+    ).toMatchObject({
+      status: 'stopped',
+    });
+
+    // A command stopped at its timeout says so.
+    plan = (step) =>
+      step.messages.at(-1)?.role === 'user'
+        ? calls({
+            id: 'c4',
+            name: 'bash',
+            arguments: { command: 'echo waiting; sleep 300', timeout: 1 },
+          })
+        : says('It timed out.');
+    await turn(actor.id, 'Wait for too long.');
+    expect((await results(actor.id)).at(-1)).toMatch(/^waiting\n\[stopped: timed out after \S+\]$/);
+  }, 90_000);
+
+  it('is told when its machine is away, runs again when it is back, and not at all once it is removed', async (context) => {
+    if (program === undefined) return context.skip();
+    const { actor } = await client.call('actors.create', {
+      params: { agent: agentId as never },
+      body: { machine: { id: machineId, cwd: work } },
+    });
+    plan = (step, told) =>
+      step.messages.at(-1)?.role === 'user'
+        ? calls({
+            id: `c${String(step.messages.length)}`,
+            name: 'bash',
+            arguments: { command: 'echo here' },
+          })
+        : says(told);
+
+    await stopDaemon();
+    await expect.poll(online, { timeout: 10_000, interval: 25 }).toBe(false);
+    await turn(actor.id, 'Anyone there?');
+    expect((await results(actor.id)).at(-1)).toBe(
+      `Your machine, ${machineId}, is not connected: nothing was run. It may be back later.`,
+    );
+    expect(
+      await client
+        .call('machines.upgrade', { params: { machine: machineId } })
+        .catch((error: unknown) => (error as { code: string }).code),
+    ).toBe('machine_offline');
+
+    daemon = connect();
+    await expect.poll(online, { timeout: 10_000, interval: 25 }).toBe(true);
+    await turn(actor.id, 'And now?');
+    expect((await results(actor.id)).at(-1)).toBe('here');
+    // This engine hands out no daemon for it to take.
+    expect(
+      await client
+        .call('machines.upgrade', { params: { machine: machineId } })
+        .catch((error: unknown) => (error as { code: string }).code),
+    ).toBe('conflict');
+
+    await client.call('machines.delete', { params: { machine: machineId } });
+    await turn(actor.id, 'Still?');
+    expect((await results(actor.id)).at(-1)).toBe(
+      `Your machine, ${machineId}, was removed: nothing was run.`,
+    );
+    // Its daemon is not taken again: it goes on asking, and is refused.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(daemon.exitCode).toBeNull();
+    expect(
+      await client
+        .call('machines.get', { params: { machine: machineId } })
+        .catch((error: unknown) => (error as { code: string }).code),
+    ).toBe('not_found');
+  }, 90_000);
+});

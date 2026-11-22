@@ -81,6 +81,8 @@ export async function api(
     readonly blobs?: boolean;
     /** The kinds of task the engine has. None, without it. */
     readonly kinds?: readonly TaskKind[];
+    /** True for an engine that keeps machines. */
+    readonly machines?: boolean;
   } = {},
 ) {
   const store = new MemoryStore();
@@ -113,6 +115,7 @@ export async function api(
     secrets,
     ...(options.blobs === false ? {} : { blobs }),
     ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
+    ...(options.machines === true ? { machines: {} } : {}),
   });
   // A hash that is quick to make: these tests are not of how long a password takes to guess.
   const people = new People({ store, audit, passwordCost: 1024 });

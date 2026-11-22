@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { builtInProviders } from '@acentric/ai';
 import type { ModelRunner, Providers } from '@acentric/ai';
 import { Accounts, Audit, Engine, Keys, People, Secrets, accountRunners } from '@acentric/core';
-import type { RunnerSource } from '@acentric/core';
+import type { EngineOptions, RunnerSource } from '@acentric/core';
 import { IsolateExecutor } from '@acentric/executor';
 import { FileBlobStore, SqliteStore } from '@acentric/store';
 
@@ -44,6 +44,8 @@ export async function start(
     readonly checkAnswers?: boolean;
     /** How hard a password's hash is to make (see `People`). Tests ask for less. */
     readonly passwordCost?: number;
+    /** How long machines and their daemons are given, and the like. Tests ask for less. */
+    readonly machines?: NonNullable<EngineOptions['machines']>;
   },
 ): Promise<Started> {
   await mkdir(settings.data, { recursive: true });
@@ -71,6 +73,8 @@ export async function start(
     // The bytes of images and files, in a folder beside the database.
     blobs: new FileBlobStore(join(settings.data, 'blobs')),
     runner: more.runner ?? accountRunners(accounts),
+    // The computers actors' commands run on: their daemons connect to this server.
+    machines: more.machines ?? {},
   });
   const people = new People({
     store,
