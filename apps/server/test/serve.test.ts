@@ -118,7 +118,7 @@ describe('a server', () => {
       ],
     });
     await first.close();
-    await expect(client.call('me.get')).rejects.toThrow();
+    await expect(client.call('me.get')).rejects.toThrow(/fetch failed/);
 
     // Started again on the same data: nothing was lost, and it needs no new key.
     const second = await up();
