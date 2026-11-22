@@ -1,7 +1,7 @@
 // What any executor does with an agent's code. The executor in this process is held to it
 // here, and the one that keeps code apart from the engine will be, by the same tests.
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { CallContext, Executor } from '@acentric/core';
 import { agentDefinitionSchema, makeId } from '@acentric/protocol';
@@ -54,6 +54,10 @@ export function executorSuite(
       ];
       executor = await open(loading, { ORDERS_API_KEY: 'k-1' });
       bare = await open(loading, {});
+    });
+    afterAll(async () => {
+      // An executor that started processes of its own ends them.
+      for (const one of [executor, bare] as { close?: () => Promise<void> }[]) await one.close?.();
     });
 
     it('says what the code is', async () => {
