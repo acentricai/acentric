@@ -60,6 +60,23 @@ and the project depends on it as `file:./vendor/agent`.
 An agent is named by its name. An actor is named by its ID, or as `<agent>/<name>` when it has
 a name.
 
+## Its own version
+
+The command is installed from an engine, and is that engine's own build of it. It stays so:
+
+| Command            | What it does                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| `acentric version` | This command's version, the engine's, and whether the engine hands out this version of the command. |
+| `acentric update`  | Takes the version the engine hands out, without asking.                                             |
+
+Every answer of an engine says which command it hands out. When that is not the one you have,
+the command asks, after it has done what you asked for, whether to update to it. Say no, and
+it does not ask again until the engine has yet another version. It asks only when a person is
+there to answer: in a script or in CI it says nothing, and `acentric update` is run when wanted.
+
+The engine's version is the one to have, whichever is newer. With two engines of different
+versions, the command is updated to the one it is used with.
+
 ## Building
 
 `pnpm build`, at the root of the repository, makes `dist/acentric.mjs`: the command as one

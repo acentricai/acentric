@@ -61,6 +61,9 @@ acentric actors create my-agents               # a running agent
 acentric actors send <actor> "Hello" --follow  # talk to it
 ```
 
+When the server is upgraded, the command offers to update itself to the server's version the
+next time it is used, and `acentric update` does it without asking.
+
 [apps/cli/README.md](apps/cli/README.md) has every command.
 
 ## What is here
