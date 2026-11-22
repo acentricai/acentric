@@ -33,6 +33,8 @@ const actorOf = (): Actor => {
     externalId: null,
     agent: makeId('agent', { now: NOW, random: random(2) }),
     deployment: { id: makeId('deployment', { now: NOW, random: random(3) }), version: 1 },
+    pinned: false,
+    behind: null,
     modelId: 'fake-1',
     reasoning: 'medium',
     configuration: null,

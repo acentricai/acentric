@@ -30,6 +30,8 @@ export const ERROR_STATUS = {
   unsupported_protocol: 400,
   /** The deployed code is not an agent, or does not load. */
   invalid_agent: 400,
+  /** The deployed code uses what this engine does not have: a provider, or a feature. */
+  unsupported_feature: 400,
   /** An actor's configuration failed its agent's schema. */
   invalid_configuration: 400,
   /** An input's payload failed its schema. */

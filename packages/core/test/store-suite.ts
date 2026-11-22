@@ -27,6 +27,8 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       externalId: null,
       agent,
       deployment: { id: makeId('deployment', { now: NOW, random: random() }), version: 1 },
+      pinned: false,
+      behind: null,
       modelId: 'fake-1',
       reasoning: 'medium',
       configuration: { region: 'eu' },
