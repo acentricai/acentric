@@ -6,7 +6,8 @@ import { generateKeyPairSync } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { says } from '@acentric/ai/testing';
+import { calls, says } from '@acentric/ai/testing';
+import type { TaskEnd, TaskKind } from '@acentric/core';
 
 import { ADMIN, BASE, api, refusal } from './api.ts';
 
@@ -256,6 +257,62 @@ describe('an actor on a machine', () => {
         admin.call('actors.update', { params: { actor: other.id }, body: { env: { A: '1' } } }),
       ),
     ).toEqual({ code: 'invalid_request', status: 400 });
+    expect(failures).toEqual([]);
+  });
+});
+
+describe('the variables of an actor’s commands', () => {
+  it('are changed while the actor is in a turn, where nothing else of it is', async () => {
+    // A kind of task whose work goes on until the test ends it: its call keeps the turn going.
+    let end: (ended: TaskEnd) => void = () => {};
+    const kind: TaskKind = {
+      kind: 'job',
+      prefix: 'j',
+      tool: { name: 'job', description: 'Starts a job.', properties: {} },
+      input: () => ({}),
+      run: (_task, { closing }) =>
+        new Promise<TaskEnd>((resolve) => {
+          end = resolve;
+          closing.addEventListener('abort', () => {
+            resolve({ status: 'done', text: '' });
+          });
+        }),
+    };
+    const one = await api([calls({ id: 'c1', name: 'job', arguments: {} }), says('Done.')], {
+      machines: true,
+      kinds: [kind],
+    });
+    const { admin, deploy, engine, failures } = one;
+    const { agent } = await deploy('workers', 'machines@1');
+    const added = await admin.call('machines.create', { body: { name: 'box', agents: '*' } });
+    const { actor } = await admin.call('actors.create', {
+      params: { agent: agent.id },
+      body: { machine: { id: added.machine.id, cwd: '~', env: { A: '1' } } },
+    });
+    const params = { actor: actor.id };
+    await admin.call('inputs.send', {
+      params,
+      body: { type: 'message', payload: { text: 'Go.' } },
+    });
+    await expect
+      .poll(async () => (await admin.call('tasks.list', { params })).items.length)
+      .toBe(1);
+    expect((await admin.call('actors.get', { params })).status).toBe('working');
+
+    const changed = await admin.call('actors.update', { params, body: { env: { B: '2' } } });
+    expect(changed).toMatchObject({ status: 'working', machine: { env: ['B'] } });
+    // Anything else waits for the turn to end, and with it the variables do too.
+    expect(
+      await refusal(admin.call('actors.update', { params, body: { name: 'w', env: { C: '3' } } })),
+    ).toEqual({ code: 'actor_busy', status: 409 });
+    expect((await admin.call('actors.get', { params })).machine?.env).toEqual(['B']);
+
+    end({ status: 'done', text: 'finished' });
+    await engine.settled(actor.id);
+    expect(await admin.call('actors.get', { params })).toMatchObject({
+      status: 'idle',
+      machine: { env: ['B'] },
+    });
     expect(failures).toEqual([]);
   });
 });
