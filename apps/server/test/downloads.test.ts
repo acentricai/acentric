@@ -1,10 +1,12 @@
 // What the server hands out to be installed elsewhere: the command, and the script that
 // installs it.
 
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { COMMAND_HEADER } from '@acentric/protocol';
 import { Hono } from 'hono';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -86,6 +88,7 @@ describe('a server', () => {
 
     const without = await start(settings({}), { version: 'test', log: () => {} });
     expect((await fetch(`${without.server.url}/install-cli.sh`)).status).toBe(404);
+    expect((await fetch(`${without.server.url}/health`)).headers.get(COMMAND_HEADER)).toBeNull();
     await without.close();
 
     const withIt = await start(settings({ ACENTRIC_DOWNLOADS: folder }), {
@@ -94,6 +97,14 @@ describe('a server', () => {
     });
     const script = await fetch(`${withIt.server.url}/install-cli.sh`);
     expect(await script.text()).toContain(`SERVER='${withIt.server.url}'`);
+
+    // Every answer says which command the server hands out, by the digest of its file: one
+    // that is up, one that is refused, one of no route, and the command itself.
+    const digest = createHash('sha256').update('// the command\n').digest('hex');
+    for (const path of ['/health', '/v1/me', '/v1/nothing-here', '/acentric.mjs']) {
+      const answer = await fetch(`${withIt.server.url}${path}`);
+      expect(answer.headers.get(COMMAND_HEADER), path).toBe(digest);
+    }
     await withIt.close();
   }, 60_000);
 });

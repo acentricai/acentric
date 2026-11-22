@@ -3,9 +3,13 @@
 //   GET /install-cli.sh   installs the acentric command
 //   GET /acentric.mjs     the acentric command, as one file
 //
+// Every answer of a server that hands out the command says which one, by the digest of its
+// file: a command that was installed from an engine sees when the engine has another version.
+//
 // Each engine hands out the programs of its own build, so what is installed from it speaks what
 // it speaks. The script has the engine's own address written in. Nothing here is secret.
 
+import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -48,10 +52,11 @@ export type Downloads = {
 /**
  * Serves what is in the folder: each of `DOWNLOADS`, all of which must be there. It throws,
  * saying which is not and where it comes from, so that a server told a folder without them
- * does not start.
+ * does not start. It gives the digest of the command it hands out.
  */
-export function serveDownloads(app: Hono, downloads: Downloads): void {
+export function serveDownloads(app: Hono, downloads: Downloads): string {
   const root = resolve(downloads.folder);
+  let command = '';
   const headers = { 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' };
   for (const { file, script, from } of DOWNLOADS) {
     if (statSync(join(root, file), { throwIfNoEntry: false })?.isFile() !== true) {
@@ -59,6 +64,7 @@ export function serveDownloads(app: Hono, downloads: Downloads): void {
     }
     const body = readFileSync(join(root, file));
     if (!script) {
+      command = createHash('sha256').update(body).digest('hex');
       app.get(`/${file}`, (context) =>
         context.body(body, 200, { ...headers, 'content-type': 'text/javascript; charset=utf-8' }),
       );
@@ -85,4 +91,5 @@ export function serveDownloads(app: Hono, downloads: Downloads): void {
       });
     });
   }
+  return command;
 }

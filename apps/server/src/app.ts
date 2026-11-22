@@ -7,7 +7,13 @@
 
 import { randomBytes } from 'node:crypto';
 
-import { API_VERSION, MAX_BUNDLE_SIZE, buildOpenApi, routes } from '@acentric/protocol';
+import {
+  API_VERSION,
+  COMMAND_HEADER,
+  MAX_BUNDLE_SIZE,
+  buildOpenApi,
+  routes,
+} from '@acentric/protocol';
 import type { Issue, Route, RouteId } from '@acentric/protocol';
 import { Hono } from 'hono';
 import type { z } from 'zod';
@@ -85,11 +91,22 @@ export function createApp(options: AppOptions): Hono {
     });
   const app = new Hono();
 
+  // A server that hands out the command says which one with every answer, so that a command
+  // installed from it sees when the server has another version.
+  if (options.downloads !== undefined) {
+    const downloads = new Hono();
+    const command = serveDownloads(downloads, options.downloads);
+    app.use('*', async (context, next) => {
+      await next();
+      context.res.headers.set(COMMAND_HEADER, command);
+    });
+    app.route('/', downloads);
+  }
+
   // Not of the API: whether the server is up, and what the API is.
   app.get('/health', (context) => context.json({ ok: true, version: options.version }));
   const openApi = buildOpenApi(routes, { title: 'Acentric', version: API_VERSION });
   app.get('/v1/openapi.json', (context) => context.json(openApi));
-  if (options.downloads !== undefined) serveDownloads(app, options.downloads);
 
   for (const [id, route] of Object.entries(routes) as [RouteId, Route][]) {
     const handler = handlers[id] as ((asked: unknown, parts: Parts) => unknown) | undefined;
