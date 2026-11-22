@@ -100,7 +100,10 @@ function messageOf(message: Message, where: string, model: string): JsonObject[]
           `${where} is an answer of ${message.provider}, which ${LABEL} cannot be sent`,
         );
       }
-      if (message.model === model) return [{ role: 'assistant', content: message.content }];
+      if (message.model === model) {
+        // An answer that was thinking and nothing else, with its thinking left out, is nothing.
+        return message.content.length > 0 ? [{ role: 'assistant', content: message.content }] : [];
+      }
       // Another model's thinking is its own: some models read it, others pass over it without
       // a word. The rest of what it wrote is sent as it was written.
       const kept = message.content.filter(

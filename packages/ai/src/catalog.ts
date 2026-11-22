@@ -29,6 +29,13 @@ export type ModelInfo = {
   readonly maxOutputTokens?: number;
   readonly input?: readonly ('text' | 'image' | 'file')[];
   readonly pricing?: ModelPricing;
+  /**
+   * Whether its reasoning is tied to what came before it: the instructions, the tools and
+   * every earlier message. For such a model, reasoning from before a change to any of those
+   * is refused by its provider, or thrown away without a word, so it is not sent (see
+   * `bindsReasoning`). Without it, what the provider says of the models it does not know.
+   */
+  readonly bindsReasoning?: boolean;
 };
 
 function price(count: number, perMillion: number): number {

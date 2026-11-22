@@ -3,12 +3,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { Message } from '@acentric/protocol';
+import type { AssistantMessage, Message } from '@acentric/protocol';
 
 import {
   ModelFailure,
   Providers,
   UnknownProvider,
+  bindsReasoning,
   builtInProviders,
   effortOf,
   estimateCost,
@@ -391,6 +392,87 @@ describe('what a conversation holds', () => {
   });
 });
 
+describe('reasoning from before a change', () => {
+  const answer = (
+    provider: string,
+    api: string,
+    content: AssistantMessage['content'],
+  ): AssistantMessage => ({
+    role: 'assistant',
+    provider,
+    api,
+    model: 'a-model',
+    content,
+  });
+
+  it('is tied to what came before it for the models that say so, and for those not known', () => {
+    const binds = (id: string, model: string) => bindsReasoning(providers.get(id), model);
+    expect(binds('anthropic', 'claude-fable-5-2')).toBe(true);
+    expect(binds('anthropic', 'claude-sonnet-5-5')).toBe(true);
+    expect(binds('openai', 'gpt-6.2-sol')).toBe(true);
+    expect(binds('chatgpt', 'gpt-6.2-astra')).toBe(true);
+    expect(binds('openai', 'gpt-6.1-terra')).toBe(false);
+    expect(binds('openai', 'gpt-6-luna')).toBe(false);
+    expect(binds('fireworks', 'accounts/fireworks/models/glm-5p3-flash')).toBe(false);
+    // A model the catalog has not heard of is a newer one.
+    expect(binds('anthropic', 'claude-next')).toBe(true);
+    expect(binds('openai', 'gpt-7')).toBe(true);
+    expect(binds('fireworks', 'accounts/fireworks/models/new')).toBe(false);
+  });
+
+  it('is taken out of an answer, and everything else of the answer stays', () => {
+    const thought = answer('anthropic', 'anthropic-messages', [
+      { type: 'thinking', thinking: 'Look it up.', signature: 'sig' },
+      { type: 'redacted_thinking', data: 'sealed' },
+      { type: 'text', text: 'Looking.' },
+      { type: 'tool_use', id: 'toolu_1', name: 'lookup_order', input: { id: 4411 } },
+    ]);
+    expect(
+      providers
+        .get('anthropic')
+        .withoutReasoning(thought)
+        .content.map((block) => block['type']),
+    ).toEqual(['text', 'tool_use']);
+
+    const reasoned = answer('openai', 'openai-responses', [
+      { type: 'reasoning', id: 'rs_1', encrypted_content: 'sealed', summary: [] },
+      {
+        type: 'function_call',
+        id: 'fc_1',
+        call_id: 'call_1',
+        name: 'lookup_order',
+        arguments: '{}',
+      },
+    ]);
+    for (const id of ['openai', 'chatgpt', 'fireworks']) {
+      const kept = providers.get(id).withoutReasoning(reasoned);
+      expect(
+        kept.content.map((item) => item['type']),
+        id,
+      ).toEqual(['function_call']);
+    }
+    // An answer with none is the answer itself: nothing is copied.
+    const plain = answer('openai', 'openai-responses', [{ type: 'message', id: 'msg_1' }]);
+    expect(providers.get('openai').withoutReasoning(plain)).toBe(plain);
+  });
+
+  it('an answer that was thinking and nothing else is not sent to Anthropic at all', async () => {
+    const only = answer('anthropic', 'anthropic-messages', []);
+    const sent = await sentBy(
+      'anthropic',
+      step({
+        messages: [
+          ...step().messages,
+          only,
+          { role: 'user', content: [{ type: 'text', text: 'Go on.' }] },
+        ],
+      }),
+    );
+    const roles = (sent.body['messages'] as { role: string }[]).map((message) => message.role);
+    expect(roles).toEqual(['user', 'user']);
+  });
+});
+
 describe('a call that fails', () => {
   it('for too many calls may pass later, after as long as the provider says', async () => {
     const openai = await failureOf(
@@ -502,6 +584,20 @@ describe('a call that fails', () => {
         retryable: false,
       });
     }
+  });
+
+  it('for reasoning tied to what has since changed is that, whatever else was wrong', async () => {
+    // As Anthropic answered a conversation whose instructions were changed, on 2026-11-22.
+    const failure = await failureOf('anthropic', 400, {
+      type: 'error',
+      error: {
+        type: 'invalid_request_error',
+        message:
+          'messages.1.content.0: Invalid `signature` in `thinking` block. The block is bound to a different conversation. Remove the block, or set `thinking.block_binding.prefix_mismatch_behavior` to "drop_block". The `system` prompt differs',
+      },
+    });
+    // The same call is refused again: it is the engine that sends it without that reasoning.
+    expect(failure).toMatchObject({ kind: 'stale_reasoning', retryable: false });
   });
 
   it('for an account with no more to spend is that', async () => {

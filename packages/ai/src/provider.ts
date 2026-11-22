@@ -44,6 +44,12 @@ export interface Provider {
   /** The model an actor runs on when it is created without one. */
   readonly defaultModel: string;
   /**
+   * Whether the reasoning of a model that is not among `models` is taken to be tied to what
+   * came before it (see `ModelInfo.bindsReasoning`). True is the safe answer: reasoning that
+   * was left out is never refused, and reasoning that was sent may be.
+   */
+  readonly bindsReasoning: boolean;
+  /**
    * Checks what an agent asks of this provider that only it has, and gives it back as its
    * runner reads it. Throws, with what is wrong, when it asks what the provider has not.
    */
@@ -51,6 +57,26 @@ export interface Provider {
   runner(settings: RunnerSettings): ModelRunner;
   /** Reads an answer this provider wrote. */
   read(message: AssistantMessage): AnswerView;
+  /** An answer this provider wrote, without what it gives of its reasoning. */
+  withoutReasoning(message: AssistantMessage): AssistantMessage;
+}
+
+/**
+ * Whether a model's reasoning is tied to what came before it: what is known of the model, or
+ * else what its provider says of the models it does not know.
+ */
+export function bindsReasoning(provider: Provider, model: string): boolean {
+  const known = provider.models.find((info) => info.id === model);
+  return known?.bindsReasoning ?? provider.bindsReasoning;
+}
+
+/** An answer without the items of its content that have one of these types. */
+export function withoutTypes(
+  message: AssistantMessage,
+  types: readonly string[],
+): AssistantMessage {
+  const content = message.content.filter((item) => !types.includes(String(item['type'])));
+  return content.length === message.content.length ? message : { ...message, content };
 }
 
 export class UnknownProvider extends Error {
