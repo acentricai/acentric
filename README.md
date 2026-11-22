@@ -40,7 +40,9 @@ docker run -p 4000:4000 -v acentric-data:/data \
 - The server makes machines itself, as sandboxes, at the providers it was set up with. For
   Docker, build the sandbox image with `docker build --target sandbox -t acentric-sandbox .`
   and set `ACENTRIC_DOCKER_HOST`, such as `unix:///var/run/docker.sock`, and
-  `ACENTRIC_DOCKER_IMAGE`. Whoever may make a sandbox then has the computer Docker is on. An
+  `ACENTRIC_DOCKER_IMAGE`. Whoever may make a sandbox then has the computer Docker is on. For
+  Boat (boat.dev), build its snapshot with `deploy/sandbox/boat-template.sh` and set
+  `ACENTRIC_BOAT_TEMPLATE` to the name it prints. An
   account at the provider is added with `POST /v1/providers`, and a sandbox is made with
   `POST /v1/sandboxes`: it is stopped when nothing was run on it for its idle time, and started
   again for the next command.
