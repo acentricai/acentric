@@ -23,6 +23,7 @@
     "dist",
     "target",
     "packages/agent/src/schema.ts",
-    "packages/agent/test/types.ts"
+    "packages/agent/test/types.ts",
+    "apps/cli/src/vendored.ts"
   ]
 }

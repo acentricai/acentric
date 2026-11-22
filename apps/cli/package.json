@@ -14,7 +14,8 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "install.sh"
   ],
   "engines": {
     "node": ">=24"
@@ -23,7 +24,16 @@
     "access": "public",
     "provenance": true
   },
+  "scripts": {
+    "vendor": "node scripts/vendor.ts",
+    "bundle": "node scripts/bundle.ts"
+  },
+  "dependencies": {
+    "@acentric/client": "workspace:*",
+    "@acentric/protocol": "workspace:*"
+  },
   "devDependencies": {
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "esbuild": "catalog:"
   }
 }
