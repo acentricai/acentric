@@ -1,6 +1,6 @@
 // What the engine refuses, each with the code the API answers it with.
 
-import type { ActorId, ErrorCode } from '@acentric/protocol';
+import type { ActorId, CallIssue, ErrorCode } from '@acentric/protocol';
 
 /** Something the engine was asked that it does not do. `code` is what the API says of it. */
 export abstract class EngineError extends Error {
@@ -37,6 +37,12 @@ export class UnknownInput extends EngineError {
 export class InvalidInput extends EngineError {
   override readonly name = 'InvalidInput';
   readonly code = 'invalid_input';
+  /** What the input's schema found wrong with it. Absent when the agent's code threw. */
+  readonly issues: readonly CallIssue[] | undefined;
+  constructor(message: string, issues?: readonly CallIssue[]) {
+    super(message);
+    this.issues = issues;
+  }
 }
 
 /** What was asked cannot be done as the actor stands. */
