@@ -36,7 +36,7 @@ RUN pnpm install --frozen-lockfile
 COPY packages packages
 COPY apps apps
 COPY scripts scripts
-RUN pnpm exec tsc -b
+RUN pnpm build
 
 # The server alone, with what it needs to run and nothing it was built with.
 RUN pnpm --filter @acentric/server deploy --prod --legacy /out
@@ -45,13 +45,17 @@ FROM node:26-slim
 ENV NODE_ENV=production \
     ACENTRIC_HOST=0.0.0.0 \
     ACENTRIC_PORT=4000 \
-    ACENTRIC_DATA=/data
+    ACENTRIC_DATA=/data \
+    ACENTRIC_DOWNLOADS=/app/downloads
 # What workerd checks the sites agents' code calls against: the slim image has none.
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /out .
+# The acentric command of this build, which the server hands out at /install-cli.sh.
+COPY --from=build /repo/apps/cli/install.sh downloads/install-cli.sh
+COPY --from=build /repo/apps/cli/dist/acentric.mjs downloads/
 RUN mkdir /data && chown node:node /data
 VOLUME /data
 EXPOSE 4000

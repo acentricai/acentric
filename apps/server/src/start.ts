@@ -102,6 +102,9 @@ export async function start(
       port: settings.port,
       host: settings.host,
       ...(more.checkAnswers === undefined ? {} : { checkAnswers: more.checkAnswers }),
+      ...(settings.downloads === undefined
+        ? {}
+        : { downloads: { folder: settings.downloads, publicUrl: settings.publicUrl } }),
     });
     return {
       server,
