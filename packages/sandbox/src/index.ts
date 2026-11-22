@@ -13,3 +13,6 @@ export {
   dockerState,
 } from './docker.ts';
 export type { DockerOptions } from './docker.ts';
+
+export { BOAT_PROVISION_PATH, BOAT_SIZES, boat, boatState } from './boat.ts';
+export type { BoatOptions } from './boat.ts';
