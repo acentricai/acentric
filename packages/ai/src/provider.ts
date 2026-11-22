@@ -60,6 +60,12 @@ export interface Provider {
   /** An answer this provider wrote, without what it gives of its reasoning. */
   withoutReasoning(message: AssistantMessage): AssistantMessage;
   /**
+   * Asks the provider whether it takes a credential, without calling a model. Rejects with a
+   * `ModelFailure`: of kind `auth` when the provider refuses it, and of another kind when the
+   * provider could not be asked. A provider without it cannot be asked.
+   */
+  check?(settings: RunnerSettings): Promise<void>;
+  /**
    * For a provider whose reasoning level can be changed from a place in a conversation on:
    * the message that changes it, to be put at the conversation's end. The request's own level
    * then stays the one the conversation started with, and what the provider keeps of the

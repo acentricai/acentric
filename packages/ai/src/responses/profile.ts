@@ -43,6 +43,8 @@ export type ResponsesProfile = {
   priceMultiplier(response: JsonObject): number | undefined;
   /** What one search of the provider's own web search costs, in dollars. */
   readonly searchPrice?: number;
+  /** Where the provider lists its models: what a key is checked with. */
+  readonly modelsUrl?: string;
   /**
    * The item that changes the reasoning level from where it is in the input, for a provider
    * that has one. Without it, the level is the request's alone.
