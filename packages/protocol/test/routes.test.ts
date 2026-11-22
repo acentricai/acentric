@@ -29,9 +29,11 @@ describe('the route table', () => {
     expect(new Set(seen).size).toBe(seen.length);
   });
 
-  it('takes an ID for every path parameter, never a name', () => {
+  it('takes an ID for every path parameter, never a name, but for a secret’s', () => {
     for (const [id, route] of all) {
       for (const [name, schema] of Object.entries(route.params?.shape ?? {})) {
+        // A secret has no ID: its name is what its agent's code reads it by, and all it has.
+        if (id.startsWith('secrets.') && name === 'name') continue;
         expect((schema as z.ZodType).safeParse('support').success, `${id} ${name}`).toBe(false);
       }
     }

@@ -5,7 +5,8 @@
 // These are the routes of the first milestone. Signing in, machines, sandboxes, model accounts
 // and usage are added with the steps that build them.
 //
-// A path takes IDs and nothing else. What has a name is found by it with a list's `name`.
+// A path takes IDs and nothing else. What has a name is found by it with a list's `name`. The
+// one exception is a secret, which has no ID: its name is what its agent's code reads it by.
 
 import { z } from 'zod';
 
@@ -20,6 +21,7 @@ import {
   sessionIdSchema,
   userIdSchema,
 } from './ids.ts';
+import { secretNameSchema } from './manifest.ts';
 import { pageQuerySchema, pageSchema } from './primitives.ts';
 import {
   actorSchema,
@@ -42,6 +44,8 @@ import {
   deploymentSummarySchema,
   updateAgentRequestSchema,
   listAgentsQuerySchema,
+  secretSchema,
+  setSecretRequestSchema,
 } from './resources/agents.ts';
 import {
   auditEventSchema,
@@ -70,7 +74,7 @@ export type RouteAuth =
   | { readonly on: 'agent' | 'actor'; readonly permission: Permission; readonly param: string };
 
 export type Route = {
-  readonly method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  readonly method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** From the root, with each parameter in braces: `/v1/actors/{actor}`. */
   readonly path: string;
   /** What it does, in a line. */
@@ -207,6 +211,38 @@ export const routes = defineRoutes({
     params: z.object({ agent: agentIdSchema, deployment: deploymentIdSchema }),
     response: deploymentSchema,
     status: 200,
+    errors: ['not_found'],
+  },
+
+  // An agent's secrets
+
+  'secrets.list': {
+    method: 'GET',
+    path: '/v1/agents/{agent}/secrets',
+    summary: "Lists the names of an agent's secrets. Never their values.",
+    auth: onAgent('secrets:write'),
+    params: agentParam,
+    response: z.object({ items: z.array(secretSchema) }).meta({ id: 'SecretList' }),
+    status: 200,
+    errors: ['not_found'],
+  },
+  'secrets.set': {
+    method: 'PUT',
+    path: '/v1/agents/{agent}/secrets/{name}',
+    summary: "Sets a secret of an agent's, in place of the value it had.",
+    auth: onAgent('secrets:write'),
+    params: z.object({ agent: agentIdSchema, name: secretNameSchema }),
+    body: setSecretRequestSchema,
+    status: 204,
+    errors: ['not_found', 'unavailable'],
+  },
+  'secrets.delete': {
+    method: 'DELETE',
+    path: '/v1/agents/{agent}/secrets/{name}',
+    summary: "Removes a secret of an agent's.",
+    auth: onAgent('secrets:write'),
+    params: z.object({ agent: agentIdSchema, name: secretNameSchema }),
+    status: 204,
     errors: ['not_found'],
   },
 
