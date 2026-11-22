@@ -593,7 +593,9 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         await Promise.all(actors.map((actor) => one.say(actor.id, 'Hello.')));
 
         for (const [index, gate] of gates.entries()) {
-          await eventually(() => asked > index);
+          // An answer is held back until the next actor's call is under way as well, where
+          // there is a next: otherwise a quick answer could come before two were ever at once.
+          await eventually(() => asked >= Math.min(index + 2, gates.length));
           expect(inFlight).toBeLessThanOrEqual(2);
           gate.resolve(says('Hello.'));
         }
