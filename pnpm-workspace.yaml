@@ -9,6 +9,8 @@ catalog:
   zod: ^4.6.7
   esbuild: 0.28.2
 
-# esbuild works without its install script: its binary is a package of its own.
+# esbuild and workerd work without their install scripts: the binary of each is a package of
+# its own, for the platform it is installed on.
 allowBuilds:
   esbuild: false
+  workerd: false

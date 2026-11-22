@@ -18,3 +18,20 @@ export class UnsupportedProtocol extends BundleError {
     );
   }
 }
+
+/**
+ * The process an agent's code ran in died or was killed, so the call has no answer: it
+ * stopped answering, it ran out of memory, or it was replaced and the call did not end in
+ * time. The message says which. Whether the code did anything before is not known.
+ */
+export class SandboxLost extends Error {
+  override readonly name = 'SandboxLost';
+}
+
+/**
+ * A call into code that loads failed for another reason than the code throwing, such as
+ * workerd ending code that waited on nothing. The code may have run in part.
+ */
+export class CallFailed extends Error {
+  override readonly name = 'CallFailed';
+}

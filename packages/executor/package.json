@@ -18,7 +18,8 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "sandbox"
   ],
   "engines": {
     "node": ">=24"
@@ -36,6 +37,7 @@
   },
   "dependencies": {
     "@acentric/core": "workspace:*",
-    "@acentric/protocol": "workspace:*"
+    "@acentric/protocol": "workspace:*",
+    "workerd": "1.20261110.1"
   }
 }
