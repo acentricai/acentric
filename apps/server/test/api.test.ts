@@ -701,7 +701,10 @@ describe('API keys', () => {
       },
     });
     expect(made.token).toMatch(/^ak_/);
-    expect(JSON.stringify(made.key)).not.toContain(made.token.split('_')[2]);
+    // What comes after the key's ID is its secret, which may have a `_` of its own in it.
+    expect(JSON.stringify(made.key)).not.toContain(
+      made.token.slice(made.token.indexOf('_', 3) + 1),
+    );
     const service = as(made.token);
     expect(await service.call('me.get')).toMatchObject({
       type: 'key',

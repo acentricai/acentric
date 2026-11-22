@@ -138,7 +138,9 @@ describe('a request', () => {
   it('keeps nothing of a key but what tells it is the one', async () => {
     const { store, made: make } = world();
     const { token } = await make(Keys.settings);
-    const secret = token.split('_')[2] as string;
+    // Everything after the key's ID: it may have a `_` of its own in it.
+    const secret = token.slice(token.indexOf('_', 3) + 1);
+    expect(secret).toHaveLength(43);
     expect(JSON.stringify(await store.listKeys())).not.toContain(secret);
   });
 });
