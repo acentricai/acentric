@@ -282,7 +282,9 @@ export function machinesSuite(name: string, open: () => Promise<Store>): void {
       });
 
       it('is given up when its daemon does not prove itself, says nothing, or does not answer', async () => {
-        const machines = machinesOf({ times: { proofMs: 30, silenceMs: 60, requestMs: 40 } });
+        // The silence it is given is long beside the proof: the machine's own connection, which
+        // says nothing meanwhile, is to be there still when the other has been given up.
+        const machines = machinesOf({ times: { proofMs: 30, silenceMs: 500, requestMs: 40 } });
         const { id, daemon } = await connected(machines);
 
         const mute = new FakeDaemon();
