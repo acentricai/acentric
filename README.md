@@ -9,8 +9,8 @@ which connect out to the engine, or ones the engine makes at a sandbox provider.
 > foundation up. Today it has the engine on SQLite, four model providers (OpenAI, ChatGPT,
 > Fireworks and Anthropic), the framework an agent is written with, agents deployed as versions
 > that their running actors follow, agents' code run apart from the engine in isolates of
-> `workerd`, and a server with an HTTP API, API keys, sign-in for people with roles and an audit
-> log, and a typed client. It has no command and no dashboard yet.
+> `workerd`, and a server with an HTTP API, API keys, sign-in for people with roles, an audit
+> log, model accounts and usage, and a typed client. It has no command and no dashboard yet.
 
 ## Running the server
 
@@ -21,7 +21,6 @@ stay as it is.
 docker build -t acentric-server .
 docker run -p 4000:4000 -v acentric-data:/data \
   -e ACENTRIC_SECRET_KEY=<32 bytes, as 64 hex characters> \
-  -e OPENAI_API_KEY=<a key of a model provider> \
   acentric-server
 ```
 
@@ -34,8 +33,14 @@ docker run -p 4000:4000 -v acentric-data:/data \
   locked out runs `acentric-server reset-link <email>` on the server itself.
 - Set `ACENTRIC_PUBLIC_URL` to where people reach the server, so that its links start there.
 - It keeps everything it has in `/data`.
-- `ACENTRIC_SECRET_KEY` is what agents' secrets are sealed with. Without it, agents can be
-  given no secrets.
+- `ACENTRIC_SECRET_KEY` is what agents' secrets and the keys of model accounts are sealed
+  with. Without it, the server keeps neither.
+- A provider's models are called with a model account: a key of the provider's, added with
+  `POST /v1/accounts` and checked with the provider before it is kept. No key is read from the
+  environment. The first account of a provider is its default, and an agent can be given
+  another.
+- Every call of a model is written down with what it used and cost. `GET /v1/usage` adds it
+  up, by agent, actor, account, provider, model or day.
 - Its API is described at `/v1/openapi.json`, and `@acentric/client` calls it.
 
 Every setting is listed at the top of `apps/server/src/settings.ts`.
