@@ -6,7 +6,7 @@ import { ScriptedRunner, fakeProvider } from '@acentric/ai/testing';
 import type { Scripted } from '@acentric/ai/testing';
 import { createClient } from '@acentric/client';
 import type { Client } from '@acentric/client';
-import { Engine, Keys, MemoryStore, Secrets } from '@acentric/core';
+import { Audit, Engine, Keys, MemoryStore, People, Secrets } from '@acentric/core';
 import { InlineExecutor } from '@acentric/core/testing';
 import type { AgentFunction, InlineAgent } from '@acentric/core/testing';
 import type { ActorId, AgentDefinition, BodyOf, Json } from '@acentric/protocol';
@@ -72,10 +72,14 @@ export async function api(
     executor: new InlineExecutor(AGENTS),
     secrets,
   });
+  const audit = new Audit({ store });
+  // A hash that is quick to make: these tests are not of how long a password takes to guess.
+  const people = new People({ store, audit, passwordCost: 1024 });
   const keys = new Keys({
     store,
     settingsKey: ADMIN,
     agentOf: async (actor) => (await store.loadActor(actor))?.actor.agent,
+    holderOf: (user) => people.holder(user),
   });
   const streams = new Streams();
   /** What the server itself failed at. */
@@ -83,6 +87,8 @@ export async function api(
   const app = createApp({
     engine,
     keys,
+    people,
+    audit,
     secrets,
     streams,
     version: 'test',
@@ -124,6 +130,8 @@ export async function api(
     store,
     engine,
     keys,
+    people,
+    audit,
     secrets,
     streams,
     runner,

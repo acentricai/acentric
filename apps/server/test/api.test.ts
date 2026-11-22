@@ -33,29 +33,8 @@ describe('the server', () => {
     expect(await response.json()).toMatchObject({ error: { code: 'not_found' } });
   });
 
-  it('has a handler for every route that is built, and says which are not yet', () => {
-    const missing = Object.keys(routes).filter((id) => !Object.hasOwn(handlers, id));
-    // People, their sessions and the audit log come with the part that adds people.
-    expect(missing).toEqual([
-      'setup.complete',
-      'auth.signIn',
-      'auth.signOut',
-      'me.update',
-      'me.password',
-      'password.reset',
-      'invites.create',
-      'invites.list',
-      'invites.revoke',
-      'invites.accept',
-      'users.list',
-      'users.get',
-      'users.update',
-      'users.resetPassword',
-      'users.delete',
-      'sessions.list',
-      'sessions.revoke',
-      'audit.list',
-    ]);
+  it('has a handler for every route of the table', () => {
+    expect(Object.keys(routes).filter((id) => !Object.hasOwn(handlers, id))).toEqual([]);
   });
 
   it('says nothing of why when it fails itself, and tells whoever runs it', async () => {

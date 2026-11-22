@@ -41,6 +41,11 @@ describe('a server’s settings', () => {
       credentials: { openai: { type: 'api_key', apiKey: 'sk-test' } },
     });
     expect(readSettings({ ACENTRIC_AGENT_NETWORK: 'any' }).network).toEqual({ reach: 'any' });
+    // Where people reach it, without the slash a person may leave at its end.
+    expect(readSettings({ ACENTRIC_PUBLIC_URL: 'https://engine.example.com/' }).publicUrl).toBe(
+      'https://engine.example.com',
+    );
+    expect(readSettings({}).publicUrl).toBeUndefined();
   });
 
   it('name the key secrets are sealed with by the key itself, and keep the keys from before', () => {
@@ -59,6 +64,7 @@ describe('a server’s settings', () => {
       [{ ACENTRIC_PORT: 'eighty' }, /ACENTRIC_PORT is a whole number/],
       [{ ACENTRIC_PORT: '70000' }, /ACENTRIC_PORT/],
       [{ ACENTRIC_ADMIN_KEY: 'short' }, /ACENTRIC_ADMIN_KEY is 24 characters or more/],
+      [{ ACENTRIC_PUBLIC_URL: 'engine.example.com' }, /ACENTRIC_PUBLIC_URL is where/],
       [{ ACENTRIC_SECRET_KEY: 'not a key' }, /ACENTRIC_SECRET_KEY is 32 bytes/],
       [{ ACENTRIC_SECRET_KEYS_OLD: KEY }, /ACENTRIC_SECRET_KEY is not/],
       [{ ACENTRIC_AGENT_NETWORK: 'private' }, /public or any/],

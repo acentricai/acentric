@@ -4,6 +4,8 @@
 //   ACENTRIC_PORT           4000 without it. 0 takes any free port
 //   ACENTRIC_HOST           127.0.0.1 without it: only this machine
 //   ACENTRIC_DATA           the folder its database is in. ./data without it
+//   ACENTRIC_PUBLIC_URL     where people reach the server, such as https://engine.example.com:
+//                           what the links it makes start with. Without it, where it listens
 //   ACENTRIC_ADMIN_KEY      an API key that may do everything, of 24 characters or more: what
 //                           other keys are made with. Without it, a server that has no key yet
 //                           makes one, and prints it once
@@ -32,6 +34,8 @@ export type Settings = {
   readonly host: string;
   /** The folder the database is in. */
   readonly data: string;
+  /** Where people reach the server: what the links it makes start with. */
+  readonly publicUrl: string | undefined;
   readonly adminKey: string | undefined;
   readonly secretKeys: SecretKeys | undefined;
   readonly network: Network;
@@ -77,6 +81,13 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
       .split(',')
       .map((part) => part.trim())
       .filter((part) => part !== '');
+
+  const publicUrl = given('ACENTRIC_PUBLIC_URL')?.replace(/\/+$/, '');
+  if (publicUrl !== undefined && !/^https?:\/\/[^/]+/.test(publicUrl)) {
+    throw new InvalidSettings(
+      `ACENTRIC_PUBLIC_URL is where the server is reached, such as https://engine.example.com, and is ${publicUrl}`,
+    );
+  }
 
   const adminKey = given('ACENTRIC_ADMIN_KEY');
   if (adminKey !== undefined && adminKey.length < 24) {
@@ -127,6 +138,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     port: wholeNumber('ACENTRIC_PORT', 4000, 0, 65_535),
     host: given('ACENTRIC_HOST') ?? '127.0.0.1',
     data: resolve(given('ACENTRIC_DATA') ?? './data'),
+    publicUrl,
     adminKey,
     secretKeys,
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },

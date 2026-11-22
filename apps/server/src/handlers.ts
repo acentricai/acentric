@@ -2,7 +2,7 @@
 // its route takes, checked, and answers with what its route answers.
 
 import { reaches } from '@acentric/core';
-import type { Engine, Keys, Secrets } from '@acentric/core';
+import type { Audit, Engine, Keys, People, Secrets, SignedIn } from '@acentric/core';
 import type {
   Actor,
   Agent,
@@ -16,6 +16,7 @@ import type {
 } from '@acentric/protocol';
 import type { z } from 'zod';
 
+import { personOf, sessionCookie } from './auth.ts';
 import type { Granted } from './auth.ts';
 import { ApiFailure } from './errors.ts';
 import type { Streams } from './events.ts';
@@ -23,9 +24,21 @@ import type { Streams } from './events.ts';
 export type Parts = {
   readonly engine: Engine;
   readonly keys: Keys;
+  readonly people: People;
+  readonly audit: Audit;
   readonly secrets: Secrets;
   readonly streams: Streams;
 };
+
+/** An answer with headers of its own: what sets, or clears, the dashboard's cookie. */
+export class Reply<T> {
+  readonly body: T;
+  readonly headers: { readonly [name: string]: string };
+  constructor(body: T, headers: { readonly [name: string]: string }) {
+    this.body = body;
+    this.headers = headers;
+  }
+}
 
 type Shape<I extends RouteId, K extends string> = (typeof routes)[I] extends {
   readonly [P in K]: infer S extends z.ZodType;
@@ -47,9 +60,38 @@ type Answered<I extends RouteId> = (typeof routes)[I] extends { readonly stream:
     ? ResponseOf<I>
     : undefined;
 
+type Gives<T> = T | Reply<T> | Promise<T | Reply<T>>;
+
 export type Handlers = {
-  readonly [I in RouteId]?: (asked: Asked<I>, parts: Parts) => Promise<Answered<I>> | Answered<I>;
+  readonly [I in RouteId]?: (asked: Asked<I>, parts: Parts) => Gives<Answered<I>>;
 };
+
+/**
+ * A person signed in, as they are answered. The dashboard is given its session in a cookie
+ * its scripts cannot read, and no token. The command is given the token.
+ */
+function signed(
+  request: Request,
+  signedIn: SignedIn,
+): Reply<ResponseOf<'auth.signIn'>> | ResponseOf<'auth.signIn'> {
+  const { user, session, token } = signedIn;
+  if (session.client === 'cli') return { user, session, token };
+  return new Reply(
+    { user, session },
+    { 'set-cookie': sessionCookie(request, token, session.expiresAt) },
+  );
+}
+
+/** A page of a list that is all in memory, in order: those after the cursor, `limit` at most. */
+function pageOf<T extends { readonly id: string }>(
+  all: readonly T[],
+  query: { readonly limit: number; readonly cursor?: string | undefined },
+): Page<T> {
+  const { cursor, limit } = query;
+  const rest = cursor === undefined ? all : all.filter((item) => item.id > cursor);
+  const items = rest.slice(0, limit);
+  return { items, nextCursor: rest.length > limit ? (items.at(-1)?.id ?? null) : null };
+}
 
 const refOf = (granted: Granted): PrincipalRef =>
   granted.principal.type === 'key'
@@ -85,14 +127,29 @@ export const handlers: Handlers = {
     return engine.listAgents({ limit, ...(cursor === undefined ? {} : { cursor }) });
   },
   'agents.get': (asked) => agentOf(asked),
-  'agents.update': (asked, { engine }) =>
-    engine.activate(agentOf(asked).id, asked.body.activeVersion),
-  'agents.delete': async (asked, { engine }) => {
-    await engine.deleteAgent(agentOf(asked).id);
+  'agents.update': async (asked, { engine, audit }) => {
+    const agent = await engine.activate(agentOf(asked).id, asked.body.activeVersion);
+    await audit.record({
+      by: refOf(asked),
+      action: 'agent.activate',
+      target: { type: 'agent', id: agent.id },
+      detail: { name: agent.name, version: asked.body.activeVersion },
+    });
+    return agent;
+  },
+  'agents.delete': async (asked, { engine, audit }) => {
+    const agent = agentOf(asked);
+    await engine.deleteAgent(agent.id);
+    await audit.record({
+      by: refOf(asked),
+      action: 'agent.delete',
+      target: { type: 'agent', id: agent.id },
+      detail: { name: agent.name },
+    });
     return undefined;
   },
 
-  'deployments.create': async (asked, { engine }) => {
+  'deployments.create': async (asked, { engine, audit }) => {
     const { body, scope } = asked;
     // A key that does not reach the whole engine deploys to what it reaches, and makes no agent.
     if (scope.type !== 'engine') {
@@ -101,7 +158,16 @@ export const handlers: Handlers = {
         throw new ApiFailure('forbidden', `The key does not reach an agent named ${body.agent}`);
       }
     }
-    return engine.deploy({ ...body, by: refOf(asked) });
+    const deployed = await engine.deploy({ ...body, by: refOf(asked) });
+    if (deployed.created) {
+      await audit.record({
+        by: refOf(asked),
+        action: 'agent.deploy',
+        target: { type: 'agent', id: deployed.agent.id },
+        detail: { name: deployed.agent.name, version: deployed.deployment.version },
+      });
+    }
+    return deployed;
   },
   'deployments.list': async (asked, { engine }) => {
     const { limit, cursor } = asked.query;
@@ -124,14 +190,27 @@ export const handlers: Handlers = {
   'secrets.list': async (asked, { secrets }) => ({
     items: await secrets.list(agentOf(asked).id),
   }),
-  'secrets.set': async (asked, { secrets }) => {
+  'secrets.set': async (asked, { secrets, audit }) => {
     await secrets.set(agentOf(asked).id, asked.params.name, asked.body.value);
+    // The name, and never the value.
+    await audit.record({
+      by: refOf(asked),
+      action: 'secret.set',
+      target: { type: 'agent', id: agentOf(asked).id },
+      detail: { name: asked.params.name },
+    });
     return undefined;
   },
-  'secrets.delete': async (asked, { secrets }) => {
+  'secrets.delete': async (asked, { secrets, audit }) => {
     if (!(await secrets.delete(agentOf(asked).id, asked.params.name))) {
       throw new ApiFailure('not_found', `The agent has no secret ${asked.params.name}`);
     }
+    await audit.record({
+      by: refOf(asked),
+      action: 'secret.delete',
+      target: { type: 'agent', id: agentOf(asked).id },
+      detail: { name: asked.params.name },
+    });
     return undefined;
   },
 
@@ -199,7 +278,16 @@ export const handlers: Handlers = {
 
   // API keys
 
-  'keys.create': (asked, { keys }) => keys.create(asked.principal, defined(asked.body)),
+  'keys.create': async (asked, { keys, audit }) => {
+    const made = await keys.create(asked.principal, defined(asked.body));
+    await audit.record({
+      by: refOf(asked),
+      action: 'key.create',
+      target: { type: 'key', id: made.key.id },
+      detail: { label: made.key.label, scope: made.key.scope },
+    });
+    return made;
+  },
   'keys.list': async (asked, { keys }) => {
     // Oldest first, a page at a time: the cursor is the ID of the last key of the page before.
     const { limit, cursor } = asked.query;
@@ -209,9 +297,65 @@ export const handlers: Handlers = {
     return { items, nextCursor: rest.length > limit ? (items.at(-1)?.id ?? null) : null };
   },
   'keys.get': (asked, { keys }) => keys.get(asked.principal, asked.params.key),
-  'keys.revoke': async (asked, { keys }) => {
+  'keys.revoke': async (asked, { keys, audit }) => {
     await keys.revoke(asked.principal, asked.params.key);
+    await audit.record({
+      by: refOf(asked),
+      action: 'key.revoke',
+      target: { type: 'key', id: asked.params.key },
+    });
     return undefined;
+  },
+
+  // Signing in
+
+  'setup.complete': async ({ body, request }, { people }) =>
+    signed(request, await people.setup(defined(body))),
+  'auth.signIn': async ({ body, request }, { people }) =>
+    signed(request, await people.signIn(defined(body))),
+  'auth.signOut': async ({ principal, request }, { people }) => {
+    await people.signOut(personOf(principal));
+    return new Reply(undefined, { 'set-cookie': sessionCookie(request) });
+  },
+  'me.update': ({ principal, body }, { people }) => people.updateMe(personOf(principal), body),
+  'me.password': async ({ principal, body }, { people }) => {
+    await people.changePassword(personOf(principal), body);
+    return undefined;
+  },
+  'password.reset': async ({ body }, { people }) => {
+    await people.reset(body);
+    return undefined;
+  },
+  'invites.create': ({ principal, body }, { people }) => people.invite(principal, defined(body)),
+  'invites.list': async ({ query }, { people }) => pageOf(await people.invites(), query),
+  'invites.revoke': async ({ principal, params }, { people }) => {
+    await people.revokeInvite(principal, params.invite);
+    return undefined;
+  },
+  'invites.accept': async ({ body, request }, { people }) =>
+    signed(request, await people.accept(defined(body))),
+
+  // People and their sessions
+
+  'users.list': async ({ query }, { people }) => pageOf(await people.list(), query),
+  'users.get': ({ params }, { people }) => people.get(params.user),
+  'users.update': ({ principal, params, body }, { people }) =>
+    people.update(principal, params.user, defined(body)),
+  'users.resetPassword': ({ principal, params }, { people }) =>
+    people.resetLink(principal, params.user),
+  'users.delete': async ({ principal, params }, { people }) => {
+    await people.remove(principal, params.user);
+    return undefined;
+  },
+  'sessions.list': async ({ principal, query }, { people }) =>
+    pageOf(await people.sessions(personOf(principal).user), query),
+  'sessions.revoke': async ({ principal, params }, { people }) => {
+    await people.endSession(personOf(principal), params.session);
+    return undefined;
+  },
+  'audit.list': ({ query }, { audit }) => {
+    const { limit, cursor, action } = query;
+    return audit.list({ limit, ...defined({ cursor, action }) });
   },
 };
 
