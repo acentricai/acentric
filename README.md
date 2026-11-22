@@ -6,8 +6,10 @@ calls and tools, and picks up where it was after a crash. Actors can work on mac
 which connect out to the engine, or ones the engine makes at a sandbox provider.
 
 > **There is nothing to install yet.** This repository is being built in the open, from its
-> foundation up. Today it has the contracts, the engine's core on SQLite, and four model
-> providers: OpenAI, ChatGPT, Fireworks and Anthropic. It has no server and no command yet.
+> foundation up. Today it has the contracts, the engine's core on SQLite, four model providers
+> (OpenAI, ChatGPT, Fireworks and Anthropic), the framework an agent is written with, and
+> deploying an agent as versions that its running actors follow. It has no server and no
+> command yet.
 
 ## What is here
 
