@@ -110,3 +110,23 @@ export const listAgentsQuerySchema = pageQuerySchema.extend({
   name: nameSchema.optional(),
 });
 export type ListAgentsQuery = z.infer<typeof listAgentsQuerySchema>;
+
+// Secrets
+
+/** A secret of an agent's, as it is listed: its name, never its value. */
+export const secretSchema = z
+  .object({
+    name: secretNameSchema,
+    updatedAt: timestampSchema,
+  })
+  .meta({ id: 'Secret' });
+export type Secret = z.infer<typeof secretSchema>;
+
+/** The most a secret's value is, in characters. */
+export const MAX_SECRET_SIZE = 64 * 1024;
+
+/** A secret's value, set in place of the one it had. Nothing reads it back but the agent's code. */
+export const setSecretRequestSchema = z
+  .strictObject({ value: z.string().min(1).max(MAX_SECRET_SIZE) })
+  .meta({ id: 'SetSecretRequest' });
+export type SetSecretRequest = z.infer<typeof setSecretRequestSchema>;
