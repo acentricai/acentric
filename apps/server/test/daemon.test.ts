@@ -9,7 +9,7 @@
 import { execFile, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -453,6 +453,110 @@ describe('the daemon, against a server', () => {
     expect(
       (await fetch(url(''), { headers: { authorization: `Bearer ${made.token}` } })).status,
     ).toBe(403);
+  }, 90_000);
+
+  it('lets an agent’s own code read and write files there, from its actor’s working directory', async (context) => {
+    if (program === undefined) return context.skip();
+    const deployed = await client.call('deployments.create', {
+      body: {
+        agent: 'keeper',
+        manifest: { protocol: 1, sdk: '0.15.0' },
+        code: await bundle('files'),
+      },
+    });
+    const keeper = deployed.agent.id;
+    await client.call('machines.update', {
+      params: { machine: machineId },
+      body: { agents: [agentId as never, keeper] },
+    });
+    const { actor } = await client.call('actors.create', {
+      params: { agent: keeper },
+      body: { machine: { id: machineId, cwd: work, env: { GREETING: 'hello' } } },
+    });
+    /** One turn in which the model calls these tools of the agent, one after the other. */
+    const tools = async (...asked: [name: string, args: { [name: string]: unknown }][]) => {
+      const before = (await results(actor.id)).length;
+      plan = (step) => {
+        const done =
+          step.messages.filter((message) => message.role === 'tool_result').length - before;
+        const next = asked[done];
+        return next === undefined
+          ? says('Done.')
+          : calls({ id: `k${String(before + done)}`, name: next[0], arguments: next[1] as never });
+      };
+      await turn(actor.id, 'Keep.');
+      return (await results(actor.id)).slice(before);
+    };
+
+    // Text, with the folders it needs made, and a path of its own where its code says one.
+    const apart = join(dir, 'apart', 'top.txt');
+    expect(
+      await tools(
+        ['save', { path: 'notes/today.txt', text: 'buy bolts ✓' }],
+        ['save', { path: apart, text: 'apart' }],
+        ['load', { path: 'notes/today.txt' }],
+        ['load', { path: apart }],
+      ),
+    ).toEqual(['saved notes/today.txt', `saved ${apart}`, 'buy bolts ✓', 'apart']);
+    expect(await readFile(join(work, 'notes', 'today.txt'), 'utf8')).toBe('buy bolts ✓');
+    expect(await readFile(apart, 'utf8')).toBe('apart');
+
+    // Bytes, more than one request carries: 9 MiB is two each way.
+    expect(await tools(['big', { bytes: 9 << 20 }])).toEqual([`${String(9 << 20)} true`]);
+    const written = await readFile(join(work, 'big.bin'));
+    expect(written.length).toBe(9 << 20);
+    expect(written[(8 << 20) + 5]).toBe(((8 << 20) + 5) % 251);
+
+    // What is wrong is said to its code: a file that is not there, and one too large for it.
+    await writeFile(join(work, 'huge.bin'), Buffer.alloc((32 << 20) + 1));
+    const [missing, huge, big] = await tools(
+      ['load', { path: 'missing.txt' }],
+      ['load', { path: 'huge.bin' }],
+      ['big', { bytes: (32 << 20) + 1 }],
+    );
+    expect(missing).toContain(`There is no file ${join(work, 'missing.txt')}`);
+    expect(huge).toContain(
+      "huge.bin is 33554433 bytes: an agent's code reads and writes files of at most 32 MiB",
+    );
+    expect(big).toContain('big.bin is 33554433 bytes');
+    // Nothing of a file that is refused was written: the one before it is as it was.
+    expect((await readFile(join(work, 'big.bin'))).length).toBe(9 << 20);
+
+    // Its machine is given to it as data, with the variables its commands are run with.
+    const [what] = await tools(['what', {}]);
+    const machine = { id: machineId, cwd: work, env: { GREETING: 'hello' } };
+    expect(JSON.parse(what as string)).toEqual({
+      keys: ['id', 'cwd', 'env'],
+      spread: machine,
+      json: machine,
+    });
+
+    // And what an actor is sent is put into a file, where its code turns it into what the model reads.
+    plan = () => says('Got it.');
+    const before = (await client.call('actors.get', { params: { actor: actor.id } })).lastTurn?.at;
+    await client.call('inputs.send', {
+      params: { actor: actor.id },
+      body: {
+        type: 'upload',
+        payload: {
+          name: 'logo.png',
+          base64: Buffer.from([137, 80, 78, 71, 0, 255]).toString('base64'),
+        },
+      },
+    });
+    await expect
+      .poll(
+        async () =>
+          (await client.call('actors.get', { params: { actor: actor.id } })).lastTurn?.at !==
+          before,
+        { timeout: 20_000, interval: 25 },
+      )
+      .toBe(true);
+    expect([...(await readFile(join(work, 'inbox', 'logo.png')))]).toEqual([
+      137, 80, 78, 71, 0, 255,
+    ]);
+    const said = (await conversation(actor.id)).filter((entry) => entry.message.role === 'user');
+    expect(textOf(said.at(-1))).toBe('A file is in inbox/logo.png: 6 bytes.');
   }, 90_000);
 
   it('is told when its machine is away, runs again when it is back, and not at all once it is removed', async (context) => {
