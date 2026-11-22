@@ -295,6 +295,115 @@
           }
         }
       },
+      "patch": {
+        "operationId": "agents.update",
+        "summary": "Makes one of an agent's deployments the active one.",
+        "tags": [
+          "agents"
+        ],
+        "x-acentric-auth": {
+          "on": "agent",
+          "permission": "agents:deploy",
+          "param": "agent"
+        },
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind agent, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^agt_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "agt_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "operationId": "agents.delete",
         "summary": "Deletes an agent, with its deployments and its actors.",
@@ -432,7 +541,7 @@
             }
           },
           "400": {
-            "description": "Failed: invalid_request, unsupported_protocol, invalid_agent.",
+            "description": "Failed: invalid_request, unsupported_protocol, invalid_agent, unsupported_feature.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3333,6 +3442,50 @@
               "version"
             ]
           },
+          "pinned": {
+            "type": "boolean"
+          },
+          "behind": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "deployment": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^dep_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                        "description": "An ID of kind deployment, made by the engine.",
+                        "examples": [
+                          "dep_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                        ]
+                      },
+                      "version": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "deployment",
+                  "reason"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "modelId": {
             "type": "string",
             "minLength": 1,
@@ -3441,6 +3594,8 @@
           "externalId",
           "agent",
           "deployment",
+          "pinned",
+          "behind",
           "modelId",
           "reasoning",
           "configuration",
@@ -3576,6 +3731,36 @@
               "support"
             ]
           },
+          "provider": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "A model provider's ID.",
+            "examples": [
+              "anthropic"
+            ]
+          },
+          "activeDeployment": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^dep_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                "description": "An ID of kind deployment, made by the engine.",
+                "examples": [
+                  "dep_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                ]
+              },
+              "version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ]
+          },
           "latestDeployment": {
             "type": "object",
             "properties": {
@@ -3611,6 +3796,8 @@
         "required": [
           "id",
           "name",
+          "provider",
+          "activeDeployment",
           "latestDeployment",
           "createdAt"
         ]
@@ -4264,6 +4451,11 @@
           },
           "configuration": {
             "$ref": "#/components/schemas/Json"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "additionalProperties": false
@@ -4373,6 +4565,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 10485760
+          },
+          "activate": {
+            "default": true,
+            "type": "boolean"
           }
         },
         "required": [
@@ -4393,12 +4589,24 @@
           },
           "created": {
             "type": "boolean"
+          },
+          "missingSecrets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$",
+              "description": "The name of a secret.",
+              "examples": [
+                "ORDERS_API_KEY"
+              ]
+            }
           }
         },
         "required": [
           "agent",
           "deployment",
-          "created"
+          "created",
+          "missingSecrets"
         ]
       },
       "Deployment": {
@@ -4555,6 +4763,7 @@
                   "unavailable",
                   "unsupported_protocol",
                   "invalid_agent",
+                  "unsupported_feature",
                   "invalid_configuration",
                   "invalid_input",
                   "unknown_input",
@@ -5797,8 +6006,35 @@
           },
           "configuration": {
             "$ref": "#/components/schemas/Json"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "string",
+                "const": "active"
+              }
+            ]
           }
         },
+        "additionalProperties": false
+      },
+      "UpdateAgentRequest": {
+        "type": "object",
+        "properties": {
+          "activeVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "activeVersion"
+        ],
         "additionalProperties": false
       },
       "UpdateUserRequest": {

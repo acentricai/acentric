@@ -49,6 +49,8 @@ const actor = () => ({
   externalId: 'telegram:4411',
   agent: id('agent'),
   deployment: { id: id('deployment'), version: 3 },
+  pinned: false,
+  behind: null,
   modelId: 'claude-opus-5-5',
   reasoning: 'medium',
   configuration: { region: 'eu' },
@@ -66,7 +68,9 @@ describe('a deploy', () => {
       manifest: { protocol: 1, sdk: '0.15.0' },
       code: 'export default {}',
     };
-    expect(deployRequestSchema.parse(deploy)).toEqual(deploy);
+    // It becomes the active deployment unless it says not to.
+    expect(deployRequestSchema.parse(deploy)).toEqual({ ...deploy, activate: true });
+    expect(deployRequestSchema.parse({ ...deploy, activate: false }).activate).toBe(false);
   });
 
   it('refuses an ID in place of a name, an empty code, and a field it does not know', () => {
@@ -135,12 +139,25 @@ describe('an actor', () => {
     expect(createActorRequestSchema.safeParse({ id: 'my-actor' }).success).toBe(false);
   });
 
-  it('can lose its name, and cannot be moved to another deployment by a change', () => {
+  it('can lose its name, and is moved by a version, never by a deployment ID', () => {
     expect(updateActorRequestSchema.parse({ name: null })).toEqual({ name: null });
     expect(updateActorRequestSchema.safeParse({ deployment: id('deployment') }).success).toBe(
       false,
     );
+    // A number pins it to that version. `active` has it follow the active one again.
+    expect(updateActorRequestSchema.parse({ version: 3 })).toEqual({ version: 3 });
+    expect(updateActorRequestSchema.parse({ version: 'active' })).toEqual({ version: 'active' });
     expect(updateActorRequestSchema.safeParse({ version: 'latest' }).success).toBe(false);
+    expect(updateActorRequestSchema.safeParse({ version: 0 }).success).toBe(false);
+  });
+
+  it('says when it could not move to the active deployment, and why', () => {
+    const behind = {
+      deployment: { id: id('deployment'), version: 4 },
+      reason: 'region: Required',
+    };
+    expect(actorSchema.parse({ ...actor(), behind }).behind).toEqual(behind);
+    expect(createActorRequestSchema.parse({ version: 2 })).toEqual({ version: 2 });
   });
 });
 

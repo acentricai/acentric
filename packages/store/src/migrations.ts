@@ -13,6 +13,10 @@ const MIGRATIONS: readonly string[] = [
     agent_id TEXT NOT NULL,
     deployment_id TEXT NOT NULL,
     deployment_version INTEGER NOT NULL,
+    -- 1 for one that stays on its deployment.
+    pinned INTEGER NOT NULL,
+    -- JSON: the deployment it could not move to, and why. NULL for one that is where it is to be.
+    behind TEXT,
     name TEXT,
     external_id TEXT,
     model TEXT NOT NULL,

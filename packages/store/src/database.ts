@@ -23,6 +23,8 @@ type ActorRow = {
   agent_id: string;
   deployment_id: string;
   deployment_version: number;
+  pinned: number;
+  behind: string | null;
   name: string | null;
   external_id: string | null;
   model: string;
@@ -60,6 +62,8 @@ function recordOf(row: ActorRow): ActorRecord {
       externalId: row.external_id,
       agent: row.agent_id,
       deployment: { id: row.deployment_id, version: row.deployment_version },
+      pinned: row.pinned === 1,
+      behind: row.behind === null ? null : JSON.parse(row.behind),
       modelId: row.model,
       reasoning: row.reasoning,
       configuration: row.configuration === null ? null : JSON.parse(row.configuration),
@@ -142,14 +146,16 @@ export function operations(db: DatabaseSync) {
       }
       const turn: Turn = { phase: 'idle' };
       run(
-        `INSERT INTO actors (id, agent_id, deployment_id, deployment_version, name, external_id,
+        `INSERT INTO actors (id, agent_id, deployment_id, deployment_version, pinned, behind, name, external_id,
            model, reasoning, configuration, status, last_turn, turn, owed, epoch, next_seq,
            created_at, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 1, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 1, ?, ?)`,
         actor.id,
         actor.agent,
         actor.deployment.id,
         actor.deployment.version,
+        actor.pinned ? 1 : 0,
+        actor.behind === null ? null : JSON.stringify(actor.behind),
         actor.name,
         actor.externalId,
         actor.modelId,

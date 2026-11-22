@@ -155,6 +155,8 @@ export class Engine {
       externalId: given.externalId ?? null,
       agent: given.agent,
       deployment: given.deployment,
+      pinned: false,
+      behind: null,
       modelId: given.modelId,
       reasoning: given.reasoning ?? 'medium',
       configuration: given.configuration ?? null,

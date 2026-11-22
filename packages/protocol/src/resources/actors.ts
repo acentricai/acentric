@@ -45,6 +45,16 @@ export const actorSchema = z
     agent: agentIdSchema,
     /** The deployment of its agent whose code it runs. */
     deployment: deploymentRefSchema,
+    /**
+     * Whether it stays on its deployment. One that is not pinned moves to its agent's active
+     * deployment at the start of its next turn.
+     */
+    pinned: z.boolean(),
+    /**
+     * For one that could not move to its agent's active deployment: which that is, and why
+     * not. It stays on the deployment it has. Null for one that is where it is to be.
+     */
+    behind: z.object({ deployment: deploymentRefSchema, reason: z.string() }).nullable(),
     modelId: modelIdSchema,
     reasoning: reasoningSchema,
     /** Its configuration, as its agent's schema returned it. Null for an agent that takes none. */
@@ -74,6 +84,11 @@ export const createActorRequestSchema = z
     reasoning: reasoningSchema.optional(),
     /** What the agent's configuration schema takes. */
     configuration: jsonSchema.optional(),
+    /**
+     * The version of its agent to create it on, and pin it to. Without it, the active one,
+     * which it then follows.
+     */
+    version: z.number().int().positive().optional(),
   })
   .meta({ id: 'CreateActorRequest' });
 export type CreateActorRequest = z.infer<typeof createActorRequestSchema>;
@@ -95,6 +110,12 @@ export const updateActorRequestSchema = z
     reasoning: reasoningSchema.optional(),
     /** In place of the one it has, whole. */
     configuration: jsonSchema.optional(),
+    /**
+     * A number moves it to that version of its agent and pins it there. `active` moves it to
+     * the active one, which it then follows. Its configuration is checked by the schema of
+     * the version it moves to, and nothing is changed when that fails.
+     */
+    version: z.union([z.number().int().positive(), z.literal('active')]).optional(),
   })
   .meta({ id: 'UpdateActorRequest' });
 export type UpdateActorRequest = z.infer<typeof updateActorRequestSchema>;

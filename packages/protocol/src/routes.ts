@@ -40,6 +40,7 @@ import {
   deployResponseSchema,
   deploymentSchema,
   deploymentSummarySchema,
+  updateAgentRequestSchema,
   listAgentsQuerySchema,
 } from './resources/agents.ts';
 import {
@@ -156,6 +157,17 @@ export const routes = defineRoutes({
     status: 200,
     errors: ['not_found'],
   },
+  'agents.update': {
+    method: 'PATCH',
+    path: '/v1/agents/{agent}',
+    summary: "Makes one of an agent's deployments the active one.",
+    auth: onAgent('agents:deploy'),
+    params: agentParam,
+    body: updateAgentRequestSchema,
+    response: agentSchema,
+    status: 200,
+    errors: ['not_found'],
+  },
   'agents.delete': {
     method: 'DELETE',
     path: '/v1/agents/{agent}',
@@ -174,7 +186,7 @@ export const routes = defineRoutes({
     response: deployResponseSchema,
     status: 201,
     existing: 200,
-    errors: ['unsupported_protocol', 'invalid_agent', 'too_large'],
+    errors: ['unsupported_protocol', 'invalid_agent', 'unsupported_feature', 'too_large'],
   },
   'deployments.list': {
     method: 'GET',

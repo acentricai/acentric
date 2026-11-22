@@ -1,16 +1,20 @@
 // Agents and their deployments.
 //
 // An agent is what a developer deployed under a name. Each deploy of code that differs from
-// the last is a deployment: it has a number, counted from 1 for its agent, and never changes.
+// the last is a deployment: it has a number, its version, counted from 1 for its agent, and
+// never changes.
 //
-// How actors move from one deployment to the next is not decided, so nothing here says: an
-// agent has a newest deployment, a new actor is created on it, and that is all.
+// One of an agent's deployments is the active one. A new actor is created on it, and an actor
+// that is not pinned to a version moves to it at the start of its next turn. A deploy makes
+// its deployment the active one unless it says not to, and any deployment can be made the
+// active one again: that is how a deploy is taken back.
 
 import { z } from 'zod';
 
 import { principalRefSchema } from '../auth.ts';
 import { agentIdSchema, deploymentIdSchema } from '../ids.ts';
-import { agentDefinitionSchema, bundleManifestSchema } from '../manifest.ts';
+import { agentDefinitionSchema, bundleManifestSchema, secretNameSchema } from '../manifest.ts';
+import { providerIdSchema } from '../messages.ts';
 import { nameSchema } from '../names.ts';
 import { pageQuerySchema, timestampSchema } from '../primitives.ts';
 
@@ -26,7 +30,11 @@ export const agentSchema = z
   .object({
     id: agentIdSchema,
     name: nameSchema,
-    /** Its newest deployment: what a new actor is created on. */
+    /** The provider of its model. It is the same for as long as the agent is. */
+    provider: providerIdSchema,
+    /** What a new actor is created on, and what an actor that is not pinned moves to. */
+    activeDeployment: deploymentRefSchema,
+    /** Its newest deployment. It is the active one unless another was made so. */
     latestDeployment: deploymentRefSchema,
     createdAt: timestampSchema,
   })
@@ -66,6 +74,11 @@ export const deployRequestSchema = z
     manifest: bundleManifestSchema,
     /** The agent's code: one ES module. */
     code: z.string().min(1).max(MAX_BUNDLE_SIZE),
+    /**
+     * Whether the deployment becomes the active one. False keeps it for actors that are
+     * pinned to it, and for making active later.
+     */
+    activate: z.boolean().default(true),
   })
   .meta({ id: 'DeployRequest' });
 export type DeployRequest = z.infer<typeof deployRequestSchema>;
@@ -76,9 +89,20 @@ export const deployResponseSchema = z
     deployment: deploymentSchema,
     /** False when the code was the agent's newest already: nothing was made. */
     created: z.boolean(),
+    /** The secrets the code says it reads that the agent has none of yet. */
+    missingSecrets: z.array(secretNameSchema),
   })
   .meta({ id: 'DeployResponse' });
 export type DeployResponse = z.infer<typeof deployResponseSchema>;
+
+/** What of an agent can be changed: which of its deployments is the active one. */
+export const updateAgentRequestSchema = z
+  .strictObject({
+    /** The version of the deployment to make active. */
+    activeVersion: z.number().int().positive(),
+  })
+  .meta({ id: 'UpdateAgentRequest' });
+export type UpdateAgentRequest = z.infer<typeof updateAgentRequestSchema>;
 
 /** Which agents a list gives. */
 export const listAgentsQuerySchema = pageQuerySchema.extend({
