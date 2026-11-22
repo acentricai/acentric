@@ -5,11 +5,34 @@ to an engine. The engine keeps each running agent, an actor, in its database, ru
 calls and tools, and picks up where it was after a crash. Actors can work on machines: your own,
 which connect out to the engine, or ones the engine makes at a sandbox provider.
 
-> **There is nothing to install yet.** This repository is being built in the open, from its
-> foundation up. Today it has the contracts, the engine's core on SQLite, four model providers
-> (OpenAI, ChatGPT, Fireworks and Anthropic), the framework an agent is written with,
-> deploying an agent as versions that its running actors follow, and running an agent's code
-> apart from the engine, in isolates of `workerd`. It has no server and no command yet.
+> **Nothing is published yet.** This repository is being built in the open, from its
+> foundation up. Today it has the engine on SQLite, four model providers (OpenAI, ChatGPT,
+> Fireworks and Anthropic), the framework an agent is written with, agents deployed as versions
+> that their running actors follow, agents' code run apart from the engine in isolates of
+> `workerd`, and a server with an HTTP API, API keys and a typed client. It has no sign-in for
+> people, no command and no dashboard yet.
+
+## Running the server
+
+The server can be built from this repository as an image and run. Nothing of it is promised to
+stay as it is.
+
+```sh
+docker build -t acentric-server .
+docker run -p 4000:4000 -v acentric-data:/data \
+  -e ACENTRIC_SECRET_KEY=<32 bytes, as 64 hex characters> \
+  -e OPENAI_API_KEY=<a key of a model provider> \
+  acentric-server
+```
+
+- It prints an API key once, when it first starts. That key may do everything, and other keys
+  are made with it. To choose the key yourself, set `ACENTRIC_ADMIN_KEY`.
+- It keeps everything it has in `/data`.
+- `ACENTRIC_SECRET_KEY` is what agents' secrets are sealed with. Without it, agents can be
+  given no secrets.
+- Its API is described at `/v1/openapi.json`, and `@acentric/client` calls it.
+
+Every setting is listed at the top of `apps/server/src/settings.ts`.
 
 ## What is here
 
