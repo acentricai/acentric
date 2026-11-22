@@ -5,7 +5,13 @@
 import { z } from 'zod';
 
 import { permissionSchema, principalRefSchema, roleSchema, scopeSchema } from '../auth.ts';
-import { auditEventIdSchema, keyIdSchema, sessionIdSchema, userIdSchema } from '../ids.ts';
+import {
+  auditEventIdSchema,
+  inviteIdSchema,
+  keyIdSchema,
+  sessionIdSchema,
+  userIdSchema,
+} from '../ids.ts';
 import { jsonObjectSchema } from '../json.ts';
 import { labelSchema } from '../names.ts';
 import { pageQuerySchema, timestampSchema } from '../primitives.ts';
@@ -49,6 +55,139 @@ export const sessionSchema = z
   })
   .meta({ id: 'Session' });
 export type Session = z.infer<typeof sessionSchema>;
+
+// Signing in
+//
+// A person signs in with their email and a password the engine keeps the hash of. The engine
+// sends no email: an email is what a person signs in as, and nothing is ever sent to it.
+//
+// An account is made by a link that is used once. The first is printed by a server that has
+// no person yet, and makes its owner. After that an admin makes an invite, and passes its
+// link on themselves. A password that was lost is set again the same way.
+
+/** The fewest characters a password is. */
+export const PASSWORD_MIN = 10;
+
+export const passwordSchema = z
+  .string()
+  .min(PASSWORD_MIN, `A password is ${String(PASSWORD_MIN)} characters or more`)
+  .max(1024)
+  .meta({ description: 'A password. It is never given back.' });
+
+/** What signs in: the dashboard in a browser, or the command. */
+export const sessionClientSchema = z.enum(['dashboard', 'cli']);
+export type SessionClient = z.infer<typeof sessionClientSchema>;
+
+/** What a session is for, said when it is made. */
+const sessionFor = {
+  /** The dashboard's session is kept in a cookie. The command's is given as a token. */
+  client: sessionClientSchema.default('dashboard'),
+  /** A few words on where, such as the browser's name. */
+  label: labelSchema.optional(),
+};
+
+/** The token of a link that is used once: what the link ends in. */
+const linkTokenSchema = z.string().min(1).max(200);
+
+/** A person, signed in. */
+export const signedInSchema = z
+  .object({
+    user: userSchema,
+    session: sessionSchema,
+    /**
+     * What the command sends with its requests from now on. It is given here and never
+     * again. The dashboard has none: its session is in a cookie its scripts cannot read.
+     */
+    token: z.string().optional(),
+  })
+  .meta({ id: 'SignedIn' });
+export type SignedIn = z.infer<typeof signedInSchema>;
+
+export const signInRequestSchema = z
+  .strictObject({ email: z.email(), password: z.string().min(1).max(1024), ...sessionFor })
+  .meta({ id: 'SignInRequest' });
+export type SignInRequest = z.infer<typeof signInRequestSchema>;
+
+/** The first person of an engine, made by the link the server printed when it had none. */
+export const setupRequestSchema = z
+  .strictObject({
+    token: linkTokenSchema,
+    email: z.email(),
+    password: passwordSchema,
+    displayName: labelSchema.optional(),
+    ...sessionFor,
+  })
+  .meta({ id: 'SetupRequest' });
+export type SetupRequest = z.infer<typeof setupRequestSchema>;
+
+/** An invite: a link that makes one account, with a role, when someone opens it. */
+export const inviteSchema = z
+  .object({
+    id: inviteIdSchema,
+    role: roleSchema,
+    /** Who it was made for, as its maker noted. Whoever opens it gives their own email. */
+    note: labelSchema.nullable(),
+    createdBy: principalRefSchema,
+    createdAt: timestampSchema,
+    expiresAt: timestampSchema,
+  })
+  .meta({ id: 'Invite' });
+export type Invite = z.infer<typeof inviteSchema>;
+
+export const createInviteRequestSchema = z
+  .strictObject({
+    role: roleSchema.default('member'),
+    note: labelSchema.optional(),
+  })
+  .meta({ id: 'CreateInviteRequest' });
+export type CreateInviteRequest = z.infer<typeof createInviteRequestSchema>;
+
+export const createInviteResponseSchema = z
+  .object({
+    invite: inviteSchema,
+    /** What the invite's link ends in. It is given here and never again. */
+    token: linkTokenSchema,
+  })
+  .meta({ id: 'CreateInviteResponse' });
+export type CreateInviteResponse = z.infer<typeof createInviteResponseSchema>;
+
+export const acceptInviteRequestSchema = z
+  .strictObject({
+    token: linkTokenSchema,
+    email: z.email(),
+    password: passwordSchema,
+    displayName: labelSchema.optional(),
+    ...sessionFor,
+  })
+  .meta({ id: 'AcceptInviteRequest' });
+export type AcceptInviteRequest = z.infer<typeof acceptInviteRequestSchema>;
+
+/** A link that sets a person's password again, made by an admin for one who lost theirs. */
+export const passwordResetSchema = z
+  .object({
+    /** What the link ends in. It is given here and never again. */
+    token: linkTokenSchema,
+    expiresAt: timestampSchema,
+  })
+  .meta({ id: 'PasswordReset' });
+export type PasswordReset = z.infer<typeof passwordResetSchema>;
+
+export const resetPasswordRequestSchema = z
+  .strictObject({ token: linkTokenSchema, password: passwordSchema })
+  .meta({ id: 'ResetPasswordRequest' });
+export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
+
+/** A person's own change of their password. Everywhere else they are signed in is signed out. */
+export const changePasswordRequestSchema = z
+  .strictObject({ current: z.string().min(1).max(1024), password: passwordSchema })
+  .meta({ id: 'ChangePasswordRequest' });
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
+
+/** What a person changes of themselves. */
+export const updateMeRequestSchema = z
+  .strictObject({ displayName: labelSchema.nullable() })
+  .meta({ id: 'UpdateMeRequest' });
+export type UpdateMeRequest = z.infer<typeof updateMeRequestSchema>;
 
 /** An API key, without its secret: that is shown once, when the key is made. */
 export const keySchema = z

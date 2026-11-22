@@ -17,6 +17,7 @@ import {
   actorIdSchema,
   agentIdSchema,
   deploymentIdSchema,
+  inviteIdSchema,
   keyIdSchema,
   sessionIdSchema,
   userIdSchema,
@@ -48,12 +49,23 @@ import {
   setSecretRequestSchema,
 } from './resources/agents.ts';
 import {
+  acceptInviteRequestSchema,
   auditEventSchema,
+  changePasswordRequestSchema,
+  createInviteRequestSchema,
+  createInviteResponseSchema,
   createKeyRequestSchema,
   createKeyResponseSchema,
+  inviteSchema,
   keySchema,
   listAuditEventsQuerySchema,
+  passwordResetSchema,
+  resetPasswordRequestSchema,
   sessionSchema,
+  setupRequestSchema,
+  signInRequestSchema,
+  signedInSchema,
+  updateMeRequestSchema,
   updateUserRequestSchema,
   userSchema,
 } from './resources/people.ts';
@@ -61,6 +73,7 @@ import {
 /**
  * What a route needs of whoever calls it.
  *
+ *   none    anyone, with no credential: it is how a person comes to have one.
  *   any     any principal, for what is its own: itself, its sessions.
  *   engine  the permission, across the whole engine.
  *   agent   the permission, on the agent the path parameter `param` names.
@@ -69,6 +82,7 @@ import {
  *           what the principal reaches, and a create is refused past its reach.
  */
 export type RouteAuth =
+  | { readonly on: 'none' }
   | { readonly on: 'any' }
   | { readonly on: 'engine' | 'reach'; readonly permission: Permission }
   | { readonly on: 'agent' | 'actor'; readonly permission: Permission; readonly param: string };
@@ -384,6 +398,105 @@ export const routes = defineRoutes({
     stream: true,
   },
 
+  // Signing in
+
+  'setup.complete': {
+    method: 'POST',
+    path: '/v1/setup',
+    summary: 'Makes the first person of an engine, its owner, by the link the server printed.',
+    auth: { on: 'none' },
+    body: setupRequestSchema,
+    response: signedInSchema,
+    status: 201,
+    errors: ['invalid_link'],
+  },
+  'auth.signIn': {
+    method: 'POST',
+    path: '/v1/sign-in',
+    summary: 'Signs a person in with their email and password.',
+    auth: { on: 'none' },
+    body: signInRequestSchema,
+    response: signedInSchema,
+    status: 200,
+    errors: ['invalid_credentials'],
+  },
+  'auth.signOut': {
+    method: 'POST',
+    path: '/v1/sign-out',
+    summary: 'Ends the session the request came with.',
+    auth: { on: 'any' },
+    status: 204,
+    errors: [],
+  },
+  'me.update': {
+    method: 'PATCH',
+    path: '/v1/me',
+    summary: 'Changes what a person is called.',
+    auth: { on: 'any' },
+    body: updateMeRequestSchema,
+    response: userSchema,
+    status: 200,
+    errors: ['conflict'],
+  },
+  'me.password': {
+    method: 'POST',
+    path: '/v1/me/password',
+    summary: "Changes a person's own password, and signs them out everywhere else.",
+    auth: { on: 'any' },
+    body: changePasswordRequestSchema,
+    status: 204,
+    errors: ['invalid_credentials', 'conflict'],
+  },
+  'password.reset': {
+    method: 'POST',
+    path: '/v1/password-reset',
+    summary: 'Sets a password again, by a link an admin made, and signs the person out everywhere.',
+    auth: { on: 'none' },
+    body: resetPasswordRequestSchema,
+    status: 204,
+    errors: ['invalid_link'],
+  },
+  'invites.create': {
+    method: 'POST',
+    path: '/v1/invites',
+    summary:
+      'Makes an invite: a link that makes one account. Its token is in the answer, and nowhere after.',
+    auth: { on: 'engine', permission: 'users:manage' },
+    body: createInviteRequestSchema,
+    response: createInviteResponseSchema,
+    status: 201,
+    errors: [],
+  },
+  'invites.list': {
+    method: 'GET',
+    path: '/v1/invites',
+    summary: 'Lists the invites that can still be used.',
+    auth: { on: 'engine', permission: 'users:manage' },
+    query: pageQuerySchema,
+    response: page('InvitePage', inviteSchema),
+    status: 200,
+    errors: [],
+  },
+  'invites.revoke': {
+    method: 'DELETE',
+    path: '/v1/invites/{invite}',
+    summary: 'Takes an invite back: its link no longer works.',
+    auth: { on: 'engine', permission: 'users:manage' },
+    params: z.object({ invite: inviteIdSchema }),
+    status: 204,
+    errors: ['not_found'],
+  },
+  'invites.accept': {
+    method: 'POST',
+    path: '/v1/invites/accept',
+    summary: 'Makes the account an invite is for, and signs its person in.',
+    auth: { on: 'none' },
+    body: acceptInviteRequestSchema,
+    response: signedInSchema,
+    status: 201,
+    errors: ['invalid_link', 'conflict'],
+  },
+
   // People, sessions and keys
 
   'users.list': {
@@ -416,6 +529,17 @@ export const routes = defineRoutes({
     response: userSchema,
     status: 200,
     errors: ['not_found', 'conflict'],
+  },
+  'users.resetPassword': {
+    method: 'POST',
+    path: '/v1/users/{user}/password-reset',
+    summary:
+      "Makes a link that sets a person's password again. Its token is in the answer, and nowhere after.",
+    auth: { on: 'engine', permission: 'users:manage' },
+    params: z.object({ user: userIdSchema }),
+    response: passwordResetSchema,
+    status: 201,
+    errors: ['not_found'],
   },
   'users.delete': {
     method: 'DELETE',
