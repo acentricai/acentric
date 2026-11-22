@@ -14,6 +14,8 @@
     "../../core/test/engine-suite.ts",
     "../../core/test/upgrade-suite.ts",
     "../../core/test/tasks-suite.ts",
+    "../../core/test/machines-suite.ts",
+    "../../core/test/fake-daemon.ts",
     "../../core/test/world.ts"
   ],
   "references": [

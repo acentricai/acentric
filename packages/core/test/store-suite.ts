@@ -56,6 +56,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       modelId: 'fake-1',
       reasoning: 'medium',
       configuration: { region: 'eu' },
+      machine: null,
       status: 'idle',
       lastTurn: null,
       pendingInputs: 0,

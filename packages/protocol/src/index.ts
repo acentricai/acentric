@@ -13,6 +13,8 @@ export * from './versions.ts';
 export * from './manifest.ts';
 export * from './bundle.ts';
 export * from './resources/agents.ts';
+export * from './machine.ts';
+export * from './resources/machines.ts';
 export * from './resources/actors.ts';
 export * from './resources/tasks.ts';
 export * from './resources/people.ts';

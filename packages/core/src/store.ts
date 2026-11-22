@@ -27,10 +27,13 @@ import type {
   InviteId,
   Key,
   KeyId,
+  MachineAgents,
+  MachineId,
   PrincipalRef,
   Role,
   Session,
   SessionId,
+  StoppedOnMachine,
   TaskStatus,
   TaskStoppedBy,
   UsageGroup,
@@ -104,14 +107,103 @@ export type StoredBlob = {
   readonly createdAt: number;
 };
 
+/** A machine, as a store keeps it. */
+export type StoredMachine = {
+  readonly id: MachineId;
+  readonly name: string;
+  readonly agents: MachineAgents;
+  /** The SHA-256 of the token its daemon may enrol with, in hex, and until when it works. */
+  readonly tokenHash: string | null;
+  readonly tokenExpiresAt: number | null;
+  /** Its daemon's Ed25519 public key, as base64 of its SubjectPublicKeyInfo. Null until it enrols. */
+  readonly publicKey: string | null;
+  /** What its daemon last said of it. Null until it has connected once. */
+  readonly os: string | null;
+  readonly arch: string | null;
+  readonly home: string | null;
+  readonly hostname: string | null;
+  readonly version: string | null;
+  /** The SHA-256 of its daemon's program, in hex. */
+  readonly build: string | null;
+  /** The folder its daemon keeps commands in. */
+  readonly tasksDir: string | null;
+  readonly createdAt: number;
+  readonly enrolledAt: number | null;
+  readonly lastSeenAt: number | null;
+};
+
+/** What of a machine changes. A field that is absent stays as it is. */
+export type MachinePatch = Partial<Omit<StoredMachine, 'id' | 'createdAt'>>;
+
+/**
+ * Where a command stands: `starting` until its machine has said that it has it, then
+ * `running`. It ends as `exited` when it ended by itself, `stopped` when it was stopped,
+ * `failed` when it could not be started, and `lost` when its machine no longer has it.
+ */
+export type CommandStatus = 'starting' | 'running' | 'exited' | 'stopped' | 'failed' | 'lost';
+
+/** A command on a machine, as a store keeps it. It is named by the actor and the task it is for. */
+export type StoredCommand = {
+  /** The actor it is for, or what stands in an actor's place for a machine's own commands. */
+  readonly actor: string;
+  readonly task: string;
+  readonly machine: MachineId;
+  readonly command: string;
+  readonly cwd: string;
+  /** Seconds it may run. Null for no limit. */
+  readonly timeout: number | null;
+  readonly status: CommandStatus;
+  /** It was asked to be stopped: the asking is sent again when its machine connects. */
+  readonly stopWanted: boolean;
+  /** Its exit status. Null while it runs, and when it was killed and left none. */
+  readonly exit: number | null;
+  readonly stoppedBy: StoppedOnMachine | null;
+  readonly ranMs: number | null;
+  /** How much it wrote. */
+  readonly bytes: number | null;
+  readonly lines: number | null;
+  /** The end of what it wrote. */
+  readonly tail: string | null;
+  /** The file all of its output is in, on the machine. */
+  readonly log: string | null;
+  /** Why it failed or was lost. */
+  readonly error: string | null;
+  readonly startedAt: number;
+  readonly endedAt: number | null;
+};
+
+/** A command to store: it is `starting`. */
+export type NewCommand = Pick<
+  StoredCommand,
+  'actor' | 'task' | 'machine' | 'command' | 'cwd' | 'timeout' | 'startedAt'
+>;
+
+/** What of a command changes. A field that is absent stays as it is. */
+export type CommandPatch = Partial<
+  Pick<
+    StoredCommand,
+    | 'status'
+    | 'stopWanted'
+    | 'exit'
+    | 'stoppedBy'
+    | 'ranMs'
+    | 'bytes'
+    | 'lines'
+    | 'tail'
+    | 'log'
+    | 'error'
+    | 'endedAt'
+  >
+>;
+
 export class NameTaken extends Error {
   override readonly name = 'NameTaken';
   readonly code: ErrorCode = 'name_taken';
-  constructor(name: string, of: 'actor' | 'agent' | 'account' = 'actor') {
+  constructor(name: string, of: 'actor' | 'agent' | 'account' | 'machine' = 'actor') {
     super(
       of === 'actor'
         ? `An actor of this agent is named ${name} already`
-        : `An ${of} is named ${name} already`,
+        : `${of === 'machine' ? 'A' : 'An'} ${of} is named ${name} already`,
     );
   }
 }
@@ -243,8 +335,9 @@ export interface Store {
   listDeployments(agent: AgentId, page?: PageOf): Promise<Paged<Deployment>>;
   /**
    * Removes an agent with everything of it: its deployments and their code, its secrets, and
-   * its actors with their conversations and their mailboxes. All of it, or none. It gives the
-   * deployments and the actors that went, or undefined when there is no such agent.
+   * its actors with their conversations and their mailboxes. It is taken off every machine
+   * that names it. All of it, or none. It gives the deployments and the actors that went, or
+   * undefined when there is no such agent.
    */
   deleteAgent(
     id: AgentId,
@@ -367,14 +460,23 @@ export interface Store {
 
   /**
    * Keeps a new actor, idle and with nothing said. `configurationGiven` is its configuration
-   * as it was given. When it has an external ID that an actor of its agent has already, that
-   * actor is given back and nothing is kept. Rejects with `NameTaken` when its name is
-   * another's.
+   * as it was given, and `env` the variables its commands are run with, sealed. When it has an
+   * external ID that an actor of its agent has already, that actor is given back and nothing
+   * is kept. Rejects with `NameTaken` when its name is another's.
    */
   createActor(
     actor: Actor,
     configurationGiven?: Json | null,
+    env?: string | null,
   ): Promise<{ readonly record: ActorRecord; readonly created: boolean }>;
+  /** The variables an actor's commands are run with, sealed. Null for an actor that has none. */
+  actorEnv(actor: ActorId): Promise<string | null>;
+  /**
+   * Keeps the variables an actor's commands are run with, sealed, with their names, in place
+   * of all it had. It names no epoch: they are changed at any moment, a turn going on or none.
+   * False, and nothing is kept, for an actor that is not there or has no machine.
+   */
+  setActorEnv(actor: ActorId, names: readonly string[], sealed: string | null): Promise<boolean>;
   loadActor(id: ActorId): Promise<ActorRecord | undefined>;
   /** The actor of an agent with this external ID, if it has one. */
   findActor(agent: AgentId, externalId: string): Promise<ActorRecord | undefined>;
@@ -457,6 +559,64 @@ export interface Store {
     end: TaskEnding,
     notice: Input | null,
   ): Promise<{ readonly ended: boolean; readonly notified: boolean }>;
+
+  // Machines: the computers commands run on (see `machines.ts`)
+
+  /** Keeps a new machine. Rejects with `NameTaken` when its name is another's. */
+  addMachine(machine: StoredMachine): Promise<void>;
+  loadMachine(id: MachineId): Promise<StoredMachine | undefined>;
+  findMachine(name: string): Promise<StoredMachine | undefined>;
+  /** Every machine, in the order they were added. */
+  listMachines(): Promise<StoredMachine[]>;
+  /**
+   * Changes what a patch names of a machine, and gives the machine as it then is. Undefined
+   * when there is no such machine. Rejects with `NameTaken` when its name is now another's.
+   */
+  changeMachine(id: MachineId, patch: MachinePatch): Promise<StoredMachine | undefined>;
+  /**
+   * Takes a daemon's public key for a machine whose token has this hash, and works at `at`.
+   * The token is gone with it: of two that enrol with one token, one does. False, and nothing
+   * is kept, for any other.
+   */
+  enrolMachine(id: MachineId, tokenHash: string, publicKey: string, at: number): Promise<boolean>;
+  /**
+   * Removes a machine. The commands that had not ended there are `lost`, with this to say why,
+   * and are given. Undefined when there is no such machine.
+   */
+  removeMachine(
+    id: MachineId,
+    lost: { readonly error: string; readonly endedAt: number },
+  ): Promise<StoredCommand[] | undefined>;
+
+  // Commands: what machines run (see `machines.ts`)
+
+  /**
+   * Stores a command before its machine is asked to run it, unless there is one of its actor
+   * and task already: that one is given, and nothing is stored.
+   */
+  addCommand(
+    command: NewCommand,
+  ): Promise<{ readonly command: StoredCommand; readonly created: boolean }>;
+  /**
+   * Stores a command that is for no actor, under `actor`, and names it: `c` and its number
+   * among those. Counted and stored in one step, so no two take one name.
+   */
+  addOwnCommand(command: Omit<NewCommand, 'task'>): Promise<StoredCommand>;
+  loadCommand(actor: string, task: string): Promise<StoredCommand | undefined>;
+  /** The commands that have not ended, on one machine. */
+  openCommands(machine: MachineId): Promise<StoredCommand[]>;
+  /** The commands of `actor` on a machine, newest first, at most `limit`. */
+  listCommands(actor: string, machine: MachineId, limit: number): Promise<StoredCommand[]>;
+  /**
+   * Changes what a patch names of a command, when its status is one of `from`, or whatever its
+   * status without that. False, and nothing is changed, otherwise: so an ending is stored once.
+   */
+  changeCommand(
+    actor: string,
+    task: string,
+    patch: CommandPatch,
+    from?: readonly CommandStatus[],
+  ): Promise<boolean>;
 
   close(): Promise<void>;
 }

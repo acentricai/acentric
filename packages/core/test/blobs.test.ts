@@ -80,6 +80,7 @@ function world(given: { readonly bytes?: BlobStore | null } = {}) {
       modelId: 'fake-1',
       reasoning: 'medium',
       configuration: null,
+      machine: null,
       status: 'idle',
       lastTurn: null,
       pendingInputs: 0,

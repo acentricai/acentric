@@ -17,6 +17,7 @@ import {
 import { externalIdSchema, nameSchema } from '../names.ts';
 import { pageQuerySchema, timestampSchema } from '../primitives.ts';
 import { deploymentRefSchema } from './agents.ts';
+import { actorMachineRequestSchema, actorMachineSchema, machineEnvSchema } from './machines.ts';
 
 /**
  * What an actor is doing: `working` in a turn, `idle` between turns, and `archived` when it
@@ -59,6 +60,8 @@ export const actorSchema = z
     reasoning: reasoningSchema,
     /** Its configuration, as its agent's schema returned it. Null for an agent that takes none. */
     configuration: jsonSchema.nullable(),
+    /** The machine it works on, and where there. Null for one that has none. */
+    machine: actorMachineSchema.nullable(),
     status: actorStatusSchema,
     /** Null until it has had a turn. */
     lastTurn: turnEndSchema.nullable(),
@@ -84,6 +87,11 @@ export const createActorRequestSchema = z
     reasoning: reasoningSchema.optional(),
     /** What the agent's configuration schema takes. */
     configuration: jsonSchema.optional(),
+    /**
+     * The machine it works on. An agent that says `machine: true` has actors that all have
+     * one, and any other agent has actors that have none.
+     */
+    machine: actorMachineRequestSchema.optional(),
     /**
      * The version of its agent to create it on, and pin it to. Without it, the active one,
      * which it then follows.
@@ -116,6 +124,11 @@ export const updateActorRequestSchema = z
      * the version it moves to, and nothing is changed when that fails.
      */
     version: z.union([z.number().int().positive(), z.literal('active')]).optional(),
+    /**
+     * The variables its commands are run with on its machine, in place of all it had. Given
+     * alone, they are changed at any time, in a turn or between them.
+     */
+    env: machineEnvSchema.optional(),
   })
   .meta({ id: 'UpdateActorRequest' });
 export type UpdateActorRequest = z.infer<typeof updateActorRequestSchema>;
