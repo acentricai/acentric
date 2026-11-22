@@ -88,6 +88,7 @@ export class Sandbox {
   /** Calls cancelled after they were sent, whose code has not finished in the process. */
   readonly #abandoned = new Set<number>();
   readonly #codes = new Map<string, Promise<string>>();
+  readonly #state: { stopped: boolean };
   readonly #socket: WebSocket;
   readonly #dir: string;
   readonly #options: SandboxOptions;
@@ -116,7 +117,9 @@ export class Sandbox {
     dir: string,
     tail: readonly string[],
     options: SandboxOptions,
+    state: { stopped: boolean },
   ) {
+    this.#state = state;
     this.#tailLines = tail;
     this.#socket = socket;
     this.#dir = dir;
@@ -166,6 +169,8 @@ export class Sandbox {
     );
     let pid = 0;
     const tail: string[] = [];
+    // What the shell says of a process this side killed is not news: it is not passed on.
+    const state = { stopped: false };
     const lines = (stream: Readable | null): void => {
       let buffer = '';
       stream?.setEncoding('utf8');
@@ -177,7 +182,7 @@ export class Sandbox {
           if (line === '') continue;
           tail.push(line);
           if (tail.length > 5) tail.shift();
-          options.log(`[workerd ${String(pid)}] ${line}`);
+          if (!state.stopped) options.log(`[workerd ${String(pid)}] ${line}`);
         }
       });
     };
@@ -191,7 +196,7 @@ export class Sandbox {
         `ws://127.0.0.1:${port}/?token=${token}`,
         options.startTimeoutMs,
       );
-      return new Sandbox(child, pid, socket, dir, tail, options);
+      return new Sandbox(child, pid, socket, dir, tail, options, state);
     } catch (error) {
       if (pid !== 0) killQuietly(pid);
       child.kill('SIGKILL');
@@ -360,6 +365,7 @@ export class Sandbox {
 
   #stop(): void {
     this.#gone = true;
+    this.#state.stopped = true;
     if (this.#ping !== undefined) clearTimeout(this.#ping.timer);
     if (this.#draining !== undefined) clearTimeout(this.#draining);
     // workerd itself: the shell around it exits with it.

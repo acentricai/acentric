@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "allowImportingTsExtensions": true,
+    "tsBuildInfoFile": "tsconfig.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": [".", "../../../packages/executor/test/bundle.ts"],
+  "references": [
+    { "path": ".." },
+    { "path": "../../../packages/ai" },
+    { "path": "../../../packages/client" },
+    { "path": "../../../packages/core" },
+    { "path": "../../../packages/protocol" }
+  ]
+}

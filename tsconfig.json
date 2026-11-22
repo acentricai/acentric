@@ -51,6 +51,9 @@
     },
     {
       "path": "packages/store/test"
+    },
+    {
+      "path": "apps/server/test"
     }
   ]
 }

@@ -13,7 +13,8 @@
     "@acentric/core",
     "@acentric/store",
     "@acentric/executor",
-    "@acentric/sandbox"
+    "@acentric/sandbox",
+    "@acentric/client"
   ],
   "acentric": ["@acentric/protocol", "@acentric/client"]
 }
