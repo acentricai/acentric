@@ -34,8 +34,22 @@ export function reasoned(reasoning: string, answer: ModelAnswer): ModelAnswer {
  * The provider of the models of tests, `fake`. Its model `fake-1` does not tie its reasoning
  * to what came before it, and `fake-bound` does.
  */
-export function fakeProvider(runner: ModelRunner): Provider {
+export function fakeProvider(
+  runner: ModelRunner,
+  /** Whether its reasoning level can be changed from a place in a conversation on. */
+  options: { readonly changesReasoningInPlace?: boolean } = {},
+): Provider {
   return {
+    ...(options.changesReasoningInPlace === true
+      ? {
+          reasoningChange: (_model, reasoning) => ({
+            role: 'native',
+            provider: 'fake',
+            api: 'fake',
+            content: [{ type: 'reasoning_level', level: reasoning }],
+          }),
+        }
+      : {}),
     id: 'fake',
     label: 'Fake',
     credentials: ['api_key'],

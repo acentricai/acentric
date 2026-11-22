@@ -115,9 +115,19 @@ for (const target of TARGETS) {
   });
   await engine.settled(actor.id);
 
+  // Its reasoning level is changed, by a message in its conversation where its provider has
+  // one, and a third message is answered.
+  await engine.updateActor(actor.id, { reasoning: 'low' });
+  await engine.send(actor.id, {
+    type: 'message',
+    payload: { text: 'Thank you. Say goodbye in three words.' },
+  });
+  await engine.settled(actor.id);
+
   const record = await store.loadActor(actor.id);
   const conversation = await store.conversation(actor.id);
   const roles = conversation.map((entry) => entry.message.role).join(', ');
+  const lastUsage = conversation.at(-1)?.completion?.usage;
   const last = conversation.at(-1)?.message;
   const provider = providers.get(target.provider);
   const said = last?.role === 'assistant' ? provider.read(last).text : '';
@@ -132,9 +142,11 @@ for (const target of TARGETS) {
   const ok =
     record?.actor.lastTurn?.end === 'ok' &&
     record.actor.deployment.version === 2 &&
-    /^user, assistant, tool_result, assistant(, tool_result, assistant)*, user, assistant$/.test(
+    /^user, assistant, tool_result, assistant(, tool_result, assistant)*, user, assistant(, tool_result, assistant)*(, native|, system)?, user, assistant$/.test(
       roles,
     ) &&
+    // Its level was changed in its conversation exactly when its provider has a way to.
+    (record.reasoningSent !== null) === (provider.reasoningChange !== undefined) &&
     // Its old reasoning is left out exactly when its model ties reasoning to what came before.
     record.reasoningFrom > 1 === binds;
   failed ||= !ok;
@@ -146,6 +158,9 @@ for (const target of TARGETS) {
   console.log(`     turn: ${JSON.stringify(record?.actor.lastTurn)}`);
   console.log(
     `     version ${String(record?.actor.deployment.version)}, reasoned before the upgrade: ${String(reasoned)}, reasoning sent from message ${String(record?.reasoningFrom)}`,
+  );
+  console.log(
+    `     level changed ${record?.reasoningSent === null ? 'with the call' : 'by a message in the conversation'}; the last call read ${String(lastUsage?.cacheRead)} of ${String(lastUsage?.totalInput)} tokens from what the provider had kept`,
   );
   console.log(`     says: ${JSON.stringify(said.slice(0, 160))}`);
 }

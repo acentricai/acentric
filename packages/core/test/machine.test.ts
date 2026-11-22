@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { calls, says } from '@acentric/ai/testing';
 import { makeId } from '@acentric/protocol';
-import type { Input, ToolResultMessage, TurnEnd } from '@acentric/protocol';
+import type { Input, Message, ToolResultMessage, TurnEnd } from '@acentric/protocol';
 
 import { DEFAULT_RULES, OutOfTurn, decide } from '../src/machine.ts';
 import type { MachineEvent, Rules } from '../src/machine.ts';
@@ -39,6 +39,7 @@ function at(turn: Turn, said = 0, lastTurn: TurnEnd | null = null): ActorRecord 
     configurationGiven: null,
     sent: null,
     reasoningFrom: 1,
+    reasoningSent: null,
   };
 }
 
@@ -364,6 +365,17 @@ describe('an actor moves, and is changed', () => {
     // What it was given is kept beside the actor, not in it.
     expect(after.configurationGiven).toEqual({ region: 'eu' });
     expect(after.actor).not.toHaveProperty('configurationGiven');
+
+    // What tells its model of a change is put at the end of its conversation, in the same step.
+    const told: Message = { role: 'system', content: [{ type: 'text', text: 'Reason harder.' }] };
+    const saying = decide(
+      before,
+      { type: 'update', set: { reasoningSent: 'low' }, append: [told] },
+      NOW,
+    );
+    expect(saying.append).toMatchObject([{ seq: 4, message: told }]);
+    expect(applyChange(before, saying, 0)).toMatchObject({ nextSeq: 5, reasoningSent: 'low' });
+    expect(applyChange(before, saying, 0).actor).not.toHaveProperty('reasoningSent');
 
     expect(() => decide(at(model()), { type: 'update', set }, NOW)).toThrow(OutOfTurn);
     expect(() => decide(owing(), { type: 'update', set }, NOW)).toThrow(OutOfTurn);

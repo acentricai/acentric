@@ -4,7 +4,7 @@
 //
 // So a provider is added by writing one, and nothing here or in the engine changes for it.
 
-import type { AssistantMessage, ProviderFields } from '@acentric/protocol';
+import type { AssistantMessage, Message, ProviderFields, Reasoning } from '@acentric/protocol';
 
 import type { ModelInfo } from './catalog.ts';
 import type { ModelRunner, ToolCall } from './runner.ts';
@@ -59,6 +59,13 @@ export interface Provider {
   read(message: AssistantMessage): AnswerView;
   /** An answer this provider wrote, without what it gives of its reasoning. */
   withoutReasoning(message: AssistantMessage): AssistantMessage;
+  /**
+   * For a provider whose reasoning level can be changed from a place in a conversation on:
+   * the message that changes it, to be put at the conversation's end. The request's own level
+   * then stays the one the conversation started with, and what the provider keeps of the
+   * conversation stays good. A provider without it takes a level only with the request.
+   */
+  reasoningChange?(model: string, reasoning: Reasoning): Message;
 }
 
 /**

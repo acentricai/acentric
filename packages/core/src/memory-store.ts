@@ -60,6 +60,7 @@ type Kept = {
   configurationGiven: Json | null;
   sent: string | null;
   reasoningFrom: number;
+  reasoningSent: Actor['reasoning'] | null;
 };
 
 /** A copy that shares nothing with what it was made from, as what a database gives back does. */
@@ -224,6 +225,7 @@ export class MemoryStore implements Store {
       configurationGiven: copy(configurationGiven),
       sent: null,
       reasoningFrom: 1,
+      reasoningSent: null,
     };
     this.#actors.set(actor.id, kept);
     return { record: this.#record(kept), created: true };
@@ -273,6 +275,7 @@ export class MemoryStore implements Store {
     if (change.set?.configurationGiven !== undefined) {
       kept.configurationGiven = copy(change.set.configurationGiven);
     }
+    if (change.set?.reasoningSent !== undefined) kept.reasoningSent = change.set.reasoningSent;
     if (change.sent !== null) {
       kept.sent = change.sent.fingerprint;
       kept.reasoningFrom = change.sent.reasoningFrom;

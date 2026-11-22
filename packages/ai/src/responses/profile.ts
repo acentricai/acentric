@@ -1,7 +1,7 @@
 // What one provider changes about the Responses format: where a call is sent, how it is
 // signed, and what is the provider's own. The format's codec does the rest.
 
-import type { Json, JsonObject, ProviderFields } from '@acentric/protocol';
+import type { Json, JsonObject, ProviderFields, Reasoning } from '@acentric/protocol';
 
 import type { ModelInfo } from '../catalog.ts';
 import type { FailureKind } from '../failure.ts';
@@ -43,6 +43,11 @@ export type ResponsesProfile = {
   priceMultiplier(response: JsonObject): number | undefined;
   /** What one search of the provider's own web search costs, in dollars. */
   readonly searchPrice?: number;
+  /**
+   * The item that changes the reasoning level from where it is in the input, for a provider
+   * that has one. Without it, the level is the request's alone.
+   */
+  reasoningChange?(model: string, reasoning: Reasoning): JsonObject;
   /** The provider's own reading of a failure the format does not know. */
   classify?(failure: ErrorInput): ErrorReading | undefined;
 };

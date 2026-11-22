@@ -130,6 +130,10 @@ const SHARED = {
   options,
   hostedTools,
   searchPrice: 0.01,
+  reasoningChange: (_model: string, reasoning: string) => ({
+    type: 'configuration_update',
+    reasoning: { effort: effortOf(LEVELS, reasoning) },
+  }),
 } as const;
 
 export const openAiProfile: ResponsesProfile = {

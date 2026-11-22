@@ -105,6 +105,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         configurationGiven: null,
         sent: null,
         reasoningFrom: 1,
+        reasoningSent: null,
       });
       expect(await store.loadActor(actor.id)).toEqual(record);
       expect(await store.conversation(actor.id)).toEqual([]);
@@ -479,6 +480,12 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         // A step that made no call leaves both.
         await store.commit(actor.id, 2, change());
         expect(await store.loadActor(actor.id)).toMatchObject({ sent: 'abc', reasoningFrom: 5 });
+        // The level its calls are sent with, where that is not the level it is at.
+        expect((await store.loadActor(actor.id))?.reasoningSent).toBeNull();
+        await store.commit(actor.id, 3, change({ set: { reasoningSent: 'low' } }));
+        expect((await store.loadActor(actor.id))?.reasoningSent).toBe('low');
+        await store.commit(actor.id, 4, change({ set: { reasoningSent: null } }));
+        expect((await store.loadActor(actor.id))?.reasoningSent).toBeNull();
       });
     });
 
