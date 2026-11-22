@@ -3333,7 +3333,7 @@
               "version"
             ]
           },
-          "model": {
+          "modelId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
@@ -3441,7 +3441,7 @@
           "externalId",
           "agent",
           "deployment",
-          "model",
+          "modelId",
           "reasoning",
           "configuration",
           "status",
@@ -3700,7 +3700,7 @@
               "properties": {
                 "type": {
                   "type": "string",
-                  "pattern": "^[a-z][a-z0-9_]{0,62}$",
+                  "pattern": "^[A-Za-z0-9_.-]{1,64}$",
                   "description": "The type of an input, as its agent names it.",
                   "examples": [
                     "message"
@@ -3736,6 +3736,24 @@
             },
             "additionalProperties": {
               "$ref": "#/components/schemas/Json"
+            }
+          },
+          "secrets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$",
+              "description": "The name of a secret.",
+              "examples": [
+                "ORDERS_API_KEY"
+              ]
+            }
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
             }
           }
         },
@@ -4141,7 +4159,7 @@
               },
               "type": {
                 "type": "string",
-                "pattern": "^[a-z][a-z0-9_]{0,62}$",
+                "pattern": "^[A-Za-z0-9_.-]{1,64}$",
                 "description": "The type of an input, as its agent names it.",
                 "examples": [
                   "message"
@@ -4228,7 +4246,7 @@
               "telegram:4411"
             ]
           },
-          "model": {
+          "modelId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
@@ -4607,7 +4625,7 @@
           },
           "type": {
             "type": "string",
-            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$",
             "description": "The type of an input, as its agent names it.",
             "examples": [
               "message"
@@ -5588,7 +5606,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$",
             "description": "The type of an input, as its agent names it.",
             "examples": [
               "message"
@@ -5761,7 +5779,7 @@
               }
             ]
           },
-          "model": {
+          "modelId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200,

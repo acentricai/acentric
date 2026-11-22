@@ -78,7 +78,7 @@ for (const target of deployments) {
   const { actor } = await engine.createActor({
     agent,
     deployment: target.deployment,
-    model: target.model,
+    modelId: target.model,
     reasoning: 'low',
   });
   const started = Date.now();

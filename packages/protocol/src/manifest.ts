@@ -26,13 +26,17 @@ export const bundleManifestSchema = z
   .meta({ id: 'BundleManifest' });
 export type BundleManifest = z.infer<typeof bundleManifestSchema>;
 
-/** The type of an input, as its agent names it: lowercase letters, digits and `_`. */
+/** The name of a secret: letters, digits and `_`, not starting with a digit. */
+export const secretNameSchema = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/, 'A secret is named with letters, digits and _')
+  .meta({ description: 'The name of a secret.', examples: ['ORDERS_API_KEY'] });
+export type SecretName = z.infer<typeof secretNameSchema>;
+
+/** The type of an input, as its agent names it: letters, digits, `_`, `.` and `-`, 64 at most. */
 export const inputTypeSchema = z
   .string()
-  .regex(
-    /^[a-z][a-z0-9_]{0,62}$/,
-    'An input type is lowercase letters, digits and _, starting with a letter',
-  )
+  .regex(/^[A-Za-z0-9_.-]{1,64}$/, 'An input type is 1 to 64 letters, digits, _, . or -')
   .meta({ description: 'The type of an input, as its agent names it.', examples: ['message'] });
 export type InputType = z.infer<typeof inputTypeSchema>;
 
@@ -70,6 +74,13 @@ export const agentDefinitionSchema = z
     inputs: z.array(inputDeclarationSchema),
     /** What the agent asks of its provider that only that provider has, for the provider to read. */
     providerOptions: providerFieldsSchema.optional(),
+    /** The secrets its code reads, by name, so that one that is not set can be told of. */
+    secrets: z.array(secretNameSchema).optional(),
+    /**
+     * What it uses that an engine may not have, by name, such as `machine` or `schedule`. An
+     * engine that lacks one refuses the deploy, and says which.
+     */
+    features: z.array(z.string().min(1)).optional(),
   })
   .meta({ id: 'AgentDefinition' });
 export type AgentDefinition = z.infer<typeof agentDefinitionSchema>;

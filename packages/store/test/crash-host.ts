@@ -112,7 +112,7 @@ const engine = new Engine({ store, runner, executor });
 const { actor } = await engine.createActor({
   agent,
   deployment,
-  model: 'fake-1',
+  modelId: 'fake-1',
   externalId: 'the-one-actor',
 });
 

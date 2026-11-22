@@ -45,7 +45,7 @@ export const actorSchema = z
     agent: agentIdSchema,
     /** The deployment of its agent whose code it runs. */
     deployment: deploymentRefSchema,
-    model: modelIdSchema,
+    modelId: modelIdSchema,
     reasoning: reasoningSchema,
     /** Its configuration, as its agent's schema returned it. Null for an agent that takes none. */
     configuration: jsonSchema.nullable(),
@@ -70,7 +70,7 @@ export const createActorRequestSchema = z
     name: nameSchema.optional(),
     externalId: externalIdSchema.optional(),
     /** Without it, the default model of the agent's provider. */
-    model: modelIdSchema.optional(),
+    modelId: modelIdSchema.optional(),
     reasoning: reasoningSchema.optional(),
     /** What the agent's configuration schema takes. */
     configuration: jsonSchema.optional(),
@@ -91,7 +91,7 @@ export type CreateActorResponse = z.infer<typeof createActorResponseSchema>;
 export const updateActorRequestSchema = z
   .strictObject({
     name: nameSchema.nullable().optional(),
-    model: modelIdSchema.optional(),
+    modelId: modelIdSchema.optional(),
     reasoning: reasoningSchema.optional(),
     /** In place of the one it has, whole. */
     configuration: jsonSchema.optional(),
