@@ -10,7 +10,7 @@ import { COMMAND_HEADER } from '@acentric/protocol';
 import { Hono } from 'hono';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { serveDownloads } from '../src/downloads.ts';
+import { machinePrograms, serveDownloads } from '../src/downloads.ts';
 import { readSettings, start } from '../src/index.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'acentric-downloads-'));
@@ -20,6 +20,7 @@ afterAll(() => {
 
 const folder = join(dir, 'downloads');
 const SCRIPT = '#!/bin/sh\nSERVER=\'__SERVER__\'\ncurl "$SERVER/acentric.mjs"\n';
+const MACHINE_SCRIPT = '#!/bin/sh\nSERVER=\'__SERVER__\'\ncurl "$SERVER/machine/linux-x64"\n';
 
 function served(publicUrl?: string): Hono {
   const app = new Hono();
@@ -37,6 +38,8 @@ describe('what the server hands out', () => {
     writeFileSync(join(folder, 'install-cli.sh'), SCRIPT);
     expect(() => served()).toThrow(/has no acentric\.mjs/);
     writeFileSync(join(folder, 'acentric.mjs'), '// the command\n');
+    expect(() => served()).toThrow(/has no install\.sh: it is apps\/machine\/install\.sh/);
+    writeFileSync(join(folder, 'install.sh'), MACHINE_SCRIPT);
 
     const app = served();
     const script = await app.request('http://engine.test:4000/install-cli.sh');
@@ -48,6 +51,56 @@ describe('what the server hands out', () => {
     const command = await app.request('http://engine.test:4000/acentric.mjs');
     expect(command.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
     expect(await command.text()).toBe('// the command\n');
+
+    // The script that installs the machine program has the server's address in it too.
+    const machine = await app.request('https://engine.test/install.sh');
+    expect(machine.headers.get('content-type')).toBe('text/x-shellscript; charset=utf-8');
+    expect(await machine.text()).toBe(MACHINE_SCRIPT.replace('__SERVER__', 'https://engine.test'));
+  });
+
+  it('is the machine program for each system the folder has one for, and none for any other', async () => {
+    // A folder with no machine programs hands out none, and says so.
+    const none = await served().request('http://engine.test/machine/linux-x64');
+    expect(none.status).toBe(404);
+    expect(await none.json()).toMatchObject({
+      error: { message: 'This engine hands out no machine program for linux-x64: it has none' },
+    });
+
+    mkdirSync(join(folder, 'machine'), { recursive: true });
+    writeFileSync(join(folder, 'machine', 'linux-x64'), Buffer.from([1, 2, 3, 0, 255]));
+    writeFileSync(join(folder, 'machine', 'darwin-arm64'), 'another');
+    // What is not named as a system is not a program.
+    writeFileSync(join(folder, 'machine', 'README.md'), 'notes');
+    mkdirSync(join(folder, 'machine', 'linux-arm64'));
+
+    const programs = machinePrograms(folder);
+    expect(programs.systems).toEqual(['darwin-arm64', 'linux-x64']);
+    expect(programs.build('linux', 'x64')).toBe(
+      createHash('sha256')
+        .update(Buffer.from([1, 2, 3, 0, 255]))
+        .digest('hex'),
+    );
+    expect(programs.build('linux', 'arm64')).toBeUndefined();
+    expect(machinePrograms(undefined).systems).toEqual([]);
+    expect(machinePrograms(join(dir, 'nothing-here')).systems).toEqual([]);
+
+    const app = served();
+    const program = await app.request('http://engine.test/machine/linux-x64');
+    expect(program.status).toBe(200);
+    expect(program.headers.get('content-type')).toBe('application/octet-stream');
+    expect(program.headers.get('content-length')).toBe('5');
+    expect([...new Uint8Array(await program.arrayBuffer())]).toEqual([1, 2, 3, 0, 255]);
+    for (const system of ['linux-arm64', 'README.md', 'windows-x64']) {
+      const other = await app.request(`http://engine.test/machine/${system}`);
+      expect(other.status, system).toBe(404);
+    }
+    const said = await (await app.request('http://engine.test/machine/windows-x64')).json();
+    expect(said).toMatchObject({
+      error: {
+        message:
+          'This engine hands out no machine program for windows-x64: it has darwin-arm64, linux-x64',
+      },
+    });
   });
 
   it('says the address it is reached at from outside: its public one, or what a proxy says', async () => {
