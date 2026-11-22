@@ -77,6 +77,7 @@ import { SecretsUnavailable } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import type { ActorsQuery, PageOf, Paged, Store } from './store.ts';
 import type { UsageFilter } from './usage.ts';
+import { viewImage } from './view-image.ts';
 
 /**
  * Gives what an actor's model is called with: a runner, or a runner and the model account it
@@ -277,6 +278,21 @@ export class Engine {
               kept?.stopGraceMs === undefined ? {} : { stopGraceMs: kept.stopGraceMs },
             ),
           ];
+    // What the engine itself offers a model that answers at once: an image from its machine.
+    const ownTools =
+      this.machines === undefined
+        ? []
+        : [
+            viewImage(
+              this.machines,
+              (provider, model) =>
+                this.#providers.has(provider) &&
+                this.#providers
+                  .get(provider)
+                  .models.find((info) => info.id === model)
+                  ?.input?.includes('image') === true,
+            ),
+          ];
     this.tasks = new Tasks({
       store: options.store,
       clock: this.#clock,
@@ -321,6 +337,7 @@ export class Engine {
         const found = await this.#store.findDeployment(agent, version);
         return found === undefined ? undefined : { id: found.id, version };
       },
+      ownTools: (actor, definition) => ownTools.filter((one) => one.available(actor, definition)),
       instructions: (actor, definition, own) => {
         const { machine } = actor;
         const facts = machine === null ? undefined : this.machines?.facts(machine.id);

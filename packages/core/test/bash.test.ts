@@ -6,6 +6,7 @@ import { renderCommand } from '../src/bash.ts';
 import { familyOf } from '../src/families.ts';
 import type { CommandEnd } from '../src/machines.ts';
 import { instructionsOf, scaffoldOf } from '../src/scaffold.ts';
+import { imageSize, imageTypeOf, viewImage } from '../src/view-image.ts';
 
 const ended = (more: Partial<CommandEnd> = {}): CommandEnd => ({
   actor: 'act_1',
@@ -155,5 +156,78 @@ describe('the pieces of the scaffold', () => {
   it('are followed by the agent’s own instructions, when it has any', () => {
     expect(instructionsOf(none, 'You answer.')).toBe(`${scaffoldOf(none)}\n\nYou answer.`);
     expect(instructionsOf(none, '  \n')).toBe(scaffoldOf(none));
+  });
+});
+
+describe('an image file', () => {
+  const png = (width: number, height: number): Buffer => {
+    const bytes = Buffer.alloc(32);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+    bytes.writeUInt32BE(width, 16);
+    bytes.writeUInt32BE(height, 20);
+    return bytes;
+  };
+  const gif = Buffer.concat([Buffer.from('GIF89a'), Buffer.from([0x40, 0x01, 0xf0, 0x00, 0, 0])]);
+  // A JPEG of 640 by 480, with a segment before its frame header.
+  const jpeg = Buffer.from([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x01, 0xe0, 0x02,
+    0x80, 0x03, 0x01, 0x11, 0x00,
+  ]);
+  const webp = (kind: string, rest: number[]): Buffer =>
+    Buffer.concat([
+      Buffer.from('RIFF'),
+      Buffer.alloc(4),
+      Buffer.from('WEBP'),
+      Buffer.from(kind),
+      Buffer.from(rest),
+      Buffer.alloc(16),
+    ]);
+
+  it('is known by how it starts, whatever it is called', () => {
+    expect(imageTypeOf(png(1, 1))).toBe('image/png');
+    expect(imageTypeOf(gif)).toBe('image/gif');
+    expect(imageTypeOf(jpeg)).toBe('image/jpeg');
+    expect(imageTypeOf(webp('VP8X', []))).toBe('image/webp');
+    expect(imageTypeOf(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBeUndefined();
+    expect(imageTypeOf(Buffer.from('RIFF....WAVE'))).toBeUndefined();
+    expect(imageTypeOf(Buffer.alloc(0))).toBeUndefined();
+  });
+
+  it('says how large it is, from where each kind keeps that', () => {
+    expect(imageSize(png(1280, 720))).toEqual({ width: 1280, height: 720 });
+    expect(imageSize(gif)).toEqual({ width: 320, height: 240 });
+    expect(imageSize(jpeg)).toEqual({ width: 640, height: 480 });
+    // 4 bytes of size and 4 of flags, then the width and the height less one, 3 bytes each.
+    expect(imageSize(webp('VP8X', [0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0x03, 0, 0xff, 0x01, 0]))).toEqual(
+      { width: 1024, height: 512 },
+    );
+    expect(imageSize(Buffer.from('not an image'))).toBeUndefined();
+    expect(imageSize(png(1, 1).subarray(0, 12))).toBeUndefined();
+  });
+
+  it('is kept from a model whose provider takes none so large, and it is told how to look at it', async () => {
+    const actor = { machine: { id: 'mch_1', cwd: '~', env: [] } } as never;
+    const machines = (image: Buffer) =>
+      ({
+        settled: async () => {},
+        read: async () => ({ size: image.length, from: 0, data: image.toString('base64') }),
+      }) as never;
+    const shown = (image: Buffer, provider: string) =>
+      viewImage(machines(image), () => true).run(
+        actor,
+        { provider } as never,
+        { path: 'big.png' },
+        { id: 'c1' },
+      );
+    expect(await shown(png(4000, 300), 'anthropic')).toEqual({
+      content:
+        'big.png is 4000×300 pixels, and the largest image this model can be shown is 3000 pixels a side. Make a smaller copy, and look at that.',
+      isError: true,
+    });
+    expect(await shown(png(3000, 3000), 'anthropic')).toMatchObject({
+      content: [{ type: 'image' }],
+    });
+    // A provider that scales a large image down itself is given it as it is.
+    expect(await shown(png(4000, 300), 'openai')).toMatchObject({ content: [{ type: 'image' }] });
   });
 });

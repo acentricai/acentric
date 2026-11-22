@@ -58,7 +58,10 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
     /** An engine whose agent works on machines, a machine that is connected, and an actor on it. */
     const setup = async (
       script: readonly Scripted[],
-      more: { readonly env?: { readonly [name: string]: string } } = {},
+      more: {
+        readonly env?: { readonly [name: string]: string };
+        readonly modelId?: string;
+      } = {},
     ) => {
       const one = engine(script);
       await one.deploy(ON_MACHINE);
@@ -70,7 +73,12 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
       await daemon.connect(machines, machine.id);
       await machines.whenOnline(machine.id);
       const actor = await one.createActor({
-        machine: { id: machine.id, cwd: '~/work', ...(more.env === undefined ? {} : more) },
+        machine: {
+          id: machine.id,
+          cwd: '~/work',
+          ...(more.env === undefined ? {} : { env: more.env }),
+        },
+        ...(more.modelId === undefined ? {} : { modelId: more.modelId }),
       });
       /** Every command ends at once, with what a test says of it. */
       const ends = (how: Parameters<FakeDaemon['end']>[1] = {}) => {
@@ -381,6 +389,113 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
         expect(textOf((await results(actor.id))[0])).toBe('made');
         expect(daemon.asked('run')).toHaveLength(1);
         expect(await w.roles(actor.id)).toEqual(['user', 'assistant', 'tool_result', 'assistant']);
+      });
+    });
+
+    describe('view_image', () => {
+      const view = (id: string, args: { [name: string]: Json }) =>
+        calls({ id, name: 'view_image', arguments: args });
+      /** A PNG of a size, as its file starts: enough to know it by. */
+      const png = (width: number, height: number): Buffer => {
+        const bytes = Buffer.alloc(64);
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+        bytes.writeUInt32BE(width, 16);
+        bytes.writeUInt32BE(height, 20);
+        return bytes;
+      };
+
+      it('is offered to a model that takes images, on a machine, and to no other', async () => {
+        const { one, actor } = await setup([says('Ready.')], { modelId: 'fake-eyes' });
+        await one.say(actor.id, 'Hello.');
+        await one.it.settled(actor.id);
+        expect(one.steps[0]?.tools.map((tool) => tool.name)).toEqual([
+          'lookup_order',
+          'bash',
+          'stop',
+          'view_image',
+        ]);
+        expect(one.steps[0]?.instructions).toContain(
+          '- `view_image` shows you an image file from the machine.',
+        );
+        // The same model with no machine has no file to be shown.
+        await one.it.activate((await one.agent()).id, 1);
+        const plain = await one.createActor({ modelId: 'fake-eyes', version: 1 });
+        await one.say(plain.id, 'Hello.');
+        await one.it.settled(plain.id);
+        expect(one.steps[1]?.tools.map((tool) => tool.name)).toEqual(['lookup_order']);
+      });
+
+      it('shows the model an image from the machine, as the result of its call', async () => {
+        const { one, actor, daemon } = await setup(
+          [view('c1', { path: 'shots/home.png' }), says('A home page.')],
+          { modelId: 'fake-eyes' },
+        );
+        daemon.files.set('shots/home.png', png(1280, 720));
+        await one.say(actor.id, 'Look.');
+        await one.it.settled(actor.id);
+        expect(daemon.asked('read')).toEqual([
+          { path: 'shots/home.png', cwd: '~/work', max: 5 * 1024 * 1024 + 1 },
+        ]);
+        const [result] = await results(actor.id);
+        expect(result?.message).toMatchObject({
+          toolName: 'view_image',
+          isError: false,
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                mediaType: 'image/png',
+                data: png(1280, 720).toString('base64'),
+              },
+            },
+          ],
+        });
+        // The model is sent it with its next call.
+        expect(JSON.stringify(one.steps[1]?.messages.at(-1))).toContain('image/png');
+      });
+
+      it('answers with what is wrong when there is no image to show', async () => {
+        const { one, actor, daemon, machines, machine } = await setup(
+          [
+            view('c1', { path: 'notes.txt' }),
+            view('c2', { path: 'huge.png' }),
+            view('c3', { path: 'gone.png' }),
+            view('c4', { file: 'a.png' }),
+            view('c5', { path: 'a.png', scale: 2 }),
+            says('I see.'),
+            view('c6', { path: 'shot.png' }),
+            says('Away.'),
+          ],
+          { modelId: 'fake-eyes' },
+        );
+        daemon.files.set('notes.txt', Buffer.from('not an image'));
+        daemon.files.set('huge.png', Buffer.concat([png(10, 10), Buffer.alloc(5 * 1024 * 1024)]));
+        daemon.refuse = (method, params) =>
+          method === 'read' && params['path'] === 'gone.png'
+            ? { code: 'not_found', message: 'There is no file gone.png' }
+            : undefined;
+        await one.say(actor.id, 'Look at these.');
+        await one.it.settled(actor.id);
+        const shown = await results(actor.id);
+        expect(shown.map(textOf)).toEqual([
+          'notes.txt is not a png, jpeg, gif or webp image',
+          'huge.png is 5.0 MB, and the largest image that can be shown is 5.0 MB',
+          'There is no file gone.png',
+          'path is the path of a file',
+          'scale is not known',
+        ]);
+        expect(shown.every((result) => (result.message as { isError?: boolean }).isError)).toBe(
+          true,
+        );
+
+        daemon.drop();
+        await machines.whenOffline(machine);
+        await one.say(actor.id, 'And this.');
+        await one.it.settled(actor.id);
+        expect(textOf((await results(actor.id)).at(-1))).toBe(
+          `Your machine, ${machine}, is not connected: the file could not be read.`,
+        );
       });
     });
 
