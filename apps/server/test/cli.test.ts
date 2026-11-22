@@ -89,6 +89,7 @@ beforeAll(() => {
   downloads = folder();
   copyFileSync(join(REPO, 'apps', 'cli', 'install.sh'), join(downloads, 'install-cli.sh'));
   copyFileSync(command, join(downloads, 'acentric.mjs'));
+  copyFileSync(join(REPO, 'apps', 'machine', 'install.sh'), join(downloads, 'install.sh'));
 });
 
 afterAll(() => {
@@ -434,6 +435,7 @@ describe('the acentric command', () => {
     // An engine of another build: what it hands out is another file.
     const other = folder();
     copyFileSync(join(downloads, 'install-cli.sh'), join(other, 'install-cli.sh'));
+    copyFileSync(join(downloads, 'install.sh'), join(other, 'install.sh'));
     const theirs = Buffer.concat([mine, Buffer.from('\n// another build\n')]);
     writeFileSync(join(other, 'acentric.mjs'), theirs);
     const second = await serve(folder(), model, other);

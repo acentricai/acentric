@@ -12,6 +12,7 @@ import type { EngineOptions, RunnerSource } from '@acentric/core';
 import { IsolateExecutor } from '@acentric/executor';
 import { FileBlobStore, SqliteStore } from '@acentric/store';
 
+import { machinePrograms } from './downloads.ts';
 import { startServer } from './serve.ts';
 import type { Server } from './serve.ts';
 import type { Settings } from './settings.ts';
@@ -61,6 +62,7 @@ export async function start(
     ...(more.log === undefined ? {} : { log: more.log }),
   });
   const providers = more.providers ?? builtInProviders();
+  const programs = machinePrograms(settings.downloads);
   const audit = new Audit({ store });
   // A model is called with a model account, and with nothing else: no key is read from the
   // environment.
@@ -73,8 +75,9 @@ export async function start(
     // The bytes of images and files, in a folder beside the database.
     blobs: new FileBlobStore(join(settings.data, 'blobs')),
     runner: more.runner ?? accountRunners(accounts),
-    // The computers actors' commands run on: their daemons connect to this server.
-    machines: more.machines ?? {},
+    // The computers actors' commands run on: their daemons connect to this server. A daemon
+    // is asked to take the machine program this server hands out, by its digest.
+    machines: { build: programs.build, ...more.machines },
   });
   const people = new People({
     store,
@@ -108,7 +111,13 @@ export async function start(
       ...(more.checkAnswers === undefined ? {} : { checkAnswers: more.checkAnswers }),
       ...(settings.downloads === undefined
         ? {}
-        : { downloads: { folder: settings.downloads, publicUrl: settings.publicUrl } }),
+        : {
+            downloads: {
+              folder: settings.downloads,
+              publicUrl: settings.publicUrl,
+              machines: programs,
+            },
+          }),
     });
     return {
       server,
