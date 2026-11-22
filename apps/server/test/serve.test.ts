@@ -30,6 +30,8 @@ const model: ModelRunner = {
   },
 };
 
+const MODEL_KEY = 'a-key-the-fake-provider-takes';
+
 let dir: string;
 let code: string;
 const up = () =>
@@ -42,8 +44,9 @@ const up = () =>
     }),
     {
       version: 'test',
-      providers: new Providers([fakeProvider(model)]),
-      runner: model,
+      // No runner in place of the model accounts: the model is called with one, as it is by
+      // a server that calls real providers.
+      providers: new Providers([fakeProvider(model, { keys: [MODEL_KEY] })]),
       log: () => {},
       checkAnswers: true,
     },
@@ -103,6 +106,10 @@ describe('a server', () => {
       params: { agent: deployed.agent.id },
       body: { configuration: { region: 'eu' }, externalId: 'telegram:4411' },
     });
+    // What its model is called with: no setting of the server's says.
+    const account = await client.call('accounts.create', {
+      body: { provider: 'fake', name: 'main', apiKey: MODEL_KEY },
+    });
 
     const events = await turn(client, actor.id, 'Why two refunds?');
     const roles = events.flatMap((event) =>
@@ -141,6 +148,14 @@ describe('a server', () => {
       [8, 'assistant'],
       [7, 'tool_result'],
     ]);
+    // The account was kept, sealed, and its key opened again: both turns' calls are its.
+    const usage = await client.call('usage.get', { query: { by: 'account' } });
+    expect(usage.groups?.map((group) => [group.key, group.totals.calls])).toEqual([
+      [account.id, 4],
+    ]);
+    expect((await client.call('usage.actor', { params: { actor: actor.id } })).totals.calls).toBe(
+      4,
+    );
     await second.close();
   }, 60_000);
 

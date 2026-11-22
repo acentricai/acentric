@@ -9,8 +9,9 @@
 //   ACENTRIC_ADMIN_KEY      an API key that may do everything, of 24 characters or more: what
 //                           other keys are made with. Without it, a server that has no key yet
 //                           makes one, and prints it once
-//   ACENTRIC_SECRET_KEY     the key agents' secrets are sealed with: 32 bytes, as 64 hex
-//                           characters or as base64. Without it, the server keeps no secrets
+//   ACENTRIC_SECRET_KEY     the key agents' secrets and the keys of model accounts are sealed
+//                           with: 32 bytes, as 64 hex characters or as base64. Without it, the
+//                           server keeps neither
 //   ACENTRIC_SECRET_KEYS_OLD  keys secrets were sealed with before, separated by commas, so
 //                           that what they sealed still opens after the key was changed
 //   ACENTRIC_AGENT_NETWORK  what agents' code may reach: `public` (without it), which is
@@ -18,13 +19,13 @@
 //   ACENTRIC_AGENT_NETWORK_ALLOW  with `public`: private addresses and ranges agents' code
 //                           may reach as well, separated by commas, such as 10.0.0.0/8
 //   ACENTRIC_CODE_PROCESSES how many processes agents' code runs in. 2 without it
-//   OPENAI_API_KEY, ANTHROPIC_API_KEY, FIREWORKS_API_KEY
-//                           what the calls of each provider's models are made with
+//
+// What a provider's models are called with is not among them: that is a model account, added
+// through the API and kept sealed.
 
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
-import type { Credential } from '@acentric/ai';
 import { secretKeyOf } from '@acentric/core';
 import type { SecretKeys } from '@acentric/core';
 import type { Network } from '@acentric/executor';
@@ -40,21 +41,12 @@ export type Settings = {
   readonly secretKeys: SecretKeys | undefined;
   readonly network: Network;
   readonly codeProcesses: number;
-  /** What each provider's calls are made with, by the provider's ID. */
-  readonly credentials: { readonly [provider: string]: Credential };
 };
 
 /** The settings are wrong. The message says which, and how. */
 export class InvalidSettings extends Error {
   override readonly name = 'InvalidSettings';
 }
-
-/** The provider each key in the environment is for. */
-const PROVIDER_KEYS = {
-  OPENAI_API_KEY: 'openai',
-  ANTHROPIC_API_KEY: 'anthropic',
-  FIREWORKS_API_KEY: 'fireworks',
-} as const;
 
 /** A key's ID: the start of its digest, so the same key is the same ID wherever it is given. */
 const idOf = (key: Uint8Array): string =>
@@ -128,12 +120,6 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     );
   }
 
-  const credentials: { [provider: string]: Credential } = {};
-  for (const [name, provider] of Object.entries(PROVIDER_KEYS)) {
-    const apiKey = given(name);
-    if (apiKey !== undefined) credentials[provider] = { type: 'api_key', apiKey };
-  }
-
   return {
     port: wholeNumber('ACENTRIC_PORT', 4000, 0, 65_535),
     host: given('ACENTRIC_HOST') ?? '127.0.0.1',
@@ -143,6 +129,5 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     secretKeys,
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
-    credentials,
   };
 }

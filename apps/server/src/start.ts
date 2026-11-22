@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 import { builtInProviders } from '@acentric/ai';
 import type { ModelRunner, Providers } from '@acentric/ai';
-import { Audit, Engine, Keys, People, Secrets, providerRunners } from '@acentric/core';
+import { Accounts, Audit, Engine, Keys, People, Secrets, accountRunners } from '@acentric/core';
 import type { RunnerSource } from '@acentric/core';
 import { IsolateExecutor } from '@acentric/executor';
 import { SqliteStore } from '@acentric/store';
@@ -37,6 +37,7 @@ export async function start(
     readonly version: string;
     /** In place of the providers there are: for a server that is to call no real model. */
     readonly providers?: Providers;
+    /** In place of the model accounts: what calls every actor's model. */
     readonly runner?: ModelRunner | RunnerSource;
     /** Lines the processes agents' code runs in write. To stderr without it. */
     readonly log?: (line: string) => void;
@@ -58,14 +59,17 @@ export async function start(
     ...(more.log === undefined ? {} : { log: more.log }),
   });
   const providers = more.providers ?? builtInProviders();
+  const audit = new Audit({ store });
+  // A model is called with a model account, and with nothing else: no key is read from the
+  // environment.
+  const accounts = new Accounts({ store, secrets, providers, audit });
   const engine = new Engine({
     store,
     executor,
     providers,
     secrets,
-    runner: more.runner ?? providerRunners(providers, (id) => settings.credentials[id]),
+    runner: more.runner ?? accountRunners(accounts),
   });
-  const audit = new Audit({ store });
   const people = new People({
     store,
     audit,
@@ -89,6 +93,7 @@ export async function start(
       people,
       audit,
       secrets,
+      accounts,
       version: more.version,
       port: settings.port,
       host: settings.host,

@@ -1,8 +1,17 @@
 // What each route does, once a request has been read and let through. A handler is given what
 // its route takes, checked, and answers with what its route answers.
 
-import { reaches } from '@acentric/core';
-import type { Audit, Engine, Keys, People, Secrets, SignedIn } from '@acentric/core';
+import { AgentNotFound, reaches, reportOf } from '@acentric/core';
+import type {
+  Accounts,
+  Audit,
+  Engine,
+  Keys,
+  People,
+  Secrets,
+  SignedIn,
+  UsageFilter,
+} from '@acentric/core';
 import type {
   Actor,
   Agent,
@@ -27,6 +36,7 @@ export type Parts = {
   readonly people: People;
   readonly audit: Audit;
   readonly secrets: Secrets;
+  readonly accounts: Accounts;
   readonly streams: Streams;
 };
 
@@ -127,14 +137,29 @@ export const handlers: Handlers = {
     return engine.listAgents({ limit, ...(cursor === undefined ? {} : { cursor }) });
   },
   'agents.get': (asked) => agentOf(asked),
-  'agents.update': async (asked, { engine, audit }) => {
-    const agent = await engine.activate(agentOf(asked).id, asked.body.activeVersion);
-    await audit.record({
-      by: refOf(asked),
-      action: 'agent.activate',
-      target: { type: 'agent', id: agent.id },
-      detail: { name: agent.name, version: asked.body.activeVersion },
-    });
+  'agents.update': async (asked, { engine, accounts, audit }) => {
+    const { activeVersion, account } = asked.body;
+    let agent = agentOf(asked);
+    if (activeVersion === undefined && account === undefined) {
+      throw new ApiFailure('invalid_request', 'Nothing to change was given');
+    }
+    // Both are done, or neither: a version there is not is refused before anything is changed.
+    if (activeVersion !== undefined && activeVersion > agent.latestDeployment.version) {
+      throw new AgentNotFound(agent.id, activeVersion);
+    }
+    if (account !== undefined) {
+      agent = await accounts.give(refOf(asked), agent, account);
+      engine.forgetAgent(agent.id);
+    }
+    if (activeVersion !== undefined) {
+      agent = await engine.activate(agent.id, activeVersion);
+      await audit.record({
+        by: refOf(asked),
+        action: 'agent.activate',
+        target: { type: 'agent', id: agent.id },
+        detail: { name: agent.name, version: activeVersion },
+      });
+    }
     return agent;
   },
   'agents.delete': async (asked, { engine, audit }) => {
@@ -306,6 +331,37 @@ export const handlers: Handlers = {
     });
     return undefined;
   },
+
+  // Model accounts, and what was used
+
+  'accounts.create': (asked, { accounts }) => accounts.add(refOf(asked), defined(asked.body)),
+  'accounts.list': async ({ query }, { accounts }) => pageOf(await accounts.list(), query),
+  'accounts.get': ({ params }, { accounts }) => accounts.get(params.account),
+  'accounts.update': (asked, { accounts }) =>
+    accounts.update(refOf(asked), asked.params.account, defined(asked.body)),
+  'accounts.delete': async (asked, { accounts }) => {
+    await accounts.remove(refOf(asked), asked.params.account);
+    return undefined;
+  },
+  'usage.get': ({ query, scope }, { engine }) => {
+    const { by, ...asked } = query;
+    const filter: UsageFilter = defined(asked);
+    // A key is told of what it reaches, whatever it asks for: of the rest there is nothing.
+    const reached =
+      scope.type === 'engine'
+        ? filter
+        : scope.type === 'agent'
+          ? { ...filter, agent: scope.agent }
+          : { ...filter, actor: scope.actor };
+    if (
+      (filter.agent !== undefined && filter.agent !== reached.agent) ||
+      (filter.actor !== undefined && filter.actor !== reached.actor)
+    ) {
+      return reportOf([], {}, by);
+    }
+    return engine.usage(reached, by);
+  },
+  'usage.actor': (asked, { engine }) => engine.usage({ actor: actorOf(asked).id }),
 
   // Signing in
 

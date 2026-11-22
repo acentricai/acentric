@@ -14,7 +14,6 @@ describe('a server’s settings', () => {
       secretKeys: undefined,
       network: { reach: 'public', allow: [] },
       codeProcesses: 2,
-      credentials: {},
     });
     expect(settings.data.endsWith('/data')).toBe(true);
   });
@@ -27,8 +26,8 @@ describe('a server’s settings', () => {
       ACENTRIC_ADMIN_KEY: 'a-key-an-operator-keeps-somewhere-safe',
       ACENTRIC_AGENT_NETWORK_ALLOW: '10.0.0.0/8, 192.168.1.7',
       ACENTRIC_CODE_PROCESSES: '4',
+      // What a provider's models are called with is a model account, and no setting.
       OPENAI_API_KEY: 'sk-test',
-      ANTHROPIC_API_KEY: ' ',
     });
     expect(settings).toMatchObject({
       port: 8080,
@@ -37,9 +36,8 @@ describe('a server’s settings', () => {
       adminKey: 'a-key-an-operator-keeps-somewhere-safe',
       network: { reach: 'public', allow: ['10.0.0.0/8', '192.168.1.7'] },
       codeProcesses: 4,
-      // One that is given as nothing is not given.
-      credentials: { openai: { type: 'api_key', apiKey: 'sk-test' } },
     });
+    expect(JSON.stringify(settings)).not.toContain('sk-test');
     expect(readSettings({ ACENTRIC_AGENT_NETWORK: 'any' }).network).toEqual({ reach: 'any' });
     // Where people reach it, without the slash a person may leave at its end.
     expect(readSettings({ ACENTRIC_PUBLIC_URL: 'https://engine.example.com/' }).publicUrl).toBe(
