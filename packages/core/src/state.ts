@@ -5,6 +5,8 @@
 // owed and does it. So there is one way of going on, and no other for coming back.
 
 import type { ToolCall } from '@acentric/ai';
+
+import type { UsageRecord } from './usage.ts';
 import type {
   Actor,
   ActorStatus,
@@ -108,6 +110,8 @@ export type Change = {
    * and the place its reasoning was sent from. Null for a step that made no such call.
    */
   readonly sent: { readonly fingerprint: string | null; readonly reasoningFrom: number } | null;
+  /** For a step that ends a call of the model, answered or failed: what the call used. */
+  readonly usage: UsageRecord | null;
 };
 
 /** An actor with `patch` applied. */

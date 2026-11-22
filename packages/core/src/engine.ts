@@ -31,8 +31,11 @@ import type {
   Name,
   PrincipalRef,
   Reasoning,
+  UsageGroup,
+  UsageReport,
 } from '@acentric/protocol';
 
+import type { Access } from './accounts.ts';
 import { MemoryBus } from './bus.ts';
 import type { EventBus } from './bus.ts';
 import { ActorDriver, contentOf } from './driver.ts';
@@ -58,9 +61,17 @@ import { DEFAULT_RULES } from './machine.ts';
 import type { Rules } from './machine.ts';
 import type { Secrets } from './secrets.ts';
 import type { ActorsQuery, PageOf, Paged, Store } from './store.ts';
+import type { UsageFilter } from './usage.ts';
 
-/** Gives an actor the runner of its model. It is asked at every call, so it is quick to answer. */
-export type RunnerSource = (actor: Actor, definition: AgentDefinition) => ModelRunner;
+/**
+ * Gives what an actor's model is called with: a runner, or a runner and the model account it
+ * is of. It is asked at every call, so it is quick to answer. It throws, or rejects, with why,
+ * when the model cannot be called at all.
+ */
+export type RunnerSource = (
+  actor: Actor,
+  definition: AgentDefinition,
+) => ModelRunner | Access | Promise<ModelRunner | Access>;
 
 /** Ten random bytes. */
 export type Entropy = () => Uint8Array;
@@ -168,7 +179,10 @@ export class Engine {
       });
     this.#host = {
       store: options.store,
-      runnerFor: typeof runner === 'function' ? runner : () => runner,
+      access: async (actor, definition) => {
+        const given = typeof runner === 'function' ? await runner(actor, definition) : runner;
+        return 'run' in given ? { account: null, runner: given } : given;
+      },
       call: (deployment, path, argument, context, signal) =>
         // A tool takes as long as it takes. Anything else of an agent's is to be quick.
         path.startsWith('tools.')
@@ -358,6 +372,7 @@ export class Engine {
       provider: definition.provider,
       activeDeployment: activate || existing === undefined ? ref : existing.activeDeployment,
       latestDeployment: ref,
+      account: existing?.account ?? null,
       createdAt: existing?.createdAt ?? now,
     };
     try {
@@ -391,6 +406,11 @@ export class Engine {
     }
     this.#agents.set(id, agent);
     return agent;
+  }
+
+  /** An agent was changed by something beside the engine: it is read again when next wanted. */
+  forgetAgent(id: AgentId): void {
+    this.#agents.delete(id);
   }
 
   async getAgent(id: AgentId): Promise<Agent> {
@@ -572,6 +592,14 @@ export class Engine {
   ): Promise<ConversationEntry[]> {
     await this.getActor(actor);
     return this.#store.conversation(actor, part);
+  }
+
+  /**
+   * What the calls of models add up to: all of them, or those a filter leaves, and by a group
+   * as well when one is asked for. It stays when what it was used by is gone.
+   */
+  usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport> {
+    return this.#store.usage(filter, by);
   }
 
   /**

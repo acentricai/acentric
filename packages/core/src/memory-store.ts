@@ -2,6 +2,7 @@
 // when it stops. Two engines given the same one are two processes on one database.
 
 import type {
+  AccountId,
   Actor,
   ActorId,
   Agent,
@@ -17,6 +18,8 @@ import type {
   KeyId,
   Session,
   SessionId,
+  UsageGroup,
+  UsageReport,
   User,
   UserId,
 } from '@acentric/protocol';
@@ -31,12 +34,16 @@ import type {
   Redeem,
   SealedSecret,
   Store,
+  StoredAccount,
   StoredDeployment,
   StoredKey,
   StoredLink,
   StoredSession,
   StoredUser,
 } from './store.ts';
+
+import { reportOf } from './usage.ts';
+import type { UsageFilter, UsageRecord } from './usage.ts';
 
 /**
  * A page of what is in `all`, newest first: those whose `key` is below the cursor, `limit` at
@@ -85,6 +92,8 @@ export class MemoryStore implements Store {
   readonly #sessions = new Map<SessionId, StoredSession>();
   readonly #links = new Map<InviteId, StoredLink>();
   readonly #audit: AuditEvent[] = [];
+  readonly #accounts = new Map<AccountId, StoredAccount>();
+  readonly #usage: UsageRecord[] = [];
   readonly #actors = new Map<ActorId, Kept>();
   readonly #inputs = new Map<ActorId, Input[]>();
   readonly #entries = new Map<ActorId, ConversationEntry[]>();
@@ -162,6 +171,55 @@ export class MemoryStore implements Store {
       this.#entries.delete(actor);
     }
     return { deployments, actors };
+  }
+
+  async setAgentAccount(agent: AgentId, account: AccountId | null): Promise<Agent | undefined> {
+    const there = this.#agents.get(agent);
+    if (there === undefined) return undefined;
+    const now = { ...there, account };
+    this.#agents.set(agent, now);
+    return copy(now);
+  }
+
+  #accountNamed(name: string, but?: AccountId): boolean {
+    return [...this.#accounts.values()].some(
+      ({ account }) => account.name === name && account.id !== but,
+    );
+  }
+
+  async addAccount(stored: StoredAccount): Promise<void> {
+    if (this.#accountNamed(stored.account.name))
+      throw new NameTaken(stored.account.name, 'account');
+    this.#accounts.set(stored.account.id, copy(stored));
+  }
+
+  async loadAccount(id: AccountId): Promise<StoredAccount | undefined> {
+    return copy(this.#accounts.get(id));
+  }
+
+  async listAccounts(): Promise<StoredAccount[]> {
+    return copy([...this.#accounts.values()]);
+  }
+
+  async saveAccount(stored: StoredAccount): Promise<void> {
+    const { id, name } = stored.account;
+    if (!this.#accounts.has(id)) return;
+    if (this.#accountNamed(name, id)) throw new NameTaken(name, 'account');
+    this.#accounts.set(id, copy(stored));
+  }
+
+  async removeAccount(id: AccountId): Promise<void> {
+    this.#accounts.delete(id);
+  }
+
+  async agentsOf(account: AccountId): Promise<AgentId[]> {
+    return [...this.#agents.values()]
+      .filter((agent) => agent.account === account)
+      .map((agent) => agent.id);
+  }
+
+  async usage(filter: UsageFilter = {}, by?: UsageGroup): Promise<UsageReport> {
+    return reportOf(this.#usage, filter, by);
   }
 
   async addKey(key: StoredKey): Promise<void> {
@@ -396,6 +454,7 @@ export class MemoryStore implements Store {
       kept.configurationGiven = copy(change.set.configurationGiven);
     }
     if (change.set?.reasoningSent !== undefined) kept.reasoningSent = change.set.reasoningSent;
+    if (change.usage !== null) this.#usage.push(copy(change.usage));
     if (change.sent !== null) {
       kept.sent = change.sent.fingerprint;
       kept.reasoningFrom = change.sent.reasoningFrom;

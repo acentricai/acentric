@@ -11,7 +11,7 @@
 // process that thinks the actor its own.
 
 import { ModelFailure } from '@acentric/ai';
-import type { ModelRunner, ModelStep } from '@acentric/ai';
+import type { ModelStep } from '@acentric/ai';
 import { contentPartSchema } from '@acentric/protocol';
 import type {
   Actor,
@@ -30,6 +30,7 @@ import type {
   ToolResultMessage,
 } from '@acentric/protocol';
 
+import type { Access } from './accounts.ts';
 import type { EventBus } from './bus.ts';
 import {
   ActorArchived,
@@ -58,8 +59,11 @@ export type Timer = (ms: number, signal: AbortSignal) => Promise<void>;
 /** What a driver is given of the engine it is part of. */
 export type Host = {
   readonly store: Store;
-  /** The runner of an actor's model: its agent says which provider's. */
-  runnerFor(actor: Actor, definition: AgentDefinition): ModelRunner;
+  /**
+   * What an actor's model is called with: a runner, and the model account it is of, when one
+   * says. It rejects, with why, when the model cannot be called at all.
+   */
+  access(actor: Actor, definition: AgentDefinition): Promise<Access>;
   /** Calls a function of a deployment's code. The code is loaded first, if it is not. */
   call(
     deployment: DeploymentId,
@@ -592,11 +596,24 @@ export class ActorDriver {
       }
 
       let event: MachineEvent;
+      // The call, once one is made: what is written down of it, answered or failed.
+      let called:
+        | { readonly account: Access['account']; readonly provider: string; readonly at: number }
+        | undefined;
+      const call = () => {
+        if (called === undefined) return {};
+        const { account, provider, at } = called;
+        return { call: { account, provider, durationMs: clock() - at } };
+      };
       try {
-        const { step, runner, sent } = await this.#step();
-        const answer = await untilAborted(runner.run(step, controller.signal), controller.signal);
+        const { step, access, sent, provider } = await this.#step();
+        called = { account: access.account, provider, at: clock() };
+        const answer = await untilAborted(
+          access.runner.run(step, controller.signal),
+          controller.signal,
+        );
         if (answer === ABORTED) return;
-        event = { type: 'answered', answer, sent };
+        event = { type: 'answered', answer, sent, ...call() };
       } catch (error) {
         if (controller.signal.aborted) return;
         event =
@@ -605,6 +622,8 @@ export class ActorDriver {
                 type: 'model_failed',
                 reason: error.message,
                 retryable: error.retryable,
+                kind: error.kind,
+                ...call(),
                 ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
                 // Reasoning the engine did not know to leave out: it is left out, once. When
                 // none is being sent and the provider still says so, it is a failure like any.
@@ -617,6 +636,7 @@ export class ActorDriver {
                 type: 'model_failed',
                 reason: error instanceof Error ? error.message : String(error),
                 retryable: false,
+                ...call(),
               };
       }
       // An interrupt that came with the answer wins: the call is dropped.
@@ -717,8 +737,9 @@ export class ActorDriver {
    */
   async #step(): Promise<{
     readonly step: ModelStep;
-    readonly runner: ModelRunner;
+    readonly access: Access;
     readonly sent: NonNullable<Change['sent']>;
+    readonly provider: string;
   }> {
     const { actor, nextSeq } = this.record;
     const definition = await this.#host.definition(actor.deployment.id);
@@ -763,8 +784,9 @@ export class ActorDriver {
     };
     return {
       step,
-      runner: this.#host.runnerFor(actor, definition),
+      access: await this.#host.access(actor, definition),
       sent: { fingerprint, reasoningFrom: from },
+      provider: definition.provider,
     };
   }
 

@@ -19,9 +19,11 @@ import type {
 } from '@acentric/protocol';
 
 import type { Change } from '../src/state.ts';
+import type { UsageRecord } from '../src/usage.ts';
 import type {
   Paged,
   Store,
+  StoredAccount,
   StoredKey,
   StoredLink,
   StoredSession,
@@ -86,6 +88,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       leaveOutFrom: null,
       set: null,
       sent: null,
+      usage: null,
       ...more,
     });
 
@@ -313,6 +316,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         provider: 'fake',
         activeDeployment: { id: active.id, version: active.version },
         latestDeployment: { id: latest.id, version: latest.version },
+        account: null,
         createdAt: NOW,
       });
       /** An agent with two deployments, the second the active one. */
@@ -617,6 +621,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           provider: 'fake',
           activeDeployment: ref,
           latestDeployment: ref,
+          account: null,
           createdAt: NOW,
         };
         await store.addDeployment({ agent, deployment, code: 'v1' });
@@ -858,6 +863,283 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           third,
           first,
         ]);
+      });
+    });
+
+    describe('model accounts', () => {
+      const accountOf = (
+        called: string,
+        more: Partial<StoredAccount['account']> = {},
+      ): StoredAccount => ({
+        account: {
+          id: makeId('account', { now: NOW, random: random() }),
+          provider: 'fake',
+          name: called,
+          credential: 'api_key',
+          default: false,
+          owner: null,
+          createdBy: { type: 'system' },
+          createdAt: NOW,
+          ...more,
+        },
+        sealed: `sealed-${called}`,
+      });
+
+      it('are kept sealed, changed and removed, each with a name of its own', async () => {
+        const main = accountOf('main', { default: true });
+        const spare = accountOf('spare');
+        await store.addAccount(main);
+        await store.addAccount(spare);
+        expect(await store.loadAccount(main.account.id)).toEqual(main);
+        expect(await store.listAccounts()).toEqual([main, spare]);
+        await expect(store.addAccount(accountOf('main'))).rejects.toMatchObject({
+          name: 'NameTaken',
+          code: 'name_taken',
+        });
+
+        const renamed = {
+          ...spare,
+          account: { ...spare.account, name: 'backup' },
+          sealed: 'again',
+        };
+        await store.saveAccount(renamed);
+        expect(await store.loadAccount(spare.account.id)).toEqual(renamed);
+        // Its own name again is no other's, and another's is.
+        await store.saveAccount(renamed);
+        await expect(
+          store.saveAccount({ ...renamed, account: { ...renamed.account, name: 'main' } }),
+        ).rejects.toMatchObject({ name: 'NameTaken' });
+
+        await store.removeAccount(spare.account.id);
+        expect(await store.loadAccount(spare.account.id)).toBeUndefined();
+        expect(await store.listAccounts()).toEqual([main]);
+      });
+
+      it('are given to agents, which keep theirs through a deploy', async () => {
+        const id = agentId();
+        const deploymentOf = (version: number): Deployment => ({
+          id: makeId('deployment', { now: NOW, random: random() }),
+          agent: id,
+          version,
+          hash: String(version).repeat(64).slice(0, 64),
+          manifest: { protocol: 1, sdk: '0.15.0' },
+          definition: {
+            provider: 'fake',
+            instructions: '',
+            configuration: null,
+            tools: [],
+            inputs: [],
+          },
+          createdBy: { type: 'system' },
+          createdAt: NOW,
+        });
+        const one = deploymentOf(1);
+        const agent: Agent = {
+          id,
+          name: 'orders',
+          provider: 'fake',
+          activeDeployment: { id: one.id, version: 1 },
+          latestDeployment: { id: one.id, version: 1 },
+          account: null,
+          createdAt: NOW,
+        };
+        await store.addDeployment({ agent, deployment: one, code: 'v1' });
+        const account = accountOf('main');
+        await store.addAccount(account);
+
+        const given = await store.setAgentAccount(id, account.account.id);
+        expect(given).toEqual({ ...agent, account: account.account.id });
+        expect(await store.agentsOf(account.account.id)).toEqual([id]);
+        // A new version is the agent as it is, with the account it has.
+        const two = deploymentOf(2);
+        const ref = { id: two.id, version: 2 };
+        await store.addDeployment({
+          agent: {
+            ...agent,
+            account: account.account.id,
+            activeDeployment: ref,
+            latestDeployment: ref,
+          },
+          deployment: two,
+          code: 'v2',
+        });
+        expect((await store.loadAgent(id))?.account).toBe(account.account.id);
+
+        expect((await store.setAgentAccount(id, null))?.account).toBeNull();
+        expect(await store.agentsOf(account.account.id)).toEqual([]);
+        expect(await store.setAgentAccount(agentId(), null)).toBeUndefined();
+      });
+    });
+
+    describe('usage', () => {
+      const DAY = 86_400_000;
+      const usedBy = (actor: Actor, more: Partial<UsageRecord> = {}): UsageRecord => ({
+        at: NOW,
+        actor: actor.id,
+        agent: actor.agent,
+        version: 1,
+        account: null,
+        provider: 'fake',
+        model: 'fake-1',
+        usage: {
+          totalInput: 100,
+          input: 20,
+          cacheRead: 70,
+          cacheWrite: 10,
+          output: 30,
+          reasoning: 5,
+          cost: { source: 'estimated', total: 0.25 },
+        },
+        failure: null,
+        durationMs: 400,
+        ...more,
+      });
+      /** Stores a step for each record, each with its call's usage. */
+      const record = async (actor: Actor, records: readonly UsageRecord[]) => {
+        let epoch = (await store.loadActor(actor.id))?.epoch ?? 0;
+        for (const usage of records) {
+          await store.commit(actor.id, epoch, change({ usage }));
+          epoch += 1;
+        }
+      };
+
+      it('is written with the step that ends a call, and adds up', async () => {
+        const actor = await create();
+        expect(await store.usage()).toEqual({
+          totals: {
+            calls: 0,
+            failed: 0,
+            totalInput: 0,
+            input: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            output: 0,
+            reasoning: 0,
+            webSearches: 0,
+            cost: 0,
+            estimatedCost: 0,
+            unpriced: 0,
+            durationMs: 0,
+            first: null,
+            last: null,
+          },
+        });
+        await record(actor, [
+          usedBy(actor),
+          usedBy(actor, {
+            at: NOW + 1000,
+            usage: {
+              totalInput: 50,
+              input: 50,
+              output: 10,
+              webSearches: 2,
+              cost: { source: 'reported', total: 0.5 },
+            },
+          }),
+          // Answered, with nothing known of what it cost.
+          usedBy(actor, {
+            at: NOW + 2000,
+            usage: { totalInput: 7, input: 7, output: 3 },
+            durationMs: 100,
+          }),
+          // Failed: nothing was counted.
+          usedBy(actor, { at: NOW + 3000, usage: null, failure: 'overloaded', durationMs: 50 }),
+        ]);
+
+        expect((await store.usage()).totals).toEqual({
+          calls: 4,
+          failed: 1,
+          totalInput: 157,
+          input: 77,
+          cacheRead: 70,
+          cacheWrite: 10,
+          output: 43,
+          reasoning: 5,
+          webSearches: 2,
+          cost: 0.75,
+          estimatedCost: 0.25,
+          unpriced: 1,
+          durationMs: 950,
+          first: NOW,
+          last: NOW + 3000,
+        });
+      });
+
+      it('is not written by a step that is refused', async () => {
+        const actor = await create();
+        await expect(
+          store.commit(actor.id, 7, change({ usage: usedBy(actor) })),
+        ).rejects.toMatchObject({ name: 'StaleEpoch' });
+        expect((await store.usage()).totals.calls).toBe(0);
+      });
+
+      it('is narrowed by when, by whom, with what, and added up by each of those', async () => {
+        const [orders, billing] = [agentId(), agentId()];
+        const one = await create({}, orders);
+        const two = await create({}, orders);
+        const three = await create({}, billing);
+        const account = makeId('account', { now: NOW, random: random() });
+        await record(one, [
+          usedBy(one, { account }),
+          usedBy(one, { at: NOW + DAY, model: 'fake-2', account }),
+        ]);
+        await record(two, [usedBy(two, { at: NOW + DAY })]);
+        await record(three, [
+          usedBy(three, { at: NOW + 2 * DAY, provider: 'other', usage: null, failure: 'auth' }),
+        ]);
+        const calls = async (filter: Parameters<Store['usage']>[0]) =>
+          (await store.usage(filter)).totals.calls;
+
+        expect(await calls({})).toBe(4);
+        expect(await calls({ agent: orders })).toBe(3);
+        expect(await calls({ actor: one.id })).toBe(2);
+        expect(await calls({ account })).toBe(2);
+        expect(await calls({ model: 'fake-2' })).toBe(1);
+        expect(await calls({ provider: 'other' })).toBe(1);
+        // From a time on, and up to another but not at it.
+        expect(await calls({ from: NOW + DAY })).toBe(3);
+        expect(await calls({ from: NOW + DAY, to: NOW + 2 * DAY })).toBe(2);
+        expect(await calls({ agent: orders, model: 'fake-1', from: NOW + DAY })).toBe(1);
+
+        const groups = async (by: Parameters<Store['usage']>[1], filter = {}) =>
+          (await store.usage(filter, by)).groups?.map((group) => [group.key, group.totals.calls]);
+        // What cost most first, and then by what it is of.
+        expect(await groups('agent')).toEqual([
+          [orders, 3],
+          [billing, 1],
+        ]);
+        expect(await groups('actor', { agent: orders })).toEqual([
+          [one.id, 2],
+          [two.id, 1],
+        ]);
+        expect(await groups('model')).toEqual([
+          ['fake-1', 3],
+          ['fake-2', 1],
+        ]);
+        expect(await groups('provider')).toEqual([
+          ['fake', 3],
+          ['other', 1],
+        ]);
+        // A call that no account says anything of is under none.
+        expect(await groups('account')).toEqual([
+          [account, 2],
+          ['', 2],
+        ]);
+        const day = (offset: number) => new Date(NOW + offset * DAY).toISOString().slice(0, 10);
+        expect(await groups('day')).toEqual([
+          [day(1), 2],
+          [day(0), 1],
+          [day(2), 1],
+        ]);
+        expect((await store.usage({ agent: orders }, 'agent')).totals.calls).toBe(3);
+      });
+
+      it('stays when what it names is gone', async () => {
+        const id = agentId();
+        const actor = await create({}, id);
+        await record(actor, [usedBy(actor)]);
+        await store.deleteAgent(id);
+        expect((await store.usage({ actor: actor.id })).totals.calls).toBe(1);
       });
     });
   });

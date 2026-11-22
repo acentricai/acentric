@@ -196,6 +196,80 @@ describe('a call of the model fails', () => {
   });
 });
 
+describe('a call of the model is written down', () => {
+  const call = { account: makeId('account', source(7)), provider: 'fake', durationMs: 1200 };
+  const usage = { totalInput: 40, input: 30, cacheRead: 10, output: 5 };
+  const record = at(model());
+
+  it('with what it used, when it was answered: whatever the answer was', () => {
+    const answers = [
+      says('Hello.'),
+      two,
+      { ...says('No.'), stopReason: 'refusal' as const },
+      { ...says(''), stopReason: 'pause_turn' as const },
+    ];
+    for (const answer of answers) {
+      const change = decide(record, { type: 'answered', answer: { ...answer, usage }, call }, NOW);
+      expect(change.usage, answer.stopReason).toEqual({
+        at: NOW,
+        actor,
+        agent: record.actor.agent,
+        version: 1,
+        account: call.account,
+        provider: 'fake',
+        model: 'fake-1',
+        usage,
+        failure: null,
+        durationMs: 1200,
+      });
+    }
+    // A provider that counted nothing: the call is written down all the same.
+    const uncounted = decide(record, { type: 'answered', answer: says('Hello.'), call }, NOW);
+    expect(uncounted.usage).toMatchObject({ usage: null, failure: null });
+  });
+
+  it('with how it failed, when it did: whether it is tried again or not', () => {
+    const failure = {
+      type: 'model_failed',
+      reason: 'overloaded',
+      kind: 'overloaded',
+      call,
+    } as const;
+    for (const retryable of [true, false]) {
+      expect(decide(record, { ...failure, retryable }, NOW).usage, String(retryable)).toMatchObject(
+        {
+          account: call.account,
+          usage: null,
+          failure: 'overloaded',
+          durationMs: 1200,
+        },
+      );
+    }
+    const stale: MachineEvent = {
+      ...failure,
+      retryable: false,
+      staleReasoning: true,
+      kind: 'stale_reasoning',
+    };
+    expect(decide(record, stale, NOW).usage).toMatchObject({ failure: 'stale_reasoning' });
+  });
+
+  it('and nothing is, of a call that was never made, or of anything else a turn does', () => {
+    // The model could not be had: no provider was asked.
+    expect(decide(record, failed(false), NOW).usage).toBeNull();
+    expect(decide(record, { type: 'cut_off' }, NOW).usage).toBeNull();
+    expect(decide(record, { type: 'interrupted' }, NOW).usage).toBeNull();
+    expect(decide(at(IDLE), { type: 'wake', inputs: [input(10, 'one')] }, NOW).usage).toBeNull();
+    const finished: MachineEvent = {
+      type: 'tool_finished',
+      call: 'c1',
+      result: result('c1', 'one'),
+      inputs: [],
+    };
+    expect(decide(owing(), finished, NOW).usage).toBeNull();
+  });
+});
+
 describe('a restart finds the call of the model owed', () => {
   it('and it is owed again, counted', () => {
     const change = decide(at(model({ cutOffs: 2 })), { type: 'cut_off' }, NOW);

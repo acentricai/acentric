@@ -18,8 +18,51 @@ const MIGRATIONS: readonly string[] = [
     -- Its newest deployment.
     latest_id TEXT NOT NULL,
     latest_version INTEGER NOT NULL,
+    -- The model account its calls are made with. NULL: its provider's default.
+    account_id TEXT,
     created_at INTEGER NOT NULL
   ) STRICT;
+
+  -- A model account: what the calls of a provider's models are made with.
+  CREATE TABLE accounts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    -- JSON: the account as the API shows it, but for the agents given it.
+    account TEXT NOT NULL,
+    -- Its credential, sealed with a key the database never has.
+    sealed TEXT NOT NULL
+  ) STRICT;
+
+  -- One row for each call of a model, answered or failed. What it names is kept as it was: an
+  -- actor, an agent or an account removed later is still in what was spent.
+  CREATE TABLE usage (
+    id INTEGER PRIMARY KEY,
+    at INTEGER NOT NULL,
+    actor_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    account_id TEXT,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    -- The kind of failure, for a call that failed.
+    failure TEXT,
+    total_input INTEGER NOT NULL DEFAULT 0,
+    input INTEGER NOT NULL DEFAULT 0,
+    output INTEGER NOT NULL DEFAULT 0,
+    reasoning INTEGER NOT NULL DEFAULT 0,
+    cache_read INTEGER NOT NULL DEFAULT 0,
+    cache_write INTEGER NOT NULL DEFAULT 0,
+    web_searches INTEGER NOT NULL DEFAULT 0,
+    -- In US dollars. NULL when it cannot be known.
+    cost REAL,
+    -- 'reported' by the provider, or 'estimated' from the model's prices.
+    cost_source TEXT,
+    duration_ms INTEGER NOT NULL
+  ) STRICT;
+
+  CREATE INDEX usage_at ON usage (at);
+  CREATE INDEX usage_actor ON usage (actor_id, at);
+  CREATE INDEX usage_agent ON usage (agent_id, at);
 
   -- A deployment of an agent. A row is never changed.
   CREATE TABLE deployments (

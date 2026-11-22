@@ -9,6 +9,8 @@
 //     written since. So of two writers that each think the actor theirs, one is stopped.
 
 import type {
+  Account,
+  AccountId,
   Actor,
   ActorId,
   Agent,
@@ -28,11 +30,14 @@ import type {
   Role,
   Session,
   SessionId,
+  UsageGroup,
+  UsageReport,
   User,
   UserId,
 } from '@acentric/protocol';
 
 import type { ActorRecord, Change } from './state.ts';
+import type { UsageFilter } from './usage.ts';
 
 /** A commit named an epoch that has passed: something else has written to the actor since. */
 export class StaleEpoch extends Error {
@@ -46,11 +51,11 @@ export class StaleEpoch extends Error {
 export class NameTaken extends Error {
   override readonly name = 'NameTaken';
   readonly code: ErrorCode = 'name_taken';
-  constructor(name: string, of: 'actor' | 'agent' = 'actor') {
+  constructor(name: string, of: 'actor' | 'agent' | 'account' = 'actor') {
     super(
       of === 'actor'
         ? `An actor of this agent is named ${name} already`
-        : `An agent is named ${name} already`,
+        : `An ${of} is named ${name} already`,
     );
   }
 }
@@ -85,6 +90,13 @@ export type ActorsQuery = PageOf & {
   readonly status?: Actor['status'];
   readonly name?: string;
   readonly externalId?: string;
+};
+
+/** A model account as the store keeps it: its credential sealed, never the credential. */
+export type StoredAccount = {
+  /** The account, but for which agents were given it: that is asked of the agents. */
+  readonly account: Omit<Account, 'agents'>;
+  readonly sealed: string;
 };
 
 /** The email is another person's. */
@@ -181,6 +193,36 @@ export interface Store {
   deleteAgent(
     id: AgentId,
   ): Promise<{ readonly deployments: DeploymentId[]; readonly actors: ActorId[] } | undefined>;
+
+  /**
+   * Gives an agent a model account, or with null none: it then uses its provider's default.
+   * It gives the agent as it then is, or undefined when there is no such agent.
+   */
+  setAgentAccount(agent: AgentId, account: AccountId | null): Promise<Agent | undefined>;
+
+  // Model accounts
+
+  /** Keeps a new account. Rejects with `NameTaken` when its name is another's. */
+  addAccount(account: StoredAccount): Promise<void>;
+  loadAccount(id: AccountId): Promise<StoredAccount | undefined>;
+  /** Every account, in the order they were made. */
+  listAccounts(): Promise<StoredAccount[]>;
+  /**
+   * Keeps an account as it now is, in place of how it was. Rejects with `NameTaken` when its
+   * name is now another's.
+   */
+  saveAccount(account: StoredAccount): Promise<void>;
+  removeAccount(id: AccountId): Promise<void>;
+  /** The agents that were given an account. */
+  agentsOf(account: AccountId): Promise<AgentId[]>;
+
+  // Usage
+
+  /**
+   * What was used, added up: every call of a model that a filter leaves, and by a group as
+   * well when one is asked for. A call is written with the step that ends it (see `commit`).
+   */
+  usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport>;
 
   // API keys
 

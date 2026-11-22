@@ -2,6 +2,7 @@
 
 import type { Credential, ModelRunner, Providers } from '@acentric/ai';
 
+import type { Accounts } from './accounts.ts';
 import type { RunnerSource } from './engine.ts';
 
 /**
@@ -31,4 +32,12 @@ export function providerRunners(
     }
     return runner;
   };
+}
+
+/**
+ * A source of runners from an engine's model accounts: an actor's model is called with the
+ * account its agent was given, or with its provider's default.
+ */
+export function accountRunners(accounts: Accounts): RunnerSource {
+  return (actor) => accounts.access(actor.agent);
 }
