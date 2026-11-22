@@ -11,6 +11,9 @@
       "path": "packages/agent"
     },
     {
+      "path": "packages/agent/test"
+    },
+    {
       "path": "packages/client"
     },
     {

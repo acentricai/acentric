@@ -5,3 +5,4 @@ pnpm-lock.yaml
 LICENSE
 .notes
 packages/protocol/openapi.json
+packages/agent/test/types.ts

@@ -1,0 +1,355 @@
+// The bundle's side of what the engine and an agent's code say to each other (see
+// `@acentric/protocol/bundle`). It is in every bundle, since it is part of the framework a
+// bundle is built with.
+//
+// Everything of an agent is checked here as it is read: a bundle may have been written in
+// JavaScript, with nothing to hold it to the types.
+
+import { BUNDLE_PROTOCOL } from '@acentric/protocol/bundle';
+import type {
+  BundleContext,
+  BundleEntry,
+  BundleHost,
+  CallIssue,
+  CallOutcome,
+} from '@acentric/protocol/bundle';
+import type { AgentDefinition, Json, JsonObject } from '@acentric/protocol';
+
+import type { AnyAgent } from './agent.ts';
+import { SecretNotSet } from './context.ts';
+
+type Dict = { readonly [key: string]: unknown };
+type Fn = (...args: never[]) => unknown;
+
+/** The agent's code is not an agent, as far as can be read off it. */
+export class InvalidAgent extends Error {
+  override readonly name = 'InvalidAgent';
+}
+
+/** The engine's own tools, whose names an agent's tool cannot have. */
+const RESERVED = ['bash', 'view_image', 'code', 'stop', 'spawn_agent', 'message_agent', 'schedule'];
+
+const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+const INPUT_TYPE = /^[A-Za-z0-9_.-]{1,64}$/;
+const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+
+const isDict = (value: unknown): value is Dict =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isFn = (value: unknown): value is Fn => typeof value === 'function';
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/** A value as JSON, or a throw that says what was not. */
+function json(value: unknown, what: string): Json {
+  try {
+    const text = JSON.stringify(value);
+    if (text === undefined) throw new Error('it is nothing JSON has');
+    return JSON.parse(text) as Json;
+  } catch (error) {
+    throw new Error(`${what} is not JSON: ${messageOf(error)}`, { cause: error });
+  }
+}
+
+/** The `validate` of a schema, or undefined when the value is not a schema. */
+function validateOf(schema: unknown): Fn | undefined {
+  if (!isDict(schema) && !isFn(schema)) return undefined;
+  const standard = (schema as Dict)['~standard'];
+  if (!isDict(standard) || !isFn(standard['validate'])) return undefined;
+  return standard['validate'];
+}
+
+/** The JSON Schema of what a schema takes, or undefined when it cannot give one. */
+function jsonSchemaOf(schema: unknown): JsonObject | undefined {
+  const standard = (schema as Dict)['~standard'];
+  const converter = isDict(standard) ? standard['jsonSchema'] : undefined;
+  if (!isDict(converter) || !isFn(converter['input'])) return undefined;
+  const given = (converter['input'] as (options: Dict) => unknown)({ target: 'draft-2020-12' });
+  const read = json(given, 'Its JSON Schema');
+  return isDict(read) ? (read as JsonObject) : undefined;
+}
+
+// Describing
+
+type ToolDeclaration = AgentDefinition['tools'][number];
+
+function describeTool(tool: unknown, index: number, names: Set<string>): ToolDeclaration {
+  if (!isDict(tool)) throw new InvalidAgent(`tools[${String(index)}] is not a tool`);
+  const { name, description, parameters, codemode, retrySafe, execute } = tool;
+  if (typeof name !== 'string' || !TOOL_NAME.test(name)) {
+    const given = JSON.stringify(name);
+    throw new InvalidAgent(
+      `tools[${String(index)}] has the name ${given}: a tool's name is 1 to 64 letters, digits, _ or -`,
+    );
+  }
+  if (RESERVED.includes(name)) {
+    throw new InvalidAgent(`A tool is named ${name}, which is one of the engine's own tools`);
+  }
+  if (names.has(name)) throw new InvalidAgent(`Two tools are named ${name}`);
+  names.add(name);
+  if (typeof description !== 'string' || description === '') {
+    throw new InvalidAgent(`The tool ${name} has no description`);
+  }
+  if (!isFn(execute)) throw new InvalidAgent(`The tool ${name} has no execute function`);
+  for (const [field, value] of [
+    ['codemode', codemode],
+    ['retrySafe', retrySafe],
+  ] as const) {
+    if (value !== undefined && typeof value !== 'boolean') {
+      throw new InvalidAgent(`${field} of the tool ${name} is true or false`);
+    }
+  }
+  if (validateOf(parameters) === undefined) {
+    throw new InvalidAgent(`parameters of the tool ${name} is not a schema`);
+  }
+  let schema: JsonObject | undefined;
+  try {
+    schema = jsonSchemaOf(parameters);
+  } catch (error) {
+    throw new InvalidAgent(
+      `The schema of the tool ${name} failed to give its JSON Schema: ${messageOf(error)}`,
+    );
+  }
+  if (schema === undefined) {
+    throw new InvalidAgent(
+      `The schema of the tool ${name} cannot give its JSON Schema, which the model is sent`,
+    );
+  }
+  if (schema['type'] !== 'object') {
+    throw new InvalidAgent(
+      `The arguments of the tool ${name} are an object: its schema is not of one`,
+    );
+  }
+  return { name, description, parameters: schema, retrySafe: retrySafe === true };
+}
+
+/** What the agent asks of its provider that only that provider has. */
+function providerOptionsOf(agent: Dict): JsonObject | undefined {
+  const search = agent['webSearch'];
+  if (search === undefined) return undefined;
+  if (search !== true && !isDict(search)) {
+    throw new InvalidAgent('webSearch is true, or the sites it looks at');
+  }
+  return { webSearch: json(search, 'webSearch') };
+}
+
+/** What the agent uses that an engine may not have yet, by name. */
+function featuresOf(agent: Dict, tools: readonly unknown[]): string[] {
+  const used = (value: unknown): boolean =>
+    Array.isArray(value) ? value.length > 0 : isDict(value) && Object.keys(value).length > 0;
+  return [
+    ...(agent['machine'] === true ? ['machine'] : []),
+    ...(used(agent['mcps']) ? ['mcps'] : []),
+    ...(used(agent['subagents']) ? ['subagents'] : []),
+    ...(agent['schedule'] === undefined ? [] : ['schedule']),
+    ...(used(agent['compactionSettings']) ? ['compaction-settings'] : []),
+    ...(tools.some((tool) => isDict(tool) && tool['codemode'] === true) ? ['codemode'] : []),
+  ];
+}
+
+function describe(agent: Dict): AgentDefinition {
+  const { provider, instructions, configuration } = agent;
+  if (typeof provider !== 'string' || provider === '') {
+    throw new InvalidAgent('The agent has no provider');
+  }
+  if (typeof instructions !== 'string') throw new InvalidAgent('The instructions are not text');
+  if (configuration !== undefined && validateOf(configuration) === undefined) {
+    throw new InvalidAgent('configuration is not a schema');
+  }
+
+  const tools: readonly unknown[] = Array.isArray(agent['tools']) ? agent['tools'] : [];
+  const names = new Set<string>();
+  // A tool of the model's scripts is not one the model calls, and is not offered to it.
+  const offered = tools
+    .map((tool, index) => ({ tool, index }))
+    .filter(({ tool }) => !(isDict(tool) && tool['codemode'] === true))
+    .map(({ tool, index }) => describeTool(tool, index, names));
+
+  const inputs = isDict(agent['inputs']) ? agent['inputs'] : {};
+  const declared = Object.entries(inputs).map(([type, input]) => {
+    if (!INPUT_TYPE.test(type)) {
+      const given = JSON.stringify(type);
+      throw new InvalidAgent(
+        `An input has the type ${given}: a type is 1 to 64 letters, digits, _, . or -`,
+      );
+    }
+    if (!isDict(input) || validateOf(input['schema']) === undefined) {
+      throw new InvalidAgent(`schema of the input ${type} is not a schema`);
+    }
+    if (!isFn(input['handler']))
+      throw new InvalidAgent(`The input ${type} has no handler function`);
+    let schema: JsonObject | undefined;
+    try {
+      schema = jsonSchemaOf(input['schema']);
+    } catch {
+      // What it takes cannot be said as JSON Schema: it is still checked by its own schema.
+    }
+    return { type, schema: schema ?? null };
+  });
+
+  const secrets: readonly unknown[] = Array.isArray(agent['secrets']) ? agent['secrets'] : [];
+  for (const secret of secrets) {
+    if (typeof secret !== 'string' || !SECRET_NAME.test(secret)) {
+      const given = JSON.stringify(secret);
+      throw new InvalidAgent(`A secret is named ${given}: a name is letters, digits and _`);
+    }
+  }
+
+  let configurationSchema: JsonObject | undefined;
+  try {
+    configurationSchema = configuration === undefined ? undefined : jsonSchemaOf(configuration);
+  } catch {
+    // As for an input.
+  }
+  const providerOptions = providerOptionsOf(agent);
+  const features = featuresOf(agent, tools);
+  return {
+    provider,
+    instructions,
+    configuration: configuration === undefined ? null : { schema: configurationSchema ?? null },
+    tools: offered,
+    inputs: declared,
+    ...(providerOptions === undefined ? {} : { providerOptions }),
+    ...(secrets.length === 0 ? {} : { secrets: [...new Set(secrets as string[])] }),
+    ...(features.length === 0 ? {} : { features }),
+  };
+}
+
+// Calling
+
+/** What a schema makes of `value`: its output, or the issues it has with it. */
+async function validate(
+  schema: unknown,
+  value: unknown,
+): Promise<{ readonly value: unknown } | { readonly issues: CallIssue[] }> {
+  const run = validateOf(schema);
+  if (run === undefined) throw new Error('It has no schema');
+  const result = (await (run as (value: unknown) => unknown)(value)) as Dict;
+  if (!Array.isArray(result['issues'])) return { value: result['value'] };
+  return {
+    issues: (result['issues'] as Dict[]).map((issue) => ({
+      message: String(issue['message']),
+      ...(Array.isArray(issue['path'])
+        ? {
+            path: (issue['path'] as unknown[]).map((segment) => {
+              const key = isDict(segment) ? segment['key'] : segment;
+              return typeof key === 'number' ? key : String(key);
+            }),
+          }
+        : {}),
+    })),
+  };
+}
+
+/** What a tool or a handler returned, checked to be content. */
+function content(value: unknown, what: string): Json {
+  if (typeof value === 'string') return value;
+  // Where an image or a file comes from: a URL, base64 with its media type, or a provider's file.
+  const isSource = (source: unknown): boolean =>
+    isDict(source) &&
+    ((source['type'] === 'url' && typeof source['url'] === 'string') ||
+      (source['type'] === 'base64' &&
+        typeof source['mediaType'] === 'string' &&
+        typeof source['data'] === 'string') ||
+      (source['type'] === 'file_id' && typeof source['id'] === 'string'));
+  const isPart = (part: unknown): boolean =>
+    isDict(part) &&
+    ((part['type'] === 'text' && typeof part['text'] === 'string') ||
+      ((part['type'] === 'image' || part['type'] === 'file') && isSource(part['source'])));
+  if (!Array.isArray(value) || !value.every(isPart)) {
+    throw new Error(`${what} returned what is not content: text, or text, image and file parts`);
+  }
+  return json(value, 'The content');
+}
+
+/** The context an agent's code is given, made from what the engine sent. */
+function contextOf(sent: BundleContext, configuration: unknown, host: BundleHost): Dict {
+  return {
+    agent: sent.agent,
+    agentName: sent.agentName,
+    actor: sent.actor,
+    actorName: sent.actorName,
+    externalId: sent.externalId,
+    configuration,
+    modelId: sent.modelId,
+    reasoning: sent.reasoning,
+    // An actor has a machine once the engine has machines.
+    machine: null,
+    secrets: {
+      get: async (name: string): Promise<string> => {
+        const value = await host.secret(name);
+        if (value === undefined) throw new SecretNotSet(name);
+        return value;
+      },
+    },
+  };
+}
+
+async function call(
+  agent: Dict,
+  path: string,
+  argument: Json,
+  sent: BundleContext,
+  host: BundleHost,
+): Promise<{ readonly value: Json } | { readonly issues: CallIssue[] }> {
+  const [part, name, member] = path.split('.') as [string, string | undefined, string | undefined];
+
+  if (path === 'configuration.validate') {
+    if (agent['configuration'] === undefined) {
+      if (argument !== null) throw new Error('The agent takes no configuration');
+      return { value: null };
+    }
+    const checked = await validate(agent['configuration'], argument ?? undefined);
+    return 'issues' in checked
+      ? checked
+      : { value: json(checked.value ?? null, 'The configuration') };
+  }
+
+  // What the actor was created with is as its schema returned it then, and is given as it is.
+  const context = contextOf(sent, sent.configuration ?? undefined, host);
+
+  if (part === 'tools' && member === 'execute') {
+    const tools: readonly unknown[] = Array.isArray(agent['tools']) ? agent['tools'] : [];
+    const tool = tools.find((one): one is Dict => isDict(one) && one['name'] === name);
+    if (tool === undefined || !isFn(tool['execute']))
+      throw new Error(`The agent has no tool ${String(name)}`);
+    const checked = await validate(tool['parameters'], argument);
+    if ('issues' in checked) return checked;
+    const execute = tool['execute'] as (args: unknown, context: Dict) => unknown;
+    return { value: content(await execute(checked.value, context), `The tool ${String(name)}`) };
+  }
+
+  if (path.startsWith('inputs.') && path.endsWith('.handler')) {
+    // A type may have dots in it: it is everything between the first part and the last.
+    const type = path.slice('inputs.'.length, -'.handler'.length);
+    const inputs = isDict(agent['inputs']) ? agent['inputs'] : {};
+    const input = Object.hasOwn(inputs, type) ? inputs[type] : undefined;
+    if (!isDict(input) || !isFn(input['handler']))
+      throw new Error(`The agent has no input ${type}`);
+    const checked = await validate(input['schema'], argument);
+    if ('issues' in checked) return checked;
+    const handler = input['handler'] as (payload: unknown, context: Dict) => unknown;
+    return { value: content(await handler(checked.value, context), `The input ${type}`) };
+  }
+
+  throw new Error(`The agent has nothing at ${path}`);
+}
+
+/** The entry of an agent: what its bundle gives the engine. */
+export function entryOf(agent: AnyAgent): BundleEntry {
+  const read = agent as unknown as Dict;
+  return {
+    protocol: BUNDLE_PROTOCOL,
+    describe: () => describe(read),
+    call: async (path, argument, context, host): Promise<CallOutcome> => {
+      try {
+        const result = await call(read, path, argument, context, host);
+        return 'issues' in result
+          ? { ok: false, kind: 'invalid', issues: result.issues }
+          : { ok: true, value: result.value };
+      } catch (error) {
+        const name = error instanceof Error ? error.name : 'Error';
+        return { ok: false, kind: 'error', error: { name, message: messageOf(error) } };
+      }
+    },
+  };
+}
