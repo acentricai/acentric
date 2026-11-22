@@ -27,6 +27,7 @@ import type {
 
 import type { EventBus } from './bus.ts';
 import { Conflict, Unavailable } from './errors.ts';
+import { contextOf as callContextOf, issuesText } from './executor.ts';
 import type { Executor } from './executor.ts';
 import type { Semaphore } from './limits.ts';
 import { OutOfTurn, decide } from './machine.ts';
@@ -429,12 +430,16 @@ export class ActorDriver {
       actor.deployment.id,
       `tools.${call.name}.execute`,
       call.arguments,
-      { agent: actor.agent, actor: actor.id, configuration: actor.configuration },
+      callContextOf(actor),
       signal,
     );
-    return result.ok
-      ? answer(contentOf(result.value), false)
-      : answer([{ type: 'text', text: result.error }], true);
+    if (result.ok) return answer(contentOf(result.value), false);
+    // The model reads what was wrong with what it gave, and may give it again, right.
+    const text =
+      result.kind === 'invalid'
+        ? `The arguments are not what ${call.name} takes. ${issuesText(result.issues)}`
+        : result.error.message;
+    return answer([{ type: 'text', text }], true);
   }
 
   /** What the model is called with: the agent's definition, and the conversation so far. */

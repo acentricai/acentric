@@ -26,6 +26,7 @@ import type { EventBus } from './bus.ts';
 import { ActorDriver, contentOf } from './driver.ts';
 import type { Clock, Host, Timer } from './driver.ts';
 import { ActorArchived, ActorNotFound, InvalidInput, Unavailable, UnknownInput } from './errors.ts';
+import { contextOf, issuesText } from './executor.ts';
 import type { Executor } from './executor.ts';
 import { Semaphore } from './limits.ts';
 import { DEFAULT_RULES } from './machine.ts';
@@ -198,10 +199,16 @@ export class Engine {
       actor.deployment.id,
       `inputs.${sent.type}.handler`,
       sent.payload ?? null,
-      { agent: actor.agent, actor: actor.id, configuration: actor.configuration },
+      contextOf(actor),
       new AbortController().signal,
     );
-    if (!handled.ok) throw new InvalidInput(handled.error);
+    if (!handled.ok) {
+      if (handled.kind === 'error') throw new InvalidInput(handled.error.message);
+      throw new InvalidInput(
+        `The input is not what ${sent.type} takes. ${issuesText(handled.issues)}`,
+        handled.issues,
+      );
+    }
 
     const now = this.#clock();
     const input: Input = {

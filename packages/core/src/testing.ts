@@ -48,12 +48,17 @@ export class InlineExecutor implements Executor {
     signal: AbortSignal,
   ): Promise<CallResult> {
     const called = this.#agent(deployment).functions[path];
-    if (called === undefined) return { ok: false, error: `The agent has no ${path}` };
+    if (called === undefined) {
+      const message = `The agent has no ${path}`;
+      return { ok: false, kind: 'error', error: { name: 'Error', message } };
+    }
     this.made.push({ path, argument: structuredClone(argument) });
     try {
       return { ok: true, value: await called(argument, context, signal) };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      const name = error instanceof Error ? error.name : 'Error';
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, kind: 'error', error: { name, message } };
     }
   }
 }
