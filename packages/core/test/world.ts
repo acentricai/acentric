@@ -119,7 +119,8 @@ export function world(given: { readonly store?: Store; readonly retrySafe?: bool
       events,
       failures,
       follow: (actor: ActorId) => it.bus.subscribe(actor, (event) => events.push(event)),
-      createActor: async () => (await it.createActor({ agent, deployment, model: 'fake-1' })).actor,
+      createActor: async () =>
+        (await it.createActor({ agent, deployment, modelId: 'fake-1' })).actor,
       say: (actor: ActorId, text: string, externalId?: string) =>
         it.send(actor, {
           type: 'message',

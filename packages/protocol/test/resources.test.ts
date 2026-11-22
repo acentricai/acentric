@@ -49,7 +49,7 @@ const actor = () => ({
   externalId: 'telegram:4411',
   agent: id('agent'),
   deployment: { id: id('deployment'), version: 3 },
-  model: 'claude-opus-5-5',
+  modelId: 'claude-opus-5-5',
   reasoning: 'medium',
   configuration: { region: 'eu' },
   status: 'idle',
@@ -123,7 +123,7 @@ describe('an actor', () => {
     const given = {
       name: 'eu-desk',
       externalId: 'telegram:4411',
-      model: 'claude-opus-5-5',
+      modelId: 'claude-opus-5-5',
       reasoning: 'high',
       configuration: { region: 'eu' },
     };
@@ -154,7 +154,8 @@ describe('an input', () => {
   });
 
   it('refuses a type that is not one, and an ID from outside', () => {
-    expect(sendInputRequestSchema.safeParse({ type: 'Message' }).success).toBe(false);
+    expect(sendInputRequestSchema.safeParse({ type: 'two words' }).success).toBe(false);
+    expect(sendInputRequestSchema.safeParse({ type: 'github.push' }).success).toBe(true);
     expect(sendInputRequestSchema.safeParse({ type: '~up' }).success).toBe(false);
     expect(sendInputRequestSchema.safeParse({ type: 'message', id: 'update-9' }).success).toBe(
       false,

@@ -140,7 +140,7 @@ export class Engine {
   async createActor(given: {
     readonly agent: AgentId;
     readonly deployment: DeploymentRef;
-    readonly model: string;
+    readonly modelId: string;
     readonly reasoning?: Reasoning;
     readonly configuration?: Json;
     readonly name?: Name;
@@ -154,7 +154,7 @@ export class Engine {
       externalId: given.externalId ?? null,
       agent: given.agent,
       deployment: given.deployment,
-      model: given.model,
+      modelId: given.modelId,
       reasoning: given.reasoning ?? 'medium',
       configuration: given.configuration ?? null,
       status: 'idle',

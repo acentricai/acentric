@@ -448,7 +448,7 @@ export class ActorDriver {
         .map((entry) => entry.message);
     }
     const step: ModelStep = {
-      model: actor.model,
+      model: actor.modelId,
       reasoning: actor.reasoning,
       instructions: definition.instructions,
       tools: definition.tools.map((tool) => ({

@@ -78,7 +78,7 @@ async function run(groupCommit: boolean) {
   });
   const actors = await Promise.all(
     Array.from({ length: ACTORS }, () =>
-      engine.createActor({ agent, deployment, model: 'fake-1' }),
+      engine.createActor({ agent, deployment, modelId: 'fake-1' }),
     ),
   );
   const before = await store.stats();
