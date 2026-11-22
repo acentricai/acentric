@@ -9,6 +9,7 @@ import { ModelFailure } from '@acentric/ai';
 import type { ModelAnswer } from '@acentric/ai';
 import { calls, says } from '@acentric/ai/testing';
 import { makeId } from '@acentric/protocol';
+import type { Json } from '@acentric/protocol';
 
 import {
   ActorArchived,
@@ -600,6 +601,41 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         const nobody = makeId('actor', { now: 1, random: new Uint8Array(10) });
         await expect(one.say(nobody, 'Hello.')).rejects.toBeInstanceOf(ActorNotFound);
         expect(await w.roles(actor.id)).toEqual([]);
+      });
+
+      it('that is a message of text is taken by an agent with no input of its own', async () => {
+        // An agent as a new project has it: a provider and instructions, and nothing else.
+        const one = w.engine([says('Hello.')], {
+          versions: { plain: { definition: { inputs: [], tools: [] } } },
+        });
+        const { agent } = await one.it.deploy({
+          agent: 'plain',
+          manifest: MANIFEST,
+          code: 'plain',
+        });
+        const { actor } = await one.it.createActor({ agent: agent.id });
+        const send = (payload: Json) => one.it.send(actor.id, { type: 'message', payload });
+
+        // A message has a `text`, and nothing else. Nothing of the agent's is run for one.
+        await expect(send({ text: 4 })).rejects.toThrow('`text` is a string');
+        await expect(send({ text: 'Hi.', also: true })).rejects.toThrow(
+          'A message has a `text`, and nothing else',
+        );
+        await expect(send('Hi.')).rejects.toBeInstanceOf(InvalidInput);
+        await expect(one.it.send(actor.id, { type: 'message' })).rejects.toBeInstanceOf(
+          InvalidInput,
+        );
+        await expect(one.it.send(actor.id, { type: 'voice' })).rejects.toBeInstanceOf(UnknownInput);
+        expect(await one.it.listInputs(actor.id)).toMatchObject({ items: [] });
+
+        await send({ text: 'Hello?' });
+        await one.it.settled(actor.id);
+        expect((await store.conversation(actor.id)).map((entry) => entry.message)).toMatchObject([
+          { role: 'user', content: [{ type: 'text', text: 'Hello?' }] },
+          { role: 'assistant' },
+        ]);
+        expect(one.executor.made.filter((call) => call.path.startsWith('inputs.'))).toEqual([]);
+        expect(one.failures).toEqual([]);
       });
     });
 
