@@ -29,6 +29,7 @@ import type {
   KeyId,
   MachineAgents,
   MachineId,
+  SandboxProviderId,
   PrincipalRef,
   Role,
   Session,
@@ -130,6 +131,35 @@ export type StoredMachine = {
   readonly createdAt: number;
   readonly enrolledAt: number | null;
   readonly lastSeenAt: number | null;
+  /** What it is as a sandbox. Null for a machine someone enrolled. */
+  readonly sandbox: StoredSandbox | null;
+};
+
+/** What a machine that the engine made at a provider is, beyond a machine (see `sandboxes.ts`). */
+export type StoredSandbox = {
+  /** The provider account it was made in. */
+  readonly provider: SandboxProviderId;
+  /** The provider's own ID for it. Null until the provider has answered that it made it. */
+  readonly sandboxId: string | null;
+  readonly vcpu: number;
+  readonly memoryGB: number;
+  /** How many seconds it may be idle before it is stopped. */
+  readonly idle: number;
+  /** When its idle time runs out, as far as the engine set it. Null until it has. */
+  readonly deadline: number | null;
+};
+
+/** An account at a provider of sandboxes, as a store keeps it. */
+export type StoredSandboxProvider = {
+  readonly id: SandboxProviderId;
+  /** Which provider it is an account at. */
+  readonly kind: string;
+  readonly name: string;
+  /** Its credential, sealed. Null for a provider that has none. */
+  readonly credential: string | null;
+  /** Who the provider says it belongs to. */
+  readonly account: string | null;
+  readonly createdAt: number;
 };
 
 /** What of a machine changes. A field that is absent stays as it is. */
@@ -196,14 +226,17 @@ export type CommandPatch = Partial<
   >
 >;
 
+/** What has a name that no other of its kind has. */
+export type Named = 'actor' | 'agent' | 'account' | 'machine' | 'provider account';
+
 export class NameTaken extends Error {
   override readonly name = 'NameTaken';
   readonly code: ErrorCode = 'name_taken';
-  constructor(name: string, of: 'actor' | 'agent' | 'account' | 'machine' = 'actor') {
+  constructor(name: string, of: Named = 'actor') {
     super(
       of === 'actor'
         ? `An actor of this agent is named ${name} already`
-        : `${of === 'machine' ? 'A' : 'An'} ${of} is named ${name} already`,
+        : `${of === 'agent' || of === 'account' ? 'An' : 'A'} ${of} is named ${name} already`,
     );
   }
 }
@@ -587,6 +620,24 @@ export interface Store {
     id: MachineId,
     lost: { readonly error: string; readonly endedAt: number },
   ): Promise<StoredCommand[] | undefined>;
+
+  // Accounts at providers of sandboxes (see `sandboxes.ts`)
+
+  /** Keeps a new account. Rejects with `NameTaken` when its name is another's. */
+  addSandboxProvider(provider: StoredSandboxProvider): Promise<void>;
+  loadSandboxProvider(id: SandboxProviderId): Promise<StoredSandboxProvider | undefined>;
+  /** Every account, in the order they were added. */
+  listSandboxProviders(): Promise<StoredSandboxProvider[]>;
+  /**
+   * Forgets an account that no machine was made in. `in_use`, and nothing is forgotten, while
+   * one was: looked at and forgotten in one step, so none is made in it meanwhile.
+   */
+  removeSandboxProvider(id: SandboxProviderId): Promise<'removed' | 'in_use' | 'missing'>;
+  /**
+   * Says what a machine is as a sandbox, when the account it names is there. False, and
+   * nothing is kept, when there is no such machine or no such account.
+   */
+  setSandbox(id: MachineId, sandbox: StoredSandbox): Promise<boolean>;
 
   // Commands: what machines run (see `machines.ts`)
 

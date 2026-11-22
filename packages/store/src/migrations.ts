@@ -249,6 +249,19 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX tasks_running ON tasks (actor_id) WHERE status = 'running';
 
   -- A machine: a computer with the daemon on it, where commands run.
+  -- An account at a provider of sandboxes.
+  CREATE TABLE sandbox_providers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    -- Which provider it is an account at.
+    kind TEXT NOT NULL,
+    -- Its credential, sealed with a key the database never has. NULL for a provider that has none.
+    credential TEXT,
+    -- Who the provider says it belongs to.
+    account TEXT,
+    created_at INTEGER NOT NULL
+  ) STRICT;
+
   CREATE TABLE machines (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -271,8 +284,13 @@ const MIGRATIONS: readonly string[] = [
     tasks_dir TEXT,
     created_at INTEGER NOT NULL,
     enrolled_at INTEGER,
-    last_seen_at INTEGER
+    last_seen_at INTEGER,
+    -- For a sandbox: the provider account it was made in. NULL for a machine someone enrolled.
+    provider_id TEXT REFERENCES sandbox_providers (id),
+    -- JSON: what it is as a sandbox, but for its account. NULL as its account is.
+    sandbox TEXT
   ) STRICT;
+  CREATE INDEX machines_provider ON machines (provider_id) WHERE provider_id IS NOT NULL;
 
   -- A command on a machine, named by the actor and the task it is for. Its row is stored
   -- before the machine is asked to run it, and its ending before the machine is told it arrived.

@@ -14,6 +14,8 @@ import type {
   NewCommand,
   StoredCommand,
   StoredMachine,
+  StoredSandbox,
+  StoredSandboxProvider,
   PageOf,
   Paged,
   Redeem,
@@ -49,6 +51,7 @@ import type {
   KeyId,
   MachineAgents,
   MachineId,
+  SandboxProviderId,
   Session,
   SessionId,
   UsageGroup,
@@ -237,7 +240,29 @@ type MachineRow = {
   created_at: number;
   enrolled_at: number | null;
   last_seen_at: number | null;
+  provider_id: string | null;
+  sandbox: string | null;
 };
+
+type SandboxProviderRow = {
+  id: string;
+  name: string;
+  kind: string;
+  credential: string | null;
+  account: string | null;
+  created_at: number;
+};
+
+function sandboxProviderOf(row: SandboxProviderRow): StoredSandboxProvider {
+  return {
+    id: row.id as SandboxProviderId,
+    kind: row.kind,
+    name: row.name,
+    credential: row.credential,
+    account: row.account,
+    createdAt: row.created_at,
+  };
+}
 
 function machineOf(row: MachineRow): StoredMachine {
   return {
@@ -257,6 +282,10 @@ function machineOf(row: MachineRow): StoredMachine {
     createdAt: row.created_at,
     enrolledAt: row.enrolled_at,
     lastSeenAt: row.last_seen_at,
+    sandbox:
+      row.provider_id === null || row.sandbox === null
+        ? null
+        : { provider: row.provider_id, ...JSON.parse(row.sandbox) },
   } as StoredMachine;
 }
 
@@ -276,7 +305,15 @@ const MACHINE_COLUMNS: { readonly [F in keyof MachinePatch]-?: string } = {
   tasksDir: 'tasks_dir',
   enrolledAt: 'enrolled_at',
   lastSeenAt: 'last_seen_at',
+  sandbox: 'sandbox',
 };
+
+/** What a sandbox's two columns hold: its account, and the rest as JSON. */
+function sandboxColumns(sandbox: StoredSandbox | null): [string | null, string | null] {
+  if (sandbox === null) return [null, null];
+  const { provider, ...rest } = sandbox;
+  return [provider, JSON.stringify(rest)];
+}
 
 type CommandRow = {
   actor_id: string;
@@ -477,6 +514,9 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'changeMachine',
   'enrolMachine',
   'removeMachine',
+  'addSandboxProvider',
+  'removeSandboxProvider',
+  'setSandbox',
   'addCommand',
   'addOwnCommand',
   'changeCommand',
@@ -1459,8 +1499,9 @@ export function operations(db: DatabaseSync) {
       }
       run(
         `INSERT INTO machines (id, name, agents, token_hash, token_expires_at, public_key, os, arch,
-           home, hostname, version, build, tasks_dir, created_at, enrolled_at, last_seen_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           home, hostname, version, build, tasks_dir, created_at, enrolled_at, last_seen_at,
+           provider_id, sandbox)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         machine.id,
         machine.name,
         JSON.stringify(machine.agents),
@@ -1477,6 +1518,7 @@ export function operations(db: DatabaseSync) {
         machine.createdAt,
         machine.enrolledAt,
         machine.lastSeenAt,
+        ...sandboxColumns(machine.sandbox),
       );
     },
 
@@ -1506,6 +1548,11 @@ export function operations(db: DatabaseSync) {
       const values: SQLInputValue[] = [];
       for (const [field, value] of Object.entries(patch)) {
         if (value === undefined) continue;
+        if (field === 'sandbox') {
+          sets.push('provider_id = ?', 'sandbox = ?');
+          values.push(...sandboxColumns(value as StoredSandbox | null));
+          continue;
+        }
         sets.push(`${MACHINE_COLUMNS[field as keyof MachinePatch]} = ?`);
         values.push(field === 'agents' ? JSON.stringify(value) : (value as SQLInputValue));
       }
@@ -1545,6 +1592,52 @@ export function operations(db: DatabaseSync) {
         id,
       );
       return unended;
+    },
+
+    addSandboxProvider(provider: StoredSandboxProvider): void {
+      if (get('SELECT 1 FROM sandbox_providers WHERE name = ?', provider.name) !== undefined) {
+        throw new Refused('NameTaken', [provider.name, 'provider account']);
+      }
+      run(
+        `INSERT INTO sandbox_providers (id, name, kind, credential, account, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        provider.id,
+        provider.name,
+        provider.kind,
+        provider.credential,
+        provider.account,
+        provider.createdAt,
+      );
+    },
+
+    loadSandboxProvider(id: SandboxProviderId): StoredSandboxProvider | undefined {
+      const row = get<SandboxProviderRow>('SELECT * FROM sandbox_providers WHERE id = ?', id);
+      return row === undefined ? undefined : sandboxProviderOf(row);
+    },
+
+    listSandboxProviders(): StoredSandboxProvider[] {
+      return all<SandboxProviderRow>('SELECT * FROM sandbox_providers ORDER BY created_at, id').map(
+        sandboxProviderOf,
+      );
+    },
+
+    removeSandboxProvider(id: SandboxProviderId): 'removed' | 'in_use' | 'missing' {
+      if (get('SELECT 1 FROM sandbox_providers WHERE id = ?', id) === undefined) return 'missing';
+      if (get('SELECT 1 FROM machines WHERE provider_id = ?', id) !== undefined) return 'in_use';
+      run('DELETE FROM sandbox_providers WHERE id = ?', id);
+      return 'removed';
+    },
+
+    setSandbox(id: MachineId, sandbox: StoredSandbox): boolean {
+      if (get('SELECT 1 FROM sandbox_providers WHERE id = ?', sandbox.provider) === undefined) {
+        return false;
+      }
+      const changed = run(
+        'UPDATE machines SET provider_id = ?, sandbox = ? WHERE id = ?',
+        ...sandboxColumns(sandbox),
+        id,
+      );
+      return changed === 1;
     },
 
     addCommand(given: NewCommand): { command: StoredCommand; created: boolean } {
