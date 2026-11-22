@@ -5,7 +5,7 @@
 // Everything of an agent is checked here as it is read: a bundle may have been written in
 // JavaScript, with nothing to hold it to the types.
 
-import { BUNDLE_PROTOCOL } from '@acentric/protocol/bundle';
+import { BUNDLE_FILE_PART, BUNDLE_PROTOCOL } from '@acentric/protocol/bundle';
 import type {
   BundleContext,
   BundleEntry,
@@ -266,6 +266,105 @@ function content(value: unknown, what: string): Json {
   return json(value, 'The content');
 }
 
+// Bytes and base64, with what every place an agent's code runs in has: the web platform.
+
+type NativeBase64 = {
+  readonly toBase64?: (this: Uint8Array) => string;
+};
+type NativeFromBase64 = {
+  readonly fromBase64?: (text: string) => Uint8Array;
+};
+/** What the web platform has that the language does not: this package is built with neither's types. */
+const web = globalThis as unknown as {
+  readonly btoa: (binary: string) => string;
+  readonly atob: (base64: string) => string;
+  readonly TextEncoder: new () => { encode(text: string): Uint8Array };
+  readonly TextDecoder: new (
+    label: string,
+    options: { readonly ignoreBOM: boolean },
+  ) => { decode(bytes: Uint8Array): string };
+};
+
+function toBase64(bytes: Uint8Array): string {
+  const native = (bytes as NativeBase64).toBase64;
+  if (isFn(native)) return native.call(bytes);
+  let binary = '';
+  for (let at = 0; at < bytes.length; at += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  }
+  return web.btoa(binary);
+}
+
+function fromBase64(text: string): Uint8Array {
+  const native = (Uint8Array as NativeFromBase64).fromBase64;
+  if (isFn(native)) return native(text);
+  const binary = web.atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let at = 0; at < binary.length; at += 1) bytes[at] = binary.charCodeAt(at);
+  return bytes;
+}
+
+function pathOf(path: unknown): string {
+  if (typeof path !== 'string' || path === '') throw new TypeError("A file's path is a string");
+  return path;
+}
+
+/**
+ * The actor's machine with its files. The functions are not enumerable: the machine as data,
+ * such as one a subagent's `create` gives back, is its ID, working directory and variables.
+ */
+function machineOf(machine: BundleContext['machine'] | undefined, host: BundleHost): Dict | null {
+  if (machine === undefined || machine === null) return null;
+  // A file moves in as many parts as it takes: nothing large is said to the engine at once.
+  const read = async (given: unknown): Promise<Uint8Array> => {
+    const path = pathOf(given);
+    const parts: Uint8Array[] = [];
+    let from = 0;
+    for (;;) {
+      const part = await host.file({ op: 'read', path, from });
+      const bytes = fromBase64(part?.data ?? '');
+      parts.push(bytes);
+      from += bytes.length;
+      if (bytes.length === 0 || from >= (part?.size ?? 0)) break;
+    }
+    if (parts.length === 1) return parts[0] as Uint8Array;
+    const all = new Uint8Array(from);
+    let at = 0;
+    for (const part of parts) {
+      all.set(part, at);
+      at += part.length;
+    }
+    return all;
+  };
+  const write = async (given: unknown, data: unknown): Promise<void> => {
+    const path = pathOf(given);
+    if (typeof data !== 'string' && !(data instanceof Uint8Array)) {
+      throw new TypeError('What is written is text or bytes');
+    }
+    const bytes = typeof data === 'string' ? new web.TextEncoder().encode(data) : data;
+    // The first part in place of what the file had, and each next one after its end.
+    for (let from = 0; ; from += BUNDLE_FILE_PART) {
+      const part = toBase64(bytes.subarray(from, from + BUNDLE_FILE_PART));
+      await host.file({ op: 'write', path, from, size: bytes.length, data: part });
+      if (from + BUNDLE_FILE_PART >= bytes.length) break;
+    }
+  };
+  return Object.freeze(
+    Object.defineProperties(
+      { ...machine },
+      {
+        read: { value: read },
+        readText: {
+          // As the bytes are: a mark at the start that says the order of bytes is kept.
+          value: async (path: unknown) =>
+            new web.TextDecoder('utf-8', { ignoreBOM: true }).decode(await read(path)),
+        },
+        write: { value: write },
+      },
+    ),
+  );
+}
+
 /** The context an agent's code is given, made from what the engine sent. */
 function contextOf(sent: BundleContext, configuration: unknown, host: BundleHost): Dict {
   return {
@@ -277,8 +376,7 @@ function contextOf(sent: BundleContext, configuration: unknown, host: BundleHost
     configuration,
     modelId: sent.modelId,
     reasoning: sent.reasoning,
-    // An actor has a machine once the engine has machines.
-    machine: null,
+    machine: machineOf(sent.machine, host),
     secrets: {
       get: async (name: string): Promise<string> => {
         const value = await host.secret(name);

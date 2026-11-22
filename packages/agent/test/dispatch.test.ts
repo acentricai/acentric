@@ -400,3 +400,255 @@ describe('checking a configuration', () => {
     });
   });
 });
+
+describe("the machine an agent's code is given", () => {
+  const PART = 8 << 20;
+  const machine = { id: makeId('machine', source(3)), cwd: '~/work' };
+  const on: BundleContext = { ...context, machine };
+
+  /** A host with a machine's files, which keeps every request it was made. */
+  const withFiles = (files = new Map<string, Buffer>()) => {
+    const asked: { op: string; path: string; from: number; size?: number; bytes?: number }[] = [];
+    const answering: BundleHost = {
+      secret: async () => undefined,
+      file: async (request) => {
+        if (request.op === 'read') {
+          asked.push({ op: 'read', path: request.path, from: request.from });
+          const file = files.get(request.path);
+          if (file === undefined) throw new Error(`There is no file ${request.path}`);
+          const data = file.subarray(request.from, request.from + PART).toString('base64');
+          return { size: file.length, data };
+        }
+        const part = Buffer.from(request.data, 'base64');
+        asked.push({
+          op: 'write',
+          path: request.path,
+          from: request.from,
+          size: request.size,
+          bytes: part.length,
+        });
+        const before = request.from === 0 ? Buffer.alloc(0) : (files.get(request.path) as Buffer);
+        files.set(request.path, Buffer.concat([before, part]));
+        return undefined;
+      },
+    };
+    return { host: answering, files, asked };
+  };
+
+  const got: unknown[] = [];
+  const keeper = entryOf(
+    new Agent({
+      provider: 'anthropic',
+      instructions: 'You keep files.',
+      machine: true,
+      tools: [
+        {
+          name: 'save',
+          description: 'Saves text to a file.',
+          parameters: z.object({ path: z.string(), text: z.string() }),
+          execute: async ({ path, text }, { machine: its }) => {
+            await its.write(path, text);
+            return `saved ${path}`;
+          },
+        },
+        {
+          name: 'load',
+          description: 'Reads a file as text.',
+          parameters: z.object({ path: z.string() }),
+          execute: async ({ path }, { machine: its }) => its.readText(path),
+        },
+        {
+          name: 'big',
+          description: 'Writes a file of this many bytes, and reads it back.',
+          parameters: z.object({ bytes: z.number() }),
+          execute: async ({ bytes }, { machine: its }) => {
+            const data = new Uint8Array(bytes).map((_, i) => i % 251);
+            await its.write('big.bin', data);
+            const back = await its.read('big.bin');
+            return `${String(back.length)} ${String(back.every((byte, i) => byte === i % 251))}`;
+          },
+        },
+        {
+          name: 'what',
+          description: 'Says what its machine is, as data.',
+          parameters: z.object({}),
+          execute: (_args, { machine: its }) => {
+            got.push(its);
+            return JSON.stringify({
+              keys: Object.keys(its),
+              spread: { ...its },
+              json: JSON.parse(JSON.stringify(its)) as unknown,
+            });
+          },
+        },
+        {
+          name: 'wrong',
+          description: 'Asks for what cannot be asked.',
+          parameters: z.object({ how: z.string() }),
+          execute: async ({ how }, { machine: its }) => {
+            if (how === 'path') await its.read(5 as unknown as string);
+            if (how === 'empty') await its.write('', 'x');
+            if (how === 'data') await its.write('a.txt', 5 as unknown as string);
+            return 'asked';
+          },
+        },
+      ],
+      inputs: {
+        upload: {
+          schema: z.object({ name: z.string(), base64: z.string() }),
+          handler: async ({ name, base64 }, { machine: its }) => {
+            const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+            await its.write(`inbox/${name}`, bytes);
+            const size = (await its.read(`inbox/${name}`)).length;
+            return `A file is in inbox/${name}: ${String(size)} bytes.`;
+          },
+        },
+      },
+    }),
+  );
+  const run = (name: string, args: object, files: BundleHost, sent = on) =>
+    keeper.call(`tools.${name}.execute`, args as never, sent, files);
+
+  it('writes text and reads it back, each small file in one request', async () => {
+    const { host: files, asked } = withFiles();
+    const text = 'buy bolts — für später ✓';
+    expect(await run('save', { path: 'notes/today.txt', text }, files)).toEqual({
+      ok: true,
+      value: 'saved notes/today.txt',
+    });
+    expect(await run('load', { path: 'notes/today.txt' }, files)).toEqual({
+      ok: true,
+      value: text,
+    });
+    const bytes = Buffer.byteLength(text);
+    expect(asked).toEqual([
+      { op: 'write', path: 'notes/today.txt', from: 0, size: bytes, bytes },
+      { op: 'read', path: 'notes/today.txt', from: 0 },
+    ]);
+  });
+
+  it('writes and reads nothing as nothing, in one request each', async () => {
+    const { host: files, asked, files: kept } = withFiles();
+    await run('save', { path: 'empty', text: '' }, files);
+    expect(kept.get('empty')?.length).toBe(0);
+    expect(await run('load', { path: 'empty' }, files)).toEqual({ ok: true, value: '' });
+    expect(asked).toHaveLength(2);
+  });
+
+  it('reads text as its bytes are: a mark at its start is kept, and what is no UTF-8 is replaced', async () => {
+    const files = new Map([
+      ['marked.txt', Buffer.from([0xef, 0xbb, 0xbf, 0x68, 0x69])],
+      ['broken.txt', Buffer.from([0x68, 0xff, 0x69])],
+    ]);
+    const { host: answering } = withFiles(files);
+    expect(await run('load', { path: 'marked.txt' }, answering)).toEqual({
+      ok: true,
+      value: '﻿hi',
+    });
+    expect(await run('load', { path: 'broken.txt' }, answering)).toEqual({
+      ok: true,
+      value: 'h�i',
+    });
+  });
+
+  it('moves bytes in as many parts as it takes, each after the last', async () => {
+    const { host: files, asked, files: kept } = withFiles();
+    const size = PART + 1000;
+    expect(await run('big', { bytes: size }, files)).toEqual({
+      ok: true,
+      value: `${String(size)} true`,
+    });
+    expect(asked).toEqual([
+      { op: 'write', path: 'big.bin', from: 0, size, bytes: PART },
+      { op: 'write', path: 'big.bin', from: PART, size, bytes: 1000 },
+      { op: 'read', path: 'big.bin', from: 0 },
+      { op: 'read', path: 'big.bin', from: PART },
+    ]);
+    expect(kept.get('big.bin')?.[PART + 5]).toBe((PART + 5) % 251);
+
+    // A file that ends where a part does is not asked for once more.
+    asked.length = 0;
+    await run('big', { bytes: PART }, files);
+    expect(asked.map((one) => [one.op, one.from])).toEqual([
+      ['write', 0],
+      ['read', 0],
+    ]);
+  });
+
+  it('puts what is sent into a file, in an input handler', async () => {
+    const { host: files, files: kept } = withFiles();
+    const base64 = Buffer.from([137, 80, 78, 71, 0, 255]).toString('base64');
+    expect(
+      await keeper.call('inputs.upload.handler', { name: 'logo.png', base64 }, on, files),
+    ).toEqual({ ok: true, value: 'A file is in inbox/logo.png: 6 bytes.' });
+    expect([...(kept.get('inbox/logo.png') as Buffer)]).toEqual([137, 80, 78, 71, 0, 255]);
+  });
+
+  it('is told what the engine says is wrong, and what is wrong with what it asked', async () => {
+    const { host: files, asked } = withFiles();
+    expect(await run('load', { path: 'missing.txt' }, files)).toEqual({
+      ok: false,
+      kind: 'error',
+      error: { name: 'Error', message: 'There is no file missing.txt' },
+    });
+    asked.length = 0;
+    for (const [how, message] of [
+      ['path', "A file's path is a string"],
+      ['empty', "A file's path is a string"],
+      ['data', 'What is written is text or bytes'],
+    ] as const) {
+      expect(await run('wrong', { how }, files)).toEqual({
+        ok: false,
+        kind: 'error',
+        error: { name: 'TypeError', message },
+      });
+    }
+    // Nothing of those was asked of the engine.
+    expect(asked).toEqual([]);
+  });
+
+  it('has its machine as data: its ID, working directory and variables, and none of its functions', async () => {
+    const { host: files } = withFiles();
+    const said = async (sent: BundleContext) => {
+      const outcome = await run('what', {}, files, sent);
+      return JSON.parse((outcome as { value: string }).value) as unknown;
+    };
+    expect(await said(on)).toEqual({ keys: ['id', 'cwd'], spread: machine, json: machine });
+    const env = { ORDERS_API_KEY: 'k-1' };
+    const withEnv = { ...machine, env };
+    expect(await said({ ...on, machine: withEnv })).toEqual({
+      keys: ['id', 'cwd', 'env'],
+      spread: withEnv,
+      json: withEnv,
+    });
+    // It is as it was given: its code cannot make it another machine's.
+    expect(Object.isFrozen(got[0])).toBe(true);
+  });
+
+  it('is null for an actor that has none, and for an engine that says nothing of one', async () => {
+    const plain = entryOf(
+      new Agent({
+        provider: 'openai',
+        instructions: '',
+        tools: [
+          {
+            name: 'what',
+            description: 'Says what its machine is.',
+            parameters: z.object({}),
+            execute: (_args, given) => String((given as { machine: unknown }).machine),
+          },
+        ],
+      }),
+    );
+    const { host: files } = withFiles();
+    expect(await plain.call('tools.what.execute', {}, context, files)).toEqual({
+      ok: true,
+      value: 'null',
+    });
+    const { machine: _none, ...older } = context;
+    expect(await plain.call('tools.what.execute', {}, older as BundleContext, files)).toEqual({
+      ok: true,
+      value: 'null',
+    });
+  });
+});
