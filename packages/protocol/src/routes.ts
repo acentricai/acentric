@@ -21,6 +21,7 @@ import {
   deploymentIdSchema,
   inviteIdSchema,
   keyIdSchema,
+  machineIdSchema,
   sessionIdSchema,
   userIdSchema,
 } from './ids.ts';
@@ -46,6 +47,15 @@ import {
   sendInputResponseSchema,
   updateActorRequestSchema,
 } from './resources/actors.ts';
+import {
+  createMachineRequestSchema,
+  enrolMachineRequestSchema,
+  listMachinesQuerySchema,
+  machineSchema,
+  machineTokenSchema,
+  machineUpdateSchema,
+  updateMachineRequestSchema,
+} from './resources/machines.ts';
 import {
   abortResponseSchema,
   listTasksQuerySchema,
@@ -140,6 +150,7 @@ export const COMMON_ERRORS: readonly ErrorCode[] = [
 
 const agentParam = z.object({ agent: agentIdSchema });
 const actorParam = z.object({ actor: actorIdSchema });
+const machineParam = z.object({ machine: machineIdSchema });
 
 /** A page of `item`, as a schema of its own in the API's document. */
 const page = <T extends z.ZodType>(id: string, item: T) => pageSchema(item).meta({ id });
@@ -290,7 +301,7 @@ export const routes = defineRoutes({
     response: createActorResponseSchema,
     status: 201,
     existing: 200,
-    errors: ['not_found', 'invalid_configuration', 'name_taken'],
+    errors: ['not_found', 'invalid_configuration', 'name_taken', 'unavailable'],
   },
   'actors.list': {
     method: 'GET',
@@ -315,13 +326,22 @@ export const routes = defineRoutes({
   'actors.update': {
     method: 'PATCH',
     path: '/v1/actors/{actor}',
-    summary: 'Changes an actor, between its turns.',
+    summary:
+      'Changes an actor, between its turns. The variables of its commands alone are changed at any time.',
     auth: onActor('actors:write'),
     params: actorParam,
     body: updateActorRequestSchema,
     response: actorSchema,
     status: 200,
-    errors: ['not_found', 'actor_busy', 'actor_archived', 'invalid_configuration', 'name_taken'],
+    errors: [
+      'not_found',
+      'actor_busy',
+      'actor_archived',
+      'invalid_configuration',
+      'name_taken',
+      'conflict',
+      'unavailable',
+    ],
   },
   'actors.archive': {
     method: 'POST',
@@ -459,6 +479,91 @@ export const routes = defineRoutes({
     response: taskSchema,
     status: 200,
     errors: ['not_found'],
+  },
+
+  // Machines: the computers commands run on
+
+  'machines.create': {
+    method: 'POST',
+    path: '/v1/machines',
+    summary: 'Adds a machine, and gives the token its daemon enrols with.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    body: createMachineRequestSchema,
+    response: machineTokenSchema,
+    status: 201,
+    errors: ['name_taken'],
+  },
+  'machines.list': {
+    method: 'GET',
+    path: '/v1/machines',
+    summary: 'Lists machines, in the order they were added.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    query: listMachinesQuerySchema,
+    response: z.object({ items: z.array(machineSchema) }).meta({ id: 'MachineList' }),
+    status: 200,
+    errors: [],
+  },
+  'machines.get': {
+    method: 'GET',
+    path: '/v1/machines/{machine}',
+    summary: 'Reads a machine, and whether its daemon is connected.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: machineParam,
+    response: machineSchema,
+    status: 200,
+    errors: ['not_found'],
+  },
+  'machines.update': {
+    method: 'PATCH',
+    path: '/v1/machines/{machine}',
+    summary: 'Renames a machine, or says which agents it is for.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: machineParam,
+    body: updateMachineRequestSchema,
+    response: machineSchema,
+    status: 200,
+    errors: ['not_found', 'name_taken'],
+  },
+  'machines.delete': {
+    method: 'DELETE',
+    path: '/v1/machines/{machine}',
+    summary:
+      'Removes a machine. Its daemon is disconnected, and what the engine had running there is lost.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: machineParam,
+    status: 204,
+    errors: ['not_found'],
+  },
+  'machines.token': {
+    method: 'POST',
+    path: '/v1/machines/{machine}/token',
+    summary: "Gives a new token for a machine's daemon to enrol again.",
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: machineParam,
+    response: machineTokenSchema,
+    status: 201,
+    errors: ['not_found'],
+  },
+  'machines.upgrade': {
+    method: 'POST',
+    path: '/v1/machines/{machine}/upgrade',
+    summary: "Has a machine's daemon take the build of it this engine hands out.",
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: machineParam,
+    response: machineUpdateSchema,
+    status: 200,
+    errors: ['not_found', 'conflict', 'machine_offline', 'machine_refused'],
+  },
+  'machines.enrol': {
+    method: 'POST',
+    path: '/v1/machines/{machine}/enrol',
+    summary: "A daemon's own: takes its public key, for the machine's token. The token works once.",
+    auth: { on: 'none' },
+    params: machineParam,
+    body: enrolMachineRequestSchema,
+    response: z.object({ id: machineIdSchema }).meta({ id: 'EnrolledMachine' }),
+    status: 200,
+    errors: [],
   },
 
   'blobs.get': {

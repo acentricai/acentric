@@ -7,6 +7,7 @@ import type {
   Audit,
   Engine,
   Keys,
+  Machines,
   People,
   Secrets,
   SignedIn,
@@ -115,6 +116,14 @@ const summaryOf = ({ definition: _definition, ...summary }: Deployment): Deploym
 /** The agent or the actor a request was let through to. It is always there for such a route. */
 const agentOf = (asked: Granted): Agent => asked.agent as Agent;
 const actorOf = (asked: Granted): Actor => asked.actor as Actor;
+
+/** The engine's machines. An engine that keeps none has no such routes to answer. */
+function machinesOf(engine: Engine): Machines {
+  if (engine.machines === undefined) {
+    throw new ApiFailure('not_found', 'This engine keeps no machines');
+  }
+  return engine.machines;
+}
 
 /** A list that is all on one page. */
 const onePage = <T>(items: T[]): Page<T> => ({ items, nextCursor: null });
@@ -258,8 +267,16 @@ export const handlers: Handlers = {
     });
   },
   'actors.get': (asked) => actorOf(asked),
-  'actors.update': (asked, { engine }) =>
-    engine.updateActor(actorOf(asked).id, defined(asked.body)),
+  'actors.update': async (asked, { engine }) => {
+    const { env, ...rest } = asked.body;
+    const { id } = actorOf(asked);
+    // Its variables alone are changed at any time. Anything else is changed between turns.
+    if (env === undefined || Object.keys(defined(rest)).length > 0) {
+      const updated = await engine.updateActor(id, defined(rest));
+      if (env === undefined) return updated;
+    }
+    return engine.setEnv(id, env);
+  },
   'actors.archive': (asked, { engine }) => engine.archive(actorOf(asked).id),
   'actors.unarchive': (asked, { engine }) => engine.unarchive(actorOf(asked).id),
   'actors.interrupt': (asked, { engine }) => engine.interrupt(actorOf(asked).id),
@@ -310,6 +327,81 @@ export const handlers: Handlers = {
   }),
   'tasks.get': (asked, { engine }) => engine.tasks.get(actorOf(asked).id, asked.params.task),
   'tasks.stop': (asked, { engine }) => engine.tasks.stop(actorOf(asked).id, asked.params.task),
+
+  // Machines
+
+  'machines.create': async (asked, { engine, audit }) => {
+    const added = await machinesOf(engine).add(defined(asked.body));
+    await audit.record({
+      by: refOf(asked),
+      action: 'machine.create',
+      target: { type: 'machine', id: added.machine.id },
+      detail: { name: added.machine.name },
+    });
+    return added;
+  },
+  'machines.list': async ({ query }, { engine }) => {
+    const machines = machinesOf(engine);
+    if (query.name === undefined) return { items: await machines.list() };
+    const one = await machines.find(query.name);
+    return { items: one === undefined ? [] : [one] };
+  },
+  'machines.get': ({ params }, { engine }) => machinesOf(engine).get(params.machine),
+  'machines.update': async (asked, { engine, audit }) => {
+    const machine = await machinesOf(engine).update(asked.params.machine, defined(asked.body));
+    await audit.record({
+      by: refOf(asked),
+      action: 'machine.update',
+      target: { type: 'machine', id: machine.id },
+      detail: { name: machine.name, agents: machine.agents },
+    });
+    return machine;
+  },
+  'machines.delete': async (asked, { engine, audit }) => {
+    const machines = machinesOf(engine);
+    const machine = await machines.get(asked.params.machine);
+    await machines.remove(machine.id);
+    await audit.record({
+      by: refOf(asked),
+      action: 'machine.delete',
+      target: { type: 'machine', id: machine.id },
+      detail: { name: machine.name },
+    });
+    return undefined;
+  },
+  'machines.token': async (asked, { engine, audit }) => {
+    const given = await machinesOf(engine).token(asked.params.machine);
+    await audit.record({
+      by: refOf(asked),
+      action: 'machine.token',
+      target: { type: 'machine', id: given.machine.id },
+      detail: { name: given.machine.name },
+    });
+    return given;
+  },
+  'machines.upgrade': async (asked, { engine, audit }) => {
+    const upgraded = await machinesOf(engine).upgrade(asked.params.machine);
+    if (upgraded.updated) {
+      await audit.record({
+        by: refOf(asked),
+        action: 'machine.upgrade',
+        target: { type: 'machine', id: upgraded.machine.id },
+        detail: { name: upgraded.machine.name, version: upgraded.machine.version },
+      });
+    }
+    return upgraded;
+  },
+  // A daemon's own: its machine's token is what lets it.
+  'machines.enrol': async ({ params, body }, { engine, audit }) => {
+    const machine = await machinesOf(engine).enrol(params.machine, body);
+    await audit.record({
+      by: { type: 'system' },
+      action: 'machine.enrol',
+      target: { type: 'machine', id: machine.id },
+      detail: { name: machine.name },
+    });
+    return { id: machine.id };
+  },
 
   'blobs.get': async (asked, { engine }) => {
     const { digest } = asked.params;

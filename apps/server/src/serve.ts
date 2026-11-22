@@ -1,14 +1,17 @@
 // A server: the API listening on a port, over an engine. It is started from its parts, so a
 // test can give it a model that calls no provider, and the program gives it the real ones.
 
+import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { serve as listen } from '@hono/node-server';
 import type { Accounts, Audit, Engine, Keys, People, Secrets } from '@acentric/core';
+import { WebSocketServer } from 'ws';
 
 import { createApp } from './app.ts';
 import type { Downloads } from './downloads.ts';
 import { Streams } from './events.ts';
+import { takeDaemons } from './machines.ts';
 
 export type ServerOptions = {
   readonly engine: Engine;
@@ -49,6 +52,11 @@ export async function startServer(options: ServerOptions): Promise<Server> {
     listening.once('error', reject);
   });
   const { port } = server.address() as AddressInfo;
+  // The machines' daemons connect here, each to stay.
+  const daemons = new WebSocketServer({ noServer: true, maxPayload: 32 << 20 });
+  if (options.engine.machines !== undefined) {
+    takeDaemons(server as HttpServer, daemons, options.engine.machines);
+  }
   let closing: Promise<void> | undefined;
 
   return {
@@ -62,6 +70,8 @@ export async function startServer(options: ServerOptions): Promise<Server> {
           });
         });
         streams.close();
+        // The engine drops the daemons' connections as it closes: no new one is taken.
+        daemons.close();
         await options.engine.close(more);
         // A request that is still open after that is not waited for.
         (server as { closeAllConnections?: () => void }).closeAllConnections?.();
