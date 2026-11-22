@@ -21,3 +21,10 @@ export const SUPPORTED_BUNDLE_PROTOCOLS: readonly number[] = [1];
 export function supportsBundleProtocol(version: number): boolean {
   return SUPPORTED_BUNDLE_PROTOCOLS.includes(version);
 }
+
+/**
+ * The header an engine that hands out the `acentric` command says which one in: the SHA-256
+ * of the file, in hex. The command compares it with its own, and so knows when the engine has
+ * another version of it.
+ */
+export const COMMAND_HEADER = 'x-acentric-command';
