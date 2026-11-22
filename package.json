@@ -9,11 +9,11 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc -b",
-    "typecheck": "tsc -b",
-    "test": "tsc -b && vitest run",
-    "bench": "tsc -b && node packages/store/bench/turns.ts",
-    "bench:isolates": "tsc -b && node packages/executor/bench/isolates.ts",
+    "build": "tsc -b packages/agent && node apps/cli/scripts/vendor.ts && tsc -b && node apps/cli/scripts/bundle.ts",
+    "typecheck": "pnpm build",
+    "test": "pnpm build && vitest run",
+    "bench": "pnpm build && node packages/store/bench/turns.ts",
+    "bench:isolates": "pnpm build && node packages/executor/bench/isolates.ts",
     "lint": "oxlint --deny-warnings",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

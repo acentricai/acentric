@@ -19,3 +19,7 @@ target/
 *.log
 .DS_Store
 .claude/
+
+# The agent package as `acentric init` puts it in a project, made at build
+# (apps/cli/scripts/vendor.ts).
+/apps/cli/src/vendored.ts

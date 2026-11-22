@@ -198,10 +198,20 @@ importers:
         version: 5.1.1(@types/node@24.19.2)(vite@8.3.8(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))
 
   apps/cli:
+    dependencies:
+      '@acentric/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@acentric/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
 
   apps/server:
     dependencies:

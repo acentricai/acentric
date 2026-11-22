@@ -6,3 +6,4 @@ LICENSE
 .notes
 packages/protocol/openapi.json
 packages/agent/test/types.ts
+apps/cli/src/vendored.ts

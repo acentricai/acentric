@@ -14,7 +14,7 @@ pnpm install
 
 | Command           | What it does                                                   |
 | ----------------- | -------------------------------------------------------------- |
-| `pnpm build`      | Builds every package, each once, in the order they depend.     |
+| `pnpm build`      | Builds every package, and the command as one file.             |
 | `pnpm test`       | Builds, then runs every test.                                  |
 | `pnpm lint`       | Lints with oxlint. A warning fails it.                         |
 | `pnpm format`     | Formats with Prettier. `pnpm format:check` only checks.        |
