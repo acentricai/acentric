@@ -25,7 +25,16 @@ try {
   process.exit(2);
 }
 
-const started = await start(settings, { version });
+let started;
+try {
+  started = await start(settings, { version });
+} catch (error) {
+  // Said in a line: what was wrong is the message, not where in the code it was found.
+  console.error(
+    `The server was not started: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(1);
+}
 console.log(`acentric-server ${version} listening on ${started.server.url}`);
 if (started.recovered > 0) {
   console.log(`picked up ${String(started.recovered)} actors with something owed`);
