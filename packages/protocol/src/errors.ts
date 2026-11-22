@@ -9,6 +9,8 @@ export const ERROR_STATUS = {
   invalid_request: 400,
   /** No credential came with the request, or one that is not known, was revoked or has expired. */
   unauthenticated: 401,
+  /** The email and the password are not a person's who can sign in. */
+  invalid_credentials: 401,
   /** The credential does not reach what the request is about, or lacks the permission it takes. */
   forbidden: 403,
   /** There is no such thing, or none the credential can see. */
@@ -25,6 +27,9 @@ export const ERROR_STATUS = {
   internal: 500,
   /** The server cannot do this now, and may be able to later. */
   unavailable: 503,
+
+  /** A link that was to be used once is not known, was used, was revoked or has expired. */
+  invalid_link: 400,
 
   /** The deployed code was built for a protocol this engine does not run. */
   unsupported_protocol: 400,

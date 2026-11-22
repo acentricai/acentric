@@ -102,6 +102,8 @@ function operationOf(id: string, route: Route): JsonObject {
     summary: route.summary,
     tags: [id.slice(0, id.indexOf('.'))],
     'x-acentric-auth': route.auth,
+    // A route that makes a credential is called without one.
+    ...(route.auth.on === 'none' ? { security: [] } : {}),
     parameters: [
       ...parametersOf(route.params, 'path', id),
       ...parametersOf(route.query, 'query', id),

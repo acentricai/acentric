@@ -41,7 +41,7 @@ describe('the route table', () => {
 
   it('asks a permission that a key reaching what it is on could hold', () => {
     const asking = all.flatMap(([id, route]) =>
-      route.auth.on === 'any' ? [] : [{ id, auth: route.auth }],
+      route.auth.on === 'any' || route.auth.on === 'none' ? [] : [{ id, auth: route.auth }],
     );
     for (const { id, auth } of asking) {
       // What is on one agent, or on one of its actors, a key of that agent can be let do. A key

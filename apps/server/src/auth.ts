@@ -44,7 +44,7 @@ export async function authorize(
   params: { readonly [name: string]: string },
 ): Promise<Granted> {
   const scope = scopeOf(principal);
-  if (auth.on === 'any') return { principal, scope };
+  if (auth.on === 'any' || auth.on === 'none') return { principal, scope };
   if (!principal.permissions.includes(auth.permission)) {
     throw new Forbidden(`This takes ${auth.permission}, which the key does not hold`);
   }

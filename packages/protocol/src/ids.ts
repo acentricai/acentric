@@ -22,6 +22,7 @@ export const ID_PREFIXES = {
   user: 'usr',
   session: 'ses',
   key: 'key',
+  invite: 'inv',
   auditEvent: 'aud',
   usage: 'usg',
 } as const;
@@ -43,6 +44,7 @@ export type AccountId = Id<'account'>;
 export type UserId = Id<'user'>;
 export type SessionId = Id<'session'>;
 export type KeyId = Id<'key'>;
+export type InviteId = Id<'invite'>;
 export type AuditEventId = Id<'auditEvent'>;
 export type UsageId = Id<'usage'>;
 
@@ -142,5 +144,6 @@ export const accountIdSchema = idSchema('account');
 export const userIdSchema = idSchema('user');
 export const sessionIdSchema = idSchema('session');
 export const keyIdSchema = idSchema('key');
+export const inviteIdSchema = idSchema('invite');
 export const auditEventIdSchema = idSchema('auditEvent');
 export const usageIdSchema = idSchema('usage');
