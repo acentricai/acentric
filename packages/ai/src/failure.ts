@@ -99,3 +99,10 @@ export function cut(detail: Json | undefined): Json | undefined {
   const text = JSON.stringify(detail);
   return text.length <= 2000 ? detail : `${text.slice(0, 2000)}…`;
 }
+
+/**
+ * Why a call is refused that has a blob in place of bytes: whoever calls puts a blob's bytes
+ * back first, and no provider is sent what only names them.
+ */
+export const unfilled = (at: string): string =>
+  `${at} is a blob, and its bytes were not put back before the call`;

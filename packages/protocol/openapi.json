@@ -6512,6 +6512,35 @@
                     "properties": {
                       "type": {
                         "type": "string",
+                        "const": "blob"
+                      },
+                      "digest": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$",
+                        "description": "A blob's name: the SHA-256 of its bytes, in hex."
+                      },
+                      "mediaType": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "digest",
+                      "mediaType",
+                      "size"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
                         "const": "file_id"
                       },
                       "id": {
@@ -6595,6 +6624,35 @@
                       "type",
                       "mediaType",
                       "data"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "blob"
+                      },
+                      "digest": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$",
+                        "description": "A blob's name: the SHA-256 of its bytes, in hex."
+                      },
+                      "mediaType": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "digest",
+                      "mediaType",
+                      "size"
                     ]
                   },
                   {
@@ -7710,6 +7768,35 @@
                                 "type",
                                 "mediaType",
                                 "data"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "blob"
+                                },
+                                "digest": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "description": "A blob's name: the SHA-256 of its bytes, in hex."
+                                },
+                                "mediaType": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "size": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "digest",
+                                "mediaType",
+                                "size"
                               ]
                             },
                             {

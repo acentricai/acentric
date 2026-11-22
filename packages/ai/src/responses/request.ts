@@ -4,7 +4,7 @@
 
 import type { ContentPart, JsonObject, Message, ToolResultMessage } from '@acentric/protocol';
 
-import { ModelFailure } from '../failure.ts';
+import { ModelFailure, unfilled } from '../failure.ts';
 import { omit } from '../json.ts';
 import type { ModelStep } from '../runner.ts';
 import type { ResponsesProfile } from './profile.ts';
@@ -126,6 +126,7 @@ function parts(
             `${at} is an image by its file ID, which ${profile.label} cannot take`,
           );
         }
+        if (source.type === 'blob') return refuse(profile, unfilled(at));
         return {
           ...part.providerOptions,
           type: 'input_image',
@@ -144,6 +145,7 @@ function parts(
           );
         }
         const { source } = part;
+        if (source.type === 'blob') return refuse(profile, unfilled(at));
         return {
           ...part.providerOptions,
           type: 'input_file',
