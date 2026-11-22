@@ -6,17 +6,21 @@
 
 import { Worker } from 'node:worker_threads';
 
-import { NameTaken, OutOfOrder, StaleEpoch } from '@acentric/core';
+import { EmailTaken, NameTaken, OutOfOrder, StaleEpoch } from '@acentric/core';
 import type {
   ActorRecord,
   ActorsQuery,
   Change,
   PageOf,
   Paged,
+  Redeem,
   SealedSecret,
   Store,
   StoredDeployment,
   StoredKey,
+  StoredLink,
+  StoredSession,
+  StoredUser,
 } from '@acentric/core';
 import type {
   Actor,
@@ -26,10 +30,16 @@ import type {
   ConversationEntry,
   Deployment,
   DeploymentId,
+  AuditEvent,
   Input,
   InputId,
+  InviteId,
   Json,
   KeyId,
+  Session,
+  SessionId,
+  User,
+  UserId,
 } from '@acentric/protocol';
 
 import type { Operation } from './database.ts';
@@ -121,6 +131,8 @@ class Line {
     } else if (refused?.kind === 'NameTaken') {
       const of = refused.args[1] === 'agent' ? 'agent' : 'actor';
       waiting.reject(new NameTaken(String(refused.args[0]), of));
+    } else if (refused?.kind === 'EmailTaken') {
+      waiting.reject(new EmailTaken(String(refused.args[0])));
     } else if (refused?.kind === 'OutOfOrder') {
       const [agent, version] = refused.args as [AgentId, number];
       waiting.reject(new OutOfOrder(agent, version));
@@ -241,6 +253,83 @@ export class SqliteStore implements Store {
 
   allSecrets(): Promise<SealedSecret[]> {
     return this.#write.ask('allSecrets' satisfies Operation);
+  }
+
+  addUser(user: StoredUser): Promise<void> {
+    return this.#write.ask('addUser' satisfies Operation, user);
+  }
+
+  // Who a request is from is read where it was written, so that it is never behind.
+  loadUser(id: UserId): Promise<StoredUser | undefined> {
+    return this.#write.ask('loadUser' satisfies Operation, id);
+  }
+
+  findUser(email: string): Promise<StoredUser | undefined> {
+    return this.#write.ask('findUser' satisfies Operation, email);
+  }
+
+  listUsers(): Promise<User[]> {
+    return this.#write.ask('listUsers' satisfies Operation);
+  }
+
+  saveUser(user: StoredUser): Promise<void> {
+    return this.#write.ask('saveUser' satisfies Operation, user);
+  }
+
+  removeUser(id: UserId): Promise<void> {
+    return this.#write.ask('removeUser' satisfies Operation, id);
+  }
+
+  addSession(session: StoredSession): Promise<void> {
+    return this.#write.ask('addSession' satisfies Operation, session);
+  }
+
+  loadSession(id: SessionId): Promise<StoredSession | undefined> {
+    return this.#write.ask('loadSession' satisfies Operation, id);
+  }
+
+  listSessions(user: UserId): Promise<Session[]> {
+    return this.#write.ask('listSessions' satisfies Operation, user);
+  }
+
+  touchSession(id: SessionId, lastUsedAt: number, expiresAt: number): Promise<void> {
+    return this.#write.ask('touchSession' satisfies Operation, id, lastUsedAt, expiresAt);
+  }
+
+  removeSession(id: SessionId): Promise<void> {
+    return this.#write.ask('removeSession' satisfies Operation, id);
+  }
+
+  removeSessions(user: UserId, keep?: SessionId): Promise<void> {
+    return this.#write.ask('removeSessions' satisfies Operation, user, keep);
+  }
+
+  addLink(link: StoredLink): Promise<void> {
+    return this.#write.ask('addLink' satisfies Operation, link);
+  }
+
+  loadLink(id: InviteId): Promise<StoredLink | undefined> {
+    return this.#write.ask('loadLink' satisfies Operation, id);
+  }
+
+  listLinks(kind: StoredLink['kind']): Promise<StoredLink[]> {
+    return this.#write.ask('listLinks' satisfies Operation, kind);
+  }
+
+  removeLink(id: InviteId): Promise<boolean> {
+    return this.#write.ask('removeLink' satisfies Operation, id);
+  }
+
+  redeemLink(id: InviteId, redeem: Redeem): Promise<'done' | 'gone'> {
+    return this.#write.ask('redeemLink' satisfies Operation, id, redeem);
+  }
+
+  addAuditEvent(event: AuditEvent): Promise<void> {
+    return this.#write.ask('addAuditEvent' satisfies Operation, event);
+  }
+
+  listAuditEvents(query?: PageOf & { readonly action?: string }): Promise<Paged<AuditEvent>> {
+    return this.#read.ask('listAuditEvents' satisfies Operation, query);
   }
 
   createActor(

@@ -9,14 +9,24 @@ import type {
   Agent,
   AgentDefinition,
   AgentId,
+  AuditEvent,
   ConversationEntry,
   Deployment,
   Input,
   KeyId,
+  User,
+  UserId,
 } from '@acentric/protocol';
 
 import type { Change } from '../src/state.ts';
-import type { Paged, Store, StoredKey } from '../src/store.ts';
+import type {
+  Paged,
+  Store,
+  StoredKey,
+  StoredLink,
+  StoredSession,
+  StoredUser,
+} from '../src/store.ts';
 
 const NOW = 1_795_305_600_000;
 
@@ -669,6 +679,185 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         await store.removeKeys([first.key.id, second.key.id]);
         expect(await store.loadKey(first.key.id)).toBeUndefined();
         expect(await store.listKeys()).toEqual([]);
+      });
+    });
+
+    describe('people', () => {
+      const personOf = (email: string, more: Partial<User> = {}): StoredUser => ({
+        user: {
+          id: makeId('user', { now: NOW, random: random() }),
+          email,
+          displayName: null,
+          role: 'member',
+          createdAt: NOW,
+          disabledAt: null,
+          ...more,
+        },
+        password: `hash-of-${email}`,
+      });
+      const sessionOf = (user: UserId): StoredSession => ({
+        session: {
+          id: makeId('session', { now: NOW, random: random() }),
+          user,
+          client: 'dashboard',
+          label: null,
+          createdAt: NOW,
+          lastUsedAt: null,
+          expiresAt: NOW + 1000,
+        },
+        hash: 'c'.repeat(64),
+      });
+      const linkOf = (kind: StoredLink['kind'], more: Partial<StoredLink> = {}): StoredLink => ({
+        id: makeId('invite', { now: NOW, random: random() }),
+        kind,
+        hash: 'd'.repeat(64),
+        role: kind === 'reset' ? null : 'member',
+        user: null,
+        note: null,
+        createdBy: { type: 'system' },
+        createdAt: NOW,
+        expiresAt: NOW + 1000,
+        ...more,
+      });
+
+      it('are kept, found by what they sign in as, changed and removed', async () => {
+        const ada = personOf('ada@example.com', { role: 'owner' });
+        const grace = personOf('grace@example.com');
+        await store.addUser(ada);
+        await store.addUser(grace);
+        expect(await store.loadUser(ada.user.id)).toEqual(ada);
+        expect(await store.findUser('grace@example.com')).toEqual(grace);
+        expect(await store.findUser('nobody@example.com')).toBeUndefined();
+        expect(await store.listUsers()).toEqual([ada.user, grace.user]);
+
+        const changed = { user: { ...grace.user, role: 'admin' as const }, password: 'another' };
+        await store.saveUser(changed);
+        expect(await store.loadUser(grace.user.id)).toEqual(changed);
+
+        await store.removeUser(grace.user.id);
+        expect(await store.loadUser(grace.user.id)).toBeUndefined();
+        // One who is gone is not brought back by being saved.
+        await store.saveUser(changed);
+        expect(await store.listUsers()).toEqual([ada.user]);
+      });
+
+      it('have each their own email', async () => {
+        await store.addUser(personOf('ada@example.com'));
+        await expect(store.addUser(personOf('ada@example.com'))).rejects.toMatchObject({
+          name: 'EmailTaken',
+          code: 'conflict',
+        });
+        expect(await store.listUsers()).toHaveLength(1);
+      });
+
+      it('have sessions, which are noted when used, ended one at a time, or all but one', async () => {
+        const ada = personOf('ada@example.com');
+        const grace = personOf('grace@example.com');
+        await store.addUser(ada);
+        await store.addUser(grace);
+        const [one, two, three] = [
+          sessionOf(ada.user.id),
+          sessionOf(ada.user.id),
+          sessionOf(ada.user.id),
+        ];
+        const hers = sessionOf(grace.user.id);
+        for (const session of [one, two, three, hers]) await store.addSession(session);
+        expect(await store.loadSession(one.session.id)).toEqual(one);
+        expect(await store.listSessions(ada.user.id)).toEqual([
+          one.session,
+          two.session,
+          three.session,
+        ]);
+
+        await store.touchSession(one.session.id, NOW + 5, NOW + 5000);
+        expect((await store.loadSession(one.session.id))?.session).toMatchObject({
+          lastUsedAt: NOW + 5,
+          expiresAt: NOW + 5000,
+        });
+        await store.removeSession(two.session.id);
+        await store.removeSessions(ada.user.id, one.session.id);
+        expect((await store.listSessions(ada.user.id)).map((session) => session.id)).toEqual([
+          one.session.id,
+        ]);
+        // A person who is removed is signed out everywhere, and no one else is.
+        await store.removeUser(ada.user.id);
+        expect(await store.loadSession(one.session.id)).toBeUndefined();
+        expect(await store.listSessions(grace.user.id)).toEqual([hers.session]);
+      });
+
+      it('are made by a link that is used once: of two who use it, one does', async () => {
+        const invite = linkOf('invite', { note: 'for Grace' });
+        const setup = linkOf('setup', { role: 'owner' });
+        await store.addLink(invite);
+        await store.addLink(setup);
+        expect(await store.loadLink(invite.id)).toEqual(invite);
+        expect(await store.listLinks('invite')).toEqual([invite]);
+
+        const grace = personOf('grace@example.com');
+        const used = await Promise.all([
+          store.redeemLink(invite.id, { addUser: grace }),
+          store.redeemLink(invite.id, { addUser: personOf('mallory@example.com') }),
+        ]);
+        expect(used).toEqual(['done', 'gone']);
+        expect(await store.listUsers()).toEqual([grace.user]);
+        expect(await store.loadLink(invite.id)).toBeUndefined();
+        expect(await store.removeLink(setup.id)).toBe(true);
+        expect(await store.removeLink(setup.id)).toBe(false);
+      });
+
+      it('keep a link that could not be used: an email that is another’s leaves it for another try', async () => {
+        const invite = linkOf('invite');
+        await store.addLink(invite);
+        await store.addUser(personOf('ada@example.com'));
+        await expect(
+          store.redeemLink(invite.id, { addUser: personOf('ada@example.com') }),
+        ).rejects.toMatchObject({ name: 'EmailTaken' });
+        expect(await store.loadLink(invite.id)).toEqual(invite);
+        expect(await store.redeemLink(invite.id, { addUser: personOf('grace@example.com') })).toBe(
+          'done',
+        );
+      });
+
+      it('have a password set again by a link, once', async () => {
+        const ada = personOf('ada@example.com');
+        await store.addUser(ada);
+        const reset = linkOf('reset', { user: ada.user.id });
+        await store.addLink(reset);
+        const setPassword = { user: ada.user.id, password: 'a-new-hash' };
+        expect(await store.redeemLink(reset.id, { setPassword })).toBe('done');
+        expect(await store.loadUser(ada.user.id)).toEqual({ ...ada, password: 'a-new-hash' });
+        expect(await store.redeemLink(reset.id, { setPassword })).toBe('gone');
+      });
+    });
+
+    describe('the audit log', () => {
+      it('is added to, and read newest first, a page at a time, all of it or one kind', async () => {
+        const events: AuditEvent[] = ['key.create', 'agent.deploy', 'key.create'].map(
+          (action, index) => ({
+            id: makeId('auditEvent', { now: NOW + index, random: random() }),
+            at: NOW + index,
+            by: { type: 'system' },
+            action,
+            target: index === 1 ? null : { type: 'key', id: `key-${String(index)}` },
+            detail: index === 1 ? { version: 2 } : null,
+          }),
+        );
+        for (const event of events) await store.addAuditEvent(event);
+        const [first, second, third] = events;
+
+        expect(await store.listAuditEvents({ limit: 10 })).toEqual({
+          items: [third, second, first],
+          nextCursor: null,
+        });
+        const page = await store.listAuditEvents({ limit: 2 });
+        expect(page.items).toEqual([third, second]);
+        expect(
+          (await store.listAuditEvents({ limit: 2, cursor: page.nextCursor ?? '' })).items,
+        ).toEqual([first]);
+        expect((await store.listAuditEvents({ limit: 10, action: 'key.create' })).items).toEqual([
+          third,
+          first,
+        ]);
       });
     });
   });

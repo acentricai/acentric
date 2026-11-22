@@ -9,23 +9,33 @@ import type {
   ConversationEntry,
   Deployment,
   DeploymentId,
+  AuditEvent,
   Input,
   InputId,
+  InviteId,
   Json,
   KeyId,
+  Session,
+  SessionId,
+  User,
+  UserId,
 } from '@acentric/protocol';
 
 import { patched } from './state.ts';
 import type { ActorRecord, Change, Turn } from './state.ts';
-import { NameTaken, OutOfOrder, StaleEpoch } from './store.ts';
+import { EmailTaken, NameTaken, OutOfOrder, StaleEpoch } from './store.ts';
 import type {
   ActorsQuery,
   PageOf,
   Paged,
+  Redeem,
   SealedSecret,
   Store,
   StoredDeployment,
   StoredKey,
+  StoredLink,
+  StoredSession,
+  StoredUser,
 } from './store.ts';
 
 /**
@@ -71,6 +81,10 @@ export class MemoryStore implements Store {
   readonly #deployments = new Map<DeploymentId, StoredDeployment>();
   readonly #secrets = new Map<string, SealedSecret>();
   readonly #keys = new Map<KeyId, StoredKey>();
+  readonly #users = new Map<UserId, StoredUser>();
+  readonly #sessions = new Map<SessionId, StoredSession>();
+  readonly #links = new Map<InviteId, StoredLink>();
+  readonly #audit: AuditEvent[] = [];
   readonly #actors = new Map<ActorId, Kept>();
   readonly #inputs = new Map<ActorId, Input[]>();
   readonly #entries = new Map<ActorId, ConversationEntry[]>();
@@ -203,6 +217,112 @@ export class MemoryStore implements Store {
 
   async allSecrets(): Promise<SealedSecret[]> {
     return copy([...this.#secrets.values()]);
+  }
+
+  async addUser(stored: StoredUser): Promise<void> {
+    const taken = [...this.#users.values()].some((one) => one.user.email === stored.user.email);
+    if (taken) throw new EmailTaken(stored.user.email);
+    this.#users.set(stored.user.id, copy(stored));
+  }
+
+  async loadUser(id: UserId): Promise<StoredUser | undefined> {
+    return copy(this.#users.get(id));
+  }
+
+  async findUser(email: string): Promise<StoredUser | undefined> {
+    return copy([...this.#users.values()].find((one) => one.user.email === email));
+  }
+
+  async listUsers(): Promise<User[]> {
+    return copy([...this.#users.values()].map((one) => one.user));
+  }
+
+  async saveUser(stored: StoredUser): Promise<void> {
+    if (this.#users.has(stored.user.id)) this.#users.set(stored.user.id, copy(stored));
+  }
+
+  async removeUser(id: UserId): Promise<void> {
+    this.#users.delete(id);
+    await this.removeSessions(id);
+  }
+
+  async addSession(stored: StoredSession): Promise<void> {
+    this.#sessions.set(stored.session.id, copy(stored));
+  }
+
+  async loadSession(id: SessionId): Promise<StoredSession | undefined> {
+    return copy(this.#sessions.get(id));
+  }
+
+  async listSessions(user: UserId): Promise<Session[]> {
+    return copy(
+      [...this.#sessions.values()]
+        .map((one) => one.session)
+        .filter((session) => session.user === user),
+    );
+  }
+
+  async touchSession(id: SessionId, lastUsedAt: number, expiresAt: number): Promise<void> {
+    const kept = this.#sessions.get(id);
+    if (kept === undefined) return;
+    this.#sessions.set(id, { ...kept, session: { ...kept.session, lastUsedAt, expiresAt } });
+  }
+
+  async removeSession(id: SessionId): Promise<void> {
+    this.#sessions.delete(id);
+  }
+
+  async removeSessions(user: UserId, keep?: SessionId): Promise<void> {
+    for (const [id, { session }] of this.#sessions) {
+      if (session.user === user && id !== keep) this.#sessions.delete(id);
+    }
+  }
+
+  async addLink(link: StoredLink): Promise<void> {
+    this.#links.set(link.id, copy(link));
+  }
+
+  async loadLink(id: InviteId): Promise<StoredLink | undefined> {
+    return copy(this.#links.get(id));
+  }
+
+  async listLinks(kind: StoredLink['kind']): Promise<StoredLink[]> {
+    return copy([...this.#links.values()].filter((link) => link.kind === kind));
+  }
+
+  async removeLink(id: InviteId): Promise<boolean> {
+    return this.#links.delete(id);
+  }
+
+  async redeemLink(id: InviteId, redeem: Redeem): Promise<'done' | 'gone'> {
+    // In one go, with nothing awaited in between: of two who use a link at once, one does.
+    if (!this.#links.has(id)) return 'gone';
+    if ('addUser' in redeem) {
+      const { user } = redeem.addUser;
+      const taken = [...this.#users.values()].some((one) => one.user.email === user.email);
+      if (taken) throw new EmailTaken(user.email);
+      this.#users.set(user.id, copy(redeem.addUser));
+    } else {
+      const kept = this.#users.get(redeem.setPassword.user);
+      if (kept !== undefined) {
+        this.#users.set(kept.user.id, { ...kept, password: redeem.setPassword.password });
+      }
+    }
+    this.#links.delete(id);
+    return 'done';
+  }
+
+  async addAuditEvent(event: AuditEvent): Promise<void> {
+    this.#audit.push(copy(event));
+  }
+
+  async listAuditEvents(
+    query: PageOf & { readonly action?: string } = { limit: Number.POSITIVE_INFINITY },
+  ): Promise<Paged<AuditEvent>> {
+    const all = this.#audit.filter(
+      (event) => query.action === undefined || event.action === query.action,
+    );
+    return copy(pageOf(all, (event) => event.id, query));
   }
 
   async createActor(
