@@ -1,5 +1,7 @@
 // A model for tests: it says what a test told it to. No provider is called.
 
+import { withoutTypes } from './provider.ts';
+import type { Provider } from './provider.ts';
 import type { ModelAnswer, ModelRunner, ModelStep, ToolCall } from './runner.ts';
 
 const FAKE = { role: 'assistant', provider: 'fake', api: 'fake', model: 'fake-1' } as const;
@@ -19,6 +21,42 @@ export function calls(...toolCalls: ToolCall[]): ModelAnswer {
     message: { ...FAKE, content: toolCalls.map((call) => ({ type: 'tool_call', ...call })) },
     stopReason: 'tool_use',
     toolCalls,
+  };
+}
+
+/** An answer with reasoning before whatever else it has. */
+export function reasoned(reasoning: string, answer: ModelAnswer): ModelAnswer {
+  const content = [{ type: 'reasoning', text: reasoning }, ...answer.message.content];
+  return { ...answer, message: { ...answer.message, content } };
+}
+
+/**
+ * The provider of the models of tests, `fake`. Its model `fake-1` does not tie its reasoning
+ * to what came before it, and `fake-bound` does.
+ */
+export function fakeProvider(runner: ModelRunner): Provider {
+  return {
+    id: 'fake',
+    label: 'Fake',
+    credentials: ['api_key'],
+    models: [
+      { id: 'fake-1', name: 'Fake 1', bindsReasoning: false },
+      { id: 'fake-bound', name: 'Fake Bound', bindsReasoning: true },
+    ],
+    defaultModel: 'fake-1',
+    bindsReasoning: true,
+    parseOptions: (given) => (given ?? {}) as ReturnType<Provider['parseOptions']>,
+    runner: () => runner,
+    read: (message) => ({
+      text: message.content
+        .map((item) => (item['type'] === 'text' ? String(item['text']) : ''))
+        .join(''),
+      reasoning: message.content
+        .filter((item) => item['type'] === 'reasoning')
+        .map((item) => String(item['text'])),
+      toolCalls: [],
+    }),
+    withoutReasoning: (message) => withoutTypes(message, ['reasoning']),
   };
 }
 

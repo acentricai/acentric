@@ -109,6 +109,8 @@ export const fireworksProfile: ResponsesProfile = {
 export const fireworks: Provider = responsesProvider(fireworksProfile, {
   credentials: ['api_key'],
   defaultModel: 'accounts/fireworks/models/kimi-k3p1-pro',
+  // None of the models it serves ties its reasoning to what came before it.
+  bindsReasoning: false,
   parseOptions: (given) => {
     onlyOptions(given, [], 'Fireworks');
     return {};

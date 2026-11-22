@@ -3,6 +3,7 @@
 import type { ProviderFields } from '@acentric/protocol';
 
 import { post } from '../http.ts';
+import { withoutTypes } from '../provider.ts';
 import type { CredentialType, Provider, RunnerSettings } from '../provider.ts';
 import type { ModelRunner } from '../runner.ts';
 import { httpFailure } from './errors.ts';
@@ -39,6 +40,7 @@ export function responsesProvider(
   more: {
     readonly credentials: readonly CredentialType[];
     readonly defaultModel: string;
+    readonly bindsReasoning: boolean;
     parseOptions(given: unknown): ProviderFields;
   },
 ): Provider {
@@ -48,6 +50,8 @@ export function responsesProvider(
     credentials: more.credentials,
     models: profile.models,
     defaultModel: more.defaultModel,
+    bindsReasoning: more.bindsReasoning,
+    withoutReasoning: (message) => withoutTypes(message, ['reasoning']),
     parseOptions: (given) => more.parseOptions(given),
     runner: (settings) => responsesRunner(profile, settings),
     read: (message) => ({

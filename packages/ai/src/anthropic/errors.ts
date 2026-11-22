@@ -32,6 +32,8 @@ function classify(
   if (code === 'enforced_spend_limit_reached') return 'quota_exceeded';
   if (message !== undefined && type === 'invalid_request_error') {
     if (/^prompt is too long/i.test(message)) return 'context_overflow';
+    // What a model whose thinking is tied to what came before it says when that has changed.
+    if (/bound to a different conversation/i.test(message)) return 'stale_reasoning';
     if (
       /reached your specified (workspace )?API usage limits|credit balance is too low/i.test(
         message,

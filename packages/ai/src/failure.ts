@@ -27,6 +27,11 @@ export type FailureKind =
   | 'policy_violation'
   /** There is no such model, or no such thing the call names. */
   | 'not_found'
+  /**
+   * The reasoning in the conversation is tied to instructions, tools or messages that have
+   * changed since. The same call without that reasoning is taken.
+   */
+  | 'stale_reasoning'
   | 'other';
 
 /** The kinds a call may get past by being made again later. */

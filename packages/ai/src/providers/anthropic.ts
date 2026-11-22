@@ -7,7 +7,7 @@ import { LABEL, PROVIDER, buildBody } from '../anthropic/request.ts';
 import { readAnswer } from '../anthropic/response.ts';
 import { assemble } from '../anthropic/stream.ts';
 import { post } from '../http.ts';
-import { onlyOptions, readWebSearch } from '../provider.ts';
+import { onlyOptions, readWebSearch, withoutTypes } from '../provider.ts';
 import type { Provider } from '../provider.ts';
 
 const URL = 'https://api.anthropic.com/v1/messages';
@@ -27,10 +27,14 @@ function cost(
   return { input, output, cacheWrite, cacheWrite1h, cacheRead };
 }
 
+// Each of these keeps its thinking from one turn to the next, and ties it to what came before
+// it: Fable refuses thinking from before a change, and the others may (Anthropic's "Prefix
+// checks on thinking blocks", November 2026).
 const LIMITS = {
   contextWindow: 1_000_000,
   maxOutputTokens: 128_000,
   input: ['text', 'image', 'file'],
+  bindsReasoning: true,
 } as const;
 
 export const ANTHROPIC_MODELS: readonly ModelInfo[] = [
@@ -69,6 +73,8 @@ export const anthropic: Provider = {
   credentials: ['api_key'],
   models: ANTHROPIC_MODELS,
   defaultModel: 'claude-opus-5-5',
+  // A model that is not known here is a newer one, and the newer ones all do.
+  bindsReasoning: true,
 
   parseOptions(given) {
     const asked = onlyOptions(given, ['webSearch'], LABEL);
@@ -96,6 +102,8 @@ export const anthropic: Provider = {
       },
     };
   },
+
+  withoutReasoning: (message) => withoutTypes(message, ['thinking', 'redacted_thinking']),
 
   read: (message) => ({
     text: outputText(message.content),

@@ -25,11 +25,14 @@ const LIMITS = {
   input: ['text', 'image'],
 } as const;
 
+// From GPT-6.2 a model's reasoning is tied to what came before it: OpenAI throws away, without
+// an error, the reasoning from before a change (its "Keep the prefix unchanged", November 2026).
 export const OPENAI_MODELS: readonly ModelInfo[] = [
   {
     id: 'gpt-6.2-astra',
     name: 'GPT-6.2 Astra',
     ...LIMITS,
+    bindsReasoning: true,
     pricing: longContext(
       { input: 8, cacheRead: 0.4, cacheWrite: 10, output: 40 },
       { input: 16, cacheRead: 0.8, cacheWrite: 20, output: 60 },
@@ -39,6 +42,7 @@ export const OPENAI_MODELS: readonly ModelInfo[] = [
     id: 'gpt-6.2-sol',
     name: 'GPT-6.2 Sol',
     ...LIMITS,
+    bindsReasoning: true,
     pricing: longContext(
       { input: 2, cacheRead: 0.1, cacheWrite: 2.5, output: 10 },
       { input: 4, cacheRead: 0.2, cacheWrite: 5, output: 15 },
@@ -48,6 +52,7 @@ export const OPENAI_MODELS: readonly ModelInfo[] = [
     id: 'gpt-6.1-terra',
     name: 'GPT-6.1 Terra',
     ...LIMITS,
+    bindsReasoning: false,
     pricing: longContext(
       { input: 1, cacheRead: 0.05, cacheWrite: 1.25, output: 5 },
       { input: 2, cacheRead: 0.1, cacheWrite: 2.5, output: 7.5 },
@@ -57,6 +62,7 @@ export const OPENAI_MODELS: readonly ModelInfo[] = [
     id: 'gpt-6-luna',
     name: 'GPT-6 Luna',
     ...LIMITS,
+    bindsReasoning: false,
     pricing: longContext(
       { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
       { input: 0.2, cacheRead: 0.02, cacheWrite: 0.25, output: 0.75 },
@@ -145,6 +151,8 @@ export const openAiProfile: ResponsesProfile = {
 export const openai: Provider = responsesProvider(openAiProfile, {
   credentials: ['api_key'],
   defaultModel: 'gpt-6.2-sol',
+  // A model that is not known here is a newer one, and the newer ones all do.
+  bindsReasoning: true,
   parseOptions: parseOptions('OpenAI'),
 });
 
@@ -191,5 +199,6 @@ export const chatGptProfile: ResponsesProfile = {
 export const chatgpt: Provider = responsesProvider(chatGptProfile, {
   credentials: ['access_token'],
   defaultModel: 'gpt-6.2-sol',
+  bindsReasoning: true,
   parseOptions: parseOptions('ChatGPT'),
 });
