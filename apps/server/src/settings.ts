@@ -3,7 +3,8 @@
 //
 //   ACENTRIC_PORT           4000 without it. 0 takes any free port
 //   ACENTRIC_HOST           127.0.0.1 without it: only this machine
-//   ACENTRIC_DATA           the folder its database is in. ./data without it
+//   ACENTRIC_DATA           the folder its database is in, and the images and files of
+//                           conversations. ./data without it
 //   ACENTRIC_PUBLIC_URL     where people reach the server, such as https://engine.example.com:
 //                           what the links it makes start with. Without it, where it listens
 //   ACENTRIC_ADMIN_KEY      an API key that may do everything, of 24 characters or more: what
@@ -33,7 +34,7 @@ import type { Network } from '@acentric/executor';
 export type Settings = {
   readonly port: number;
   readonly host: string;
-  /** The folder the database is in. */
+  /** The folder the database is in, and the blobs. */
   readonly data: string;
   /** Where people reach the server: what the links it makes start with. */
   readonly publicUrl: string | undefined;

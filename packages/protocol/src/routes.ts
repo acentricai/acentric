@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 import { principalSchema } from './auth.ts';
 import type { Permission } from './auth.ts';
+import { blobDigestSchema } from './content.ts';
 import type { ErrorCode } from './errors.ts';
 import {
   accountIdSchema,
@@ -117,6 +118,8 @@ export type Route = {
   readonly errors: readonly ErrorCode[];
   /** For a route whose answer is a stream of server-sent events (see `events.ts`). */
   readonly stream?: true;
+  /** For a route whose answer is the bytes of a file, of the media type the answer says. */
+  readonly bytes?: true;
 };
 
 /** The failures any route can answer with. */
@@ -404,6 +407,17 @@ export const routes = defineRoutes({
     status: 200,
     errors: ['not_found'],
     stream: true,
+  },
+
+  'blobs.get': {
+    method: 'GET',
+    path: '/v1/actors/{actor}/blobs/{digest}',
+    summary: "Reads the bytes of an image or file of an actor's conversation.",
+    auth: onActor('actors:read'),
+    params: z.object({ actor: actorIdSchema, digest: blobDigestSchema }),
+    status: 200,
+    errors: ['not_found'],
+    bytes: true,
   },
 
   // Model accounts and usage

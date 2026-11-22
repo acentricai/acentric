@@ -10,7 +10,7 @@ import type { ModelRunner, Providers } from '@acentric/ai';
 import { Accounts, Audit, Engine, Keys, People, Secrets, accountRunners } from '@acentric/core';
 import type { RunnerSource } from '@acentric/core';
 import { IsolateExecutor } from '@acentric/executor';
-import { SqliteStore } from '@acentric/store';
+import { FileBlobStore, SqliteStore } from '@acentric/store';
 
 import { startServer } from './serve.ts';
 import type { Server } from './serve.ts';
@@ -68,6 +68,8 @@ export async function start(
     executor,
     providers,
     secrets,
+    // The bytes of images and files, in a folder beside the database.
+    blobs: new FileBlobStore(join(settings.data, 'blobs')),
     runner: more.runner ?? accountRunners(accounts),
   });
   const people = new People({
@@ -86,6 +88,8 @@ export async function start(
   try {
     const firstKey = await keys.first();
     const setupToken = await people.setupLink();
+    // Before anything is kept: what a process that died left in the blob store is removed.
+    await engine.blobs.sweep();
     const recovered = await engine.recover();
     const server = await startServer({
       engine,

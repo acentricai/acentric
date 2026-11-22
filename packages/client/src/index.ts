@@ -94,9 +94,19 @@ type Given<I extends RouteId> =
 /** What route `I` answers with: nothing, for a route that answers with none. */
 export type Answer<I extends RouteId> = Has<I, 'response'> extends true ? ResponseOf<I> : undefined;
 
+/** The routes that answer with JSON, or with nothing: those `call` calls. */
+export type CallableRouteId = {
+  [I in RouteId]: (typeof routes)[I] extends { readonly stream: true } | { readonly bytes: true }
+    ? never
+    : I;
+}[RouteId];
+
 export type Client = {
-  /** Calls a route. Rejects with an `ApiError` when the engine refuses or fails. */
-  call<I extends RouteId>(id: I, ...given: Given<I>): Promise<Answer<I>>;
+  /**
+   * Calls a route. Rejects with an `ApiError` when the engine refuses or fails. An actor's
+   * events are followed with `events`, and a blob is read with `blob`.
+   */
+  call<I extends CallableRouteId>(id: I, ...given: Given<I>): Promise<Answer<I>>;
   /**
    * Follows an actor: each message of its conversation as it is stored, and where it stands
    * when that changes. With `after`, every message after that place comes first. It goes on
@@ -106,6 +116,15 @@ export type Client = {
     actor: ActorId,
     options?: { readonly after?: number; readonly signal?: AbortSignal },
   ): AsyncIterable<ActorEvent>;
+  /**
+   * Reads an image or file of an actor's conversation: the bytes a message names as a blob,
+   * and the media type they were given as.
+   */
+  blob(
+    actor: ActorId,
+    digest: string,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<{ readonly bytes: Uint8Array; readonly mediaType: string }>;
 };
 
 type Loose = {
@@ -152,6 +171,21 @@ export function createClient(options: ClientOptions): Client {
       const response = await request(route, (given[0] ?? {}) as Loose, 'application/json');
       if (response.status === 204) return undefined as never;
       return (await response.json()) as never;
+    },
+
+    async blob(actor, digest, more = {}) {
+      const response = await request(
+        routes['blobs.get'],
+        {
+          params: { actor, digest },
+          ...(more.signal === undefined ? {} : { signal: more.signal }),
+        },
+        '*/*',
+      );
+      return {
+        bytes: new Uint8Array(await response.arrayBuffer()),
+        mediaType: response.headers.get('content-type') ?? 'application/octet-stream',
+      };
     },
 
     async *events(actor, more = {}) {
