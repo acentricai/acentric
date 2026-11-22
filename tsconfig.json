@@ -32,6 +32,9 @@
       "path": "packages/executor"
     },
     {
+      "path": "packages/executor/test"
+    },
+    {
       "path": "packages/sandbox"
     },
     {

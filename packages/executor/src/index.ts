@@ -1,6 +1,7 @@
-// Runs an agent's code outside the server's process, so that what the code does wrong ends with
-// its own process.
-//
-// Nothing is here yet.
+// Runs an agent's code. There is one executor here so far, which runs it in the engine's own
+// process, for a developer's own agent on their own computer. The one that keeps code apart
+// from the engine is to come.
 
-export {};
+export { InProcessExecutor } from './in-process.ts';
+export type { Bundle, SecretSource } from './in-process.ts';
+export { BundleError, UnsupportedProtocol } from './errors.ts';

@@ -28,6 +28,14 @@
     "provenance": true
   },
   "devDependencies": {
-    "@types/node": "catalog:"
+    "@acentric/agent": "workspace:*",
+    "@acentric/ai": "workspace:*",
+    "@types/node": "catalog:",
+    "esbuild": "catalog:",
+    "zod": "catalog:"
+  },
+  "dependencies": {
+    "@acentric/core": "workspace:*",
+    "@acentric/protocol": "workspace:*"
   }
 }

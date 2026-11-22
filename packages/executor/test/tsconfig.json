@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "allowImportingTsExtensions": true,
+    "tsBuildInfoFile": "tsconfig.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["."],
+  "references": [
+    { "path": ".." },
+    { "path": "../../agent" },
+    { "path": "../../ai" },
+    { "path": "../../core" }
+  ]
+}
