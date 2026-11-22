@@ -3,15 +3,18 @@
 //
 // ENGINE_URL and ENGINE_API_KEY, when set, are used in place of the key `login` kept.
 
+import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 import type { ParseArgsOptionsConfig } from 'node:util';
 
 import { addAccount, listAccounts, removeAccount } from './accounts.ts';
 import { actorLogs, createActor, listActors, sendToActor } from './actors.ts';
 import { add, deploy, init, login, logout, whoami } from './commands.ts';
+import { readCredentials } from './credentials.ts';
 import type { Io } from './engine.ts';
 import { Fail } from './fail.ts';
 import { listSecrets, removeSecret, setSecret } from './secrets.ts';
+import { installedFile, offerUpdate, update, version } from './update.ts';
 
 const USAGE = `acentric: sign in to an engine, start a project of agents, deploy them, and run them
 
@@ -42,6 +45,9 @@ const USAGE = `acentric: sign in to an engine, start a project of agents, deploy
   acentric actors send <actor> --type <type> --payload <json> [--follow]
                                           send an actor a message, or another input
   acentric actors logs <actor> [--follow] an actor's conversation, and as it grows
+
+  acentric version                        this command's version, and the engine's
+  acentric update                         take the version the engine hands out
 
 An actor is named by its ID, or as <agent>/<name> when it has a name.`;
 
@@ -83,6 +89,26 @@ async function secret(prompt: string): Promise<string> {
     };
     input.on('data', onData);
   });
+}
+
+/** Asks a person yes or no. Nothing but a no is a no. */
+async function confirm(question: string): Promise<boolean> {
+  const lines = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const answer = (await lines.question(question)).trim().toLowerCase();
+    return answer !== 'n' && answer !== 'no';
+  } finally {
+    lines.close();
+  }
+}
+
+/** The engine a command is of: the one signed in to, or the one it was installed from. */
+function engineOf(io: Io): string | undefined {
+  const installedFrom = io.env['ACENTRIC_ENGINE'];
+  return (
+    readCredentials(io.env)?.engine ??
+    (installedFrom === undefined || installedFrom === '' ? undefined : installedFrom)
+  );
 }
 
 type Options = ParseArgsOptionsConfig;
@@ -262,6 +288,25 @@ async function main(argv: readonly string[], signal: AbortSignal): Promise<void>
       throw new Fail(`actors has no ${sub}`, 'see `acentric help`');
     }
 
+    case 'version':
+    case '--version':
+      return version(io, { file: installedFile(), engine: engineOf(io) });
+    case 'update': {
+      const file = installedFile();
+      const engine = engineOf(io);
+      if (file === undefined) {
+        throw new Fail(
+          'this command was not installed from an engine, and is not updated from one',
+          'install it with `curl -fsSL <engine>/install-cli.sh | sh`',
+        );
+      }
+      if (engine === undefined) {
+        throw new Fail('say which engine: sign in with `acentric login <engine address>`');
+      }
+      await update(io, { file, engine });
+      return;
+    }
+
     case undefined:
     case 'help':
     case '--help':
@@ -279,6 +324,7 @@ process.once('SIGINT', () => {
   stopping.abort();
 });
 
+const [asked] = process.argv.slice(2);
 try {
   await main(process.argv.slice(2), stopping.signal);
 } catch (error) {
@@ -294,4 +340,29 @@ try {
     console.error(error);
   }
   process.exitCode = 1;
+}
+
+// After what was asked for: the engine's version of the command is offered when it has
+// another, to a person who is there to answer. Never after the commands that are about it.
+if (
+  asked !== 'update' &&
+  asked !== 'version' &&
+  asked !== '--version' &&
+  !stopping.signal.aborted
+) {
+  try {
+    await offerUpdate(
+      {
+        env: process.env,
+        out: (line) => {
+          console.error(line);
+        },
+        ...(process.stdin.isTTY && process.stderr.isTTY ? { confirm } : {}),
+      },
+      installedFile(),
+    );
+  } catch (error) {
+    // What was asked for is done, or has failed for its own reasons: this does not change it.
+    console.error(`acentric: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
