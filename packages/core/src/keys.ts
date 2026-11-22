@@ -13,7 +13,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
-import { HOLDABLE, PERMISSIONS, makeId } from '@acentric/protocol';
+import { HOLDABLE, PERMISSIONS, ROLE_PERMISSIONS, makeId } from '@acentric/protocol';
 import type {
   ActorId,
   AgentId,
@@ -22,6 +22,7 @@ import type {
   Permission,
   Principal,
   PrincipalRef,
+  Role,
   Scope,
   UserId,
 } from '@acentric/protocol';
@@ -127,8 +128,21 @@ export function reaches(
   return target.actor !== undefined && scope.actor === target.actor;
 }
 
+/** Keys and every key they made, however far down: what is revoked with them. */
+export function descendantsOf(all: readonly StoredKey[], roots: readonly KeyId[]): KeyId[] {
+  const going = new Set<KeyId>(roots);
+  // Oldest first: a key is always older than what it made.
+  const oldestFirst = all.toSorted((a, b) => (a.key.id < b.key.id ? -1 : 1));
+  for (const stored of oldestFirst) {
+    if (stored.parent !== null && going.has(stored.parent)) going.add(stored.key.id);
+  }
+  return [...going];
+}
+
 export class Keys {
   readonly #store: Store;
+  readonly #holderOf:
+    ((user: UserId) => Promise<{ role: Role; disabled: boolean } | undefined>) | undefined;
   readonly #settingsHash: Buffer | undefined;
   readonly #agentOf: (actor: ActorId) => Promise<AgentId | undefined>;
   readonly #clock: () => number;
@@ -145,6 +159,12 @@ export class Keys {
     readonly settingsKey?: string;
     /** The agent of an actor, or undefined when there is no such actor. */
     readonly agentOf: (actor: ActorId) => Promise<AgentId | undefined>;
+    /**
+     * The role of the person a key belongs to, and whether they can still sign in. A person's
+     * key does no more than the person may now, and stops when they can no longer sign in.
+     * Without it, a key is held to nothing but itself.
+     */
+    readonly holderOf?: (user: UserId) => Promise<{ role: Role; disabled: boolean } | undefined>;
     readonly clock?: () => number;
     readonly entropy?: () => Uint8Array;
   }) {
@@ -157,6 +177,7 @@ export class Keys {
     }
     this.#store = options.store;
     this.#agentOf = options.agentOf;
+    this.#holderOf = options.holderOf;
     this.#clock = options.clock ?? Date.now;
     this.#ids = new IdSource(options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10))));
   }
@@ -210,6 +231,13 @@ export class Keys {
     const { key } = stored;
     const now = this.#clock();
     if (key.expiresAt !== null && key.expiresAt <= now) throw refused;
+    let { permissions } = key;
+    if (key.owner !== null && this.#holderOf !== undefined) {
+      const holder = await this.#holderOf(key.owner);
+      if (holder === undefined || holder.disabled) throw refused;
+      // What its person may no longer do, it may no longer do.
+      permissions = permissions.filter((one) => ROLE_PERMISSIONS[holder.role].includes(one));
+    }
     const touched = this.#touched.get(key.id) ?? key.lastUsedAt;
     if (touched === null || now - touched >= USED_EVERY_MS) {
       this.#touched.set(key.id, now);
@@ -221,7 +249,7 @@ export class Keys {
       key: key.id,
       owner: key.owner,
       scope: key.scope,
-      permissions: key.permissions,
+      permissions,
       expiresAt: key.expiresAt,
     };
   }
@@ -292,13 +320,8 @@ export class Keys {
   /** Revokes a key and every key it made, however far down. For one that could have made it. */
   async revoke(by: Principal, id: KeyId): Promise<void> {
     await this.#seen(by, id);
-    const all = await this.#store.listKeys();
-    const going = new Set<KeyId>([id]);
-    // Oldest first: a key is always older than what it made.
-    for (const stored of all) {
-      if (stored.parent !== null && going.has(stored.parent)) going.add(stored.key.id);
-    }
-    await this.#store.removeKeys([...going]);
+    const going = descendantsOf(await this.#store.listKeys(), [id]);
+    await this.#store.removeKeys(going);
     for (const gone of going) this.#touched.delete(gone);
   }
 

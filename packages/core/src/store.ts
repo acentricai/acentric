@@ -20,8 +20,16 @@ import type {
   Input,
   InputId,
   Json,
+  AuditEvent,
+  InviteId,
   Key,
   KeyId,
+  PrincipalRef,
+  Role,
+  Session,
+  SessionId,
+  User,
+  UserId,
 } from '@acentric/protocol';
 
 import type { ActorRecord, Change } from './state.ts';
@@ -78,6 +86,53 @@ export type ActorsQuery = PageOf & {
   readonly name?: string;
   readonly externalId?: string;
 };
+
+/** The email is another person's. */
+export class EmailTaken extends Error {
+  override readonly name = 'EmailTaken';
+  readonly code: ErrorCode = 'conflict';
+  constructor(email: string) {
+    super(`A person signs in as ${email} already`);
+  }
+}
+
+/** A person as the store keeps them: with what tells their password is the one, never it. */
+export type StoredUser = {
+  readonly user: User;
+  /** The hash of their password, with what it was made by. */
+  readonly password: string;
+};
+
+/** A session as the store keeps it: never its token, only what tells it is the one. */
+export type StoredSession = {
+  readonly session: Session;
+  /** The SHA-256 of the token's secret part, in hex. */
+  readonly hash: string;
+};
+
+/**
+ * A link that is used once: the one that makes an engine's owner, an invite, or one that sets
+ * a password again. The link itself is not kept, only what tells it is the one.
+ */
+export type StoredLink = {
+  readonly id: InviteId;
+  readonly kind: 'setup' | 'invite' | 'reset';
+  readonly hash: string;
+  /** For a setup or an invite: the role of the account it makes. */
+  readonly role: Role | null;
+  /** For a reset: whose password it sets. */
+  readonly user: UserId | null;
+  /** For an invite: who it was made for, as its maker noted. */
+  readonly note: string | null;
+  readonly createdBy: PrincipalRef;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+};
+
+/** What a link does when it is used. */
+export type Redeem =
+  | { readonly addUser: StoredUser }
+  | { readonly setPassword: { readonly user: UserId; readonly password: string } };
 
 /** A deployment with the code it runs. */
 export type StoredDeployment = { readonly deployment: Deployment; readonly code: string };
@@ -149,6 +204,49 @@ export interface Store {
   deleteSecret(agent: AgentId, name: string): Promise<boolean>;
   /** Every secret there is, for sealing them again with another key. */
   allSecrets(): Promise<SealedSecret[]>;
+
+  // People
+
+  /** Keeps a new person. Rejects with `EmailTaken` when their email is another's. */
+  addUser(user: StoredUser): Promise<void>;
+  loadUser(id: UserId): Promise<StoredUser | undefined>;
+  /** The person who signs in as this email. */
+  findUser(email: string): Promise<StoredUser | undefined>;
+  /** Everyone, in the order they were made. */
+  listUsers(): Promise<User[]>;
+  /** Keeps a person as they now are, in place of how they were. Nothing when they are gone. */
+  saveUser(user: StoredUser): Promise<void>;
+  /** Removes a person and their sessions. */
+  removeUser(id: UserId): Promise<void>;
+
+  addSession(session: StoredSession): Promise<void>;
+  loadSession(id: SessionId): Promise<StoredSession | undefined>;
+  /** A person's sessions, in the order they were made. */
+  listSessions(user: UserId): Promise<Session[]>;
+  /** Notes when a session was last used, and until when it now lasts. */
+  touchSession(id: SessionId, lastUsedAt: number, expiresAt: number): Promise<void>;
+  removeSession(id: SessionId): Promise<void>;
+  /** Removes a person's sessions, but for the one that is kept. */
+  removeSessions(user: UserId, keep?: SessionId): Promise<void>;
+
+  addLink(link: StoredLink): Promise<void>;
+  loadLink(id: InviteId): Promise<StoredLink | undefined>;
+  /** The links of a kind, in the order they were made. */
+  listLinks(kind: StoredLink['kind']): Promise<StoredLink[]>;
+  /** False when there was none. */
+  removeLink(id: InviteId): Promise<boolean>;
+  /**
+   * Uses a link: does what it is for and removes it, both or neither. `gone` when the link is
+   * not there any more, so that of two who use it at once, one does. Rejects with
+   * `EmailTaken` when it was to make a person whose email is another's: the link stays.
+   */
+  redeemLink(id: InviteId, redeem: Redeem): Promise<'done' | 'gone'>;
+
+  // The audit log
+
+  addAuditEvent(event: AuditEvent): Promise<void>;
+  /** What was done, newest first: all of it, or what was done of one kind. */
+  listAuditEvents(query?: PageOf & { readonly action?: string }): Promise<Paged<AuditEvent>>;
 
   // Actors
 

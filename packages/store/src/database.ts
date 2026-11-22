@@ -10,9 +10,13 @@ import type {
   Change,
   PageOf,
   Paged,
+  Redeem,
   SealedSecret,
   StoredDeployment,
   StoredKey,
+  StoredLink,
+  StoredSession,
+  StoredUser,
   Turn,
 } from '@acentric/core';
 import type {
@@ -23,16 +27,22 @@ import type {
   ConversationEntry,
   Deployment,
   DeploymentId,
+  AuditEvent,
   Input,
   InputId,
+  InviteId,
   Json,
   Key,
   KeyId,
+  Session,
+  SessionId,
+  User,
+  UserId,
 } from '@acentric/protocol';
 
 /** What the store refuses, in a form that crosses to the engine's thread. */
 export class Refused extends Error {
-  readonly kind: 'StaleEpoch' | 'NameTaken' | 'OutOfOrder';
+  readonly kind: 'StaleEpoch' | 'NameTaken' | 'OutOfOrder' | 'EmailTaken';
   readonly args: readonly (string | number)[];
   constructor(kind: Refused['kind'], args: readonly (string | number)[]) {
     super(kind);
@@ -71,6 +81,12 @@ function keyOf(row: KeyRow): StoredKey {
     hash: row.hash,
     parent: row.parent as KeyId | null,
   };
+}
+
+type UserRow = { user: string; password: string };
+
+function userOf(row: UserRow): StoredUser {
+  return { user: JSON.parse(row.user) as User, password: row.password };
 }
 
 type SecretRow = { agent_id: string; name: string; sealed: string; updated_at: number };
@@ -177,6 +193,17 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'addKey',
   'removeKeys',
   'touchKey',
+  'addUser',
+  'saveUser',
+  'removeUser',
+  'addSession',
+  'touchSession',
+  'removeSession',
+  'removeSessions',
+  'addLink',
+  'removeLink',
+  'redeemLink',
+  'addAuditEvent',
   'setSecret',
   'deleteSecret',
   'createActor',
@@ -431,6 +458,169 @@ export function operations(db: DatabaseSync) {
 
     allSecrets(): SealedSecret[] {
       return all<SecretRow>('SELECT * FROM secrets ORDER BY agent_id, name').map(secretOf);
+    },
+
+    addUser(stored: StoredUser): void {
+      const { user } = stored;
+      if (get('SELECT 1 FROM users WHERE email = ?', user.email) !== undefined) {
+        throw new Refused('EmailTaken', [user.email]);
+      }
+      run(
+        'INSERT INTO users (id, email, user, password) VALUES (?, ?, ?, ?)',
+        user.id,
+        user.email,
+        JSON.stringify(user),
+        stored.password,
+      );
+    },
+
+    loadUser(id: UserId): StoredUser | undefined {
+      const row = get<UserRow>('SELECT user, password FROM users WHERE id = ?', id);
+      return row === undefined ? undefined : userOf(row);
+    },
+
+    findUser(email: string): StoredUser | undefined {
+      const row = get<UserRow>('SELECT user, password FROM users WHERE email = ?', email);
+      return row === undefined ? undefined : userOf(row);
+    },
+
+    listUsers(): User[] {
+      return all<UserRow>('SELECT user, password FROM users ORDER BY id').map(
+        (row) => userOf(row).user,
+      );
+    },
+
+    saveUser(stored: StoredUser): void {
+      run(
+        'UPDATE users SET email = ?, user = ?, password = ? WHERE id = ?',
+        stored.user.email,
+        JSON.stringify(stored.user),
+        stored.password,
+        stored.user.id,
+      );
+    },
+
+    removeUser(id: UserId): void {
+      run('DELETE FROM users WHERE id = ?', id);
+      run('DELETE FROM sessions WHERE user_id = ?', id);
+    },
+
+    addSession(stored: StoredSession): void {
+      run(
+        'INSERT INTO sessions (id, user_id, session, hash) VALUES (?, ?, ?, ?)',
+        stored.session.id,
+        stored.session.user,
+        JSON.stringify(stored.session),
+        stored.hash,
+      );
+    },
+
+    loadSession(id: SessionId): StoredSession | undefined {
+      const row = get<{ session: string; hash: string }>(
+        'SELECT session, hash FROM sessions WHERE id = ?',
+        id,
+      );
+      if (row === undefined) return undefined;
+      return { session: JSON.parse(row.session) as Session, hash: row.hash };
+    },
+
+    listSessions(user: UserId): Session[] {
+      return all<{ session: string }>(
+        'SELECT session FROM sessions WHERE user_id = ? ORDER BY id',
+        user,
+      ).map((row) => JSON.parse(row.session) as Session);
+    },
+
+    touchSession(id: SessionId, lastUsedAt: number, expiresAt: number): void {
+      run(
+        `UPDATE sessions SET session = json_set(session, '$.lastUsedAt', ?, '$.expiresAt', ?)
+         WHERE id = ?`,
+        lastUsedAt,
+        expiresAt,
+        id,
+      );
+    },
+
+    removeSession(id: SessionId): void {
+      run('DELETE FROM sessions WHERE id = ?', id);
+    },
+
+    removeSessions(user: UserId, keep?: SessionId): void {
+      run('DELETE FROM sessions WHERE user_id = ? AND id IS NOT ?', user, keep ?? null);
+    },
+
+    addLink(link: StoredLink): void {
+      run(
+        'INSERT INTO links (id, kind, link) VALUES (?, ?, ?)',
+        link.id,
+        link.kind,
+        JSON.stringify(link),
+      );
+    },
+
+    loadLink(id: InviteId): StoredLink | undefined {
+      const row = get<{ link: string }>('SELECT link FROM links WHERE id = ?', id);
+      return row === undefined ? undefined : (JSON.parse(row.link) as StoredLink);
+    },
+
+    listLinks(kind: StoredLink['kind']): StoredLink[] {
+      return all<{ link: string }>('SELECT link FROM links WHERE kind = ? ORDER BY id', kind).map(
+        (row) => JSON.parse(row.link) as StoredLink,
+      );
+    },
+
+    removeLink(id: InviteId): boolean {
+      return run('DELETE FROM links WHERE id = ?', id) > 0;
+    },
+
+    redeemLink(id: InviteId, redeem: Redeem): 'done' | 'gone' {
+      if (get('SELECT 1 FROM links WHERE id = ?', id) === undefined) return 'gone';
+      if ('addUser' in redeem) {
+        const { user } = redeem.addUser;
+        // Refused before anything is written, so that the link stays for another try.
+        if (get('SELECT 1 FROM users WHERE email = ?', user.email) !== undefined) {
+          throw new Refused('EmailTaken', [user.email]);
+        }
+        run(
+          'INSERT INTO users (id, email, user, password) VALUES (?, ?, ?, ?)',
+          user.id,
+          user.email,
+          JSON.stringify(user),
+          redeem.addUser.password,
+        );
+      } else {
+        const { user, password } = redeem.setPassword;
+        run('UPDATE users SET password = ? WHERE id = ?', password, user);
+      }
+      run('DELETE FROM links WHERE id = ?', id);
+      return 'done';
+    },
+
+    addAuditEvent(event: AuditEvent): void {
+      run(
+        'INSERT INTO audit_events (id, action, event) VALUES (?, ?, ?)',
+        event.id,
+        event.action,
+        JSON.stringify(event),
+      );
+    },
+
+    listAuditEvents(
+      query: PageOf & { action?: string } = { limit: Number.POSITIVE_INFINITY },
+    ): Paged<AuditEvent> {
+      const of = query.action === undefined ? '' : ' AND action = ?';
+      const rows = all<{ id: string; event: string }>(
+        `SELECT id, event FROM audit_events WHERE id < ?${of} ORDER BY id DESC LIMIT ?`,
+        query.cursor ?? '~',
+        ...(query.action === undefined ? [] : [query.action]),
+        onePast(query),
+      );
+      return paged(
+        rows,
+        limitOf(query),
+        (row) => JSON.parse(row.event) as AuditEvent,
+        (row) => row.id,
+      );
     },
 
     createActor(

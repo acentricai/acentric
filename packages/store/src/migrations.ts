@@ -54,6 +54,46 @@ const MIGRATIONS: readonly string[] = [
     parent TEXT
   ) STRICT;
 
+  -- A person. Their password is not here: only what tells a password that is given is theirs.
+  CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    -- What they sign in as.
+    email TEXT NOT NULL UNIQUE,
+    -- JSON: the person as the API shows them.
+    user TEXT NOT NULL,
+    password TEXT NOT NULL
+  ) STRICT;
+
+  -- A person signed in somewhere.
+  CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    -- JSON: the session as the API shows it.
+    session TEXT NOT NULL,
+    -- The SHA-256 of its token's secret part, in hex.
+    hash TEXT NOT NULL
+  ) STRICT;
+
+  CREATE INDEX sessions_user ON sessions (user_id, id);
+
+  -- A link that is used once: a setup, an invite, or a reset of a password.
+  CREATE TABLE links (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    -- JSON: the link, without what it ends in.
+    link TEXT NOT NULL
+  ) STRICT;
+
+  -- What was done, and by whom. A row is never changed.
+  CREATE TABLE audit_events (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    -- JSON: the event.
+    event TEXT NOT NULL
+  ) STRICT;
+
+  CREATE INDEX audit_events_action ON audit_events (action, id);
+
   -- An actor, and where its turn stands.
   CREATE TABLE actors (
     id TEXT PRIMARY KEY,
