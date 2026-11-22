@@ -32,6 +32,18 @@ const LEVELS = { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max
 /** What is kept of what Anthropic has read, to be read again at a lower price. */
 const CACHED = { cache_control: { type: 'ephemeral' } };
 
+/** The beta of a reasoning effort set by a system message, from that message on. */
+export const MESSAGE_EFFORT_BETA = 'mid-conversation-output-config-2026-07-01';
+
+/** The betas a request has to name for what is in it, for the `anthropic-beta` header. */
+export function betasOf(body: JsonObject): string[] {
+  const messages = body['messages'] as readonly JsonObject[];
+  const effortInMessages = messages.some(
+    (message) => message['role'] === 'system' && message['output_config'] !== undefined,
+  );
+  return effortInMessages ? [MESSAGE_EFFORT_BETA] : [];
+}
+
 function refuse(message: string): never {
   throw new ModelFailure(message, 'invalid_request', { provider: PROVIDER });
 }

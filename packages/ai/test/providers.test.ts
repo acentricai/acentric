@@ -473,6 +473,53 @@ describe('reasoning from before a change', () => {
   });
 });
 
+describe('a reasoning level changed in the middle of a conversation', () => {
+  it('is a message of the provider’s own, where it has one, and nothing where it has not', () => {
+    expect(providers.get('anthropic').reasoningChange?.('claude-opus-5-5', 'high')).toEqual({
+      role: 'system',
+      content: [],
+      providerOptions: { output_config: { effort: 'high' } },
+    });
+    for (const id of ['openai', 'chatgpt']) {
+      expect(providers.get(id).reasoningChange?.('gpt-6.2-sol', 'low'), id).toEqual({
+        role: 'native',
+        provider: id,
+        api: 'openai-responses',
+        content: [{ type: 'configuration_update', reasoning: { effort: 'low' } }],
+      });
+    }
+    // It takes a level only with a call.
+    expect(providers.get('fireworks').reasoningChange).toBeUndefined();
+  });
+
+  it('is sent where it is in the conversation, and the call’s own level stays', async () => {
+    const hello = step().messages;
+    const change = (id: string) =>
+      providers.get(id).reasoningChange?.('a-model', 'high') as Message;
+
+    const toOpenAi = await sentBy('openai', step({ messages: [...hello, change('openai')] }));
+    expect((toOpenAi.body['input'] as unknown[]).at(-1)).toEqual({
+      type: 'configuration_update',
+      reasoning: { effort: 'high' },
+    });
+    expect(toOpenAi.body['reasoning']).toMatchObject({ effort: 'medium' });
+
+    const toAnthropic = await sentBy(
+      'anthropic',
+      step({ messages: [...hello, change('anthropic')] }),
+    );
+    expect((toAnthropic.body['messages'] as unknown[]).at(-1)).toEqual({
+      role: 'system',
+      content: [],
+      output_config: { effort: 'high' },
+    });
+    expect(toAnthropic.body['output_config']).toEqual({ effort: 'medium' });
+    // Anthropic takes it as a beta, which a request that has one names, and no other does.
+    expect(toAnthropic.headers['anthropic-beta']).toBe('mid-conversation-output-config-2026-07-01');
+    expect((await sentBy('anthropic', step())).headers['anthropic-beta']).toBeUndefined();
+  });
+});
+
 describe('a call that fails', () => {
   it('for too many calls may pass later, after as long as the provider says', async () => {
     const openai = await failureOf(

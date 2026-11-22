@@ -9,7 +9,7 @@ import type { ModelRunner } from '../runner.ts';
 import { httpFailure } from './errors.ts';
 import type { ResponsesProfile } from './profile.ts';
 import { outputText, reasoningSummary, toolCalls } from './read.ts';
-import { buildBody } from './request.ts';
+import { RESPONSES_API, buildBody } from './request.ts';
 import { readAnswer } from './response.ts';
 import { assemble } from './stream.ts';
 
@@ -44,6 +44,7 @@ export function responsesProvider(
     parseOptions(given: unknown): ProviderFields;
   },
 ): Provider {
+  const change = profile.reasoningChange?.bind(profile);
   return {
     id: profile.id,
     label: profile.label,
@@ -52,6 +53,16 @@ export function responsesProvider(
     defaultModel: more.defaultModel,
     bindsReasoning: more.bindsReasoning,
     withoutReasoning: (message) => withoutTypes(message, ['reasoning']),
+    ...(change === undefined
+      ? {}
+      : {
+          reasoningChange: (model, reasoning) => ({
+            role: 'native',
+            provider: profile.id,
+            api: RESPONSES_API,
+            content: [change(model, reasoning)],
+          }),
+        }),
     parseOptions: (given) => more.parseOptions(given),
     runner: (settings) => responsesRunner(profile, settings),
     read: (message) => ({

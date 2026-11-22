@@ -99,6 +99,7 @@ type ActorRow = {
   configuration_given: string | null;
   sent: string | null;
   reasoning_from: number;
+  reasoning_sent: string | null;
   status: string;
   last_turn: string | null;
   turn: string;
@@ -149,6 +150,7 @@ function recordOf(row: ActorRow): ActorRecord {
       row.configuration_given === null ? null : (JSON.parse(row.configuration_given) as Json),
     sent: row.sent,
     reasoningFrom: row.reasoning_from,
+    reasoningSent: row.reasoning_sent as ActorRecord['reasoningSent'],
   };
 }
 
@@ -479,6 +481,7 @@ export function operations(db: DatabaseSync) {
           configurationGiven,
           sent: null,
           reasoningFrom: 1,
+          reasoningSent: null,
         },
         created: true,
       };
@@ -542,6 +545,7 @@ export function operations(db: DatabaseSync) {
           more.push(['deployment_id', set.deployment.id]);
           more.push(['deployment_version', set.deployment.version]);
         }
+        if (set.reasoningSent !== undefined) more.push(['reasoning_sent', set.reasoningSent]);
         if (set.pinned !== undefined) more.push(['pinned', set.pinned ? 1 : 0]);
         if (set.behind !== undefined) more.push(['behind', json(set.behind)]);
       }

@@ -85,6 +85,15 @@ export type Host = {
   bindsReasoning(actor: Actor, definition: AgentDefinition): boolean;
   /** An answer of the definition's provider, without its reasoning. */
   withoutReasoning(definition: AgentDefinition, message: AssistantMessage): AssistantMessage;
+  /**
+   * The message that changes the reasoning level of the definition's provider from where it
+   * is in a conversation, or undefined for a provider that takes a level only with a call.
+   */
+  reasoningChange(
+    definition: AgentDefinition,
+    model: string,
+    reasoning: Reasoning,
+  ): Message | undefined;
   /** Whether the engine is shutting down: nothing new is begun. */
   closing(): boolean;
   report(error: unknown): void;
@@ -290,7 +299,9 @@ export class ActorDriver {
     if (actor.status === 'archived') return Promise.reject(new ActorArchived(actor.id));
     if (turn.phase !== 'idle') return Promise.reject(new ActorBusy(actor.id));
     const update = async () => {
-      await this.#apply({ type: 'update', set: await this.#changed(changes) });
+      const set = await this.#changed(changes);
+      const said = await this.#levelChange(set);
+      await this.#apply({ type: 'update', set: { ...set, ...said?.set }, ...said?.event });
     };
     return this.#command('update', update, true);
   }
@@ -419,6 +430,36 @@ export class ActorDriver {
       configuration: fit.configuration,
       configurationGiven: fit.given,
       behind: null,
+    };
+  }
+
+  /**
+   * For a change of the actor's reasoning level, where its provider can change the level from
+   * a place in the conversation on: the message that does, for the conversation's end, and the
+   * level its calls go on being sent with, which is the one they were sent with so far. So
+   * the calls stay as its provider has read them, and what the provider keeps stays good.
+   *
+   * Undefined when there is nothing to say: the level does not change, the provider takes it
+   * only with a call, or its model has not answered yet and there is nothing kept to lose.
+   */
+  async #levelChange(set: ActorPatch): Promise<
+    | {
+        readonly set: ActorPatch;
+        readonly event: { readonly append: readonly Message[] };
+      }
+    | undefined
+  > {
+    const { actor, reasoningSent, sent } = this.record;
+    const level = set.reasoning;
+    if (level === undefined || level === actor.reasoning || sent === null) return undefined;
+    const deployment = set.deployment ?? actor.deployment;
+    const definition = await this.#host.definition(deployment.id);
+    const model = set.modelId ?? actor.modelId;
+    const message = this.#host.reasoningChange(definition, model, level);
+    if (message === undefined) return undefined;
+    return {
+      set: { reasoningSent: reasoningSent ?? actor.reasoning },
+      event: { append: [message] },
     };
   }
 
@@ -705,7 +746,8 @@ export class ActorDriver {
     }
     const step: ModelStep = {
       model: actor.modelId,
-      reasoning: actor.reasoning,
+      // Where its level was changed in its conversation, the call's own stays what it was.
+      reasoning: this.record.reasoningSent ?? actor.reasoning,
       instructions: definition.instructions,
       tools: definition.tools.map((tool) => ({
         type: 'function',

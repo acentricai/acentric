@@ -64,6 +64,12 @@ export type ActorRecord = {
    * when all of it is sent. It only ever moves on: reasoning that was left out stays out.
    */
   readonly reasoningFrom: number;
+  /**
+   * The reasoning level its calls are sent with, where that is not the level it is at: its
+   * level was changed by a message in its conversation, so that the call's own stays what the
+   * conversation started with. Null when its calls are sent with its own level.
+   */
+  readonly reasoningSent: Reasoning | null;
 };
 
 /** What of an actor a step changes besides its turn. A field that is absent stays as it is. */
@@ -73,6 +79,7 @@ export type ActorPatch = {
   readonly reasoning?: Reasoning;
   readonly configuration?: Json | null;
   readonly configurationGiven?: Json | null;
+  readonly reasoningSent?: Reasoning | null;
   readonly deployment?: DeploymentRef;
   readonly pinned?: boolean;
   readonly behind?: Actor['behind'];
@@ -106,7 +113,8 @@ export type Change = {
 /** An actor with `patch` applied. */
 export function patched(actor: Actor, patch: ActorPatch | null): Actor {
   if (patch === null) return actor;
-  const { configurationGiven: _given, ...fields } = patch;
+  // Kept beside the actor, not in it.
+  const { configurationGiven: _given, reasoningSent: _sent, ...fields } = patch;
   return { ...actor, ...fields };
 }
 
@@ -131,6 +139,8 @@ export function applyChange(
       change.set?.configurationGiven === undefined
         ? record.configurationGiven
         : change.set.configurationGiven,
+    reasoningSent:
+      change.set?.reasoningSent === undefined ? record.reasoningSent : change.set.reasoningSent,
     sent: change.sent === null ? record.sent : change.sent.fingerprint,
     reasoningFrom: change.sent === null ? record.reasoningFrom : change.sent.reasoningFrom,
   };

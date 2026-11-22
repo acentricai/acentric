@@ -595,6 +595,68 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         expect((await one.it.updateActor(actor.id, { name: null })).name).toBeNull();
       });
 
+      it('in its reasoning level by a message in its conversation, where its provider has one: its calls stay as they were', async () => {
+        const runner = { run: async () => says('unused') };
+        const one = w.engine([says('One.'), says('Two.'), says('Three.')], {
+          options: {
+            providers: new Providers([fakeProvider(runner, { changesReasoningInPlace: true })]),
+          },
+        });
+        const actor = await one.createActor({ reasoning: 'low' });
+        // Before its model has answered there is nothing kept to lose: the level is just set.
+        await one.it.updateActor(actor.id, { reasoning: 'medium' });
+        expect(await w.roles(actor.id)).toEqual([]);
+        await one.say(actor.id, 'First.');
+        await one.it.settled(actor.id);
+        expect(one.steps[0]?.reasoning).toBe('medium');
+
+        const changed = await one.it.updateActor(actor.id, { reasoning: 'high' });
+        expect(changed.reasoning).toBe('high');
+        expect((await store.conversation(actor.id)).at(-1)?.message).toEqual({
+          role: 'native',
+          provider: 'fake',
+          api: 'fake',
+          content: [{ type: 'reasoning_level', level: 'high' }],
+        });
+        await one.say(actor.id, 'Second.');
+        await one.it.settled(actor.id);
+        // The call's own level is the one the conversation started with. The message says the new.
+        expect(one.steps[1]?.reasoning).toBe('medium');
+        expect(one.steps[1]?.messages.map((message) => message.role)).toEqual([
+          'user',
+          'assistant',
+          'native',
+          'user',
+        ]);
+
+        // Changed again, and to what it is already: one more message, and none.
+        await one.it.updateActor(actor.id, { reasoning: 'max' });
+        await one.it.updateActor(actor.id, { reasoning: 'max' });
+        await one.say(actor.id, 'Third.');
+        await one.it.settled(actor.id);
+        expect(one.steps[2]?.reasoning).toBe('medium');
+        expect(one.steps[2]?.messages.filter((message) => message.role === 'native')).toHaveLength(
+          2,
+        );
+        expect(await store.loadActor(actor.id)).toMatchObject({
+          reasoningSent: 'medium',
+          actor: { reasoning: 'max' },
+        });
+      });
+
+      it('in its reasoning level with its calls themselves, where its provider has no other way', async () => {
+        const one = w.engine([says('One.'), says('Two.')]);
+        const actor = await one.createActor({ reasoning: 'low' });
+        await one.say(actor.id, 'First.');
+        await one.it.settled(actor.id);
+        await one.it.updateActor(actor.id, { reasoning: 'high' });
+        await one.say(actor.id, 'Second.');
+        await one.it.settled(actor.id);
+        expect(one.steps.map((step) => step.reasoning)).toEqual(['low', 'high']);
+        expect(await w.roles(actor.id)).toEqual(['user', 'assistant', 'user', 'assistant']);
+        expect(await store.loadActor(actor.id)).toMatchObject({ reasoningSent: null });
+      });
+
       it('only between turns, and not while it is archived', async () => {
         const answer = deferred<ReturnType<typeof says>>();
         const asked = deferred<undefined>();

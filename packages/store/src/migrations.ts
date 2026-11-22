@@ -76,6 +76,8 @@ const MIGRATIONS: readonly string[] = [
     sent TEXT,
     -- The model's reasoning from before this place in the conversation is not sent to it.
     reasoning_from INTEGER NOT NULL,
+    -- The reasoning level its calls are sent with, where that is not the level it is at.
+    reasoning_sent TEXT,
     status TEXT NOT NULL,
     -- JSON, or NULL until it has had a turn.
     last_turn TEXT,

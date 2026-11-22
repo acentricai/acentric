@@ -193,6 +193,10 @@ export class Engine {
         this.#providers.has(definition.provider)
           ? this.#providers.get(definition.provider).withoutReasoning(message)
           : message,
+      reasoningChange: (definition, model, reasoning) =>
+        this.#providers.has(definition.provider)
+          ? this.#providers.get(definition.provider).reasoningChange?.(model, reasoning)
+          : undefined,
       closing: () => this.#closing,
       report,
       rested: (driver) => {

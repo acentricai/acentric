@@ -3,11 +3,11 @@
 import type { ModelCost, ModelInfo } from '../catalog.ts';
 import { httpFailure } from '../anthropic/errors.ts';
 import { outputText, reasoningSummary, toolCalls } from '../anthropic/read.ts';
-import { LABEL, PROVIDER, buildBody } from '../anthropic/request.ts';
+import { LABEL, PROVIDER, betasOf, buildBody } from '../anthropic/request.ts';
 import { readAnswer } from '../anthropic/response.ts';
 import { assemble } from '../anthropic/stream.ts';
 import { post } from '../http.ts';
-import { onlyOptions, readWebSearch, withoutTypes } from '../provider.ts';
+import { effortOf, onlyOptions, readWebSearch, withoutTypes } from '../provider.ts';
 import type { Provider } from '../provider.ts';
 
 const URL = 'https://api.anthropic.com/v1/messages';
@@ -67,6 +67,9 @@ export const ANTHROPIC_MODELS: readonly ModelInfo[] = [
   },
 ];
 
+/** Every level is sent as itself. */
+const EFFORTS = { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' };
+
 export const anthropic: Provider = {
   id: PROVIDER,
   label: LABEL,
@@ -87,12 +90,18 @@ export const anthropic: Provider = {
     if (credential.type !== 'api_key') throw new TypeError('Anthropic is called with an API key');
     return {
       async run(step, signal) {
+        const body = buildBody(step, ANTHROPIC_MODELS);
+        const betas = betasOf(body);
         const answer = await post({
           label: LABEL,
           provider: PROVIDER,
           url: URL,
-          headers: { 'x-api-key': credential.apiKey, 'anthropic-version': VERSION },
-          body: buildBody(step, ANTHROPIC_MODELS),
+          headers: {
+            'x-api-key': credential.apiKey,
+            'anthropic-version': VERSION,
+            ...(betas.length > 0 ? { 'anthropic-beta': betas.join(',') } : {}),
+          },
+          body,
           signal,
           streamed: true,
           ...(settings.fetch === undefined ? {} : { fetch: settings.fetch }),
@@ -104,6 +113,13 @@ export const anthropic: Provider = {
   },
 
   withoutReasoning: (message) => withoutTypes(message, ['thinking', 'redacted_thinking']),
+
+  // A system message that says nothing, and sets the effort from where it is.
+  reasoningChange: (_model, reasoning) => ({
+    role: 'system',
+    content: [],
+    providerOptions: { output_config: { effort: effortOf(EFFORTS, reasoning) } },
+  }),
 
   read: (message) => ({
     text: outputText(message.content),

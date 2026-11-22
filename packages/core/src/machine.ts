@@ -48,8 +48,15 @@ export type MachineEvent =
   | { readonly type: 'wake'; readonly inputs: readonly Input[]; readonly set?: ActorPatch }
   /** A person asks that a turn that failed be tried again, with nothing new. */
   | { readonly type: 'retry'; readonly set?: ActorPatch }
-  /** A person changes what the actor was created with. Only between turns. */
-  | { readonly type: 'update'; readonly set: ActorPatch }
+  /**
+   * A person changes what the actor was created with. Only between turns. `append` is put at
+   * the end of its conversation: what tells its model of the change, where something must.
+   */
+  | {
+      readonly type: 'update';
+      readonly set: ActorPatch;
+      readonly append?: readonly Message[];
+    }
   /**
    * The model answered. `sent` names the instructions and tools the call was made with, and
    * the place its reasoning was sent from.
@@ -186,7 +193,11 @@ export function decide(
     case 'update': {
       if (actor.status === 'working' || turn.phase !== 'idle') return refuse();
       return {
-        ...ends('ok'),
+        ...ends(
+          'ok',
+          undefined,
+          (event.append ?? []).map((message) => entry(message)),
+        ),
         status: actor.status,
         lastTurn: actor.lastTurn,
         set: event.set,
