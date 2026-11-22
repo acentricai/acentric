@@ -20,6 +20,8 @@ import type {
   AgentDefinition,
   AgentId,
   BundleManifest,
+  CallIssue,
+  ContentPart,
   ConversationEntry,
   Deployment,
   DeploymentId,
@@ -137,6 +139,30 @@ const wait: Timer = (ms, signal) =>
     const timer = setTimeout(done, ms);
     signal.addEventListener('abort', done, { once: true });
   });
+
+/**
+ * The text of a message sent to an agent that has no `message` input of its own: what was
+ * sent is an object with a `text`, and nothing else.
+ */
+function plainMessage(payload: Json): string {
+  const issues: CallIssue[] = [];
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    issues.push({ message: 'A message is an object with a `text`', path: [] });
+  } else {
+    if (typeof payload['text'] !== 'string') {
+      issues.push({ message: '`text` is a string', path: ['text'] });
+    }
+    for (const key of Object.keys(payload)) {
+      if (key !== 'text') {
+        issues.push({ message: 'A message has a `text`, and nothing else', path: [key] });
+      }
+    }
+  }
+  if (issues.length > 0) {
+    throw new InvalidInput(`The input is not what message takes. ${issuesText(issues)}`, issues);
+  }
+  return (payload as { readonly text: string }).text;
+}
 
 export class Engine {
   readonly #store: Store;
@@ -639,24 +665,31 @@ export class Engine {
     }
 
     const definition = await this.#definition(actor.deployment.id);
-    if (!definition.inputs.some((declared) => declared.type === sent.type)) {
-      throw new UnknownInput(sent.type);
-    }
-    // The agent's own code turns what was sent into what the model reads.
-    const handled = await this.#timed(
-      actor.deployment.id,
-      `inputs.${sent.type}.handler`,
-      sent.payload ?? null,
-      contextOf(actor),
-      new AbortController().signal,
-    );
-    if (!handled.ok) {
-      if (handled.kind === 'lost') throw new CodeUnavailable(handled.reason);
-      if (handled.kind === 'error') throw new InvalidInput(handled.error.message);
-      throw new InvalidInput(
-        `The input is not what ${sent.type} takes. ${issuesText(handled.issues)}`,
-        handled.issues,
+    let content: ContentPart[];
+    if (definition.inputs.some((declared) => declared.type === sent.type)) {
+      // The agent's own code turns what was sent into what the model reads.
+      const handled = await this.#timed(
+        actor.deployment.id,
+        `inputs.${sent.type}.handler`,
+        sent.payload ?? null,
+        contextOf(actor),
+        new AbortController().signal,
       );
+      if (!handled.ok) {
+        if (handled.kind === 'lost') throw new CodeUnavailable(handled.reason);
+        if (handled.kind === 'error') throw new InvalidInput(handled.error.message);
+        throw new InvalidInput(
+          `The input is not what ${sent.type} takes. ${issuesText(handled.issues)}`,
+          handled.issues,
+        );
+      }
+      // An image or file the agent's code made of what was sent is kept apart from the message.
+      content = await this.blobs.keep(actorId, contentOf(handled.value));
+    } else if (sent.type === 'message') {
+      // Every agent takes a message of text, unless it has a `message` of its own.
+      content = [{ type: 'text', text: plainMessage(sent.payload ?? null) }];
+    } else {
+      throw new UnknownInput(sent.type);
     }
 
     const now = this.#clock();
@@ -665,8 +698,7 @@ export class Engine {
       actor: actorId,
       type: sent.type,
       externalId: sent.externalId ?? null,
-      // An image or file the agent's code made of what was sent is kept apart from the message.
-      message: { role: 'user', content: await this.blobs.keep(actorId, contentOf(handled.value)) },
+      message: { role: 'user', content },
       receivedAt: now,
       deliveredAt: null,
     };
