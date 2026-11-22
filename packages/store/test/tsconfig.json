@@ -13,6 +13,7 @@
     "../../core/test/store-suite.ts",
     "../../core/test/engine-suite.ts",
     "../../core/test/upgrade-suite.ts",
+    "../../core/test/tasks-suite.ts",
     "../../core/test/world.ts"
   ],
   "references": [

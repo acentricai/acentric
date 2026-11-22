@@ -19,6 +19,7 @@ import type {
   Deployment,
   DeploymentId,
   ErrorCode,
+  ImagePart,
   Input,
   InputId,
   Json,
@@ -30,6 +31,8 @@ import type {
   Role,
   Session,
   SessionId,
+  TaskStatus,
+  TaskStoppedBy,
   UsageGroup,
   UsageReport,
   User,
@@ -48,6 +51,50 @@ export class StaleEpoch extends Error {
 }
 
 /** The name is another's: another actor's of the same agent, or another agent's. */
+/** A task, as a store keeps it. */
+export type StoredTask = {
+  readonly actor: ActorId;
+  /** Its ID among its actor's, such as `b3`. */
+  readonly id: string;
+  readonly kind: string;
+  /** What it was started with, as its kind made it of the model's arguments. */
+  readonly input: Json;
+  readonly status: TaskStatus;
+  readonly stoppedBy: TaskStoppedBy | null;
+  /** The tool call that started it. */
+  readonly callId: string;
+  /** Whether that call still waits for it. */
+  readonly attached: boolean;
+  /** When the call stops waiting. Null for one nothing waits for. */
+  readonly waitUntil: number | null;
+  /** When it is stopped for running too long. Null for no limit. */
+  readonly timeoutAt: number | null;
+  /** What it came to. Null while it runs. */
+  readonly result: string | null;
+  /** The result as a notice carries it, when its kind cut it itself. */
+  readonly summary: string | null;
+  /** The images whose places are marked in the result. */
+  readonly images: readonly ImagePart[];
+  readonly startedAt: number;
+  readonly endedAt: number | null;
+};
+
+/** A task to store: everything but its ID, which the store gives it. */
+export type NewTask = Pick<
+  StoredTask,
+  'actor' | 'kind' | 'input' | 'callId' | 'attached' | 'waitUntil' | 'timeoutAt' | 'startedAt'
+> & {
+  /** What its ID starts with: its kind's letter. */
+  readonly prefix: string;
+};
+
+/** How a task ended, as it is stored. */
+export type TaskEnding = Pick<StoredTask, 'result' | 'summary' | 'images'> & {
+  readonly status: Exclude<TaskStatus, 'running'>;
+  readonly stoppedBy: TaskStoppedBy | null;
+  readonly endedAt: number;
+};
+
 /** A blob, as a store knows it: never its bytes. */
 export type StoredBlob = {
   /** The SHA-256 of its bytes, in hex. */
@@ -371,8 +418,45 @@ export interface Store {
     },
   ): Promise<ConversationEntry[]>;
 
-  /** The actors with something owed: a turn under way, or mail that waits. */
+  /**
+   * Marks everything that waits in an actor's mailbox quiet: it starts no turn, and joins the
+   * next one that something else starts.
+   */
+  quietInputs(actor: ActorId): Promise<void>;
+
+  /** The actors with something owed: a turn under way, or mail that waits and is not quiet. */
   unfinished(): Promise<ActorId[]>;
+
+  // Tasks: work an actor's model started that may go on after its call (see `tasks.ts`)
+
+  /**
+   * Stores a task before its work starts, and names it: its kind's prefix and its number
+   * among its actor's tasks of that kind. A call that started one already is given that one,
+   * and nothing is stored: a call that is made again finds its task.
+   */
+  startTask(task: NewTask): Promise<StoredTask>;
+  loadTask(actor: ActorId, id: string): Promise<StoredTask | undefined>;
+  /** The task a tool call started, if it started one. */
+  taskOfCall(actor: ActorId, callId: string): Promise<StoredTask | undefined>;
+  /** An actor's tasks, newest first. With `running`, only those under way. */
+  listTasks(actor: ActorId, query?: { readonly running?: boolean }): Promise<StoredTask[]>;
+  /** Every task that is under way, of every actor: what a start watches again. */
+  runningTasks(): Promise<StoredTask[]>;
+  /** Lets go of a task its call waits for. False when it had ended, or was let go of already. */
+  detachTask(actor: ActorId, id: string): Promise<boolean>;
+  /** Lets go of every task of an actor that a call still waits for, and gives them. */
+  detachTasks(actor: ActorId): Promise<StoredTask[]>;
+  /**
+   * Stores how a task ended, once: nothing is stored for one that had ended. `notice` is put
+   * in its actor's mailbox with it, in the same step, when no call waits for the task any
+   * more: so its ending is told once, by its call's result or by its notice.
+   */
+  endTask(
+    actor: ActorId,
+    id: string,
+    end: TaskEnding,
+    notice: Input | null,
+  ): Promise<{ readonly ended: boolean; readonly notified: boolean }>;
 
   close(): Promise<void>;
 }

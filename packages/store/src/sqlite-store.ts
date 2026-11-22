@@ -16,8 +16,11 @@ import type {
   Redeem,
   SealedSecret,
   Store,
+  NewTask,
   StoredAccount,
   StoredBlob,
+  StoredTask,
+  TaskEnding,
   StoredDeployment,
   StoredKey,
   StoredLink,
@@ -239,6 +242,49 @@ export class SqliteStore implements Store {
 
   agentsOf(account: AccountId): Promise<AgentId[]> {
     return this.#write.ask('agentsOf' satisfies Operation, account);
+  }
+
+  quietInputs(actor: ActorId): Promise<void> {
+    return this.#write.ask('quietInputs' satisfies Operation, actor);
+  }
+
+  startTask(task: NewTask): Promise<StoredTask> {
+    return this.#write.ask('startTask' satisfies Operation, task);
+  }
+
+  // Tasks are read where they are written: a task that was just stored, let go of or ended is
+  // so at once for whoever asks next.
+  loadTask(actor: ActorId, id: string): Promise<StoredTask | undefined> {
+    return this.#write.ask('loadTask' satisfies Operation, actor, id);
+  }
+
+  taskOfCall(actor: ActorId, callId: string): Promise<StoredTask | undefined> {
+    return this.#write.ask('taskOfCall' satisfies Operation, actor, callId);
+  }
+
+  listTasks(actor: ActorId, query?: { readonly running?: boolean }): Promise<StoredTask[]> {
+    return this.#write.ask('listTasks' satisfies Operation, actor, query);
+  }
+
+  runningTasks(): Promise<StoredTask[]> {
+    return this.#write.ask('runningTasks' satisfies Operation);
+  }
+
+  detachTask(actor: ActorId, id: string): Promise<boolean> {
+    return this.#write.ask('detachTask' satisfies Operation, actor, id);
+  }
+
+  detachTasks(actor: ActorId): Promise<StoredTask[]> {
+    return this.#write.ask('detachTasks' satisfies Operation, actor);
+  }
+
+  endTask(
+    actor: ActorId,
+    id: string,
+    end: TaskEnding,
+    notice: Input | null,
+  ): Promise<{ readonly ended: boolean; readonly notified: boolean }> {
+    return this.#write.ask('endTask' satisfies Operation, actor, id, end, notice);
   }
 
   addBlob(actor: ActorId, blob: StoredBlob): Promise<boolean> {

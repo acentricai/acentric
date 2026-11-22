@@ -20,5 +20,7 @@ export * from './people.ts';
 export * from './usage.ts';
 export * from './accounts.ts';
 export * from './blobs.ts';
+export * from './tasks.ts';
+export { NOTICE_TAG, asSent } from './sent.ts';
 export * from './engine.ts';
 export * from './runners.ts';
