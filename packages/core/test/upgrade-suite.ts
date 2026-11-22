@@ -12,7 +12,7 @@ import type { Json } from '@acentric/protocol';
 import { Secrets } from '../src/secrets.ts';
 import type { Store } from '../src/store.ts';
 import { Lost } from '../src/testing.ts';
-import { AGENT, CODE, MANIFEST, deferred, world } from './world.ts';
+import { AGENT, CODE, MANIFEST, deferred, told, world } from './world.ts';
 import type { World } from './world.ts';
 
 const lookup = calls({ id: 'c1', name: 'lookup_order', arguments: { id: 4411 } });
@@ -378,9 +378,9 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
           lastTurn: { end: 'ok' },
         });
         expect(one.steps.map((step) => step.instructions)).toEqual([
-          w.definition.instructions,
-          KIND,
-          KIND,
+          told(w.definition.instructions),
+          told(KIND),
+          told(KIND),
         ]);
         // Its tool is the new version's, and the whole conversation is still there.
         const conversation = await store.conversation(actor.id);
@@ -410,14 +410,14 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         await one.it.settled(actor.id);
 
         expect(one.steps.map((step) => step.instructions)).toEqual([
-          w.definition.instructions,
-          w.definition.instructions,
+          told(w.definition.instructions),
+          told(w.definition.instructions),
         ]);
         expect((await one.it.getActor(actor.id)).deployment.version).toBe(1);
 
         await one.say(actor.id, 'Second.');
         await one.it.settled(actor.id);
-        expect(one.steps.at(-1)?.instructions).toBe(KIND);
+        expect(one.steps.at(-1)?.instructions).toBe(told(KIND));
         expect((await one.it.getActor(actor.id)).deployment.version).toBe(2);
       });
 
@@ -433,8 +433,8 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         await one.it.settled(actor.id);
         expect((await one.it.getActor(actor.id)).deployment.version).toBe(1);
         expect(one.steps.map((step) => step.instructions)).toEqual([
-          KIND,
-          w.definition.instructions,
+          told(KIND),
+          told(w.definition.instructions),
         ]);
       });
 
@@ -449,7 +449,7 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
           pinned: true,
           behind: null,
         });
-        expect(one.steps[0]?.instructions).toBe(w.definition.instructions);
+        expect(one.steps[0]?.instructions).toBe(told(w.definition.instructions));
       });
 
       it('stays behind, and goes on working, when its configuration does not fit the new version', async () => {
@@ -484,7 +484,7 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
           behind,
           lastTurn: { end: 'ok' },
         });
-        expect(one.steps[0]?.instructions).toBe(w.definition.instructions);
+        expect(one.steps[0]?.instructions).toBe(told(w.definition.instructions));
 
         // The same deployment and the same configuration are not tried again at every turn.
         await one.say(actor.id, 'Second.');
@@ -505,7 +505,7 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         });
         await one.say(actor.id, 'Third.');
         await one.it.settled(actor.id);
-        expect(one.steps.at(-1)?.instructions).toBe(KIND);
+        expect(one.steps.at(-1)?.instructions).toBe(told(KIND));
 
         // And to a version that takes no configuration, which drops the one it has.
         await one.deploy('orders@3');
@@ -566,7 +566,7 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         const two = w.engine([says('Three.')], { versions });
         await two.say(actor.id, 'Third.');
         await two.it.settled(actor.id);
-        expect(two.steps[0]?.instructions).toBe(KIND);
+        expect(two.steps[0]?.instructions).toBe(told(KIND));
         // Only the version the actor is on: nothing is loaded that nothing calls.
         expect(two.executor.loads).toBe(1);
         expect((await two.it.getActor(actor.id)).lastTurn).toMatchObject({ end: 'ok' });
@@ -705,7 +705,7 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         expect(pinned).toMatchObject({ deployment: { version: 1 }, pinned: true });
         await one.say(actor.id, 'First.');
         await one.it.settled(actor.id);
-        expect(one.steps[0]?.instructions).toBe(w.definition.instructions);
+        expect(one.steps[0]?.instructions).toBe(told(w.definition.instructions));
 
         const following = await one.it.updateActor(actor.id, { version: 'active' });
         expect(following).toMatchObject({ deployment: { version: 2 }, pinned: false });
@@ -814,7 +814,7 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         await one.deploy('orders@2');
         await one.say(actor.id, 'Second.');
         await one.it.settled(actor.id);
-        expect(one.steps[1]?.instructions).toBe(KIND);
+        expect(one.steps[1]?.instructions).toBe(told(KIND));
         expect(reasoning(one.steps[1])).toEqual([true]);
         expect(await store.loadActor(actor.id)).toMatchObject({ reasoningFrom: 1 });
       });

@@ -16,6 +16,7 @@ import {
 import type {
   AbortResponse,
   Actor,
+  ActorMachineRequest,
   ActorId,
   Agent,
   AgentDefinition,
@@ -31,6 +32,7 @@ import type {
   Input,
   InputId,
   Json,
+  MachineEnv,
   Name,
   PrincipalRef,
   Reasoning,
@@ -39,13 +41,14 @@ import type {
 } from '@acentric/protocol';
 
 import type { Access } from './accounts.ts';
+import { bashKind } from './bash.ts';
 import { Blobs } from './blobs.ts';
 import { Tasks } from './tasks.ts';
 import type { EngineTool, TaskKind, TaskTimes } from './tasks.ts';
 import type { BlobStore } from './blobs.ts';
 import { MemoryBus } from './bus.ts';
 import type { EventBus } from './bus.ts';
-import { ActorDriver, contentOf } from './driver.ts';
+import { ActorDriver, contentOf, machineRuleUnmet } from './driver.ts';
 import type { ActorUpdate, Clock, Host, Timer } from './driver.ts';
 import {
   ActorArchived,
@@ -61,11 +64,16 @@ import {
   UnsupportedProtocol,
 } from './errors.ts';
 import { contextOf, issuesText } from './executor.ts';
+import { familyOf } from './families.ts';
 import type { CallContext, CallResult, Executor } from './executor.ts';
 import { Semaphore } from './limits.ts';
 import { IdSource } from './ids.ts';
 import { DEFAULT_RULES } from './machine.ts';
 import type { Rules } from './machine.ts';
+import { InvalidMachine, Machines, OWN } from './machines.ts';
+import type { MachineTimes, MachinesOptions } from './machines.ts';
+import { instructionsOf } from './scaffold.ts';
+import { SecretsUnavailable } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import type { ActorsQuery, PageOf, Paged, Store } from './store.ts';
 import type { UsageFilter } from './usage.ts';
@@ -115,6 +123,18 @@ export type EngineOptions = {
   readonly kinds?: readonly TaskKind[];
   /** How long a call waits for its task, and the like. For tests. */
   readonly taskTimes?: Partial<TaskTimes>;
+  /**
+   * Has the engine keep machines: computers its actors' commands run on (see `machines.ts`).
+   * With it an agent may say `machine: true`, and its actors' models have `bash`. Without it
+   * the engine has none, and such an agent is refused when it is deployed.
+   */
+  readonly machines?: {
+    readonly times?: Partial<MachineTimes>;
+    /** The daemon this engine hands out for a system, by the SHA-256 of its program. */
+    readonly build?: MachinesOptions['build'];
+    /** How long a command has to end once it was told to stop. For tests. */
+    readonly stopGraceMs?: number;
+  };
   /** Without it, a bus of this process. */
   readonly bus?: EventBus;
   readonly clock?: Clock;
@@ -185,6 +205,8 @@ export class Engine {
   readonly blobs: Blobs;
   /** The work models start that may go on after their calls. */
   readonly tasks: Tasks;
+  /** The machines commands run on. Undefined for an engine that keeps none. */
+  readonly machines: Machines | undefined;
   readonly #slots: Semaphore;
   readonly #maxHot: number;
   /** The drivers, the one touched longest ago first. */
@@ -220,7 +242,6 @@ export class Engine {
     this.#slots = new Semaphore(options.maxConcurrentTurns ?? 100);
     this.#maxHot = options.maxHotActors ?? 1000;
     this.#providers = options.providers ?? builtInProviders();
-    this.#features = options.features ?? [];
     this.#secrets = options.secrets;
     this.#codeTimeoutMs = options.codeTimeoutMs ?? 30_000;
     const { runner } = options;
@@ -229,13 +250,40 @@ export class Engine {
       ((error: unknown) => {
         console.error(error);
       });
+    const kept = options.machines;
+    this.machines =
+      kept === undefined
+        ? undefined
+        : new Machines({
+            store: options.store,
+            id: (now) => this.#ids.make('machine', now),
+            clock: this.#clock,
+            report,
+            envOf: (actor) => this.#envOf(actor),
+            ...(kept.times === undefined ? {} : { times: kept.times }),
+            ...(kept.build === undefined ? {} : { build: kept.build }),
+          });
+    // An engine that keeps machines has what an agent that works on one uses.
+    this.#features = [
+      ...(options.features ?? []),
+      ...(this.machines === undefined ? [] : ['machine']),
+    ];
+    const bash =
+      this.machines === undefined
+        ? []
+        : [
+            bashKind(
+              this.machines,
+              kept?.stopGraceMs === undefined ? {} : { stopGraceMs: kept.stopGraceMs },
+            ),
+          ];
     this.tasks = new Tasks({
       store: options.store,
       clock: this.#clock,
       inputId: (now) => this.#ids.make('input', now),
       keep: (actor, content) => this.blobs.keep(actor, content),
       report,
-      ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
+      kinds: [...bash, ...(options.kinds ?? [])],
       ...(options.taskTimes === undefined ? {} : { times: options.taskTimes }),
     });
     // A notice is in the mailbox already: its actor is told, and starts a turn for it.
@@ -273,7 +321,24 @@ export class Engine {
         const found = await this.#store.findDeployment(agent, version);
         return found === undefined ? undefined : { id: found.id, version };
       },
-      fingerprint: (definition, own) => this.#fingerprint(definition, own),
+      instructions: (actor, definition, own) => {
+        const { machine } = actor;
+        const facts = machine === null ? undefined : this.machines?.facts(machine.id);
+        const family = familyOf(actor.modelId);
+        return instructionsOf(
+          {
+            tools: own.map((tool) => tool.name),
+            machine:
+              machine === null
+                ? null
+                : { cwd: machine.cwd, os: facts?.os ?? null, arch: facts?.arch ?? null },
+            ...(family === undefined ? {} : { family }),
+          },
+          definition.instructions,
+        );
+      },
+      fingerprint: (definition, own, instructions) =>
+        this.#fingerprint(definition, own, instructions),
       bindsReasoning: (actor, definition) =>
         this.#providers.has(definition.provider) &&
         bindsReasoning(this.#providers.get(definition.provider), actor.modelId),
@@ -561,6 +626,8 @@ export class Engine {
     readonly configuration?: Json;
     readonly name?: Name;
     readonly externalId?: ExternalId;
+    /** The machine it works on, for an actor of an agent that says `machine: true`. */
+    readonly machine?: ActorMachineRequest;
   }): Promise<{ readonly actor: Actor; readonly created: boolean }> {
     if (this.#closing) throw new Unavailable();
     const agent = await this.getAgent(given.agent);
@@ -577,7 +644,15 @@ export class Engine {
       deployment = { id: found.id, version: found.version };
     }
     const definition = await this.#definition(deployment.id);
+    const unmet = machineRuleUnmet(definition, given.machine !== undefined);
+    if (unmet !== undefined) throw new InvalidMachine(unmet);
+    if (given.machine !== undefined) {
+      // Whoever creates it: the machine says for which agents it is.
+      const refused = await this.machines?.refuses(given.machine.id, agent.id);
+      if (refused !== undefined) throw new InvalidMachine(refused);
+    }
     const now = this.#clock();
+    const env = given.machine?.env ?? {};
     const actor: Actor = {
       id: this.#ids.make('actor', now),
       name: given.name ?? null,
@@ -593,7 +668,10 @@ export class Engine {
           : ''),
       reasoning: given.reasoning ?? 'medium',
       configuration: null,
-      machine: null,
+      machine:
+        given.machine === undefined
+          ? null
+          : { id: given.machine.id, cwd: given.machine.cwd, env: Object.keys(env).toSorted() },
       status: 'idle',
       lastTurn: null,
       pendingInputs: 0,
@@ -627,11 +705,58 @@ export class Engine {
       }
       configuration = checked.value;
     }
+    // Sealed before anything is stored: an engine that keeps no secrets takes none of these.
+    const sealed = this.#sealEnv(actor.id, env);
     const { record, created } = await this.#store.createActor(
       { ...actor, configuration },
       configurationGiven,
+      sealed,
     );
     return { actor: record.actor, created };
+  }
+
+  /**
+   * Gives an actor the variables its commands are run with on its machine, in place of all it
+   * had. They are kept sealed, and are changed at any time: the next command has them.
+   */
+  async setEnv(id: ActorId, env: MachineEnv): Promise<Actor> {
+    if (this.#closing) throw new Unavailable();
+    const driver = await this.#driver(id);
+    if (driver.record.actor.machine === null) {
+      throw new InvalidMachine(
+        `The actor ${id} has no machine, so it runs no command to give variables to`,
+      );
+    }
+    const names = Object.keys(env).toSorted();
+    await this.#store.setActorEnv(id, names, this.#sealEnv(id, env));
+    // The driver may have been given up meanwhile: the one there is now reads what was stored.
+    return (await this.#driver(id)).envNamed(names);
+  }
+
+  /** What an actor's variables are sealed as: they open as no other actor's. */
+  static #bound(actor: string): string {
+    return `actor:${actor}:env`;
+  }
+
+  /** An actor's variables, sealed. Null for none. */
+  #sealEnv(actor: ActorId, env: MachineEnv): string | null {
+    if (Object.keys(env).length === 0) return null;
+    if (this.#secrets === undefined) throw new SecretsUnavailable();
+    return this.#secrets.seal(Engine.#bound(actor), JSON.stringify(env));
+  }
+
+  /** The variables an actor's commands are run with, opened. None for a machine's own commands. */
+  async #envOf(actor: string): Promise<MachineEnv> {
+    if (actor === OWN) return {};
+    const sealed = await this.#store.actorEnv(actor as ActorId);
+    if (sealed === null) return {};
+    if (this.#secrets === undefined) throw new SecretsUnavailable();
+    const opened = this.#secrets.open(
+      Engine.#bound(actor),
+      sealed,
+      `The variables of the actor ${actor}`,
+    );
+    return JSON.parse(opened) as MachineEnv;
   }
 
   /**
@@ -790,6 +915,8 @@ export class Engine {
    * how many there were. They go on as turns come free, not all at once.
    */
   async recover(): Promise<number> {
+    // What each machine's daemon last said is known again, before its daemon has found this engine.
+    await this.machines?.load();
     // The tasks that were under way are watched again, before any call that waits for one.
     await this.tasks.recover();
     const owed = await this.#store.unfinished();
@@ -839,6 +966,8 @@ export class Engine {
     for (const driver of drivers) driver.abandon(new Unavailable());
     this.#drivers.clear();
     await this.tasks.close();
+    // The daemons' connections are dropped. The commands on the machines go on.
+    this.machines?.close();
   }
 
   /** An agent, as it was last read or written here. */
@@ -934,16 +1063,21 @@ export class Engine {
    * What names the instructions and tools the model is sent for a definition: the same for
    * the same ones, and another when anything of them differs.
    */
-  #fingerprint(definition: AgentDefinition, own: readonly EngineTool[]): string {
+  #fingerprint(
+    definition: AgentDefinition,
+    own: readonly EngineTool[],
+    instructions: string,
+  ): string {
     const base = this.#fingerprintOf(definition);
-    // With the engine's own tools the actor is offered: a model is sent those too.
-    if (own.length === 0) return base;
+    // With the engine's own tools the actor is offered, and what the harness tells it before
+    // its agent's instructions: a model is sent those too.
     return createHash('sha256')
       .update(base)
       .update(
-        JSON.stringify(
+        JSON.stringify([
+          instructions,
           own.map(({ name, description, parameters }) => [name, description, parameters]),
-        ),
+        ]),
       )
       .digest('hex')
       .slice(0, 32);

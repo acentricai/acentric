@@ -13,6 +13,7 @@ import { MemoryStore } from '../src/memory-store.ts';
 import type { Store } from '../src/store.ts';
 import { InlineExecutor } from '../src/testing.ts';
 import type { AgentFunction, InlineAgent } from '../src/testing.ts';
+import { instructionsOf } from '../src/scaffold.ts';
 
 /**
  * A store that does what `store` does, but for what `own` does in its place: for a test that
@@ -192,3 +193,9 @@ export function world(given: { readonly store?: Store; readonly retrySafe?: bool
     clock: () => now,
   };
 }
+
+/**
+ * The instructions a model is sent for an agent that says `own`, on an actor with no machine:
+ * what the harness tells every actor, and then the agent's.
+ */
+export const told = (own: string): string => instructionsOf({ tools: [], machine: null }, own);
