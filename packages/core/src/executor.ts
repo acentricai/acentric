@@ -43,9 +43,11 @@ export function contextOf(actor: Actor): CallContext {
 
 /**
  * How a call of an agent's function ended: with what it returned, with what its schema found
- * wrong with what it was given, or with what the code threw.
+ * wrong with what it was given, or with what the code threw. Or it has no end that is known:
+ * what ran the code died with the call in it, and the code may or may not have run.
  */
-export type CallResult = CallOutcome;
+export type CallResult =
+  CallOutcome | { readonly ok: false; readonly kind: 'lost'; readonly reason: string };
 
 /** What a schema found wrong, as a line to read: where, then what. */
 export function issuesText(issues: readonly CallIssue[]): string {
@@ -77,7 +79,8 @@ export interface Executor {
   unload(deployment: DeploymentId): void | Promise<void>;
   /**
    * Calls a function of the deployment's code by its path, such as
-   * `tools.lookup_order.execute`. It answers as soon as it can when `signal` is aborted.
+   * `tools.lookup_order.execute`. It answers as soon as it can when `signal` is aborted, as a
+   * call that ended with an `AbortError`.
    */
   call(
     deployment: DeploymentId,

@@ -11,12 +11,14 @@ import { makeId } from '@acentric/protocol';
 import {
   ActorArchived,
   ActorNotFound,
+  CodeUnavailable,
   Conflict,
   InvalidInput,
   Unavailable,
   UnknownInput,
 } from '../src/errors.ts';
 import type { Store } from '../src/store.ts';
+import { Lost } from '../src/testing.ts';
 import { HANDLER, LOOKUP, deferred, eventually, over, world } from './world.ts';
 import type { World } from './world.ts';
 
@@ -441,6 +443,104 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         expect(await one.it.archive(actor.id)).toMatchObject({
           status: 'archived',
           lastTurn: { end: 'interrupted' },
+        });
+      });
+    });
+
+    describe('the agent’s code', () => {
+      const dies = () => {
+        throw new Lost('workerd exited with SIGKILL');
+      };
+
+      it('lost with a tool call in it is called again, once, when the tool is safe to call again', async () => {
+        fresh(true);
+        let made = 0;
+        const one = w.engine([lookup, says('Twice.')], {
+          lookup: () => {
+            made += 1;
+            return made === 1 ? dies() : 'Refunded twice.';
+          },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Why two refunds?');
+        await one.it.settled(actor.id);
+
+        expect(made).toBe(2);
+        expect((await store.conversation(actor.id))[2]?.message).toMatchObject({
+          role: 'tool_result',
+          isError: false,
+          content: [{ type: 'text', text: 'Refunded twice.' }],
+        });
+        expect((await one.it.getActor(actor.id)).lastTurn).toMatchObject({ end: 'ok' });
+      });
+
+      // A tool lost for good: what the model is told, and how often the tool was called.
+      const lostForGood = async (retrySafe: boolean) => {
+        fresh(retrySafe);
+        let made = 0;
+        const one = w.engine([lookup, says('I could not tell.')], {
+          lookup: () => {
+            made += 1;
+            return dies();
+          },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Why two refunds?');
+        await one.it.settled(actor.id);
+        expect((await store.conversation(actor.id))[2]?.message).toMatchObject({
+          role: 'tool_result',
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: 'The call of lookup_order was lost: workerd exited with SIGKILL. It may or may not have run.',
+            },
+          ],
+        });
+        // The turn goes on: the model reads what happened, and answers.
+        expect((await one.it.getActor(actor.id)).lastTurn).toMatchObject({ end: 'ok' });
+        return made;
+      };
+
+      it('lost with a tool that is not safe to call again is told to the model, and not called again', async () => {
+        expect(await lostForGood(false)).toBe(1);
+      });
+
+      it('lost twice with a tool that is safe to call again is told to the model the same', async () => {
+        expect(await lostForGood(true)).toBe(2);
+      });
+
+      it('lost with an input in it refuses the input as something to send again, and stores nothing', async () => {
+        const one = w.engine([], { handler: dies });
+        const actor = await one.createActor();
+        const sent = one.say(actor.id, 'Hello?');
+        await expect(sent).rejects.toBeInstanceOf(CodeUnavailable);
+        await expect(sent).rejects.toMatchObject({ code: 'unavailable' });
+        expect(await store.pendingInputs(actor.id)).toEqual([]);
+      });
+
+      it('that is no tool is given up when it takes too long, and a tool is not', async () => {
+        const slow = () => new Promise<string>((resolve) => setTimeout(resolve, 150, 'late'));
+        const one = w.engine([lookup, says('Twice.')], {
+          handler: (payload) =>
+            (payload as { text: string }).text === 'slow' ? slow() : 'Why two refunds?',
+          lookup: slow,
+          options: { codeTimeoutMs: 40 },
+        });
+        const actor = await one.createActor();
+        const refused = one.say(actor.id, 'slow');
+        await expect(refused).rejects.toBeInstanceOf(InvalidInput);
+        await expect(refused).rejects.toThrow(
+          'inputs.message.handler did not return within 0.04 s, and was given up',
+        );
+        expect(await store.pendingInputs(actor.id)).toEqual([]);
+
+        // The tool takes longer than that, and is waited for.
+        await one.say(actor.id, 'quick');
+        await one.it.settled(actor.id);
+        expect((await store.conversation(actor.id))[2]?.message).toMatchObject({
+          role: 'tool_result',
+          content: [{ type: 'text', text: 'late' }],
         });
       });
     });

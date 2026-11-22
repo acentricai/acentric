@@ -12,6 +12,14 @@ export type AgentFunction = (
   signal: AbortSignal,
 ) => Json | Promise<Json>;
 
+/**
+ * Thrown by a function of a test's agent to stand for what ran it dying with the call in it:
+ * the call then ends as lost, as it does when a process of the real executor dies.
+ */
+export class Lost extends Error {
+  override readonly name = 'Lost';
+}
+
 export type InlineAgent = {
   readonly definition: AgentDefinition;
   /** Its functions by path, such as `tools.lookup_order.execute`. */
@@ -72,6 +80,7 @@ export class InlineExecutor implements Executor {
     try {
       return { ok: true, value: await called(argument, context, signal) };
     } catch (error) {
+      if (error instanceof Lost) return { ok: false, kind: 'lost', reason: error.message };
       const name = error instanceof Error ? error.name : 'Error';
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, kind: 'error', error: { name, message } };

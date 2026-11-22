@@ -102,6 +102,18 @@ export class Conflict extends EngineError {
   readonly code = 'conflict';
 }
 
+/**
+ * The agent's code could not be run just now: what runs it died with the call in it. The same
+ * request may work when it is made again. Whether the code did anything is not known.
+ */
+export class CodeUnavailable extends EngineError {
+  override readonly name = 'CodeUnavailable';
+  readonly code = 'unavailable';
+  constructor(reason: string) {
+    super(`The agent's code could not be run just now: ${reason}`);
+  }
+}
+
 /** The engine is shutting down, and takes nothing new. */
 export class Unavailable extends EngineError {
   override readonly name = 'Unavailable';
