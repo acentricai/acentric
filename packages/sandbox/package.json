@@ -27,6 +27,10 @@
     "access": "public",
     "provenance": true
   },
+  "dependencies": {
+    "@acentric/core": "workspace:*",
+    "@acentric/protocol": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "catalog:"
   }

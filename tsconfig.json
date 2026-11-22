@@ -38,6 +38,9 @@
       "path": "packages/sandbox"
     },
     {
+      "path": "packages/sandbox/test"
+    },
+    {
       "path": "apps/server"
     },
     {

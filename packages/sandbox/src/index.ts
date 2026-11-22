@@ -1,6 +1,15 @@
-// Makes machines at sandbox providers: the interface a provider implements, and the providers
-// themselves.
-//
-// Nothing is here yet.
+// The providers sandboxes are made at. What a provider is to the engine is the engine's own,
+// `SandboxProvider`: it is given again from here, for whoever writes one.
 
-export {};
+export type { NewSandbox, ProviderSandbox, SandboxAccount, SandboxProvider } from '@acentric/core';
+export { ProviderFailed, providerFailure } from '@acentric/core';
+
+export {
+  PROVISION_FILE,
+  SANDBOX_HOME,
+  SANDBOX_UID,
+  checkDockerHost,
+  docker,
+  dockerState,
+} from './docker.ts';
+export type { DockerOptions } from './docker.ts';

@@ -227,6 +227,9 @@ importers:
       '@acentric/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@acentric/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/sandbox
       '@acentric/store':
         specifier: workspace:*
         version: link:../../packages/store
@@ -327,6 +330,13 @@ importers:
         version: 4.6.7
 
   packages/sandbox:
+    dependencies:
+      '@acentric/core':
+        specifier: workspace:*
+        version: link:../core
+      '@acentric/protocol':
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
