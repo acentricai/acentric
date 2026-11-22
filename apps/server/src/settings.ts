@@ -23,6 +23,10 @@
 //   ACENTRIC_DOWNLOADS      a folder with the acentric command (`acentric.mjs`) and the script
 //                           that installs it (`install-cli.sh`), which the server then hands
 //                           out at `/install-cli.sh`. Without it, it hands out neither
+//   ACENTRIC_BOAT_TEMPLATE  the Boat snapshot sandboxes are made from at Boat (boat.dev), which
+//                           has the machine program in it (see deploy/sandbox/boat-template.sh).
+//                           Without it, an account at Boat can be added, and no sandbox made
+//   ACENTRIC_BOAT_API_URL   Boat's API, in place of https://boat.dev/api/v1. For tests
 //   ACENTRIC_DOCKER_HOST    where Docker's API is, such as unix:///var/run/docker.sock: with it
 //                           the server makes sandboxes there, as containers. Whoever may make a
 //                           sandbox then has the computer Docker is on. Without it, it makes
@@ -43,7 +47,7 @@ import { resolve } from 'node:path';
 import { secretKeyOf } from '@acentric/core';
 import type { SecretKeys } from '@acentric/core';
 import { checkDockerHost } from '@acentric/sandbox';
-import type { DockerOptions } from '@acentric/sandbox';
+import type { BoatOptions, DockerOptions } from '@acentric/sandbox';
 import type { Network } from '@acentric/executor';
 
 export type Settings = {
@@ -59,6 +63,8 @@ export type Settings = {
   readonly codeProcesses: number;
   /** The folder of what the server hands out to be installed elsewhere. */
   readonly downloads: string | undefined;
+  /** What sandboxes at Boat are made with: the snapshot they are made from, when one was given. */
+  readonly boat: BoatOptions;
   /** The Docker sandboxes are made at, as containers. Undefined when none are. */
   readonly docker: DockerOptions | undefined;
 };
@@ -142,6 +148,14 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
 
   const downloads = given('ACENTRIC_DOWNLOADS');
 
+  const boatTemplate = given('ACENTRIC_BOAT_TEMPLATE');
+  const boatUrl = given('ACENTRIC_BOAT_API_URL');
+  if (boatUrl !== undefined && !/^https?:\/\/[^/]+/.test(boatUrl)) {
+    throw new InvalidSettings(
+      `ACENTRIC_BOAT_API_URL is where Boat's API is, such as https://boat.dev/api/v1, and is ${boatUrl}`,
+    );
+  }
+
   const dockerHost = given('ACENTRIC_DOCKER_HOST');
   const dockerImage = given('ACENTRIC_DOCKER_IMAGE');
   const dockerNetwork = given('ACENTRIC_DOCKER_NETWORK');
@@ -186,6 +200,10 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
     downloads: downloads === undefined ? undefined : resolve(downloads),
+    boat: {
+      ...(boatTemplate === undefined ? {} : { template: boatTemplate }),
+      ...(boatUrl === undefined ? {} : { url: boatUrl }),
+    },
     docker:
       dockerHost === undefined || dockerImage === undefined
         ? undefined

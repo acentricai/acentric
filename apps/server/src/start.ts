@@ -10,7 +10,7 @@ import type { ModelRunner, Providers } from '@acentric/ai';
 import { Accounts, Audit, Engine, Keys, People, Secrets, accountRunners } from '@acentric/core';
 import type { EngineOptions, RunnerSource } from '@acentric/core';
 import { IsolateExecutor } from '@acentric/executor';
-import { docker } from '@acentric/sandbox';
+import { boat, docker } from '@acentric/sandbox';
 import { FileBlobStore, SqliteStore } from '@acentric/store';
 
 import { machinePrograms } from './downloads.ts';
@@ -83,7 +83,12 @@ export async function start(
     machines: { build: programs.build, ...more.machines },
     // Machines the server makes itself, at the providers it was set up with.
     sandboxes: {
-      providers: settings.docker === undefined ? [] : [docker(settings.docker)],
+      // Docker only where the server was told where Docker is. Boat always: an account at it
+      // is added by its key, and sandboxes are made there once the server has its template.
+      providers: [
+        ...(settings.docker === undefined ? [] : [docker(settings.docker)]),
+        boat(settings.boat),
+      ],
       ...(settings.publicUrl === undefined ? {} : { publicUrl: settings.publicUrl }),
       ...more.sandboxes,
     },

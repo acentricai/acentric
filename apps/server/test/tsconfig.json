@@ -11,7 +11,8 @@
     ".",
     "../../../packages/executor/test/bundle.ts",
     "../../../packages/core/test/fake-provider.ts",
-    "../../../packages/core/test/fake-daemon.ts"
+    "../../../packages/core/test/fake-daemon.ts",
+    "../../../packages/sandbox/test/fake-boat.ts"
   ],
   "references": [
     {

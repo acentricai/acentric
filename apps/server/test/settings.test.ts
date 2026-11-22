@@ -15,8 +15,9 @@ describe('a server’s settings', () => {
       network: { reach: 'public', allow: [] },
       codeProcesses: 2,
       downloads: undefined,
-      // It makes sandboxes nowhere until it is told where.
+      // It makes sandboxes nowhere until it is told where, and from what.
       docker: undefined,
+      boat: {},
     });
     expect(settings.data.endsWith('/data')).toBe(true);
   });
@@ -58,6 +59,18 @@ describe('a server’s settings', () => {
     const two = readSettings({ ACENTRIC_SECRET_KEY: older, ACENTRIC_SECRET_KEYS_OLD: KEY });
     expect(two.secretKeys?.current).not.toBe(current);
     expect(Object.keys(two.secretKeys?.keys ?? {})).toContain(current);
+  });
+
+  it('say which snapshot sandboxes are made from at Boat', () => {
+    expect(readSettings({ ACENTRIC_BOAT_TEMPLATE: 'acentric' }).boat).toEqual({
+      template: 'acentric',
+    });
+    expect(
+      readSettings({
+        ACENTRIC_BOAT_TEMPLATE: 'acentric',
+        ACENTRIC_BOAT_API_URL: 'http://127.0.0.1:9999/api/v1',
+      }).boat,
+    ).toEqual({ template: 'acentric', url: 'http://127.0.0.1:9999/api/v1' });
   });
 
   it('say where sandboxes are made at Docker, and from which image', () => {
@@ -105,6 +118,7 @@ describe('a server’s settings', () => {
         /ACENTRIC_DOCKER_IMAGE is for a server that has ACENTRIC_DOCKER_HOST/,
       ],
       [{ ACENTRIC_DOCKER_NETWORK: 'acentric' }, /is for a server that has ACENTRIC_DOCKER_HOST/],
+      [{ ACENTRIC_BOAT_API_URL: 'boat.dev' }, /ACENTRIC_BOAT_API_URL is where Boat's API is/],
       [
         { ACENTRIC_DOCKER_HOST: 'ssh://box', ACENTRIC_DOCKER_IMAGE: 'acentric-sandbox' },
         /ACENTRIC_DOCKER_HOST: Docker is reached at unix:\/\/<socket> or http:\/\/<host>:<port>/,
