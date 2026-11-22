@@ -36,6 +36,8 @@ import type {
 } from '@acentric/protocol';
 
 import type { Access } from './accounts.ts';
+import { Blobs } from './blobs.ts';
+import type { BlobStore } from './blobs.ts';
 import { MemoryBus } from './bus.ts';
 import type { EventBus } from './bus.ts';
 import { ActorDriver, contentOf } from './driver.ts';
@@ -96,6 +98,11 @@ export type EngineOptions = {
   readonly features?: readonly string[];
   /** The agents' secrets, for saying which of those a deploy names are not set. */
   readonly secrets?: Secrets;
+  /**
+   * Where the bytes of images and files are kept, apart from conversations (see `blobs.ts`).
+   * Without it they stay in their messages, as an agent's code gave them.
+   */
+  readonly blobs?: BlobStore;
   /** Without it, a bus of this process. */
   readonly bus?: EventBus;
   readonly clock?: Clock;
@@ -138,6 +145,8 @@ export class Engine {
   readonly #ids: IdSource;
   readonly #timer: Timer;
   readonly #host: Host;
+  /** The images and files of conversations, whose bytes are kept apart. */
+  readonly blobs: Blobs;
   readonly #slots: Semaphore;
   readonly #maxHot: number;
   /** The drivers, the one touched longest ago first. */
@@ -165,6 +174,11 @@ export class Engine {
     this.#clock = options.clock ?? Date.now;
     this.#ids = new IdSource(options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10))));
     this.#timer = options.timer ?? wait;
+    this.blobs = new Blobs({
+      store: options.store,
+      clock: this.#clock,
+      ...(options.blobs === undefined ? {} : { bytes: options.blobs }),
+    });
     this.#slots = new Semaphore(options.maxConcurrentTurns ?? 100);
     this.#maxHot = options.maxHotActors ?? 1000;
     this.#providers = options.providers ?? builtInProviders();
@@ -188,6 +202,7 @@ export class Engine {
         path.startsWith('tools.')
           ? this.#call(deployment, path, argument, context, signal)
           : this.#timed(deployment, path, argument, context, signal),
+      blobs: this.blobs,
       bus: options.bus ?? new MemoryBus(),
       clock: this.#clock,
       timer: this.#timer,
@@ -461,6 +476,8 @@ export class Engine {
       this.#loaded.delete(deployment);
       await this.#executor.unload(deployment);
     }
+    // What only its actors' conversations referred to goes with them.
+    if (gone.actors.length > 0) await this.blobs.collect();
   }
 
   /** A deployment, with what its code said of itself. */
@@ -648,7 +665,8 @@ export class Engine {
       actor: actorId,
       type: sent.type,
       externalId: sent.externalId ?? null,
-      message: { role: 'user', content: contentOf(handled.value) },
+      // An image or file the agent's code made of what was sent is kept apart from the message.
+      message: { role: 'user', content: await this.blobs.keep(actorId, contentOf(handled.value)) },
       receivedAt: now,
       deliveredAt: null,
     };

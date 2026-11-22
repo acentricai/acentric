@@ -35,6 +35,7 @@ import type {
   SealedSecret,
   Store,
   StoredAccount,
+  StoredBlob,
   StoredDeployment,
   StoredKey,
   StoredLink,
@@ -94,6 +95,9 @@ export class MemoryStore implements Store {
   readonly #audit: AuditEvent[] = [];
   readonly #accounts = new Map<AccountId, StoredAccount>();
   readonly #usage: UsageRecord[] = [];
+  readonly #blobs = new Map<string, StoredBlob>();
+  /** The blobs each actor refers to, each with the media type the actor first gave it. */
+  readonly #blobRefs = new Map<ActorId, Map<string, string>>();
   readonly #actors = new Map<ActorId, Kept>();
   readonly #inputs = new Map<ActorId, Input[]>();
   readonly #entries = new Map<ActorId, ConversationEntry[]>();
@@ -169,8 +173,35 @@ export class MemoryStore implements Store {
       this.#actors.delete(actor);
       this.#inputs.delete(actor);
       this.#entries.delete(actor);
+      this.#blobRefs.delete(actor);
     }
     return { deployments, actors };
+  }
+
+  async addBlob(actor: ActorId, blob: StoredBlob): Promise<boolean> {
+    if (!this.#actors.has(actor)) return false;
+    if (!this.#blobs.has(blob.digest)) this.#blobs.set(blob.digest, blob);
+    const refs = this.#blobRefs.get(actor) ?? new Map<string, string>();
+    if (!refs.has(blob.digest)) refs.set(blob.digest, blob.mediaType);
+    this.#blobRefs.set(actor, refs);
+    return true;
+  }
+
+  async blobOf(actor: ActorId, digest: string): Promise<StoredBlob | undefined> {
+    const mediaType = this.#blobRefs.get(actor)?.get(digest);
+    const blob = this.#blobs.get(digest);
+    return mediaType === undefined || blob === undefined ? undefined : { ...blob, mediaType };
+  }
+
+  async dropUnreferencedBlobs(): Promise<string[]> {
+    const referred = new Set([...this.#blobRefs.values()].flatMap((refs) => [...refs.keys()]));
+    const gone = [...this.#blobs.keys()].filter((digest) => !referred.has(digest));
+    for (const digest of gone) this.#blobs.delete(digest);
+    return gone;
+  }
+
+  async listBlobs(): Promise<string[]> {
+    return [...this.#blobs.keys()];
   }
 
   async setAgentAccount(agent: AgentId, account: AccountId | null): Promise<Agent | undefined> {

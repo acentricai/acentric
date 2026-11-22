@@ -17,6 +17,7 @@ import type {
   SealedSecret,
   Store,
   StoredAccount,
+  StoredBlob,
   StoredDeployment,
   StoredKey,
   StoredLink,
@@ -238,6 +239,23 @@ export class SqliteStore implements Store {
 
   agentsOf(account: AccountId): Promise<AgentId[]> {
     return this.#write.ask('agentsOf' satisfies Operation, account);
+  }
+
+  addBlob(actor: ActorId, blob: StoredBlob): Promise<boolean> {
+    return this.#write.ask('addBlob' satisfies Operation, actor, blob);
+  }
+
+  // Where it was written: a blob that was just kept is one its actor refers to at once.
+  blobOf(actor: ActorId, digest: string): Promise<StoredBlob | undefined> {
+    return this.#write.ask('blobOf' satisfies Operation, actor, digest);
+  }
+
+  dropUnreferencedBlobs(): Promise<string[]> {
+    return this.#write.ask('dropUnreferencedBlobs' satisfies Operation);
+  }
+
+  listBlobs(): Promise<string[]> {
+    return this.#write.ask('listBlobs' satisfies Operation);
   }
 
   usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport> {

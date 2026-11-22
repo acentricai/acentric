@@ -31,6 +31,8 @@ import type {
 } from '@acentric/protocol';
 
 import type { Access } from './accounts.ts';
+import { UnknownBlob } from './blobs.ts';
+import type { Blobs } from './blobs.ts';
 import type { EventBus } from './bus.ts';
 import {
   ActorArchived,
@@ -72,6 +74,8 @@ export type Host = {
     context: CallContext,
     signal: AbortSignal,
   ): Promise<CallResult>;
+  /** The images and files of conversations, whose bytes are kept apart. */
+  readonly blobs: Blobs;
   readonly bus: EventBus;
   readonly clock: Clock;
   readonly timer: Timer;
@@ -607,9 +611,11 @@ export class ActorDriver {
       };
       try {
         const { step, access, sent, provider } = await this.#step();
+        // The model is sent the bytes of what the conversation only names.
+        const messages = await this.#host.blobs.withBytes(step.messages);
         called = { account: access.account, provider, at: clock() };
         const answer = await untilAborted(
-          access.runner.run(step, controller.signal),
+          access.runner.run({ ...step, messages }, controller.signal),
           controller.signal,
         );
         if (answer === ABORTED) return;
@@ -713,7 +719,15 @@ export class ActorDriver {
     // What ran the tool died with the call in it, as a restart of the engine would have cut it
     // off: it may or may not have run. One that is safe to make again is made again, once.
     if (!result.ok && result.kind === 'lost' && tool.retrySafe) result = await run();
-    if (result.ok) return answer(contentOf(result.value), false);
+    if (result.ok) {
+      try {
+        // An image or file it gave is kept apart from the conversation.
+        return answer(await this.#host.blobs.keep(actor.id, contentOf(result.value)), false);
+      } catch (error) {
+        if (!(error instanceof UnknownBlob)) throw error;
+        return answer([{ type: 'text', text: error.message }], true);
+      }
+    }
     if (result.kind === 'lost') {
       const text = `The call of ${call.name} was lost: ${result.reason}. It may or may not have run.`;
       return answer([{ type: 'text', text }], true);

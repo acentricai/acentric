@@ -13,6 +13,7 @@ import type {
   Redeem,
   SealedSecret,
   StoredAccount,
+  StoredBlob,
   StoredDeployment,
   StoredKey,
   StoredLink,
@@ -275,6 +276,8 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'addAccount',
   'saveAccount',
   'removeAccount',
+  'addBlob',
+  'dropUnreferencedBlobs',
   'addKey',
   'removeKeys',
   'touchKey',
@@ -458,6 +461,10 @@ export function operations(db: DatabaseSync) {
       run('DELETE FROM secrets WHERE agent_id = ?', id);
       run('DELETE FROM messages WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
       run('DELETE FROM inputs WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
+      run(
+        'DELETE FROM actor_blobs WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
+        id,
+      );
       const actors = all<{ id: ActorId }>(
         'DELETE FROM actors WHERE agent_id = ? RETURNING id',
         id,
@@ -512,6 +519,48 @@ export function operations(db: DatabaseSync) {
 
     removeAccount(id: AccountId): void {
       run('DELETE FROM accounts WHERE id = ?', id);
+    },
+
+    addBlob(actor: ActorId, blob: StoredBlob): boolean {
+      if (get('SELECT 1 FROM actors WHERE id = ?', actor) === undefined) return false;
+      run(
+        'INSERT INTO blobs (digest, size, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
+        blob.digest,
+        blob.size,
+        blob.createdAt,
+      );
+      run(
+        'INSERT INTO actor_blobs (actor_id, digest, media_type) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
+        actor,
+        blob.digest,
+        blob.mediaType,
+      );
+      return true;
+    },
+
+    blobOf(actor: ActorId, digest: string): StoredBlob | undefined {
+      const row = get<{ size: number; created_at: number; media_type: string }>(
+        `SELECT blobs.size, blobs.created_at, actor_blobs.media_type
+         FROM actor_blobs JOIN blobs ON blobs.digest = actor_blobs.digest
+         WHERE actor_blobs.actor_id = ? AND actor_blobs.digest = ?`,
+        actor,
+        digest,
+      );
+      return row === undefined
+        ? undefined
+        : { digest, size: row.size, mediaType: row.media_type, createdAt: row.created_at };
+    },
+
+    dropUnreferencedBlobs(): string[] {
+      return all<{ digest: string }>(
+        `DELETE FROM blobs
+         WHERE NOT EXISTS (SELECT 1 FROM actor_blobs WHERE actor_blobs.digest = blobs.digest)
+         RETURNING digest`,
+      ).map((row) => row.digest);
+    },
+
+    listBlobs(): string[] {
+      return all<{ digest: string }>('SELECT digest FROM blobs').map((row) => row.digest);
     },
 
     agentsOf(account: AccountId): AgentId[] {
