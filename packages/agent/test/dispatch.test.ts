@@ -27,9 +27,11 @@ const context: BundleContext = {
   configuration: { region: 'eu', unit: 'hours' },
   modelId: 'claude-opus-5-5',
   reasoning: 'medium',
+  machine: null,
 };
 const host = (secrets: { [name: string]: string } = {}): BundleHost => ({
   secret: async (name) => secrets[name],
+  file: () => Promise.reject(new Error('The actor has no machine')),
 });
 
 const Configuration = z.object({

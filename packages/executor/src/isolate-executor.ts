@@ -8,7 +8,7 @@
 // the memory of one isolate, and agents in one process share its fate. Code that loops holds
 // up the others of its process until the watchdog kills the process, which loses their calls.
 
-import type { Bundle, CallContext, CallResult, Executor } from '@acentric/core';
+import type { Bundle, CallContext, CallHost, CallResult, Executor } from '@acentric/core';
 import {
   SUPPORTED_BUNDLE_PROTOCOLS,
   agentDefinitionSchema,
@@ -83,6 +83,7 @@ export class IsolateExecutor implements Executor {
     argument: Json,
     context: CallContext,
     signal: AbortSignal,
+    host: CallHost,
   ): Promise<CallResult> {
     const bundle = this.#bundles.get(deployment);
     if (bundle === undefined) throw new Error(`The deployment ${deployment} is not loaded`);
@@ -96,6 +97,7 @@ export class IsolateExecutor implements Executor {
           argument,
           context: { ...context, agentName: agent.name },
           secrets: async (name) => this.#secrets(agent.id, name),
+          files: async (request) => host.file(request),
           signal,
         },
       );

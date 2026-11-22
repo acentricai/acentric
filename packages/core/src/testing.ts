@@ -3,13 +3,14 @@
 
 import type { AgentDefinition, DeploymentId, Json } from '@acentric/protocol';
 
-import type { Bundle, CallContext, CallResult, Executor } from './executor.ts';
+import type { Bundle, CallContext, CallHost, CallResult, Executor } from './executor.ts';
 
-/** A function of an agent, as its code would have it. */
+/** A function of an agent, as its code would have it, and what the engine does for its call. */
 export type AgentFunction = (
   argument: Json,
   context: CallContext,
   signal: AbortSignal,
+  host: CallHost,
 ) => Json | Promise<Json>;
 
 /**
@@ -70,6 +71,7 @@ export class InlineExecutor implements Executor {
     argument: Json,
     context: CallContext,
     signal: AbortSignal,
+    host: CallHost,
   ): Promise<CallResult> {
     const called = this.#agent(deployment).functions[path];
     if (called === undefined) {
@@ -78,7 +80,7 @@ export class InlineExecutor implements Executor {
     }
     this.made.push({ path, argument: structuredClone(argument) });
     try {
-      return { ok: true, value: await called(argument, context, signal) };
+      return { ok: true, value: await called(argument, context, signal, host) };
     } catch (error) {
       if (error instanceof Lost) return { ok: false, kind: 'lost', reason: error.message };
       const name = error instanceof Error ? error.name : 'Error';

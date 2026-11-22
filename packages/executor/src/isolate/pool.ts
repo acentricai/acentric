@@ -17,7 +17,7 @@ import type { Json } from '@acentric/protocol';
 import { SandboxLost } from '../errors.ts';
 import type { Network } from './config.ts';
 import { Sandbox } from './sandbox.ts';
-import type { CallSecrets, LossKind, Request } from './sandbox.ts';
+import type { CallFiles, CallSecrets, LossKind, Request } from './sandbox.ts';
 
 export type PoolOptions = {
   /** How many workerd processes. Each runs all of its isolates on one thread. Default 2. */
@@ -110,6 +110,8 @@ export type CallRequest = {
   readonly context: Json;
   /** The secrets of this call: what the code asks for reaches them, and nothing else does. */
   readonly secrets: CallSecrets;
+  /** The files of this call: those of the machine of the actor it is for. Without it, it has none. */
+  readonly files?: CallFiles;
   readonly signal?: AbortSignal;
 };
 
@@ -507,7 +509,10 @@ export async function createPool(options: PoolOptions = {}): Promise<Pool> {
             id,
             keyed.code,
             { path: request.path, argument: request.argument, context: request.context },
-            request.secrets,
+            {
+              secrets: request.secrets,
+              ...(request.files === undefined ? {} : { files: request.files }),
+            },
           ),
           signal,
         );

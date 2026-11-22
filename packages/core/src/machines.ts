@@ -28,6 +28,8 @@ import type {
   AgentId,
   CommandEnded,
   CommandRef,
+  MachineFilePart,
+  MachineFileRequest,
   FromEngine,
   Hello,
   Machine,
@@ -719,41 +721,32 @@ export class Machines {
   }
 
   /**
-   * A file of a machine, as an agent's code reads or writes it from its actor's working
-   * directory: all of it, moved in as many requests as it takes. A read gives its bytes in
-   * base64.
+   * A part of a file of a machine, as an agent's code reads or writes it from its actor's
+   * working directory. Its code moves a file in as many parts as it takes, and no file larger
+   * than it may: one that is, is refused before any of it is written.
    */
   async file(
     machine: { readonly id: MachineId; readonly cwd: string },
-    request: { readonly op: 'read' | 'write'; readonly path: string; readonly data?: string },
-  ): Promise<string | undefined> {
+    request: MachineFileRequest,
+  ): Promise<MachineFilePart | undefined> {
     const { id, cwd } = machine;
-    const { path } = request;
+    const { path, from } = request;
     const tooLarge = (bytes: number): MachineRefused =>
       new MachineRefused(
         'invalid',
         `${path} is ${String(bytes)} bytes: an agent's code reads and writes files of at most ${String(AGENT_FILE_BYTES >> 20)} MiB`,
       );
     if (request.op === 'read') {
-      const parts: Buffer[] = [];
-      for (let from = 0; ;) {
-        const read = await this.read(id, { path, cwd, from, max: FILE_BYTES });
-        if (read.size > AGENT_FILE_BYTES) throw tooLarge(read.size);
-        const part = Buffer.from(read.data, 'base64');
-        parts.push(part);
-        from += part.length;
-        if (part.length === 0 || from >= read.size) break;
-      }
-      return Buffer.concat(parts).toString('base64');
+      const read = await this.read(id, { path, cwd, from, max: FILE_BYTES });
+      if (read.size > AGENT_FILE_BYTES) throw tooLarge(read.size);
+      return { size: read.size, data: read.data };
     }
-    const bytes = Buffer.from(request.data ?? '', 'base64');
-    if (bytes.length > AGENT_FILE_BYTES) throw tooLarge(bytes.length);
-    // The first part in place of what the file had, and each next one after its end.
-    for (let from = 0; ; from += FILE_BYTES) {
-      const part = bytes.subarray(from, from + FILE_BYTES);
-      await this.write(id, { path, cwd, from, data: part.toString('base64') });
-      if (from + FILE_BYTES >= bytes.length) break;
-    }
+    // What the code says the file is to be, and no less than what it has sent of it.
+    const { data } = request;
+    const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+    const size = Math.max(request.size, from + (data.length / 4) * 3 - padding);
+    if (size > AGENT_FILE_BYTES) throw tooLarge(size);
+    await this.write(id, { path, cwd, from, data });
     return undefined;
   }
 

@@ -7,12 +7,14 @@
 //   { t: 'inspect', id, key, code }
 //   { t: 'cancel', id }
 //   { t: 'secret', id, sid, value } | { t: 'secret', id, sid, error: { name, message } }
+//   { t: 'file', id, sid, value? } | { t: 'file', id, sid, error: { name, message } }
 //   { t: 'ping', n }
 // Host to engine:
 //   { t: 'result', id, result }      how the call ended, or what the code said it is
 //   { t: 'needCode', id }            this process does not hold the code: send the call again with it
 //   { t: 'failed', id, load, message }   the code did not load, or the call could not be made
 //   { t: 'secret', id, sid, name }   the agent's code asks for a secret, in call `id`
+//   { t: 'file', id, sid, request }  it asks for a part of a file of its actor's machine
 //   { t: 'pong', n, loaded, loading, queued }
 //   { t: 'loaded', key, loading, queued }   code finished loading, or failed to
 // A message longer than PART characters goes as frames { t: 'part', d } and a last
@@ -75,7 +77,10 @@ function load(env, key) {
   return { worker, generation };
 }
 
-/** What one call's code may reach of the engine: the secrets of its agent. */
+/**
+ * What one call's code may reach of the engine: the secrets of its agent, and the files of its
+ * actor's machine.
+ */
 class CallHost extends RpcTarget {
   #connection;
   #id;
@@ -85,7 +90,10 @@ class CallHost extends RpcTarget {
     this.#id = id;
   }
   secret(name) {
-    return this.#connection.ask(this.#id, name);
+    return this.#connection.ask(this.#id, 'secret', { name });
+  }
+  file(request) {
+    return this.#connection.ask(this.#id, 'file', { request });
   }
 }
 
@@ -95,8 +103,8 @@ class Connection {
   #parts = [];
   // Calls the engine waits for, by id.
   #calls = new Map();
-  // Secrets asked for and not answered yet, by `${id}/${sid}`.
-  #secrets = new Map();
+  // What calls asked the engine and are not answered yet, by `${id}/${sid}`.
+  #asked = new Map();
   #sid = 0;
 
   constructor(socket, env) {
@@ -135,10 +143,11 @@ class Connection {
         return void this.#start(message);
       case 'cancel':
         return this.#cancel(message.id);
-      case 'secret': {
+      case 'secret':
+      case 'file': {
         const key = `${message.id}/${message.sid}`;
-        const waiting = this.#secrets.get(key);
-        this.#secrets.delete(key);
+        const waiting = this.#asked.get(key);
+        this.#asked.delete(key);
         return waiting?.resolve(
           message.error === undefined ? { value: message.value } : { error: message.error },
         );
@@ -148,27 +157,27 @@ class Connection {
     }
   }
 
-  /** Asks the engine for a secret, for call `id`. */
-  ask(id, name) {
+  /** Asks the engine for a secret or a part of a file, for call `id`. */
+  ask(id, t, body) {
     if (!this.#calls.has(id)) {
       return { error: { name: 'Error', message: 'the call is over' } };
     }
     const sid = ++this.#sid;
     return new Promise((resolve) => {
-      this.#secrets.set(`${id}/${sid}`, { id, resolve });
-      this.send({ t: 'secret', id, sid, name });
+      this.#asked.set(`${id}/${sid}`, { id, resolve });
+      this.send({ t, id, sid, ...body });
     });
   }
 
   /**
    * The engine stopped waiting for call `id`. Nothing of it is kept here, even while its code
-   * goes on running: the secrets it waits for are refused, and any it asks for later.
+   * goes on running: what it waits for of the engine is refused, and what it asks for later.
    */
   #cancel(id) {
     if (!this.#calls.delete(id)) return;
-    for (const [key, waiting] of this.#secrets) {
+    for (const [key, waiting] of this.#asked) {
       if (waiting.id !== id) continue;
-      this.#secrets.delete(key);
+      this.#asked.delete(key);
       waiting.resolve({ error: { name: 'AbortError', message: 'the call was stopped' } });
     }
   }

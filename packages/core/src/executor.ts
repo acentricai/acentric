@@ -10,7 +10,10 @@ import type {
   CallIssue,
   CallOutcome,
   DeploymentId,
+  MachineFilePart,
+  MachineFileRequest,
   Json,
+  MachineId,
   Reasoning,
 } from '@acentric/protocol';
 
@@ -26,6 +29,15 @@ export type CallContext = {
   readonly configuration: Json | null;
   readonly modelId: string;
   readonly reasoning: Reasoning;
+  /**
+   * The machine the actor works on, and its working directory there. Null for one that has
+   * none. The engine adds the variables its commands are run with as it makes the call.
+   */
+  readonly machine: {
+    readonly id: MachineId;
+    readonly cwd: string;
+    readonly env?: { readonly [name: string]: string };
+  } | null;
 };
 
 /** The context of a call for an actor. */
@@ -38,8 +50,27 @@ export function contextOf(actor: Actor): CallContext {
     configuration: actor.configuration,
     modelId: actor.modelId,
     reasoning: actor.reasoning,
+    machine: actor.machine === null ? null : { id: actor.machine.id, cwd: actor.machine.cwd },
   };
 }
+
+/**
+ * What the engine does for one call's code while it runs, which the executor cannot do itself.
+ * It is of that call alone: the machine is the one of the actor the call is for, and its code
+ * names none.
+ */
+export type CallHost = {
+  /**
+   * Reads or writes a part of a file of the actor's machine. Rejects with what went wrong,
+   * which the code is told.
+   */
+  file(request: MachineFileRequest): Promise<MachineFilePart | undefined>;
+};
+
+/** What the engine does for a call of an actor that has no machine: nothing. */
+export const NO_MACHINE: CallHost = {
+  file: () => Promise.reject(new Error('The actor has no machine')),
+};
 
 /**
  * How a call of an agent's function ended: with what it returned, with what its schema found
@@ -88,5 +119,6 @@ export interface Executor {
     argument: Json,
     context: CallContext,
     signal: AbortSignal,
+    host: CallHost,
   ): Promise<CallResult>;
 }
