@@ -6,11 +6,13 @@
 
 import type { ModelAnswer } from '@acentric/ai';
 import type {
+  AccountId,
   ConversationEntry,
   Input,
   Message,
   ToolResultMessage,
   TurnEnd,
+  Usage,
 } from '@acentric/protocol';
 
 import type { ActorPatch, ActorRecord, Change, OwedCall, Turn } from './state.ts';
@@ -65,6 +67,7 @@ export type MachineEvent =
       readonly type: 'answered';
       readonly answer: ModelAnswer;
       readonly sent?: NonNullable<Change['sent']>;
+      readonly call?: ModelCall;
     }
   /** The call of the model failed. */
   | {
@@ -79,6 +82,9 @@ export type MachineEvent =
        * The call is made again at once without the reasoning there is so far.
        */
       readonly staleReasoning?: boolean;
+      /** The call that failed, when one was made, and what kind of failure it was. */
+      readonly call?: ModelCall;
+      readonly kind?: string;
     }
   /** A restart found the call of the model owed: it may have been under way. */
   | { readonly type: 'cut_off' }
@@ -96,6 +102,13 @@ export type MachineEvent =
   | { readonly type: 'interrupted' }
   | { readonly type: 'archive' }
   | { readonly type: 'unarchive' };
+
+/** A call of the model that was made: with which account, of which provider, and how long it took. */
+export type ModelCall = {
+  readonly account: AccountId | null;
+  readonly provider: string;
+  readonly durationMs: number;
+};
 
 /** The event does not follow from where the actor stands. */
 export class OutOfTurn extends Error {
@@ -134,6 +147,26 @@ export function decide(
   });
   const mail = (inputs: readonly Input[]): ConversationEntry[] =>
     inputs.map((input) => entry(input.message, { input: { id: input.id, type: input.type } }));
+  /** What a call of the model used, as it is written down with the step that ends the call. */
+  const used = (
+    call: ModelCall | undefined,
+    usage: Usage | undefined,
+    failure: string | null,
+  ): Change['usage'] =>
+    call === undefined
+      ? null
+      : {
+          at: now,
+          actor: actor.id,
+          agent: actor.agent,
+          version: actor.deployment.version,
+          account: call.account,
+          provider: call.provider,
+          model: actor.modelId,
+          usage: usage ?? null,
+          failure,
+          durationMs: call.durationMs,
+        };
   const refuse = (): never => {
     throw new OutOfTurn(`${event.type} does not follow from ${actor.status}, ${turn.phase}`);
   };
@@ -154,6 +187,7 @@ export function decide(
     leaveOutFrom: null,
     set: null,
     sent: null,
+    usage: null,
   });
   /** The step that ends a turn. */
   const ends = (
@@ -171,6 +205,7 @@ export function decide(
     leaveOutFrom: null,
     set: null,
     sent: null,
+    usage: null,
   });
   switch (event.type) {
     case 'wake': {
@@ -208,6 +243,7 @@ export function decide(
       if (turn.phase !== 'model') return refuse();
       const { answer } = event;
       const sent = event.sent ?? null;
+      const usage = used(event.call, answer.usage, null);
       const completion = {
         stopReason: answer.stopReason,
         ...(answer.usage === undefined ? {} : { usage: answer.usage }),
@@ -221,30 +257,39 @@ export function decide(
           ]),
           leaveOutFrom: turn.startSeq,
           sent,
+          usage,
         };
       }
       const said = entry(answer.message, { completion });
       if (answer.toolCalls.length === 0) {
         // The provider paused in the middle of its own work: sent its answer back, it goes on.
         if (answer.stopReason === 'pause_turn') {
-          return { ...goesOn(model(turn.startSeq), [said]), sent };
+          return { ...goesOn(model(turn.startSeq), [said]), sent, usage };
         }
-        return { ...ends('ok', undefined, [said]), sent };
+        return { ...ends('ok', undefined, [said]), sent, usage };
       }
       const calls: OwedCall[] = answer.toolCalls.map((call) => ({ ...call, result: null }));
-      return { ...goesOn({ phase: 'tools', startSeq: turn.startSeq, calls }, [said]), sent };
+      return {
+        ...goesOn({ phase: 'tools', startSeq: turn.startSeq, calls }, [said]),
+        sent,
+        usage,
+      };
     }
 
     case 'model_failed': {
       if (turn.phase !== 'model') return refuse();
       const { retry } = rules;
+      const usage = used(event.call, undefined, event.kind ?? 'other');
       const again = event.retryable || event.staleReasoning === true;
-      if (!again || turn.attempt >= retry.maxAttempts) return ends('failed', event.reason);
+      if (!again || turn.attempt >= retry.maxAttempts) {
+        return { ...ends('failed', event.reason), usage };
+      }
       if (event.staleReasoning === true) {
         // Not a wait for the provider: the same call, without the reasoning that was refused.
         return {
           ...goesOn({ ...turn, attempt: turn.attempt + 1, retryAt: null }),
           sent: { fingerprint: record.sent, reasoningFrom: record.nextSeq },
+          usage,
         };
       }
       const backoff = Math.min(
@@ -252,7 +297,7 @@ export function decide(
         retry.maxDelayMs,
       );
       const wait = event.retryAfterMs ?? backoff;
-      return goesOn({ ...turn, attempt: turn.attempt + 1, retryAt: now + wait });
+      return { ...goesOn({ ...turn, attempt: turn.attempt + 1, retryAt: now + wait }), usage };
     }
 
     case 'cut_off': {

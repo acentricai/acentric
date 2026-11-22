@@ -282,6 +282,88 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
       });
     });
 
+    describe('what was used', () => {
+      const used = { totalInput: 40, input: 30, cacheRead: 10, output: 5 };
+      const cost = { total: 0.002, source: 'estimated' } as const;
+      const account = makeId('account', { now: 1, random: new Uint8Array(10).fill(3) });
+
+      it('is written down for every call of the model, answered or failed', async () => {
+        const one = w.engine([
+          overloaded,
+          { ...lookup, usage: used },
+          { ...says('It was refunded twice.'), usage: { ...used, cost } },
+        ]);
+        const actor = await one.createActor();
+        await one.say(actor.id, 'What happened to order 4411?');
+        await one.it.settled(actor.id);
+
+        const report = await one.it.usage({}, 'actor');
+        expect(report.totals).toMatchObject({
+          calls: 3,
+          failed: 1,
+          totalInput: 80,
+          input: 60,
+          cacheRead: 20,
+          output: 10,
+          cost: 0.002,
+          estimatedCost: 0.002,
+          // The call that was answered with no cost. One that failed is not unpriced.
+          unpriced: 1,
+        });
+        expect(report.groups?.map((group) => [group.key, group.totals.calls])).toEqual([
+          [actor.id, 3],
+        ]);
+        expect((await one.it.usage({}, 'model')).groups?.[0]?.key).toBe('fake-1');
+        expect((await one.it.usage({}, 'provider')).groups?.[0]?.key).toBe('fake');
+        // The engine was given a runner, and no account.
+        expect((await one.it.usage({}, 'account')).groups?.[0]?.key).toBe('');
+      });
+
+      it('is of the model account the call was made with', async () => {
+        const one = w.engine([], {
+          options: {
+            runner: () => ({
+              account,
+              runner: { run: async () => ({ ...says('Hi.'), usage: used }) },
+            }),
+          },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Hello?');
+        await one.it.settled(actor.id);
+        expect((await one.it.usage({ account })).totals).toMatchObject({ calls: 1, output: 5 });
+        expect((await one.it.usage({}, 'account')).groups?.[0]?.key).toBe(account);
+      });
+
+      it('has nothing of a turn whose model could not be had: no provider was asked', async () => {
+        const one = w.engine([], {
+          options: {
+            runner: () => {
+              throw new Error('There is no model account for Fake');
+            },
+          },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Hello?');
+        await one.it.settled(actor.id);
+        expect((await one.it.usage()).totals.calls).toBe(0);
+      });
+
+      it('stays when the agent it was used by is deleted, with its actors', async () => {
+        const one = w.engine([{ ...says('Hello.'), usage: used }]);
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Hello?');
+        await one.it.settled(actor.id);
+        await one.it.deleteAgent(actor.agent);
+        await expect(one.it.getActor(actor.id)).rejects.toBeInstanceOf(ActorNotFound);
+        expect((await one.it.usage({ actor: actor.id })).totals).toMatchObject({
+          calls: 1,
+          totalInput: 40,
+        });
+        expect((await one.it.usage({ agent: actor.agent })).totals.calls).toBe(1);
+      });
+    });
+
     describe('mail', () => {
       it('that comes while a tool runs joins the turn when it goes back to the model', async () => {
         const gate = deferred<string>();

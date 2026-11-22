@@ -65,6 +65,7 @@ const change = (seq: number) => ({
   leaveOutFrom: null,
   set: null,
   sent: null,
+  usage: null,
 });
 
 describe('the store on SQLite', () => {

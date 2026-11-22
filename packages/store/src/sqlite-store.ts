@@ -16,13 +16,16 @@ import type {
   Redeem,
   SealedSecret,
   Store,
+  StoredAccount,
   StoredDeployment,
   StoredKey,
   StoredLink,
   StoredSession,
   StoredUser,
+  UsageFilter,
 } from '@acentric/core';
 import type {
+  AccountId,
   Actor,
   ActorId,
   Agent,
@@ -38,6 +41,8 @@ import type {
   KeyId,
   Session,
   SessionId,
+  UsageGroup,
+  UsageReport,
   User,
   UserId,
 } from '@acentric/protocol';
@@ -129,7 +134,8 @@ class Line {
       const [actor, read, now] = refused.args as [ActorId, number, number];
       waiting.reject(new StaleEpoch(actor, read, now));
     } else if (refused?.kind === 'NameTaken') {
-      const of = refused.args[1] === 'agent' ? 'agent' : 'actor';
+      const said = refused.args[1];
+      const of = said === 'agent' || said === 'account' ? said : 'actor';
       waiting.reject(new NameTaken(String(refused.args[0]), of));
     } else if (refused?.kind === 'EmailTaken') {
       waiting.reject(new EmailTaken(String(refused.args[0])));
@@ -203,6 +209,39 @@ export class SqliteStore implements Store {
     id: AgentId,
   ): Promise<{ deployments: DeploymentId[]; actors: ActorId[] } | undefined> {
     return this.#write.ask('deleteAgent' satisfies Operation, id);
+  }
+
+  setAgentAccount(agent: AgentId, account: AccountId | null): Promise<Agent | undefined> {
+    return this.#write.ask('setAgentAccount' satisfies Operation, agent, account);
+  }
+
+  addAccount(account: StoredAccount): Promise<void> {
+    return this.#write.ask('addAccount' satisfies Operation, account);
+  }
+
+  // What a model is called with is read where it was written, so that it is never behind.
+  loadAccount(id: AccountId): Promise<StoredAccount | undefined> {
+    return this.#write.ask('loadAccount' satisfies Operation, id);
+  }
+
+  listAccounts(): Promise<StoredAccount[]> {
+    return this.#write.ask('listAccounts' satisfies Operation);
+  }
+
+  saveAccount(account: StoredAccount): Promise<void> {
+    return this.#write.ask('saveAccount' satisfies Operation, account);
+  }
+
+  removeAccount(id: AccountId): Promise<void> {
+    return this.#write.ask('removeAccount' satisfies Operation, id);
+  }
+
+  agentsOf(account: AccountId): Promise<AgentId[]> {
+    return this.#write.ask('agentsOf' satisfies Operation, account);
+  }
+
+  usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport> {
+    return this.#read.ask('usage' satisfies Operation, filter, by);
   }
 
   addKey(key: StoredKey): Promise<void> {

@@ -12,14 +12,17 @@ import type {
   Paged,
   Redeem,
   SealedSecret,
+  StoredAccount,
   StoredDeployment,
   StoredKey,
   StoredLink,
   StoredSession,
   StoredUser,
   Turn,
+  UsageFilter,
 } from '@acentric/core';
 import type {
+  AccountId,
   Actor,
   ActorId,
   Agent,
@@ -36,6 +39,9 @@ import type {
   KeyId,
   Session,
   SessionId,
+  UsageGroup,
+  UsageReport,
+  UsageTotals,
   User,
   UserId,
 } from '@acentric/protocol';
@@ -59,6 +65,7 @@ type AgentRow = {
   active_version: number;
   latest_id: string;
   latest_version: number;
+  account_id: string | null;
   created_at: number;
 };
 
@@ -69,8 +76,82 @@ function agentOf(row: AgentRow): Agent {
     provider: row.provider,
     activeDeployment: { id: row.active_id, version: row.active_version },
     latestDeployment: { id: row.latest_id, version: row.latest_version },
+    account: row.account_id,
     createdAt: row.created_at,
   } as Agent;
+}
+
+/** The sums of the rows of `usage` a query leaves, as one row of it. */
+const SUMS = `COUNT(*) AS calls,
+  COALESCE(SUM(failure IS NOT NULL), 0) AS failed,
+  COALESCE(SUM(total_input), 0) AS total_input,
+  COALESCE(SUM(input), 0) AS input,
+  COALESCE(SUM(cache_read), 0) AS cache_read,
+  COALESCE(SUM(cache_write), 0) AS cache_write,
+  COALESCE(SUM(output), 0) AS output,
+  COALESCE(SUM(reasoning), 0) AS reasoning,
+  COALESCE(SUM(web_searches), 0) AS web_searches,
+  COALESCE(SUM(cost), 0) AS cost,
+  COALESCE(SUM(CASE WHEN cost_source = 'estimated' THEN cost ELSE 0 END), 0) AS estimated_cost,
+  COALESCE(SUM(failure IS NULL AND cost IS NULL), 0) AS unpriced,
+  COALESCE(SUM(duration_ms), 0) AS duration_ms,
+  MIN(at) AS first,
+  MAX(at) AS last`;
+
+type SumsRow = {
+  key?: string | null;
+  calls: number;
+  failed: number;
+  total_input: number;
+  input: number;
+  cache_read: number;
+  cache_write: number;
+  output: number;
+  reasoning: number;
+  web_searches: number;
+  cost: number;
+  estimated_cost: number;
+  unpriced: number;
+  duration_ms: number;
+  first: number | null;
+  last: number | null;
+};
+
+function totalsOfRow(row: SumsRow): UsageTotals {
+  return {
+    calls: row.calls,
+    failed: row.failed,
+    totalInput: row.total_input,
+    input: row.input,
+    cacheRead: row.cache_read,
+    cacheWrite: row.cache_write,
+    output: row.output,
+    reasoning: row.reasoning,
+    webSearches: row.web_searches,
+    cost: row.cost,
+    estimatedCost: row.estimated_cost,
+    unpriced: row.unpriced,
+    durationMs: row.duration_ms,
+    first: row.first,
+    last: row.last,
+  };
+}
+
+/** What each group of usage is by, as SQLite reads it off a row. */
+const GROUP_BY: { readonly [G in UsageGroup]: string } = {
+  agent: 'agent_id',
+  actor: 'actor_id',
+  account: "COALESCE(account_id, '')",
+  provider: 'provider',
+  model: 'model',
+  // A day in UTC, as the engine names one.
+  day: "strftime('%Y-%m-%d', at / 1000, 'unixepoch')",
+};
+
+type AccountRow = { account: string; sealed: string };
+
+function accountOf(row: AccountRow): StoredAccount {
+  return { account: JSON.parse(row.account) as StoredAccount['account'], sealed: row.sealed };
 }
 
 type KeyRow = { id: string; key: string; hash: string; parent: string | null };
@@ -190,6 +271,10 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'addDeployment',
   'setActive',
   'deleteAgent',
+  'setAgentAccount',
+  'addAccount',
+  'saveAccount',
+  'removeAccount',
   'addKey',
   'removeKeys',
   'touchKey',
@@ -294,8 +379,8 @@ export function operations(db: DatabaseSync) {
       );
       run(
         `INSERT INTO agents (id, name, provider, active_id, active_version, latest_id,
-           latest_version, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           latest_version, account_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET active_id = excluded.active_id,
            active_version = excluded.active_version, latest_id = excluded.latest_id,
            latest_version = excluded.latest_version`,
@@ -306,6 +391,7 @@ export function operations(db: DatabaseSync) {
         agent.activeDeployment.version,
         agent.latestDeployment.id,
         agent.latestDeployment.version,
+        agent.account,
         agent.createdAt,
       );
     },
@@ -377,6 +463,90 @@ export function operations(db: DatabaseSync) {
         id,
       ).map((row) => row.id);
       return { deployments, actors };
+    },
+
+    setAgentAccount(agent: AgentId, account: AccountId | null): Agent | undefined {
+      if (run('UPDATE agents SET account_id = ? WHERE id = ?', account, agent) === 0) {
+        return undefined;
+      }
+      const row = get<AgentRow>('SELECT * FROM agents WHERE id = ?', agent);
+      return row === undefined ? undefined : agentOf(row);
+    },
+
+    addAccount(stored: StoredAccount): void {
+      const { id, name } = stored.account;
+      if (get('SELECT 1 FROM accounts WHERE name = ?', name) !== undefined) {
+        throw new Refused('NameTaken', [name, 'account']);
+      }
+      run(
+        'INSERT INTO accounts (id, name, account, sealed) VALUES (?, ?, ?, ?)',
+        id,
+        name,
+        JSON.stringify(stored.account),
+        stored.sealed,
+      );
+    },
+
+    loadAccount(id: AccountId): StoredAccount | undefined {
+      const row = get<AccountRow>('SELECT account, sealed FROM accounts WHERE id = ?', id);
+      return row === undefined ? undefined : accountOf(row);
+    },
+
+    listAccounts(): StoredAccount[] {
+      return all<AccountRow>('SELECT account, sealed FROM accounts ORDER BY id').map(accountOf);
+    },
+
+    saveAccount(stored: StoredAccount): void {
+      const { id, name } = stored.account;
+      if (get('SELECT 1 FROM accounts WHERE name = ? AND id IS NOT ?', name, id) !== undefined) {
+        throw new Refused('NameTaken', [name, 'account']);
+      }
+      run(
+        'UPDATE accounts SET name = ?, account = ?, sealed = ? WHERE id = ?',
+        name,
+        JSON.stringify(stored.account),
+        stored.sealed,
+        id,
+      );
+    },
+
+    removeAccount(id: AccountId): void {
+      run('DELETE FROM accounts WHERE id = ?', id);
+    },
+
+    agentsOf(account: AccountId): AgentId[] {
+      return all<{ id: AgentId }>(
+        'SELECT id FROM agents WHERE account_id = ? ORDER BY id',
+        account,
+      ).map((row) => row.id);
+    },
+
+    usage(filter: UsageFilter = {}, by?: UsageGroup): UsageReport {
+      const where: string[] = [];
+      const values: SQLInputValue[] = [];
+      const only = (clause: string, value: string | number | undefined) => {
+        if (value === undefined) return;
+        where.push(clause);
+        values.push(value);
+      };
+      only('at >= ?', filter.from);
+      only('at < ?', filter.to);
+      only('agent_id = ?', filter.agent);
+      only('actor_id = ?', filter.actor);
+      only('account_id = ?', filter.account);
+      only('provider = ?', filter.provider);
+      only('model = ?', filter.model);
+      const left = where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`;
+      const totals = totalsOfRow(
+        get<SumsRow>(`SELECT ${SUMS} FROM usage${left}`, ...values) as SumsRow,
+      );
+      if (by === undefined) return { totals };
+      const groups = all<SumsRow>(
+        `SELECT ${GROUP_BY[by]} AS key, ${SUMS} FROM usage${left}
+         GROUP BY key ORDER BY cost DESC, key`,
+        ...values,
+      ).map((row) => ({ key: row.key ?? '', totals: totalsOfRow(row) }));
+      return { totals, groups };
     },
 
     addKey(stored: StoredKey): void {
@@ -771,6 +941,34 @@ export function operations(db: DatabaseSync) {
         const row = get<{ epoch: number }>('SELECT epoch FROM actors WHERE id = ?', id);
         if (row === undefined) throw new Error(`There is no actor ${id}`);
         throw new Refused('StaleEpoch', [id, epoch, row.epoch]);
+      }
+      if (change.usage !== null) {
+        const { usage: used } = change;
+        const counted = used.usage;
+        run(
+          `INSERT INTO usage (at, actor_id, agent_id, version, account_id, provider, model,
+             failure, total_input, input, output, reasoning, cache_read, cache_write,
+             web_searches, cost, cost_source, duration_ms)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          used.at,
+          used.actor,
+          used.agent,
+          used.version,
+          used.account,
+          used.provider,
+          used.model,
+          used.failure,
+          counted?.totalInput ?? 0,
+          counted?.input ?? 0,
+          counted?.output ?? 0,
+          counted?.reasoning ?? 0,
+          counted?.cacheRead ?? 0,
+          counted?.cacheWrite ?? 0,
+          counted?.webSearches ?? 0,
+          counted?.cost?.total ?? null,
+          counted?.cost?.source ?? null,
+          used.durationMs,
+        );
       }
       for (const entry of change.append) {
         run(
