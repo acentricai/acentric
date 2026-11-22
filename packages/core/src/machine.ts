@@ -98,8 +98,14 @@ export type MachineEvent =
       readonly result: ToolResultMessage;
       readonly inputs: readonly Input[];
     }
-  /** A person ended the turn. */
-  | { readonly type: 'interrupted' }
+  /**
+   * A person ended the turn. `moved` is what the calls that still waited for a task are
+   * answered with: their tasks go on, and each says so.
+   */
+  | {
+      readonly type: 'interrupted';
+      readonly moved?: readonly { readonly call: string; readonly text: string }[];
+    }
   | { readonly type: 'archive' }
   | { readonly type: 'unarchive' };
 
@@ -123,6 +129,17 @@ function stopped(call: OwedCall): ToolResultMessage {
     toolName: call.name,
     content: [{ type: 'text', text: 'The call was stopped: the turn was interrupted.' }],
     isError: true,
+  };
+}
+
+/** What a call whose task goes on without it is answered with. */
+function movedOn(call: OwedCall, text: string): ToolResultMessage {
+  return {
+    role: 'tool_result',
+    toolCallId: call.id,
+    toolName: call.name,
+    content: [{ type: 'text', text }],
+    ...(call.resultOptions === undefined ? {} : { providerOptions: call.resultOptions }),
   };
 }
 
@@ -338,7 +355,12 @@ export function decide(
       return ends(
         'interrupted',
         undefined,
-        turn.calls.map((call) => entry(call.result ?? stopped(call))),
+        turn.calls.map((call) => {
+          const moved = event.moved?.find((one) => one.call === call.id);
+          return entry(
+            call.result ?? (moved === undefined ? stopped(call) : movedOn(call, moved.text)),
+          );
+        }),
       );
     }
 

@@ -8,6 +8,7 @@ import type { Actor } from '@acentric/protocol';
 
 import { engineSuite } from '../../core/test/engine-suite.ts';
 import { storeSuite } from '../../core/test/store-suite.ts';
+import { tasksSuite } from '../../core/test/tasks-suite.ts';
 import { upgradeSuite } from '../../core/test/upgrade-suite.ts';
 import { world } from '../../core/test/world.ts';
 import { SCHEMA_VERSION, SqliteStore } from '../src/index.ts';
@@ -22,6 +23,7 @@ storeSuite('on SQLite, every write a transaction of its own', () =>
 storeSuite('on SQLite, in memory', () => SqliteStore.open(':memory:'));
 engineSuite('on SQLite', () => SqliteStore.open(database()));
 upgradeSuite('on SQLite', () => SqliteStore.open(database()));
+tasksSuite('on SQLite', () => SqliteStore.open(database()));
 
 const NOW = 1_795_305_600_000;
 let made = 0;

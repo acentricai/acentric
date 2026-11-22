@@ -34,8 +34,11 @@ import type {
   Redeem,
   SealedSecret,
   Store,
+  NewTask,
   StoredAccount,
   StoredBlob,
+  StoredTask,
+  TaskEnding,
   StoredDeployment,
   StoredKey,
   StoredLink,
@@ -95,6 +98,7 @@ export class MemoryStore implements Store {
   readonly #audit: AuditEvent[] = [];
   readonly #accounts = new Map<AccountId, StoredAccount>();
   readonly #usage: UsageRecord[] = [];
+  readonly #tasks = new Map<ActorId, StoredTask[]>();
   readonly #blobs = new Map<string, StoredBlob>();
   /** The blobs each actor refers to, each with the media type the actor first gave it. */
   readonly #blobRefs = new Map<ActorId, Map<string, string>>();
@@ -174,6 +178,7 @@ export class MemoryStore implements Store {
       this.#inputs.delete(actor);
       this.#entries.delete(actor);
       this.#blobRefs.delete(actor);
+      this.#tasks.delete(actor);
     }
     return { deployments, actors };
   }
@@ -557,10 +562,109 @@ export class MemoryStore implements Store {
     return copy(part.limit === undefined ? inOrder : inOrder.slice(0, part.limit));
   }
 
+  async quietInputs(actor: ActorId): Promise<void> {
+    const inputs = this.#inputs.get(actor);
+    if (inputs === undefined) return;
+    this.#inputs.set(
+      actor,
+      inputs.map((input) => (input.deliveredAt === null ? { ...input, quiet: true } : input)),
+    );
+  }
+
   async unfinished(): Promise<ActorId[]> {
     return [...this.#actors.values()]
-      .filter((kept) => kept.turn.phase !== 'idle' || this.#pending(kept.actor.id).length > 0)
+      .filter(
+        (kept) =>
+          kept.turn.phase !== 'idle' ||
+          this.#pending(kept.actor.id).some((input) => input.quiet !== true),
+      )
       .map((kept) => kept.actor.id);
+  }
+
+  async startTask(given: NewTask): Promise<StoredTask> {
+    const { prefix, ...task } = given;
+    const tasks = this.#tasks.get(task.actor) ?? [];
+    const started = tasks.find((other) => other.callId === task.callId);
+    if (started !== undefined) return copy(started);
+    const count = tasks.filter((other) => other.kind === task.kind).length;
+    const stored: StoredTask = {
+      ...copy(task),
+      id: `${prefix}${String(count + 1)}`,
+      status: 'running',
+      stoppedBy: null,
+      result: null,
+      summary: null,
+      images: [],
+      endedAt: null,
+    };
+    this.#tasks.set(task.actor, [...tasks, stored]);
+    return copy(stored);
+  }
+
+  async loadTask(actor: ActorId, id: string): Promise<StoredTask | undefined> {
+    const task = (this.#tasks.get(actor) ?? []).find((other) => other.id === id);
+    return task === undefined ? undefined : copy(task);
+  }
+
+  async taskOfCall(actor: ActorId, callId: string): Promise<StoredTask | undefined> {
+    const task = (this.#tasks.get(actor) ?? []).find((other) => other.callId === callId);
+    return task === undefined ? undefined : copy(task);
+  }
+
+  async listTasks(
+    actor: ActorId,
+    query: { readonly running?: boolean } = {},
+  ): Promise<StoredTask[]> {
+    // In the order they were started, they are in the order they were stored.
+    const tasks = (this.#tasks.get(actor) ?? []).filter(
+      (task) => query.running !== true || task.status === 'running',
+    );
+    return copy(tasks.toReversed());
+  }
+
+  async runningTasks(): Promise<StoredTask[]> {
+    return copy([...this.#tasks.values()].flat().filter((task) => task.status === 'running'));
+  }
+
+  #changeTask(actor: ActorId, id: string, change: (task: StoredTask) => StoredTask): void {
+    const tasks = this.#tasks.get(actor) ?? [];
+    this.#tasks.set(
+      actor,
+      tasks.map((task) => (task.id === id ? change(task) : task)),
+    );
+  }
+
+  async detachTask(actor: ActorId, id: string): Promise<boolean> {
+    const task = (this.#tasks.get(actor) ?? []).find((other) => other.id === id);
+    if (task?.status !== 'running' || !task.attached) return false;
+    this.#changeTask(actor, id, (one) => ({ ...one, attached: false }));
+    return true;
+  }
+
+  async detachTasks(actor: ActorId): Promise<StoredTask[]> {
+    const waited = (this.#tasks.get(actor) ?? []).filter(
+      (task) => task.status === 'running' && task.attached,
+    );
+    for (const task of waited)
+      this.#changeTask(actor, task.id, (one) => ({ ...one, attached: false }));
+    return copy(waited.map((task) => ({ ...task, attached: false })));
+  }
+
+  async endTask(
+    actor: ActorId,
+    id: string,
+    end: TaskEnding,
+    notice: Input | null,
+  ): Promise<{ readonly ended: boolean; readonly notified: boolean }> {
+    const task = (this.#tasks.get(actor) ?? []).find((other) => other.id === id);
+    if (task?.status !== 'running') return { ended: false, notified: false };
+    this.#changeTask(actor, id, (one) => ({ ...one, ...copy(end) }));
+    // A task its call still waits for is told by that call's result, and by nothing else.
+    if (notice === null || task.attached || !this.#actors.has(actor)) {
+      return { ended: true, notified: false };
+    }
+    this.#inputs.set(actor, [...(this.#inputs.get(actor) ?? []), copy(notice)]);
+    return { ended: true, notified: true };
   }
 
   async close(): Promise<void> {}

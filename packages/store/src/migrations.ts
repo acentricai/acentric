@@ -201,7 +201,9 @@ const MIGRATIONS: readonly string[] = [
     -- JSON: the message it is in the conversation, or will be.
     message TEXT NOT NULL,
     received_at INTEGER NOT NULL,
-    delivered_at INTEGER
+    delivered_at INTEGER,
+    -- 1 for one that starts no turn: it waits for a turn something else starts.
+    quiet INTEGER NOT NULL DEFAULT 0
   ) STRICT;
 
   -- An external ID is one input's among its actor's: sending it again stores nothing.
@@ -211,6 +213,36 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX inputs_pending ON inputs (actor_id) WHERE delivered_at IS NULL;
   -- An actor's inputs, as a list of them is read.
   CREATE INDEX inputs_actor ON inputs (actor_id, id);
+
+  -- A task: work an actor's model started that may go on after the call that started it.
+  CREATE TABLE tasks (
+    actor_id TEXT NOT NULL,
+    -- Its kind's letter and its number among its actor's tasks of that kind, such as b3.
+    id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    -- JSON: what it was started with.
+    input TEXT NOT NULL,
+    status TEXT NOT NULL,
+    stopped_by TEXT,
+    -- The tool call that started it: a call that is made again finds its task by it.
+    call_id TEXT NOT NULL,
+    -- 1 while that call still waits for it.
+    attached INTEGER NOT NULL,
+    wait_until INTEGER,
+    timeout_at INTEGER,
+    result TEXT,
+    -- The result as a notice carries it, when its kind cut it itself.
+    summary TEXT,
+    -- JSON: the images whose places are marked in the result. NULL for none.
+    images TEXT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    PRIMARY KEY (actor_id, id)
+  ) STRICT, WITHOUT ROWID;
+
+  CREATE UNIQUE INDEX tasks_call ON tasks (actor_id, call_id);
+  -- Those under way: what a start watches again.
+  CREATE INDEX tasks_running ON tasks (actor_id) WHERE status = 'running';
 
   -- A blob: an image or file of a conversation, whose bytes are kept in the blob store under
   -- its digest. A row is there while an actor refers to the blob.

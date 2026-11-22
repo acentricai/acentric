@@ -14,6 +14,7 @@ import {
   supportsBundleProtocol,
 } from '@acentric/protocol';
 import type {
+  AbortResponse,
   Actor,
   ActorId,
   Agent,
@@ -39,6 +40,8 @@ import type {
 
 import type { Access } from './accounts.ts';
 import { Blobs } from './blobs.ts';
+import { Tasks } from './tasks.ts';
+import type { EngineTool, TaskKind, TaskTimes } from './tasks.ts';
 import type { BlobStore } from './blobs.ts';
 import { MemoryBus } from './bus.ts';
 import type { EventBus } from './bus.ts';
@@ -105,6 +108,13 @@ export type EngineOptions = {
    * Without it they stay in their messages, as an agent's code gave them.
    */
   readonly blobs?: BlobStore;
+  /**
+   * The kinds of work a model can start that may go on after the call that started it (see
+   * `tasks.ts`), such as a command on a machine. None, without it.
+   */
+  readonly kinds?: readonly TaskKind[];
+  /** How long a call waits for its task, and the like. For tests. */
+  readonly taskTimes?: Partial<TaskTimes>;
   /** Without it, a bus of this process. */
   readonly bus?: EventBus;
   readonly clock?: Clock;
@@ -173,6 +183,8 @@ export class Engine {
   readonly #host: Host;
   /** The images and files of conversations, whose bytes are kept apart. */
   readonly blobs: Blobs;
+  /** The work models start that may go on after their calls. */
+  readonly tasks: Tasks;
   readonly #slots: Semaphore;
   readonly #maxHot: number;
   /** The drivers, the one touched longest ago first. */
@@ -217,8 +229,29 @@ export class Engine {
       ((error: unknown) => {
         console.error(error);
       });
+    this.tasks = new Tasks({
+      store: options.store,
+      clock: this.#clock,
+      inputId: (now) => this.#ids.make('input', now),
+      keep: (actor, content) => this.blobs.keep(actor, content),
+      report,
+      ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
+      ...(options.taskTimes === undefined ? {} : { times: options.taskTimes }),
+    });
+    // A notice is in the mailbox already: its actor is told, and starts a turn for it.
+    this.tasks.onNotice((notice) => {
+      this.#driver(notice.actor)
+        .then((driver) => {
+          driver.receive(notice);
+        })
+        .catch((error: unknown) => {
+          // An actor that is gone, or an engine that is going away, has nothing to tell.
+          if (!(error instanceof ActorNotFound) && !this.#closing) report(error);
+        });
+    });
     this.#host = {
       store: options.store,
+      tasks: this.tasks,
       access: async (actor, definition) => {
         const given = typeof runner === 'function' ? await runner(actor, definition) : runner;
         return 'run' in given ? { account: null, runner: given } : given;
@@ -240,7 +273,7 @@ export class Engine {
         const found = await this.#store.findDeployment(agent, version);
         return found === undefined ? undefined : { id: found.id, version };
       },
-      fingerprint: (definition) => this.#fingerprint(definition),
+      fingerprint: (definition, own) => this.#fingerprint(definition, own),
       bindsReasoning: (actor, definition) =>
         this.#providers.has(definition.provider) &&
         bindsReasoning(this.#providers.get(definition.provider), actor.modelId),
@@ -502,6 +535,8 @@ export class Engine {
       this.#loaded.delete(deployment);
       await this.#executor.unload(deployment);
     }
+    // What its actors had running is stopped where it runs. Nothing is told of it.
+    for (const actor of gone.actors) this.tasks.forget(actor);
     // What only its actors' conversations referred to goes with them.
     if (gone.actors.length > 0) await this.blobs.collect();
   }
@@ -717,6 +752,21 @@ export class Engine {
     return (await this.#driver(id)).interrupt();
   }
 
+  /**
+   * Stops everything an actor is doing: its turn, and every task it has running. It is left
+   * at rest, and whole: what waited in its mailbox, and the endings of what was stopped, start
+   * no turn, and are in their place when something new does. Resolves once all of it has
+   * stopped.
+   */
+  async abort(id: ActorId): Promise<AbortResponse> {
+    const driver = await this.#driver(id);
+    const interrupted = driver.record.turn.phase !== 'idle';
+    await driver.hush();
+    await driver.interrupt('the turn was aborted by a person, and it is being stopped');
+    const tasks = await this.tasks.stopAll(id);
+    return { actor: (await this.#driver(id)).record.actor, interrupted, tasks };
+  }
+
   /** Has an actor whose last turn failed try it again, with nothing new. */
   async retry(id: ActorId): Promise<Actor> {
     return (await this.#driver(id)).retry();
@@ -724,7 +774,10 @@ export class Engine {
 
   /** Puts an actor away: it takes no input until it is unarchived. A turn it is in is ended. */
   async archive(id: ActorId): Promise<Actor> {
-    return (await this.#driver(id)).archive();
+    const actor = await (await this.#driver(id)).archive();
+    // What it had running is stopped with it. Their endings start no turn.
+    await this.tasks.stopAll(id);
+    return actor;
   }
 
   async unarchive(id: ActorId): Promise<Actor> {
@@ -736,6 +789,8 @@ export class Engine {
    * how many there were. They go on as turns come free, not all at once.
    */
   async recover(): Promise<number> {
+    // The tasks that were under way are watched again, before any call that waits for one.
+    await this.tasks.recover();
     const owed = await this.#store.unfinished();
     for (const id of owed) (await this.#driver(id)).wake(true);
     return owed.length;
@@ -764,6 +819,8 @@ export class Engine {
   async close(options: { readonly graceMs?: number } = {}): Promise<void> {
     if (this.#closing) return;
     this.#closing = true;
+    // A call that waits for a task waits no longer: the task goes on, and the call stays owed.
+    this.tasks.closing();
     this.#slots.close();
     await Promise.allSettled(this.#loading.values());
     const drivers = [...this.#drivers.values()];
@@ -780,6 +837,7 @@ export class Engine {
     await settled;
     for (const driver of drivers) driver.abandon(new Unavailable());
     this.#drivers.clear();
+    await this.tasks.close();
   }
 
   /** An agent, as it was last read or written here. */
@@ -875,7 +933,22 @@ export class Engine {
    * What names the instructions and tools the model is sent for a definition: the same for
    * the same ones, and another when anything of them differs.
    */
-  #fingerprint(definition: AgentDefinition): string {
+  #fingerprint(definition: AgentDefinition, own: readonly EngineTool[]): string {
+    const base = this.#fingerprintOf(definition);
+    // With the engine's own tools the actor is offered: a model is sent those too.
+    if (own.length === 0) return base;
+    return createHash('sha256')
+      .update(base)
+      .update(
+        JSON.stringify(
+          own.map(({ name, description, parameters }) => [name, description, parameters]),
+        ),
+      )
+      .digest('hex')
+      .slice(0, 32);
+  }
+
+  #fingerprintOf(definition: AgentDefinition): string {
     let fingerprint = this.#fingerprints.get(definition);
     if (fingerprint === undefined) {
       const tools = definition.tools.map(({ name, description, parameters }) => [

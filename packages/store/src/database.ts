@@ -12,8 +12,11 @@ import type {
   Paged,
   Redeem,
   SealedSecret,
+  NewTask,
   StoredAccount,
   StoredBlob,
+  StoredTask,
+  TaskEnding,
   StoredDeployment,
   StoredKey,
   StoredLink,
@@ -216,7 +219,46 @@ type InputRow = {
   message: string;
   received_at: number;
   delivered_at: number | null;
+  quiet: number;
 };
+
+type TaskRow = {
+  actor_id: string;
+  id: string;
+  kind: string;
+  input: string;
+  status: string;
+  stopped_by: string | null;
+  call_id: string;
+  attached: number;
+  wait_until: number | null;
+  timeout_at: number | null;
+  result: string | null;
+  summary: string | null;
+  images: string | null;
+  started_at: number;
+  ended_at: number | null;
+};
+
+function taskOf(row: TaskRow): StoredTask {
+  return {
+    actor: row.actor_id,
+    id: row.id,
+    kind: row.kind,
+    input: JSON.parse(row.input),
+    status: row.status,
+    stoppedBy: row.stopped_by,
+    callId: row.call_id,
+    attached: row.attached === 1,
+    waitUntil: row.wait_until,
+    timeoutAt: row.timeout_at,
+    result: row.result,
+    summary: row.summary,
+    images: row.images === null ? [] : JSON.parse(row.images),
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+  } as StoredTask;
+}
 
 const ACTOR = `SELECT actors.*,
   (SELECT COUNT(*) FROM inputs WHERE actor_id = actors.id AND delivered_at IS NULL) AS pending
@@ -261,6 +303,7 @@ function inputOf(row: InputRow): Input {
     message: JSON.parse(row.message),
     receivedAt: row.received_at,
     deliveredAt: row.delivered_at,
+    ...(row.quiet === 1 ? { quiet: true } : {}),
   } as Input;
 }
 
@@ -278,6 +321,11 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'removeAccount',
   'addBlob',
   'dropUnreferencedBlobs',
+  'quietInputs',
+  'startTask',
+  'detachTask',
+  'detachTasks',
+  'endTask',
   'addKey',
   'removeKeys',
   'touchKey',
@@ -359,6 +407,25 @@ export function operations(db: DatabaseSync) {
       actor,
     ) !== undefined;
 
+  const task = (actor: ActorId, id: string): TaskRow | undefined =>
+    get<TaskRow>('SELECT * FROM tasks WHERE actor_id = ? AND id = ?', actor, id);
+
+  /** Puts an input in the mailbox. 0 when its actor has one of its external ID already. */
+  const putInput = (input: Input): number =>
+    run(
+      `INSERT INTO inputs
+         (id, actor_id, type, external_id, message, received_at, delivered_at, quiet)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (actor_id, external_id) WHERE external_id IS NOT NULL DO NOTHING`,
+      input.id,
+      input.actor,
+      input.type,
+      input.externalId,
+      JSON.stringify(input.message),
+      input.receivedAt,
+      input.deliveredAt,
+      input.quiet === true ? 1 : 0,
+    );
   return {
     addDeployment(given: { agent: Agent; deployment: Deployment; code: string }): void {
       const { agent, deployment, code } = given;
@@ -465,6 +532,7 @@ export function operations(db: DatabaseSync) {
         'DELETE FROM actor_blobs WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
         id,
       );
+      run('DELETE FROM tasks WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
       const actors = all<{ id: ActorId }>(
         'DELETE FROM actors WHERE agent_id = ? RETURNING id',
         id,
@@ -1046,19 +1114,7 @@ export function operations(db: DatabaseSync) {
     },
 
     addInput(input: Input): 'accepted' | 'duplicate' {
-      const inserted = run(
-        `INSERT INTO inputs (id, actor_id, type, external_id, message, received_at, delivered_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (actor_id, external_id) WHERE external_id IS NOT NULL DO NOTHING`,
-        input.id,
-        input.actor,
-        input.type,
-        input.externalId,
-        JSON.stringify(input.message),
-        input.receivedAt,
-        input.deliveredAt,
-      );
-      return inserted === 0 ? 'duplicate' : 'accepted';
+      return putInput(input) === 0 ? 'duplicate' : 'accepted';
     },
 
     findInput(actor: ActorId, externalId: string): InputId | undefined {
@@ -1111,11 +1167,119 @@ export function operations(db: DatabaseSync) {
       ).map((row) => JSON.parse(row.entry) as ConversationEntry);
     },
 
+    quietInputs(actor: ActorId): void {
+      run('UPDATE inputs SET quiet = 1 WHERE actor_id = ? AND delivered_at IS NULL', actor);
+    },
+
     unfinished(): ActorId[] {
       return all<{ id: ActorId }>(
         `SELECT id FROM actors WHERE owed = 1
-         UNION SELECT actor_id FROM inputs WHERE delivered_at IS NULL`,
+         UNION SELECT actor_id FROM inputs WHERE delivered_at IS NULL AND quiet = 0`,
       ).map((row) => row.id);
+    },
+
+    startTask(given: NewTask): StoredTask {
+      const started = get<TaskRow>(
+        'SELECT * FROM tasks WHERE actor_id = ? AND call_id = ?',
+        given.actor,
+        given.callId,
+      );
+      if (started !== undefined) return taskOf(started);
+      const counted = get<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM tasks WHERE actor_id = ? AND kind = ?',
+        given.actor,
+        given.kind,
+      );
+      const id = `${given.prefix}${String((counted?.count ?? 0) + 1)}`;
+      run(
+        `INSERT INTO tasks
+           (actor_id, id, kind, input, status, call_id, attached, wait_until, timeout_at, started_at)
+         VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`,
+        given.actor,
+        id,
+        given.kind,
+        JSON.stringify(given.input),
+        given.callId,
+        given.attached ? 1 : 0,
+        given.waitUntil,
+        given.timeoutAt,
+        given.startedAt,
+      );
+      return taskOf(task(given.actor, id) as TaskRow);
+    },
+
+    loadTask(actor: ActorId, id: string): StoredTask | undefined {
+      const row = task(actor, id);
+      return row === undefined ? undefined : taskOf(row);
+    },
+
+    taskOfCall(actor: ActorId, callId: string): StoredTask | undefined {
+      const row = get<TaskRow>(
+        'SELECT * FROM tasks WHERE actor_id = ? AND call_id = ?',
+        actor,
+        callId,
+      );
+      return row === undefined ? undefined : taskOf(row);
+    },
+
+    listTasks(actor: ActorId, query: { readonly running?: boolean } = {}): StoredTask[] {
+      return all<TaskRow>(
+        `SELECT * FROM tasks WHERE actor_id = ? ${query.running === true ? "AND status = 'running'" : ''}
+         ORDER BY started_at DESC, length(id) DESC, id DESC`,
+        actor,
+      ).map(taskOf);
+    },
+
+    runningTasks(): StoredTask[] {
+      return all<TaskRow>(
+        "SELECT * FROM tasks WHERE status = 'running' ORDER BY started_at, actor_id, id",
+      ).map(taskOf);
+    },
+
+    detachTask(actor: ActorId, id: string): boolean {
+      const changed = run(
+        "UPDATE tasks SET attached = 0 WHERE actor_id = ? AND id = ? AND status = 'running' AND attached = 1",
+        actor,
+        id,
+      );
+      return changed === 1;
+    },
+
+    detachTasks(actor: ActorId): StoredTask[] {
+      return all<TaskRow>(
+        `UPDATE tasks SET attached = 0
+         WHERE actor_id = ? AND status = 'running' AND attached = 1 RETURNING *`,
+        actor,
+      ).map(taskOf);
+    },
+
+    endTask(
+      actor: ActorId,
+      id: string,
+      end: TaskEnding,
+      notice: Input | null,
+    ): { ended: boolean; notified: boolean } {
+      const row = task(actor, id);
+      if (row?.status !== 'running') return { ended: false, notified: false };
+      run(
+        `UPDATE tasks SET status = ?, stopped_by = ?, result = ?, summary = ?, images = ?, ended_at = ?
+         WHERE actor_id = ? AND id = ?`,
+        end.status,
+        end.stoppedBy,
+        end.result,
+        end.summary,
+        end.images.length === 0 ? null : JSON.stringify(end.images),
+        end.endedAt,
+        actor,
+        id,
+      );
+      // A task its call still waits for is told by that call's result, and by nothing else.
+      if (notice === null || row.attached === 1) return { ended: true, notified: false };
+      if (get('SELECT 1 FROM actors WHERE id = ?', actor) === undefined) {
+        return { ended: true, notified: false };
+      }
+      putInput(notice);
+      return { ended: true, notified: true };
     },
   };
 }

@@ -356,6 +356,36 @@ describe('a person interrupts', () => {
       ['c2', true],
     ]);
   });
+
+  it('a call that waited for a task: it is answered that its task goes on, and not as stopped', () => {
+    const moved = [
+      { call: 'c2', text: 'moved to the background, the turn was interrupted · task b1' },
+    ];
+    const change = decide(owing(), { type: 'interrupted', moved }, NOW);
+    const results = change.append.map((entry) => entry.message as ToolResultMessage);
+    expect(results).toMatchObject([
+      { toolCallId: 'c1', isError: true },
+      {
+        toolCallId: 'c2',
+        toolName: 'lookup_order',
+        content: [{ type: 'text', text: moved[0]?.text }],
+      },
+    ]);
+    // Its task was not stopped, and its answer is no error.
+    expect(results[1]?.isError).toBeUndefined();
+    // One that was answered before the turn was ended keeps its answer.
+    const answered = applyChange(
+      owing(),
+      decide(
+        owing(),
+        { type: 'tool_finished', call: 'c2', result: result('c2', 'two'), inputs: [] },
+        NOW,
+      ),
+      0,
+    );
+    const kept = decide(answered, { type: 'interrupted', moved }, NOW).append[1]?.message;
+    expect(kept).toEqual(result('c2', 'two'));
+  });
 });
 
 describe('archiving', () => {

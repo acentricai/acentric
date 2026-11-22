@@ -23,12 +23,14 @@ import type { UsageRecord } from '../src/usage.ts';
 import type {
   Paged,
   Store,
+  NewTask,
   StoredAccount,
   StoredBlob,
   StoredKey,
   StoredLink,
   StoredSession,
   StoredUser,
+  TaskEnding,
 } from '../src/store.ts';
 
 const NOW = 1_795_305_600_000;
@@ -1176,6 +1178,200 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         expect((await store.deleteAgent(id))?.actors).toEqual([actor.id]);
         expect(await store.loadActor(actor.id)).toBeUndefined();
         expect((await store.usage({ actor: actor.id })).totals.calls).toBe(1);
+      });
+    });
+
+    describe('what waits quietly', () => {
+      it('starts no turn: an actor with nothing else is owed nothing', async () => {
+        const actor = await create();
+        const other = await create();
+        await store.addInput(inputOf(actor, 'hello'));
+        await store.addInput(inputOf(other, 'hello'));
+        expect((await store.unfinished()).toSorted()).toEqual([actor.id, other.id].toSorted());
+
+        await store.quietInputs(actor.id);
+        expect(await store.unfinished()).toEqual([other.id]);
+        // It still waits, and says that it is quiet.
+        expect(await store.pendingInputs(actor.id)).toMatchObject([{ quiet: true }]);
+        expect((await store.loadActor(actor.id))?.actor.pendingInputs).toBe(1);
+        expect((await store.pendingInputs(other.id))[0]?.quiet).toBeUndefined();
+
+        // What comes after is new, and is not quiet.
+        const next = inputOf(actor, 'again');
+        await store.addInput(next);
+        expect(await store.unfinished()).toContain(actor.id);
+        expect((await store.pendingInputs(actor.id)).map((input) => input.quiet)).toEqual([
+          true,
+          undefined,
+        ]);
+        // One that is put there quiet is kept so.
+        await store.addInput({ ...inputOf(other, 'quietly'), quiet: true });
+        expect((await store.pendingInputs(other.id)).map((input) => input.quiet)).toEqual([
+          undefined,
+          true,
+        ]);
+      });
+    });
+
+    describe('tasks', () => {
+      const taskOf = (actor: Actor, callId: string, more: Partial<NewTask> = {}): NewTask => ({
+        actor: actor.id,
+        kind: 'bash',
+        prefix: 'b',
+        input: { command: 'make' },
+        callId,
+        attached: true,
+        waitUntil: NOW + 60_000,
+        timeoutAt: null,
+        startedAt: NOW,
+        ...more,
+      });
+      const ending = (more: Partial<TaskEnding> = {}): TaskEnding => ({
+        status: 'done',
+        stoppedBy: null,
+        result: 'built',
+        summary: null,
+        images: [],
+        endedAt: NOW + 500,
+        ...more,
+      });
+      const notice = (actor: Actor, text: string): Input => ({
+        ...inputOf(actor, text),
+        type: 'notice',
+      });
+
+      it('are stored running, and named by their kind and their number among their actor’s', async () => {
+        const actor = await create();
+        const other = await create();
+        const first = await store.startTask(taskOf(actor, 'c1'));
+        expect(first).toEqual({
+          actor: actor.id,
+          id: 'b1',
+          kind: 'bash',
+          input: { command: 'make' },
+          status: 'running',
+          stoppedBy: null,
+          callId: 'c1',
+          attached: true,
+          waitUntil: NOW + 60_000,
+          timeoutAt: null,
+          result: null,
+          summary: null,
+          images: [],
+          startedAt: NOW,
+          endedAt: null,
+        });
+        const second = await store.startTask(taskOf(actor, 'c2', { startedAt: NOW + 1 }));
+        const code = await store.startTask(
+          taskOf(actor, 'c3', { kind: 'code', prefix: 'c', startedAt: NOW + 2 }),
+        );
+        expect([second.id, code.id]).toEqual(['b2', 'c1']);
+        expect((await store.startTask(taskOf(other, 'c1'))).id).toBe('b1');
+
+        expect(await store.loadTask(actor.id, 'b2')).toEqual(second);
+        expect(await store.loadTask(actor.id, 'b9')).toBeUndefined();
+        expect(await store.loadTask(other.id, 'b2')).toBeUndefined();
+        // Newest first.
+        expect((await store.listTasks(actor.id)).map((task) => task.id)).toEqual([
+          'c1',
+          'b2',
+          'b1',
+        ]);
+        expect(await store.runningTasks()).toHaveLength(4);
+      });
+
+      it('are found again by the call that started them: a call made twice starts one', async () => {
+        const actor = await create();
+        const first = await store.startTask(taskOf(actor, 'c1'));
+        const again = await store.startTask(taskOf(actor, 'c1', { input: { command: 'other' } }));
+        expect(again).toEqual(first);
+        expect(await store.taskOfCall(actor.id, 'c1')).toEqual(first);
+        expect(await store.taskOfCall(actor.id, 'c2')).toBeUndefined();
+        expect(await store.listTasks(actor.id)).toHaveLength(1);
+      });
+
+      it('are let go of once, while they run and a call waits for them', async () => {
+        const actor = await create();
+        await store.startTask(taskOf(actor, 'c1'));
+        await store.startTask(taskOf(actor, 'c2'));
+        await store.startTask(taskOf(actor, 'c3', { attached: false, waitUntil: null }));
+        expect(await store.detachTask(actor.id, 'b1')).toBe(true);
+        expect(await store.detachTask(actor.id, 'b1')).toBe(false);
+        expect(await store.detachTask(actor.id, 'b9')).toBe(false);
+        expect((await store.loadTask(actor.id, 'b1'))?.attached).toBe(false);
+
+        // Every one a call still waits for, at once.
+        const waited = await store.detachTasks(actor.id);
+        expect(waited.map((task) => [task.id, task.attached])).toEqual([['b2', false]]);
+        expect(await store.detachTasks(actor.id)).toEqual([]);
+        // One that has ended is not let go of.
+        await store.startTask(taskOf(actor, 'c4'));
+        await store.endTask(actor.id, 'b4', ending(), null);
+        expect(await store.detachTask(actor.id, 'b4')).toBe(false);
+      });
+
+      it('end once, and a notice is put in the mailbox with the ending only when no call waits', async () => {
+        const actor = await create();
+        const png = { type: 'image', source: { type: 'url', url: 'https://example.com/a.png' } };
+        await store.startTask(taskOf(actor, 'c1'));
+        await store.startTask(taskOf(actor, 'c2', { attached: false, waitUntil: null }));
+
+        // A call waits for it: its result tells how it ended, and nothing else does.
+        expect(await store.endTask(actor.id, 'b1', ending(), notice(actor, 'b1 ended'))).toEqual({
+          ended: true,
+          notified: false,
+        });
+        expect(await store.pendingInputs(actor.id)).toEqual([]);
+        expect(await store.loadTask(actor.id, 'b1')).toMatchObject({
+          status: 'done',
+          result: 'built',
+          endedAt: NOW + 500,
+        });
+
+        const told = notice(actor, 'b2 ended');
+        const stopped = ending({
+          status: 'stopped',
+          stoppedBy: 'timeout',
+          summary: 'short',
+          images: [png as never],
+        });
+        expect(await store.endTask(actor.id, 'b2', stopped, told)).toEqual({
+          ended: true,
+          notified: true,
+        });
+        expect(await store.pendingInputs(actor.id)).toEqual([told]);
+        expect(await store.loadTask(actor.id, 'b2')).toMatchObject({
+          status: 'stopped',
+          stoppedBy: 'timeout',
+          summary: 'short',
+          images: [png],
+        });
+        expect(await store.unfinished()).toEqual([actor.id]);
+
+        // Ended, it is not ended again, and nothing more is told of it.
+        expect(await store.endTask(actor.id, 'b2', ending(), notice(actor, 'again'))).toEqual({
+          ended: false,
+          notified: false,
+        });
+        expect(await store.endTask(actor.id, 'b9', ending(), null)).toEqual({
+          ended: false,
+          notified: false,
+        });
+        expect(await store.pendingInputs(actor.id)).toHaveLength(1);
+        expect(await store.loadTask(actor.id, 'b2')).toMatchObject({ status: 'stopped' });
+        expect(await store.runningTasks()).toEqual([]);
+        expect(await store.listTasks(actor.id, { running: true })).toEqual([]);
+      });
+
+      it('go with the agent whose actors had them', async () => {
+        const agent = await stored('orders');
+        const actor = await create({}, agent);
+        const other = await create();
+        await store.startTask(taskOf(actor, 'c1'));
+        await store.startTask(taskOf(other, 'c1'));
+        await store.deleteAgent(agent);
+        expect(await store.listTasks(actor.id)).toEqual([]);
+        expect((await store.runningTasks()).map((task) => task.actor)).toEqual([other.id]);
       });
     });
 

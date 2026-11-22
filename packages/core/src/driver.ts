@@ -32,6 +32,9 @@ import type {
 
 import type { Access } from './accounts.ts';
 import { UnknownBlob } from './blobs.ts';
+import { asSent } from './sent.ts';
+import { NOTICE } from './tasks.ts';
+import type { EngineTool, Tasks } from './tasks.ts';
 import type { Blobs } from './blobs.ts';
 import type { EventBus } from './bus.ts';
 import {
@@ -76,6 +79,8 @@ export type Host = {
   ): Promise<CallResult>;
   /** The images and files of conversations, whose bytes are kept apart. */
   readonly blobs: Blobs;
+  /** The work a model starts that may go on after its call. */
+  readonly tasks: Tasks;
   readonly bus: EventBus;
   readonly clock: Clock;
   readonly timer: Timer;
@@ -87,8 +92,11 @@ export type Host = {
   active(agent: AgentId): Promise<DeploymentRef | undefined>;
   /** The deployment of an agent with a version. Undefined when it has none. */
   version(agent: AgentId, version: number): Promise<DeploymentRef | undefined>;
-  /** What names the instructions and tools the model is sent for a definition. */
-  fingerprint(definition: AgentDefinition): string;
+  /**
+   * What names the instructions and tools the model is sent for a definition, with the
+   * engine's own tools the actor is offered.
+   */
+  fingerprint(definition: AgentDefinition, own: readonly EngineTool[]): string;
   /** Whether the reasoning of the actor's model is tied to what came before it. */
   bindsReasoning(actor: Actor, definition: AgentDefinition): boolean;
   /** An answer of the definition's provider, without its reasoning. */
@@ -144,6 +152,21 @@ export function contentOf(value: Json): ContentPart[] {
   if (typeof value === 'string') return [{ type: 'text', text: value }];
   const parts = contentPartSchema.array().safeParse(value);
   return parts.success ? parts.data : [{ type: 'text', text: JSON.stringify(value) }];
+}
+
+/** Whether an input is one a call lets go of its task for: a person's, and no notice of the engine's. */
+const isUserMail = (input: Input): boolean => input.type !== NOTICE && input.quiet !== true;
+
+/** Arguments of one of the engine's own tools, without the optional ones a model left empty: those were not given. */
+function withoutEmpty(args: Json, tool: EngineTool): Json {
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) return args;
+  const { required } = tool.parameters;
+  const needed = new Set(Array.isArray(required) ? required : []);
+  return Object.fromEntries(
+    Object.entries(args).filter(
+      ([name, value]) => needed.has(name) || (value !== '' && value !== null),
+    ),
+  );
 }
 
 type Command = {
@@ -204,6 +227,8 @@ export class ActorDriver {
   /** A restart found the actor as it stands: what is owed may have been begun before it. */
   #recovering = false;
   #interrupt = false;
+  /** What a task the turn still waited for is told of why it was let go of. */
+  #interruptWhy = 'the turn was interrupted by a person';
   #interrupted: (() => void)[] = [];
   /** What stops the call or the wait the driver is in. */
   #abort: AbortController | null = null;
@@ -234,7 +259,7 @@ export class ActorDriver {
       this.#running === null &&
       this.#commands.length === 0 &&
       turn.phase === 'idle' &&
-      (this.mail.length === 0 || actor.status !== 'idle')
+      (!this.#hasMail() || actor.status !== 'idle')
     );
   }
 
@@ -251,7 +276,24 @@ export class ActorDriver {
       actor: { ...this.record.actor, pendingInputs: this.mail.length },
     };
     this.#publishStatus();
+    // A call that waits for a task lets go of it for a person's message.
+    if (isUserMail(input)) this.#host.tasks.mailArrived(input.actor);
     this.wake();
+  }
+
+  /** Whether something waits that starts a turn. What is quiet waits for a turn something else starts. */
+  #hasMail(): boolean {
+    return this.mail.some((input) => input.quiet !== true);
+  }
+
+  /**
+   * Has everything that waits in the mailbox start no turn: it joins the next one that
+   * something new starts.
+   */
+  async hush(): Promise<void> {
+    if (this.mail.length === 0) return;
+    await this.#host.store.quietInputs(this.id);
+    this.mail = this.mail.map((input) => ({ ...input, quiet: true as const }));
   }
 
   /** Has the driver look at what is owed. `recovering` when a restart found the actor. */
@@ -280,10 +322,11 @@ export class ActorDriver {
   }
 
   /** Ends the turn the actor is in. Resolves once it has ended, with the actor as it then stands. */
-  async interrupt(): Promise<Actor> {
+  async interrupt(why = 'the turn was interrupted by a person'): Promise<Actor> {
     if (this.record.turn.phase === 'idle' && this.#running === null) return this.record.actor;
     const ended = new Promise<void>((resolve) => this.#interrupted.push(resolve));
     this.#interrupt = true;
+    this.#interruptWhy = why;
     this.#abort?.abort();
     this.wake();
     await ended;
@@ -319,7 +362,9 @@ export class ActorDriver {
     // Asked for before the interrupt, so that it is done before any mail starts another turn.
     const archived = this.#command('archive', () => this.#apply({ type: 'archive' }));
     archived.catch(() => {});
-    if (this.record.turn.phase !== 'idle') await this.interrupt();
+    if (this.record.turn.phase !== 'idle') {
+      await this.interrupt('the turn was aborted by a person, and it is being stopped');
+    }
     return archived;
   }
 
@@ -532,7 +577,7 @@ export class ActorDriver {
           await command.run();
           continue;
         }
-        if (actor.status !== 'idle' || this.mail.length === 0) return;
+        if (actor.status !== 'idle' || !this.#hasMail()) return;
         if (!(await this.#hold())) return;
         // A turn starts on the deployment the actor is to be on, and ends on it.
         const set = await this.#follow();
@@ -550,7 +595,12 @@ export class ActorDriver {
 
       if (!(await this.#hold())) return;
       if (this.#interrupt) {
-        await this.#apply({ type: 'interrupted' });
+        // A task the turn still waited for goes on, and its call is answered with that.
+        const moved =
+          turn.phase === 'tools'
+            ? await this.#host.tasks.detachForTurnEnd(actor.id, this.#interruptWhy)
+            : [];
+        await this.#apply({ type: 'interrupted', ...(moved.length === 0 ? {} : { moved }) });
         this.#interruptDone();
         continue;
       }
@@ -668,7 +718,8 @@ export class ActorDriver {
           .map(async (call) => {
             const { signal } = controller;
             const result = await untilAborted(this.#runTool(call, cutOff, signal), signal);
-            if (result === ABORTED || this.#interrupt) return;
+            // Given up: the turn was ended, or the engine is going away. The call stays owed.
+            if (result === ABORTED || result === undefined || this.#interrupt) return;
             await this.#apply(() => ({
               type: 'tool_finished',
               call: call.id,
@@ -682,7 +733,12 @@ export class ActorDriver {
     }
   }
 
-  async #runTool(call: OwedCall, cutOff: boolean, signal: AbortSignal): Promise<ToolResultMessage> {
+  /** Undefined for a call that was given up before it was answered: it stays owed. */
+  async #runTool(
+    call: OwedCall,
+    cutOff: boolean,
+    signal: AbortSignal,
+  ): Promise<ToolResultMessage | undefined> {
     const { actor } = this.record;
     const answer = (content: ContentPart[], isError: boolean): ToolResultMessage => ({
       role: 'tool_result',
@@ -693,6 +749,30 @@ export class ActorDriver {
       // What the provider needs said again on the result of this call.
       ...(call.resultOptions === undefined ? {} : { providerOptions: call.resultOptions }),
     });
+
+    // A tool of the engine's own that starts a task, or `stop`. A call of one finds its task
+    // again, so it is made again after a restart, whatever was begun before it.
+    const { tasks } = this.#host;
+    if (tasks.handles(call.name)) {
+      const own = tasks.tools(actor).find((tool) => tool.name === call.name);
+      const given = own === undefined ? call.arguments : withoutEmpty(call.arguments, own);
+      if (typeof given !== 'object' || given === null || Array.isArray(given)) {
+        return answer(
+          [{ type: 'text', text: `The arguments of ${call.name} are an object` }],
+          true,
+        );
+      }
+      const told = await tasks.call(
+        actor,
+        { id: call.id, name: call.name, args: given },
+        { signal, hasUserMail: () => this.mail.some(isUserMail) },
+      );
+      if (told === undefined) return undefined;
+      const content = await this.#host.blobs.keep(actor.id, [
+        ...(told.content ?? [{ type: 'text', text: told.text }]),
+      ]);
+      return answer(content, told.isError === true);
+    }
 
     const { tools } = await this.#host.definition(actor.deployment.id);
     const tool = tools.find((declared) => declared.name === call.name);
@@ -757,7 +837,9 @@ export class ActorDriver {
   }> {
     const { actor, nextSeq } = this.record;
     const definition = await this.#host.definition(actor.deployment.id);
-    const fingerprint = this.#host.fingerprint(definition);
+    // The engine's own tools, after the agent's.
+    const own = this.#host.tasks.tools(actor);
+    const fingerprint = this.#host.fingerprint(definition, own);
     const changed = this.record.sent !== null && this.record.sent !== fingerprint;
     const from =
       changed && this.#host.bindsReasoning(actor, definition) ? nextSeq : this.record.reasoningFrom;
@@ -775,7 +857,7 @@ export class ActorDriver {
         messages: this.#conversation.map(({ seq, message }) =>
           seq < from && message.role === 'assistant'
             ? this.#host.withoutReasoning(definition, message)
-            : message,
+            : asSent(message),
         ),
       };
     }
@@ -784,12 +866,15 @@ export class ActorDriver {
       // Where its level was changed in its conversation, the call's own stays what it was.
       reasoning: this.record.reasoningSent ?? actor.reasoning,
       instructions: definition.instructions,
-      tools: definition.tools.map((tool) => ({
-        type: 'function',
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      })),
+      tools: [
+        ...definition.tools.map((tool): EngineTool => ({
+          type: 'function',
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        })),
+        ...own,
+      ],
       messages: [...this.#view.messages],
       // The same at every call of this actor's: a provider finds what it has read of the
       // conversation by it.
@@ -832,7 +917,7 @@ export class ActorDriver {
           if (leftOut === true) continue;
           this.#conversation.push({ seq, message });
           // What is new is from after the place reasoning is sent from: it is sent whole.
-          this.#view?.messages.push(message);
+          this.#view?.messages.push(asSent(message));
         }
       } else {
         // Messages already held are left out now: it is read again when it is next needed.
