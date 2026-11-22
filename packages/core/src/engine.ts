@@ -593,6 +593,7 @@ export class Engine {
           : ''),
       reasoning: given.reasoning ?? 'medium',
       configuration: null,
+      machine: null,
       status: 'idle',
       lastTurn: null,
       pendingInputs: 0,

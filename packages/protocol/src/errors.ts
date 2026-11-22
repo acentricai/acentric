@@ -49,6 +49,10 @@ export const ERROR_STATUS = {
   actor_archived: 409,
   /** A model provider refused or failed a call made for this request. */
   provider_failed: 502,
+  /** The machine's daemon is not connected. Nothing was sent to it. */
+  machine_offline: 409,
+  /** The machine's daemon refused what was asked of it. */
+  machine_refused: 400,
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_STATUS;

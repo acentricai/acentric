@@ -15,6 +15,19 @@ import {
 } from '../src/resources/actors.ts';
 import { deployRequestSchema, deploymentSchema } from '../src/resources/agents.ts';
 import {
+  connectPath,
+  fromDaemonSchema,
+  machineDownloadPath,
+  machineOfConnectPath,
+  proofText,
+} from '../src/machine.ts';
+import {
+  createMachineRequestSchema,
+  enrolMachineRequestSchema,
+  machineSchema,
+  updateMachineRequestSchema,
+} from '../src/resources/machines.ts';
+import {
   auditEventSchema,
   createKeyRequestSchema,
   keySchema,
@@ -54,6 +67,7 @@ const actor = () => ({
   modelId: 'claude-opus-5-5',
   reasoning: 'medium',
   configuration: { region: 'eu' },
+  machine: null,
   status: 'idle',
   lastTurn: { end: 'ok', at: NOW },
   pendingInputs: 0,
@@ -158,6 +172,133 @@ describe('an actor', () => {
     };
     expect(actorSchema.parse({ ...actor(), behind }).behind).toEqual(behind);
     expect(createActorRequestSchema.parse({ version: 2 })).toEqual({ version: 2 });
+  });
+});
+
+describe('a machine', () => {
+  const machine = () => ({
+    id: id('machine'),
+    name: 'build-box',
+    agents: [id('agent')],
+    enrolled: true,
+    online: false,
+    os: 'linux',
+    arch: 'x64',
+    home: '/home/u',
+    hostname: 'box',
+    version: '0.1.0',
+    current: null,
+    createdAt: NOW,
+    enrolledAt: NOW,
+    lastSeenAt: null,
+  });
+
+  it('is for the agents it names, or for every agent', () => {
+    const one = machine();
+    expect(machineSchema.parse(one)).toEqual(one);
+    expect(machineSchema.parse({ ...one, agents: '*' }).agents).toBe('*');
+    expect(machineSchema.safeParse({ ...one, agents: 'all' }).success).toBe(false);
+    expect(machineSchema.safeParse({ ...one, agents: ['support'] }).success).toBe(false);
+  });
+
+  it('is added by a name, and changed in its name or its agents', () => {
+    expect(createMachineRequestSchema.parse({ name: 'build-box' })).toEqual({ name: 'build-box' });
+    expect(createMachineRequestSchema.safeParse({}).success).toBe(false);
+    expect(createMachineRequestSchema.safeParse({ name: 'Build Box' }).success).toBe(false);
+    expect(createMachineRequestSchema.safeParse({ name: 'box', id: 'box' }).success).toBe(false);
+    expect(updateMachineRequestSchema.parse({ agents: '*' })).toEqual({ agents: '*' });
+    expect(updateMachineRequestSchema.safeParse({ online: true }).success).toBe(false);
+    expect(enrolMachineRequestSchema.safeParse({ token: 'abc' }).success).toBe(false);
+    expect(enrolMachineRequestSchema.safeParse({ token: '', publicKey: 'abc' }).success).toBe(
+      false,
+    );
+  });
+
+  it('is what an actor works on, in a working directory there, with variables by name', () => {
+    const on = { id: id('machine'), cwd: '~/work' };
+    expect(createActorRequestSchema.parse({ machine: on }).machine).toEqual(on);
+    expect(createActorRequestSchema.parse({ machine: { ...on, cwd: '/srv' } }).machine?.cwd).toBe(
+      '/srv',
+    );
+    expect(createActorRequestSchema.parse({ machine: { ...on, cwd: '~' } }).machine?.cwd).toBe('~');
+    for (const cwd of ['work', './work', '~user', '']) {
+      expect(createActorRequestSchema.safeParse({ machine: { ...on, cwd } }).success).toBe(false);
+    }
+    expect(createActorRequestSchema.safeParse({ machine: { cwd: '~' } }).success).toBe(false);
+    expect(createActorRequestSchema.safeParse({ machine: { ...on, shell: 'zsh' } }).success).toBe(
+      false,
+    );
+    const env = { API_KEY: 'k', _x1: '' };
+    expect(createActorRequestSchema.parse({ machine: { ...on, env } }).machine?.env).toEqual(env);
+    for (const name of ['1ST', 'A-B', 'A B', '']) {
+      const given = { machine: { ...on, env: { [name]: 'v' } } };
+      expect(createActorRequestSchema.safeParse(given).success).toBe(false);
+    }
+    expect(createActorRequestSchema.safeParse({ machine: { ...on, env: { A: 1 } } }).success).toBe(
+      false,
+    );
+    // An actor is read with the names of its variables, never their values.
+    const read = { ...actor(), machine: { ...on, env: ['API_KEY'] } };
+    expect(actorSchema.parse(read)).toEqual(read);
+    expect(updateActorRequestSchema.parse({ env })).toEqual({ env });
+  });
+
+  it('has a daemon that says what a daemon says, and nothing else is taken for it', () => {
+    const ref = { actor: 'act_1', task: 'b1' };
+    const hello = {
+      type: 'hello',
+      os: 'linux',
+      arch: 'x64',
+      home: '/home/u',
+      hostname: 'box',
+      version: '0.1.0',
+      running: [{ ...ref, log: '/tmp/log' }],
+      ended: [ref],
+    };
+    expect(fromDaemonSchema.parse(hello)).toEqual(hello);
+    expect(fromDaemonSchema.parse({ ...hello, build: 'ab', tasks: '/t' })).toMatchObject({
+      build: 'ab',
+      tasks: '/t',
+    });
+    expect(fromDaemonSchema.safeParse({ ...hello, running: [ref] }).success).toBe(false);
+    const ended = {
+      type: 'ended',
+      ...ref,
+      status: 'stopped',
+      exit: null,
+      by: 'timeout',
+      ranMs: 30_000,
+      bytes: 0,
+      lines: 0,
+      tail: '',
+    };
+    expect(fromDaemonSchema.parse(ended)).toEqual(ended);
+    expect(fromDaemonSchema.safeParse({ ...ended, status: 'running' }).success).toBe(false);
+    expect(fromDaemonSchema.safeParse({ ...ended, by: 'person' }).success).toBe(false);
+    expect(fromDaemonSchema.parse({ type: 'response', id: 1, result: { log: 'x' } })).toEqual({
+      type: 'response',
+      id: 1,
+      result: { log: 'x' },
+    });
+    const refused = { type: 'response', id: 2, error: { code: 'bad_cwd', message: 'no' } };
+    expect(fromDaemonSchema.parse(refused)).toEqual(refused);
+    expect(
+      fromDaemonSchema.safeParse({ ...refused, error: { code: 'nope', message: '' } }).success,
+    ).toBe(false);
+    expect(fromDaemonSchema.safeParse({ type: 'request', id: 1 }).success).toBe(false);
+    expect(fromDaemonSchema.safeParse('hello').success).toBe(false);
+  });
+
+  it('is connected to at one path, which names it', () => {
+    const one = id('machine');
+    expect(connectPath(one)).toBe(`/v1/machines/${one}/connect`);
+    expect(machineOfConnectPath(connectPath(one))).toBe(one);
+    expect(machineOfConnectPath(`${connectPath(one)}?x=1`)).toBe(one);
+    expect(machineOfConnectPath(`/v1/machines/${one}`)).toBeUndefined();
+    expect(machineOfConnectPath(`/v1/machines/${one}/connect/more`)).toBeUndefined();
+    expect(machineOfConnectPath('/v1/machines//connect')).toBeUndefined();
+    expect(proofText(one, 'nonce')).toBe(`machine ${one}\nnonce`);
+    expect(machineDownloadPath('linux', 'arm64')).toBe('/machine/linux-arm64');
   });
 });
 

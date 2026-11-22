@@ -6390,6 +6390,40 @@
               }
             ]
           },
+          "machine": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "description": "An ID of kind machine, made by the engine.",
+                    "examples": [
+                      "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                    ]
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "env": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "cwd",
+                  "env"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -6477,6 +6511,7 @@
           "modelId",
           "reasoning",
           "configuration",
+          "machine",
           "status",
           "lastTurn",
           "pendingInputs",
@@ -7460,6 +7495,40 @@
           "configuration": {
             "$ref": "#/components/schemas/Json"
           },
+          "machine": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                "description": "An ID of kind machine, made by the engine.",
+                "examples": [
+                  "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                ]
+              },
+              "cwd": {
+                "type": "string",
+                "maxLength": 4096,
+                "pattern": "^(\\/|~$|~\\/)"
+              },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "maxLength": 65536
+                }
+              }
+            },
+            "required": [
+              "id",
+              "cwd"
+            ],
+            "additionalProperties": false
+          },
           "version": {
             "type": "integer",
             "exclusiveMinimum": 0,
@@ -7593,6 +7662,42 @@
           "key",
           "token"
         ]
+      },
+      "CreateMachineRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "What people call it. Unique among its kind, and can be changed.",
+            "examples": [
+              "support"
+            ]
+          },
+          "agents": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "*"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^agt_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "description": "An ID of kind agent, made by the engine.",
+                  "examples": [
+                    "agt_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
       },
       "DeployRequest": {
         "type": "object",
@@ -7789,6 +7894,26 @@
           "createdAt"
         ]
       },
+      "EnrolMachineRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "publicKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "token",
+          "publicKey"
+        ],
+        "additionalProperties": false
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -7818,7 +7943,9 @@
                   "unknown_input",
                   "actor_busy",
                   "actor_archived",
-                  "provider_failed"
+                  "provider_failed",
+                  "machine_offline",
+                  "machine_refused"
                 ]
               },
               "message": {
@@ -8220,6 +8347,185 @@
         "required": [
           "items",
           "nextCursor"
+        ]
+      },
+      "Machine": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind machine, made by the engine.",
+            "examples": [
+              "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "What people call it. Unique among its kind, and can be changed.",
+            "examples": [
+              "support"
+            ]
+          },
+          "agents": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "*"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^agt_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "description": "An ID of kind agent, made by the engine.",
+                  "examples": [
+                    "agt_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                  ]
+                }
+              }
+            ]
+          },
+          "enrolled": {
+            "type": "boolean"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "os": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "arch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "home": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "current": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch.",
+            "examples": [
+              1795305600000
+            ]
+          },
+          "enrolledAt": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch.",
+                "examples": [
+                  1795305600000
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastSeenAt": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch.",
+                "examples": [
+                  1795305600000
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "agents",
+          "enrolled",
+          "online",
+          "os",
+          "arch",
+          "home",
+          "hostname",
+          "version",
+          "current",
+          "createdAt",
+          "enrolledAt",
+          "lastSeenAt"
+        ]
+      },
+      "MachineToken": {
+        "type": "object",
+        "properties": {
+          "machine": {
+            "$ref": "#/components/schemas/Machine"
+          },
+          "token": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch.",
+            "examples": [
+              1795305600000
+            ]
+          }
+        },
+        "required": [
+          "machine",
+          "token",
+          "expiresAt"
+        ]
+      },
+      "MachineUpdate": {
+        "type": "object",
+        "properties": {
+          "machine": {
+            "$ref": "#/components/schemas/Machine"
+          },
+          "updated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "machine",
+          "updated"
         ]
       },
       "Message": {
@@ -9559,6 +9865,17 @@
                 "const": "active"
               }
             ]
+          },
+          "env": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 65536
+            }
           }
         },
         "additionalProperties": false
@@ -9583,6 +9900,39 @@
               },
               {
                 "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateMachineRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "What people call it. Unique among its kind, and can be changed.",
+            "examples": [
+              "support"
+            ]
+          },
+          "agents": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "*"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^agt_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "description": "An ID of kind agent, made by the engine.",
+                  "examples": [
+                    "agt_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                  ]
+                }
               }
             ]
           }

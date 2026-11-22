@@ -8,6 +8,12 @@ import type {
   ActorRecord,
   ActorsQuery,
   Change,
+  CommandPatch,
+  CommandStatus,
+  MachinePatch,
+  NewCommand,
+  StoredCommand,
+  StoredMachine,
   PageOf,
   Paged,
   Redeem,
@@ -41,6 +47,8 @@ import type {
   Json,
   Key,
   KeyId,
+  MachineAgents,
+  MachineId,
   Session,
   SessionId,
   UsageGroup,
@@ -208,7 +216,125 @@ type ActorRow = {
   next_seq: number;
   created_at: number;
   archived_at: number | null;
+  machine: string | null;
   pending: number;
+};
+
+type MachineRow = {
+  id: string;
+  name: string;
+  agents: string;
+  token_hash: string | null;
+  token_expires_at: number | null;
+  public_key: string | null;
+  os: string | null;
+  arch: string | null;
+  home: string | null;
+  hostname: string | null;
+  version: string | null;
+  build: string | null;
+  tasks_dir: string | null;
+  created_at: number;
+  enrolled_at: number | null;
+  last_seen_at: number | null;
+};
+
+function machineOf(row: MachineRow): StoredMachine {
+  return {
+    id: row.id,
+    name: row.name,
+    agents: JSON.parse(row.agents),
+    tokenHash: row.token_hash,
+    tokenExpiresAt: row.token_expires_at,
+    publicKey: row.public_key,
+    os: row.os,
+    arch: row.arch,
+    home: row.home,
+    hostname: row.hostname,
+    version: row.version,
+    build: row.build,
+    tasksDir: row.tasks_dir,
+    createdAt: row.created_at,
+    enrolledAt: row.enrolled_at,
+    lastSeenAt: row.last_seen_at,
+  } as StoredMachine;
+}
+
+/** The column of each field of a machine that changes. */
+const MACHINE_COLUMNS: { readonly [F in keyof MachinePatch]-?: string } = {
+  name: 'name',
+  agents: 'agents',
+  tokenHash: 'token_hash',
+  tokenExpiresAt: 'token_expires_at',
+  publicKey: 'public_key',
+  os: 'os',
+  arch: 'arch',
+  home: 'home',
+  hostname: 'hostname',
+  version: 'version',
+  build: 'build',
+  tasksDir: 'tasks_dir',
+  enrolledAt: 'enrolled_at',
+  lastSeenAt: 'last_seen_at',
+};
+
+type CommandRow = {
+  actor_id: string;
+  task_id: string;
+  machine_id: string;
+  command: string;
+  cwd: string;
+  timeout_s: number | null;
+  status: string;
+  stop_wanted: number;
+  exit_code: number | null;
+  stopped_by: string | null;
+  ran_ms: number | null;
+  bytes: number | null;
+  lines: number | null;
+  tail: string | null;
+  log: string | null;
+  error: string | null;
+  started_at: number;
+  ended_at: number | null;
+};
+
+function commandOf(row: CommandRow): StoredCommand {
+  return {
+    actor: row.actor_id,
+    task: row.task_id,
+    machine: row.machine_id,
+    command: row.command,
+    cwd: row.cwd,
+    timeout: row.timeout_s,
+    status: row.status,
+    stopWanted: row.stop_wanted === 1,
+    exit: row.exit_code,
+    stoppedBy: row.stopped_by,
+    ranMs: row.ran_ms,
+    bytes: row.bytes,
+    lines: row.lines,
+    tail: row.tail,
+    log: row.log,
+    error: row.error,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+  } as StoredCommand;
+}
+
+/** The column of each field of a command that changes. */
+const COMMAND_COLUMNS: { readonly [F in keyof CommandPatch]-?: string } = {
+  status: 'status',
+  stopWanted: 'stop_wanted',
+  exit: 'exit_code',
+  stoppedBy: 'stopped_by',
+  ranMs: 'ran_ms',
+  bytes: 'bytes',
+  lines: 'lines',
+  tail: 'tail',
+  log: 'log',
+  error: 'error',
+  endedAt: 'ended_at',
 };
 
 type InputRow = {
@@ -277,6 +403,7 @@ function recordOf(row: ActorRow): ActorRecord {
       modelId: row.model,
       reasoning: row.reasoning,
       configuration: row.configuration === null ? null : JSON.parse(row.configuration),
+      machine: row.machine === null ? null : JSON.parse(row.machine),
       status: row.status,
       lastTurn: row.last_turn === null ? null : JSON.parse(row.last_turn),
       pendingInputs: row.pending,
@@ -343,8 +470,16 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'setSecret',
   'deleteSecret',
   'createActor',
+  'setActorEnv',
   'commit',
   'addInput',
+  'addMachine',
+  'changeMachine',
+  'enrolMachine',
+  'removeMachine',
+  'addCommand',
+  'addOwnCommand',
+  'changeCommand',
 ]);
 
 export function open(path: string, readOnly: boolean, fullFsync = false): DatabaseSync {
@@ -406,6 +541,9 @@ export function operations(db: DatabaseSync) {
       name,
       actor,
     ) !== undefined;
+
+  const command = (actor: string, task: string): CommandRow | undefined =>
+    get<CommandRow>('SELECT * FROM commands WHERE actor_id = ? AND task_id = ?', actor, task);
 
   const task = (actor: ActorId, id: string): TaskRow | undefined =>
     get<TaskRow>('SELECT * FROM tasks WHERE actor_id = ? AND id = ?', actor, id);
@@ -537,6 +675,16 @@ export function operations(db: DatabaseSync) {
         'DELETE FROM actors WHERE agent_id = ? RETURNING id',
         id,
       ).map((row) => row.id);
+      // No machine is for an agent that is gone.
+      for (const row of all<{ id: string; agents: string }>('SELECT id, agents FROM machines')) {
+        const agents = JSON.parse(row.agents) as MachineAgents;
+        if (agents === '*' || !agents.includes(id)) continue;
+        run(
+          'UPDATE machines SET agents = ? WHERE id = ?',
+          JSON.stringify(agents.filter((one) => one !== id)),
+          row.id,
+        );
+      }
       return { deployments, actors };
     },
 
@@ -913,6 +1061,7 @@ export function operations(db: DatabaseSync) {
     createActor(
       actor: Actor,
       configurationGiven: Json | null = null,
+      env: string | null = null,
     ): { record: ActorRecord; created: boolean } {
       if (actor.externalId !== null) {
         const there = get<ActorRow>(
@@ -929,8 +1078,8 @@ export function operations(db: DatabaseSync) {
       run(
         `INSERT INTO actors (id, agent_id, deployment_id, deployment_version, pinned, behind, name, external_id,
            model, reasoning, configuration, configuration_given, sent, reasoning_from, status,
-           last_turn, turn, owed, epoch, next_seq, created_at, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?)`,
+           last_turn, turn, owed, epoch, next_seq, created_at, archived_at, machine, machine_env)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?, ?, ?)`,
         actor.id,
         actor.agent,
         actor.deployment.id,
@@ -948,6 +1097,8 @@ export function operations(db: DatabaseSync) {
         JSON.stringify(turn),
         actor.createdAt,
         actor.archivedAt,
+        actor.machine === null ? null : JSON.stringify(actor.machine),
+        env,
       );
       return {
         record: {
@@ -962,6 +1113,26 @@ export function operations(db: DatabaseSync) {
         },
         created: true,
       };
+    },
+
+    actorEnv(actor: ActorId): string | null {
+      return (
+        get<{ machine_env: string | null }>('SELECT machine_env FROM actors WHERE id = ?', actor)
+          ?.machine_env ?? null
+      );
+    },
+
+    setActorEnv(actor: ActorId, names: readonly string[], sealed: string | null): boolean {
+      const row = get<{ machine: string | null }>('SELECT machine FROM actors WHERE id = ?', actor);
+      if (row === undefined || row.machine === null) return false;
+      const machine = { ...(JSON.parse(row.machine) as object), env: [...names] };
+      run(
+        'UPDATE actors SET machine = ?, machine_env = ? WHERE id = ?',
+        JSON.stringify(machine),
+        sealed,
+        actor,
+      );
+      return true;
     },
 
     loadActor(id: ActorId): ActorRecord | undefined {
@@ -1280,6 +1451,176 @@ export function operations(db: DatabaseSync) {
       }
       putInput(notice);
       return { ended: true, notified: true };
+    },
+
+    addMachine(machine: StoredMachine): void {
+      if (get('SELECT 1 FROM machines WHERE name = ?', machine.name) !== undefined) {
+        throw new Refused('NameTaken', [machine.name, 'machine']);
+      }
+      run(
+        `INSERT INTO machines (id, name, agents, token_hash, token_expires_at, public_key, os, arch,
+           home, hostname, version, build, tasks_dir, created_at, enrolled_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        machine.id,
+        machine.name,
+        JSON.stringify(machine.agents),
+        machine.tokenHash,
+        machine.tokenExpiresAt,
+        machine.publicKey,
+        machine.os,
+        machine.arch,
+        machine.home,
+        machine.hostname,
+        machine.version,
+        machine.build,
+        machine.tasksDir,
+        machine.createdAt,
+        machine.enrolledAt,
+        machine.lastSeenAt,
+      );
+    },
+
+    loadMachine(id: MachineId): StoredMachine | undefined {
+      const row = get<MachineRow>('SELECT * FROM machines WHERE id = ?', id);
+      return row === undefined ? undefined : machineOf(row);
+    },
+
+    findMachine(name: string): StoredMachine | undefined {
+      const row = get<MachineRow>('SELECT * FROM machines WHERE name = ?', name);
+      return row === undefined ? undefined : machineOf(row);
+    },
+
+    listMachines(): StoredMachine[] {
+      return all<MachineRow>('SELECT * FROM machines ORDER BY created_at, id').map(machineOf);
+    },
+
+    changeMachine(id: MachineId, patch: MachinePatch): StoredMachine | undefined {
+      if (get('SELECT 1 FROM machines WHERE id = ?', id) === undefined) return undefined;
+      if (
+        patch.name !== undefined &&
+        get('SELECT 1 FROM machines WHERE name = ? AND id IS NOT ?', patch.name, id) !== undefined
+      ) {
+        throw new Refused('NameTaken', [patch.name, 'machine']);
+      }
+      const sets: string[] = [];
+      const values: SQLInputValue[] = [];
+      for (const [field, value] of Object.entries(patch)) {
+        if (value === undefined) continue;
+        sets.push(`${MACHINE_COLUMNS[field as keyof MachinePatch]} = ?`);
+        values.push(field === 'agents' ? JSON.stringify(value) : (value as SQLInputValue));
+      }
+      if (sets.length > 0)
+        run(`UPDATE machines SET ${sets.join(', ')} WHERE id = ?`, ...values, id);
+      return machineOf(get<MachineRow>('SELECT * FROM machines WHERE id = ?', id) as MachineRow);
+    },
+
+    enrolMachine(id: MachineId, tokenHash: string, publicKey: string, at: number): boolean {
+      const changed = run(
+        `UPDATE machines
+         SET public_key = ?, token_hash = NULL, token_expires_at = NULL, enrolled_at = ?
+         WHERE id = ? AND token_hash = ? AND token_expires_at > ?`,
+        publicKey,
+        at,
+        id,
+        tokenHash,
+        at,
+      );
+      return changed === 1;
+    },
+
+    removeMachine(
+      id: MachineId,
+      lost: { readonly error: string; readonly endedAt: number },
+    ): StoredCommand[] | undefined {
+      if (run('DELETE FROM machines WHERE id = ?', id) === 0) return undefined;
+      const unended = all<CommandRow>(
+        "SELECT * FROM commands WHERE machine_id = ? AND status IN ('starting', 'running')",
+        id,
+      ).map(commandOf);
+      run(
+        `UPDATE commands SET status = 'lost', error = ?, ended_at = ?
+         WHERE machine_id = ? AND status IN ('starting', 'running')`,
+        lost.error,
+        lost.endedAt,
+        id,
+      );
+      return unended;
+    },
+
+    addCommand(given: NewCommand): { command: StoredCommand; created: boolean } {
+      const there = command(given.actor, given.task);
+      if (there !== undefined) return { command: commandOf(there), created: false };
+      run(
+        `INSERT INTO commands (actor_id, task_id, machine_id, command, cwd, timeout_s, status, started_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'starting', ?)`,
+        given.actor,
+        given.task,
+        given.machine,
+        given.command,
+        given.cwd,
+        given.timeout,
+        given.startedAt,
+      );
+      return { command: commandOf(command(given.actor, given.task) as CommandRow), created: true };
+    },
+
+    addOwnCommand(given: Omit<NewCommand, 'task'>): StoredCommand {
+      const counted = get<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM commands WHERE actor_id = ?',
+        given.actor,
+      );
+      const id = `c${String((counted?.count ?? 0) + 1)}`;
+      return this.addCommand({ ...given, task: id }).command;
+    },
+
+    loadCommand(actor: string, id: string): StoredCommand | undefined {
+      const row = command(actor, id);
+      return row === undefined ? undefined : commandOf(row);
+    },
+
+    openCommands(machine: MachineId): StoredCommand[] {
+      return all<CommandRow>(
+        `SELECT * FROM commands WHERE machine_id = ? AND status IN ('starting', 'running')
+         ORDER BY started_at, actor_id, task_id`,
+        machine,
+      ).map(commandOf);
+    },
+
+    listCommands(actor: string, machine: MachineId, limit: number): StoredCommand[] {
+      return all<CommandRow>(
+        `SELECT * FROM commands WHERE actor_id = ? AND machine_id = ?
+         ORDER BY started_at DESC, length(task_id) DESC, task_id DESC LIMIT ?`,
+        actor,
+        machine,
+        limit,
+      ).map(commandOf);
+    },
+
+    changeCommand(
+      actor: string,
+      id: string,
+      patch: CommandPatch,
+      from?: readonly CommandStatus[],
+    ): boolean {
+      const row = command(actor, id);
+      if (row === undefined) return false;
+      if (from !== undefined && !from.includes(row.status as CommandStatus)) return false;
+      const sets: string[] = [];
+      const values: SQLInputValue[] = [];
+      for (const [field, value] of Object.entries(patch)) {
+        if (value === undefined) continue;
+        sets.push(`${COMMAND_COLUMNS[field as keyof CommandPatch]} = ?`);
+        values.push(typeof value === 'boolean' ? (value ? 1 : 0) : value);
+      }
+      if (sets.length > 0) {
+        run(
+          `UPDATE commands SET ${sets.join(', ')} WHERE actor_id = ? AND task_id = ?`,
+          ...values,
+          actor,
+          id,
+        );
+      }
+      return true;
     },
   };
 }

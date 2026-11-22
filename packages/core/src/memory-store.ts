@@ -16,6 +16,7 @@ import type {
   InviteId,
   Json,
   KeyId,
+  MachineId,
   Session,
   SessionId,
   UsageGroup,
@@ -29,6 +30,12 @@ import type { ActorRecord, Change, Turn } from './state.ts';
 import { EmailTaken, NameTaken, OutOfOrder, StaleEpoch } from './store.ts';
 import type {
   ActorsQuery,
+  CommandPatch,
+  CommandStatus,
+  MachinePatch,
+  NewCommand,
+  StoredCommand,
+  StoredMachine,
   PageOf,
   Paged,
   Redeem,
@@ -103,6 +110,11 @@ export class MemoryStore implements Store {
   /** The blobs each actor refers to, each with the media type the actor first gave it. */
   readonly #blobRefs = new Map<ActorId, Map<string, string>>();
   readonly #actors = new Map<ActorId, Kept>();
+  /** The variables of actors' commands, sealed. */
+  readonly #envs = new Map<ActorId, string>();
+  readonly #machines = new Map<MachineId, StoredMachine>();
+  /** By `actor/task`. */
+  readonly #commands = new Map<string, StoredCommand>();
   readonly #inputs = new Map<ActorId, Input[]>();
   readonly #entries = new Map<ActorId, ConversationEntry[]>();
   /** How many commits were stored, over every actor. */
@@ -179,6 +191,12 @@ export class MemoryStore implements Store {
       this.#entries.delete(actor);
       this.#blobRefs.delete(actor);
       this.#tasks.delete(actor);
+      this.#envs.delete(actor);
+    }
+    for (const [machineId, machine] of this.#machines) {
+      if (machine.agents === '*' || !machine.agents.includes(id)) continue;
+      const agents = machine.agents.filter((one) => one !== id);
+      this.#machines.set(machineId, { ...machine, agents });
     }
     return { deployments, actors };
   }
@@ -422,6 +440,7 @@ export class MemoryStore implements Store {
   async createActor(
     actor: Actor,
     configurationGiven: Json | null = null,
+    env: string | null = null,
   ): Promise<{ record: ActorRecord; created: boolean }> {
     const siblings = [...this.#actors.values()].filter((kept) => kept.actor.agent === actor.agent);
     if (actor.externalId !== null) {
@@ -442,7 +461,25 @@ export class MemoryStore implements Store {
       reasoningSent: null,
     };
     this.#actors.set(actor.id, kept);
+    if (env !== null) this.#envs.set(actor.id, env);
     return { record: this.#record(kept), created: true };
+  }
+
+  async actorEnv(actor: ActorId): Promise<string | null> {
+    return this.#envs.get(actor) ?? null;
+  }
+
+  async setActorEnv(
+    actor: ActorId,
+    names: readonly string[],
+    sealed: string | null,
+  ): Promise<boolean> {
+    const kept = this.#actors.get(actor);
+    if (kept === undefined || kept.actor.machine === null) return false;
+    kept.actor = { ...kept.actor, machine: { ...kept.actor.machine, env: [...names] } };
+    if (sealed === null) this.#envs.delete(actor);
+    else this.#envs.set(actor, sealed);
+    return true;
   }
 
   async loadActor(id: ActorId): Promise<ActorRecord | undefined> {
@@ -665,6 +702,143 @@ export class MemoryStore implements Store {
     }
     this.#inputs.set(actor, [...(this.#inputs.get(actor) ?? []), copy(notice)]);
     return { ended: true, notified: true };
+  }
+
+  async addMachine(machine: StoredMachine): Promise<void> {
+    if (this.#machineNamed(machine.name)) throw new NameTaken(machine.name, 'machine');
+    this.#machines.set(machine.id, copy(machine));
+  }
+
+  #machineNamed(name: string, but?: MachineId): boolean {
+    return [...this.#machines.values()].some((one) => one.name === name && one.id !== but);
+  }
+
+  async loadMachine(id: MachineId): Promise<StoredMachine | undefined> {
+    return copy(this.#machines.get(id));
+  }
+
+  async findMachine(name: string): Promise<StoredMachine | undefined> {
+    return copy([...this.#machines.values()].find((one) => one.name === name));
+  }
+
+  async listMachines(): Promise<StoredMachine[]> {
+    return copy([...this.#machines.values()]);
+  }
+
+  async changeMachine(id: MachineId, patch: MachinePatch): Promise<StoredMachine | undefined> {
+    const machine = this.#machines.get(id);
+    if (machine === undefined) return undefined;
+    if (patch.name !== undefined && this.#machineNamed(patch.name, id)) {
+      throw new NameTaken(patch.name, 'machine');
+    }
+    const changed = { ...machine, ...copy(patch) };
+    this.#machines.set(id, changed);
+    return copy(changed);
+  }
+
+  async enrolMachine(
+    id: MachineId,
+    tokenHash: string,
+    publicKey: string,
+    at: number,
+  ): Promise<boolean> {
+    const machine = this.#machines.get(id);
+    if (
+      machine === undefined ||
+      machine.tokenHash !== tokenHash ||
+      machine.tokenExpiresAt === null ||
+      machine.tokenExpiresAt <= at
+    ) {
+      return false;
+    }
+    this.#machines.set(id, {
+      ...machine,
+      publicKey,
+      tokenHash: null,
+      tokenExpiresAt: null,
+      enrolledAt: at,
+    });
+    return true;
+  }
+
+  async removeMachine(
+    id: MachineId,
+    lost: { readonly error: string; readonly endedAt: number },
+  ): Promise<StoredCommand[] | undefined> {
+    if (!this.#machines.delete(id)) return undefined;
+    const open = await this.openCommands(id);
+    for (const command of open) {
+      this.#commands.set(`${command.actor}/${command.task}`, {
+        ...command,
+        status: 'lost',
+        ...lost,
+      });
+    }
+    return open;
+  }
+
+  async addCommand(command: NewCommand): Promise<{ command: StoredCommand; created: boolean }> {
+    const key = `${command.actor}/${command.task}`;
+    const there = this.#commands.get(key);
+    if (there !== undefined) return { command: copy(there), created: false };
+    const stored: StoredCommand = {
+      ...copy(command),
+      status: 'starting',
+      stopWanted: false,
+      exit: null,
+      stoppedBy: null,
+      ranMs: null,
+      bytes: null,
+      lines: null,
+      tail: null,
+      log: null,
+      error: null,
+      endedAt: null,
+    };
+    this.#commands.set(key, stored);
+    return { command: copy(stored), created: true };
+  }
+
+  async addOwnCommand(command: Omit<NewCommand, 'task'>): Promise<StoredCommand> {
+    const own = [...this.#commands.values()].filter((one) => one.actor === command.actor);
+    const added = await this.addCommand({ ...command, task: `c${String(own.length + 1)}` });
+    return added.command;
+  }
+
+  async loadCommand(actor: string, task: string): Promise<StoredCommand | undefined> {
+    return copy(this.#commands.get(`${actor}/${task}`));
+  }
+
+  async openCommands(machine: MachineId): Promise<StoredCommand[]> {
+    return copy(
+      [...this.#commands.values()].filter(
+        (one) => one.machine === machine && (one.status === 'starting' || one.status === 'running'),
+      ),
+    );
+  }
+
+  async listCommands(actor: string, machine: MachineId, limit: number): Promise<StoredCommand[]> {
+    return copy(
+      [...this.#commands.values()]
+        .filter((one) => one.actor === actor && one.machine === machine)
+        .toReversed()
+        .slice(0, limit),
+    );
+  }
+
+  async changeCommand(
+    actor: string,
+    task: string,
+    patch: CommandPatch,
+    from?: readonly CommandStatus[],
+  ): Promise<boolean> {
+    const key = `${actor}/${task}`;
+    const command = this.#commands.get(key);
+    if (command === undefined || (from !== undefined && !from.includes(command.status))) {
+      return false;
+    }
+    this.#commands.set(key, { ...command, ...copy(patch) });
+    return true;
   }
 
   async close(): Promise<void> {}

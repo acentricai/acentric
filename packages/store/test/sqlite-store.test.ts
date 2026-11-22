@@ -7,6 +7,7 @@ import { makeId } from '@acentric/protocol';
 import type { Actor } from '@acentric/protocol';
 
 import { engineSuite } from '../../core/test/engine-suite.ts';
+import { machinesSuite } from '../../core/test/machines-suite.ts';
 import { storeSuite } from '../../core/test/store-suite.ts';
 import { tasksSuite } from '../../core/test/tasks-suite.ts';
 import { upgradeSuite } from '../../core/test/upgrade-suite.ts';
@@ -24,6 +25,7 @@ storeSuite('on SQLite, in memory', () => SqliteStore.open(':memory:'));
 engineSuite('on SQLite', () => SqliteStore.open(database()));
 upgradeSuite('on SQLite', () => SqliteStore.open(database()));
 tasksSuite('on SQLite', () => SqliteStore.open(database()));
+machinesSuite('on SQLite', () => SqliteStore.open(database()));
 
 const NOW = 1_795_305_600_000;
 let made = 0;
@@ -42,6 +44,7 @@ const actorOf = (): Actor => {
     modelId: 'fake-1',
     reasoning: 'medium',
     configuration: null,
+    machine: null,
     status: 'idle',
     lastTurn: null,
     pendingInputs: 0,

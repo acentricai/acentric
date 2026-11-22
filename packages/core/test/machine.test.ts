@@ -27,6 +27,7 @@ function at(turn: Turn, said = 0, lastTurn: TurnEnd | null = null): ActorRecord 
       modelId: 'fake-1',
       reasoning: 'medium',
       configuration: null,
+      machine: null,
       status: turn.phase === 'idle' ? 'idle' : 'working',
       lastTurn,
       pendingInputs: 0,

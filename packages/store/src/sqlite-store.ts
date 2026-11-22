@@ -11,6 +11,12 @@ import type {
   ActorRecord,
   ActorsQuery,
   Change,
+  CommandPatch,
+  CommandStatus,
+  MachinePatch,
+  NewCommand,
+  StoredCommand,
+  StoredMachine,
   PageOf,
   Paged,
   Redeem,
@@ -43,6 +49,7 @@ import type {
   InviteId,
   Json,
   KeyId,
+  MachineId,
   Session,
   SessionId,
   UsageGroup,
@@ -139,7 +146,7 @@ class Line {
       waiting.reject(new StaleEpoch(actor, read, now));
     } else if (refused?.kind === 'NameTaken') {
       const said = refused.args[1];
-      const of = said === 'agent' || said === 'account' ? said : 'actor';
+      const of = said === 'agent' || said === 'account' || said === 'machine' ? said : 'actor';
       waiting.reject(new NameTaken(String(refused.args[0]), of));
     } else if (refused?.kind === 'EmailTaken') {
       waiting.reject(new EmailTaken(String(refused.args[0])));
@@ -285,6 +292,70 @@ export class SqliteStore implements Store {
     notice: Input | null,
   ): Promise<{ readonly ended: boolean; readonly notified: boolean }> {
     return this.#write.ask('endTask' satisfies Operation, actor, id, end, notice);
+  }
+
+  // Machines and their commands are read where they are written: what a daemon's connection is
+  // settled against is never behind what was just stored.
+  addMachine(machine: StoredMachine): Promise<void> {
+    return this.#write.ask('addMachine' satisfies Operation, machine);
+  }
+
+  loadMachine(id: MachineId): Promise<StoredMachine | undefined> {
+    return this.#write.ask('loadMachine' satisfies Operation, id);
+  }
+
+  findMachine(name: string): Promise<StoredMachine | undefined> {
+    return this.#write.ask('findMachine' satisfies Operation, name);
+  }
+
+  listMachines(): Promise<StoredMachine[]> {
+    return this.#write.ask('listMachines' satisfies Operation);
+  }
+
+  changeMachine(id: MachineId, patch: MachinePatch): Promise<StoredMachine | undefined> {
+    return this.#write.ask('changeMachine' satisfies Operation, id, patch);
+  }
+
+  enrolMachine(id: MachineId, tokenHash: string, publicKey: string, at: number): Promise<boolean> {
+    return this.#write.ask('enrolMachine' satisfies Operation, id, tokenHash, publicKey, at);
+  }
+
+  removeMachine(
+    id: MachineId,
+    lost: { readonly error: string; readonly endedAt: number },
+  ): Promise<StoredCommand[] | undefined> {
+    return this.#write.ask('removeMachine' satisfies Operation, id, lost);
+  }
+
+  addCommand(
+    command: NewCommand,
+  ): Promise<{ readonly command: StoredCommand; readonly created: boolean }> {
+    return this.#write.ask('addCommand' satisfies Operation, command);
+  }
+
+  addOwnCommand(command: Omit<NewCommand, 'task'>): Promise<StoredCommand> {
+    return this.#write.ask('addOwnCommand' satisfies Operation, command);
+  }
+
+  loadCommand(actor: string, task: string): Promise<StoredCommand | undefined> {
+    return this.#write.ask('loadCommand' satisfies Operation, actor, task);
+  }
+
+  openCommands(machine: MachineId): Promise<StoredCommand[]> {
+    return this.#write.ask('openCommands' satisfies Operation, machine);
+  }
+
+  listCommands(actor: string, machine: MachineId, limit: number): Promise<StoredCommand[]> {
+    return this.#write.ask('listCommands' satisfies Operation, actor, machine, limit);
+  }
+
+  changeCommand(
+    actor: string,
+    task: string,
+    patch: CommandPatch,
+    from?: readonly CommandStatus[],
+  ): Promise<boolean> {
+    return this.#write.ask('changeCommand' satisfies Operation, actor, task, patch, from);
   }
 
   addBlob(actor: ActorId, blob: StoredBlob): Promise<boolean> {
@@ -438,8 +509,18 @@ export class SqliteStore implements Store {
   createActor(
     actor: Actor,
     configurationGiven: Json | null = null,
+    env: string | null = null,
   ): Promise<{ readonly record: ActorRecord; readonly created: boolean }> {
-    return this.#write.ask('createActor' satisfies Operation, actor, configurationGiven);
+    return this.#write.ask('createActor' satisfies Operation, actor, configurationGiven, env);
+  }
+
+  // Read where they are written: a command is sent with what was just kept.
+  actorEnv(actor: ActorId): Promise<string | null> {
+    return this.#write.ask('actorEnv' satisfies Operation, actor);
+  }
+
+  setActorEnv(actor: ActorId, names: readonly string[], sealed: string | null): Promise<boolean> {
+    return this.#write.ask('setActorEnv' satisfies Operation, actor, names, sealed);
   }
 
   findActor(agent: AgentId, externalId: string): Promise<ActorRecord | undefined> {

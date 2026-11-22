@@ -172,7 +172,11 @@ const MIGRATIONS: readonly string[] = [
     epoch INTEGER NOT NULL,
     next_seq INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
-    archived_at INTEGER
+    archived_at INTEGER,
+    -- JSON: the machine it works on, where there, and the names of its variables. NULL for none.
+    machine TEXT,
+    -- JSON: the variables its commands are run with, sealed with a key the database never has.
+    machine_env TEXT
   ) STRICT;
 
   -- An external ID, and a name, are one actor's among its agent's.
@@ -243,6 +247,68 @@ const MIGRATIONS: readonly string[] = [
   CREATE UNIQUE INDEX tasks_call ON tasks (actor_id, call_id);
   -- Those under way: what a start watches again.
   CREATE INDEX tasks_running ON tasks (actor_id) WHERE status = 'running';
+
+  -- A machine: a computer with the daemon on it, where commands run.
+  CREATE TABLE machines (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    -- JSON: the IDs of the agents whose actors may work on it, or "*" for every agent.
+    agents TEXT NOT NULL,
+    -- The SHA-256 of the token its daemon may enrol with, in hex, and until when it works.
+    token_hash TEXT,
+    token_expires_at INTEGER,
+    -- Its daemon's Ed25519 public key, as base64 of its SubjectPublicKeyInfo. NULL until it enrols.
+    public_key TEXT,
+    -- What its daemon last said of it.
+    os TEXT,
+    arch TEXT,
+    home TEXT,
+    hostname TEXT,
+    version TEXT,
+    -- The SHA-256 of its daemon's program, in hex.
+    build TEXT,
+    -- The folder its daemon keeps commands in.
+    tasks_dir TEXT,
+    created_at INTEGER NOT NULL,
+    enrolled_at INTEGER,
+    last_seen_at INTEGER
+  ) STRICT;
+
+  -- A command on a machine, named by the actor and the task it is for. Its row is stored
+  -- before the machine is asked to run it, and its ending before the machine is told it arrived.
+  CREATE TABLE commands (
+    -- The actor it is for, or '_machine' for a machine's own.
+    actor_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    machine_id TEXT NOT NULL,
+    command TEXT NOT NULL,
+    cwd TEXT NOT NULL,
+    -- Seconds it may run. NULL for no limit.
+    timeout_s REAL,
+    -- starting, running, exited, stopped, failed or lost.
+    status TEXT NOT NULL,
+    -- 1 once it was asked to be stopped: the asking is sent again when its machine connects.
+    stop_wanted INTEGER NOT NULL DEFAULT 0,
+    exit_code INTEGER,
+    stopped_by TEXT,
+    ran_ms INTEGER,
+    bytes INTEGER,
+    lines INTEGER,
+    -- The end of what it wrote.
+    tail TEXT,
+    -- The file all of its output is in, on the machine.
+    log TEXT,
+    error TEXT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    PRIMARY KEY (actor_id, task_id)
+  ) STRICT, WITHOUT ROWID;
+
+  -- Those that have not ended on a machine: what is settled when its daemon connects.
+  CREATE INDEX commands_open ON commands (machine_id)
+    WHERE status IN ('starting', 'running');
+  -- A machine's own commands, as a list of them is read.
+  CREATE INDEX commands_listed ON commands (actor_id, machine_id, started_at);
 
   -- A blob: an image or file of a conversation, whose bytes are kept in the blob store under
   -- its digest. A row is there while an actor refers to the blob.
