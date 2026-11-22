@@ -48,6 +48,15 @@ export class StaleEpoch extends Error {
 }
 
 /** The name is another's: another actor's of the same agent, or another agent's. */
+/** A blob, as a store knows it: never its bytes. */
+export type StoredBlob = {
+  /** The SHA-256 of its bytes, in hex. */
+  readonly digest: string;
+  readonly size: number;
+  readonly mediaType: string;
+  readonly createdAt: number;
+};
+
 export class NameTaken extends Error {
   override readonly name = 'NameTaken';
   readonly code: ErrorCode = 'name_taken';
@@ -223,6 +232,23 @@ export interface Store {
    * well when one is asked for. A call is written with the step that ends it (see `commit`).
    */
   usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport>;
+
+  // Blobs: the images and files of conversations, whose bytes are kept apart (see `blobs.ts`)
+
+  /**
+   * Says that an actor refers to a blob, from now on. The media type is the one the actor
+   * first gave it. False, and nothing is kept, when there is no such actor.
+   */
+  addBlob(actor: ActorId, blob: StoredBlob): Promise<boolean>;
+  /** A blob an actor refers to. Undefined when it refers to none of that name. */
+  blobOf(actor: ActorId, digest: string): Promise<StoredBlob | undefined>;
+  /**
+   * Forgets every blob that no actor refers to, and gives their names. An actor's blobs are
+   * no longer referred to by it once it is deleted.
+   */
+  dropUnreferencedBlobs(): Promise<string[]>;
+  /** The name of every blob that is known. */
+  listBlobs(): Promise<string[]>;
 
   // API keys
 

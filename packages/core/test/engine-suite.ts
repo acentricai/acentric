@@ -1,6 +1,8 @@
 // What the engine does, on any store. It is run on the store in memory here, and on the store
 // on SQLite in its own package.
 
+import { createHash } from 'node:crypto';
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ModelFailure } from '@acentric/ai';
@@ -17,9 +19,10 @@ import {
   Unavailable,
   UnknownInput,
 } from '../src/errors.ts';
+import { MemoryBlobStore } from '../src/blobs.ts';
 import type { Store } from '../src/store.ts';
 import { Lost } from '../src/testing.ts';
-import { HANDLER, LOOKUP, deferred, eventually, over, world } from './world.ts';
+import { CODE, HANDLER, LOOKUP, MANIFEST, deferred, eventually, over, world } from './world.ts';
 import type { World } from './world.ts';
 
 const lookup = calls({ id: 'c1', name: 'lookup_order', arguments: { id: 4411 } });
@@ -361,6 +364,157 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
           totalInput: 40,
         });
         expect((await one.it.usage({ agent: actor.agent })).totals.calls).toBe(1);
+      });
+    });
+
+    describe('an image or a file', () => {
+      const bytes = new Uint8Array(400).fill(7);
+      const data = Buffer.from(bytes).toString('base64');
+      const digest = createHash('sha256').update(bytes).digest('hex');
+      const given = { type: 'image', source: { type: 'base64', mediaType: 'image/png', data } };
+      const kept = {
+        type: 'image',
+        source: { type: 'blob', digest, mediaType: 'image/png', size: 400 },
+      };
+      /** An engine whose agent's code gives the image, from its input's handler and its tool. */
+      const withImages = (model: Parameters<World['engine']>[0], blobs?: MemoryBlobStore) =>
+        w.engine(model, {
+          handler: () => [{ type: 'text', text: 'What is this?' }, given],
+          lookup: () => [given, { type: 'text', text: 'The receipt.' }],
+          ...(blobs === undefined ? {} : { options: { blobs } }),
+        });
+
+      it('is kept apart from the conversation, and the model is sent its bytes', async () => {
+        const blobs = new MemoryBlobStore();
+        const one = withImages([lookup, says('A receipt.')], blobs);
+        const actor = await one.createActor();
+        one.follow(actor.id);
+        await one.say(actor.id, 'Look.');
+        await one.it.settled(actor.id);
+
+        // The conversation names the bytes, as it is stored, read and told to whoever follows.
+        const conversation = await store.conversation(actor.id);
+        expect(conversation.map((entry) => entry.message.role)).toEqual([
+          'user',
+          'assistant',
+          'tool_result',
+          'assistant',
+        ]);
+        expect(conversation[0]?.message).toMatchObject({
+          content: [{ type: 'text', text: 'What is this?' }, kept],
+        });
+        expect(conversation[2]?.message).toMatchObject({
+          content: [kept, { type: 'text', text: 'The receipt.' }],
+        });
+        expect(JSON.stringify(conversation)).not.toContain(data);
+        expect(JSON.stringify(one.events)).not.toContain(data);
+        expect(JSON.stringify(await one.it.listInputs(actor.id))).not.toContain(data);
+        // The same bytes, from the handler and from the tool, are kept once.
+        expect(await blobs.list()).toEqual([digest]);
+        expect(await blobs.get(digest)).toEqual(bytes);
+
+        // The model was sent what the agent's code gave, at every call.
+        expect(one.steps[0]?.messages[0]).toMatchObject({
+          content: [{ type: 'text', text: 'What is this?' }, given],
+        });
+        expect(one.steps[1]?.messages[0]).toMatchObject({
+          content: [{ type: 'text', text: 'What is this?' }, given],
+        });
+        expect(one.steps[1]?.messages[2]).toMatchObject({
+          content: [given, { type: 'text', text: 'The receipt.' }],
+        });
+        expect((await one.it.blobs.read(actor.id, digest))?.bytes).toEqual(bytes);
+        expect(one.failures).toEqual([]);
+      });
+
+      it('stays in its message on an engine with no blob store', async () => {
+        const one = withImages([says('A receipt.')]);
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Look.');
+        await one.it.settled(actor.id);
+        expect((await store.conversation(actor.id))[0]?.message).toMatchObject({
+          content: [{ type: 'text', text: 'What is this?' }, given],
+        });
+        expect(one.steps[0]?.messages[0]).toMatchObject({
+          content: [{ type: 'text', text: 'What is this?' }, given],
+        });
+        expect(await store.listBlobs()).toEqual([]);
+      });
+
+      it('goes when the last actor whose conversation has it is deleted', async () => {
+        const blobs = new MemoryBlobStore();
+        const one = withImages([says('A receipt.'), says('A receipt.')], blobs);
+        const first = await one.createActor();
+        await one.say(first.id, 'Look.');
+        await one.it.settled(first.id);
+        const other = await one.it.deploy({ agent: 'billing', manifest: MANIFEST, code: CODE });
+        const { actor: second } = await one.it.createActor({ agent: other.agent.id });
+        await one.say(second.id, 'Look.');
+        await one.it.settled(second.id);
+
+        await one.it.deleteAgent(first.agent);
+        expect(await blobs.list()).toEqual([digest]);
+        expect((await one.it.blobs.read(second.id, digest))?.bytes).toEqual(bytes);
+        await one.it.deleteAgent(other.agent.id);
+        expect(await blobs.list()).toEqual([]);
+        expect(await store.listBlobs()).toEqual([]);
+      });
+
+      it('that names a blob its actor has none of is refused: an input, and a tool’s result', async () => {
+        const blobs = new MemoryBlobStore();
+        const stolen = {
+          type: 'image',
+          source: { type: 'blob', digest: 'f'.repeat(64), mediaType: 'image/png', size: 1 },
+        };
+        const one = w.engine([lookup, says('I could not see it.')], {
+          handler: (payload) => ((payload as { text: string }).text === 'steal' ? [stolen] : 'Hi.'),
+          lookup: () => [stolen],
+          options: { blobs },
+        });
+        const actor = await one.createActor();
+        await expect(one.say(actor.id, 'steal')).rejects.toMatchObject({ code: 'invalid_request' });
+        expect((await one.it.listInputs(actor.id)).items).toEqual([]);
+
+        // A tool that gives one is answered as a tool that failed, and the turn goes on.
+        await one.say(actor.id, 'Hello?');
+        await one.it.settled(actor.id);
+        const conversation = await store.conversation(actor.id);
+        expect(conversation[2]?.message).toMatchObject({
+          role: 'tool_result',
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `The content names a blob this actor has none of: ${'f'.repeat(64)}`,
+            },
+          ],
+        });
+        expect((await store.loadActor(actor.id))?.actor.lastTurn?.end).toBe('ok');
+        expect(one.failures).toEqual([]);
+      });
+
+      it('whose bytes are gone fails the turn with which, and no provider is asked', async () => {
+        const blobs = new MemoryBlobStore();
+        // The image is given once. Given again, its bytes would be kept again.
+        const one = w.engine([says('A receipt.')], {
+          handler: (payload) => {
+            const { text } = payload as { text: string };
+            return text === 'Look.' ? [given] : text;
+          },
+          options: { blobs },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Look.');
+        await one.it.settled(actor.id);
+        await blobs.remove(digest);
+        await one.say(actor.id, 'Look again.');
+        await one.it.settled(actor.id);
+        expect((await store.loadActor(actor.id))?.actor.lastTurn).toMatchObject({
+          end: 'failed',
+          reason: `The bytes of the blob ${digest} are not in the blob store`,
+        });
+        expect(one.steps).toHaveLength(1);
+        expect((await one.it.usage()).totals.calls).toBe(1);
       });
     });
 

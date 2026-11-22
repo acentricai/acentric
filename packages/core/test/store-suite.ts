@@ -24,6 +24,7 @@ import type {
   Paged,
   Store,
   StoredAccount,
+  StoredBlob,
   StoredKey,
   StoredLink,
   StoredSession,
@@ -96,6 +97,40 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       const actor = actorOf(agent, more);
       await store.createActor(actor);
       return actor;
+    };
+
+    /** An agent that is there, with one deployment: one that can be deleted. */
+    const stored = async (called: string): Promise<AgentId> => {
+      const id = agentId();
+      const ref = { id: makeId('deployment', { now: NOW, random: random() }), version: 1 };
+      await store.addDeployment({
+        agent: {
+          id,
+          name: called,
+          provider: 'fake',
+          activeDeployment: ref,
+          latestDeployment: ref,
+          account: null,
+          createdAt: NOW,
+        },
+        deployment: {
+          ...ref,
+          agent: id,
+          hash: 'a'.repeat(64),
+          manifest: { protocol: 1, sdk: '0.15.0' },
+          definition: {
+            provider: 'fake',
+            instructions: '',
+            configuration: null,
+            tools: [],
+            inputs: [],
+          },
+          createdBy: { type: 'system' },
+          createdAt: NOW,
+        },
+        code: called,
+      });
+      return id;
     };
 
     beforeEach(async () => {
@@ -1135,11 +1170,75 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       });
 
       it('stays when what it names is gone', async () => {
-        const id = agentId();
+        const id = await stored('orders');
         const actor = await create({}, id);
         await record(actor, [usedBy(actor)]);
-        await store.deleteAgent(id);
+        expect((await store.deleteAgent(id))?.actors).toEqual([actor.id]);
+        expect(await store.loadActor(actor.id)).toBeUndefined();
         expect((await store.usage({ actor: actor.id })).totals.calls).toBe(1);
+      });
+    });
+
+    describe('blobs', () => {
+      const blobOf = (fill: string, more: Partial<StoredBlob> = {}): StoredBlob => ({
+        digest: fill.repeat(64),
+        size: 2048,
+        mediaType: 'image/png',
+        createdAt: NOW,
+        ...more,
+      });
+
+      it('are known while an actor refers to them, each as the actor first gave it', async () => {
+        const first = await create();
+        const second = await create();
+        const blob = blobOf('a');
+        expect(await store.blobOf(first.id, blob.digest)).toBeUndefined();
+        expect(await store.listBlobs()).toEqual([]);
+
+        expect(await store.addBlob(first.id, blob)).toBe(true);
+        // Kept again, by the same actor or another, it is the one blob.
+        expect(await store.addBlob(first.id, blobOf('a', { mediaType: 'image/jpeg' }))).toBe(true);
+        expect(await store.addBlob(second.id, blobOf('a', { mediaType: 'image/webp' }))).toBe(true);
+        expect(await store.addBlob(second.id, blobOf('b', { size: 7 }))).toBe(true);
+
+        expect(await store.blobOf(first.id, blob.digest)).toEqual(blob);
+        expect(await store.blobOf(second.id, blob.digest)).toEqual({
+          ...blob,
+          mediaType: 'image/webp',
+        });
+        // One actor has nothing of what only another refers to.
+        expect(await store.blobOf(first.id, 'b'.repeat(64))).toBeUndefined();
+        expect((await store.listBlobs()).toSorted()).toEqual([blob.digest, 'b'.repeat(64)]);
+      });
+
+      it('are not kept for an actor there is not', async () => {
+        const nobody = actorOf(agentId());
+        expect(await store.addBlob(nobody.id, blobOf('a'))).toBe(false);
+        expect(await store.listBlobs()).toEqual([]);
+        expect(await store.blobOf(nobody.id, 'a'.repeat(64))).toBeUndefined();
+      });
+
+      it('are forgotten once the last actor that referred to them is deleted', async () => {
+        const orders = await stored('orders');
+        const billing = await stored('billing');
+        const first = await create({}, orders);
+        const second = await create({}, billing);
+        await store.addBlob(first.id, blobOf('a'));
+        await store.addBlob(first.id, blobOf('b'));
+        await store.addBlob(second.id, blobOf('b'));
+        // While something refers to each, nothing is forgotten.
+        expect(await store.dropUnreferencedBlobs()).toEqual([]);
+
+        await store.deleteAgent(orders);
+        expect(await store.blobOf(first.id, 'a'.repeat(64))).toBeUndefined();
+        expect(await store.dropUnreferencedBlobs()).toEqual(['a'.repeat(64)]);
+        expect(await store.listBlobs()).toEqual(['b'.repeat(64)]);
+        expect(await store.blobOf(second.id, 'b'.repeat(64))).toBeDefined();
+
+        await store.deleteAgent(billing);
+        expect(await store.dropUnreferencedBlobs()).toEqual(['b'.repeat(64)]);
+        expect(await store.listBlobs()).toEqual([]);
+        expect(await store.dropUnreferencedBlobs()).toEqual([]);
       });
     });
   });

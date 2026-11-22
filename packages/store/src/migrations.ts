@@ -211,6 +211,27 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX inputs_pending ON inputs (actor_id) WHERE delivered_at IS NULL;
   -- An actor's inputs, as a list of them is read.
   CREATE INDEX inputs_actor ON inputs (actor_id, id);
+
+  -- A blob: an image or file of a conversation, whose bytes are kept in the blob store under
+  -- its digest. A row is there while an actor refers to the blob.
+  CREATE TABLE blobs (
+    -- The SHA-256 of its bytes, in hex.
+    digest TEXT PRIMARY KEY,
+    size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  ) STRICT, WITHOUT ROWID;
+
+  -- The blobs an actor's conversation and mailbox refer to.
+  CREATE TABLE actor_blobs (
+    actor_id TEXT NOT NULL,
+    digest TEXT NOT NULL,
+    -- The media type the actor first gave it: what it is read back as.
+    media_type TEXT NOT NULL,
+    PRIMARY KEY (actor_id, digest)
+  ) STRICT, WITHOUT ROWID;
+
+  -- Whether anything still refers to a blob.
+  CREATE INDEX actor_blobs_digest ON actor_blobs (digest);
   `,
 ];
 
