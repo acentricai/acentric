@@ -6,7 +6,16 @@ import { ScriptedRunner, fakeProvider } from '@acentric/ai/testing';
 import type { Scripted } from '@acentric/ai/testing';
 import { createClient } from '@acentric/client';
 import type { Client } from '@acentric/client';
-import { Audit, Engine, Keys, MemoryStore, People, Secrets } from '@acentric/core';
+import {
+  Accounts,
+  Audit,
+  Engine,
+  Keys,
+  MemoryStore,
+  People,
+  Secrets,
+  accountRunners,
+} from '@acentric/core';
 import { InlineExecutor } from '@acentric/core/testing';
 import type { AgentFunction, InlineAgent } from '@acentric/core/testing';
 import type { ActorId, AgentDefinition, BodyOf, Json } from '@acentric/protocol';
@@ -53,26 +62,46 @@ const AGENTS: { [code: string]: InlineAgent } = {
 
 export type Api = Awaited<ReturnType<typeof api>>;
 
+/** The keys the provider of these tests takes. */
+export const MODEL_KEY = 'a-key-the-fake-provider-takes';
+export const OTHER_MODEL_KEY = 'another-key-the-fake-provider-takes';
+
 export async function api(
   script: readonly Scripted[] = [],
-  options: { readonly secretKey?: boolean } = {},
+  options: {
+    readonly secretKey?: boolean;
+    /** False for an engine that was added no model account. */
+    readonly account?: boolean;
+  } = {},
 ) {
   const store = new MemoryStore();
   const runner = new ScriptedRunner(script);
+  const sealing = options.secretKey !== false;
   const secrets = new Secrets({
     store,
-    ...(options.secretKey === false
-      ? {}
-      : { keys: { current: 'k1', keys: { k1: new Uint8Array(32).fill(1) } } }),
+    ...(sealing ? { keys: { current: 'k1', keys: { k1: new Uint8Array(32).fill(1) } } } : {}),
   });
+  const providers = new Providers([fakeProvider(runner, { keys: [MODEL_KEY, OTHER_MODEL_KEY] })]);
+  const audit = new Audit({ store });
+  const accounts = new Accounts({ store, secrets, providers, audit });
+  // The account every agent's model is called with, unless a test is of an engine with none.
+  // It is added as an engine that was set up before the test would have it: by nobody the
+  // audit log of the test names.
+  const account =
+    sealing && options.account !== false
+      ? await new Accounts({ store, secrets, providers }).add(
+          { type: 'system' },
+          { provider: 'fake', name: 'main', apiKey: MODEL_KEY },
+        )
+      : undefined;
   const engine = new Engine({
     store,
-    runner,
-    providers: new Providers([fakeProvider(runner)]),
+    // An engine that seals nothing has no account: its model is called without one.
+    runner: sealing ? accountRunners(accounts) : runner,
+    providers,
     executor: new InlineExecutor(AGENTS),
     secrets,
   });
-  const audit = new Audit({ store });
   // A hash that is quick to make: these tests are not of how long a password takes to guess.
   const people = new People({ store, audit, passwordCost: 1024 });
   const keys = new Keys({
@@ -90,6 +119,7 @@ export async function api(
     people,
     audit,
     secrets,
+    accounts,
     streams,
     version: 'test',
     // Every answer is held to its route's schema.
@@ -133,6 +163,8 @@ export async function api(
     people,
     audit,
     secrets,
+    accounts,
+    account,
     streams,
     runner,
     failures,
