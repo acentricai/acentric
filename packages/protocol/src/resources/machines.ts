@@ -7,6 +7,7 @@
 import { z } from 'zod';
 
 import { agentIdSchema, machineIdSchema } from '../ids.ts';
+import { FILE_BYTES, stoppedOnMachineSchema } from '../machine.ts';
 import { nameSchema } from '../names.ts';
 import { timestampSchema } from '../primitives.ts';
 
@@ -122,3 +123,94 @@ export const actorMachineSchema = z.object({
   env: z.array(z.string()),
 });
 export type ActorMachine = z.infer<typeof actorMachineSchema>;
+
+// A machine's own commands and files, for setting it up from outside. Its commands are of no
+// actor.
+
+/** The ID of a command of a machine's own: `c1`, `c2`, …, as the engine names them. */
+export const machineCommandIdSchema = z
+  .string()
+  .regex(/^c[1-9][0-9]{0,8}$/, 'A command of a machine is named c1, c2, …');
+
+/** The longest a call waits for a command, in seconds. */
+export const COMMAND_WAIT_MAX_S = 300;
+
+/** A command of a machine's own. */
+export const machineCommandSchema = z
+  .object({
+    id: machineCommandIdSchema,
+    machine: machineIdSchema,
+    command: z.string(),
+    cwd: z.string(),
+    /** Seconds it may run. Null for no limit. */
+    timeout: z.number().nullable(),
+    /**
+     * `starting` until its machine has said that it has it, then `running`. It ends as `exited`
+     * when it ended by itself, `stopped` when it was stopped, `failed` when it could not be
+     * started, and `lost` when its machine no longer has it.
+     */
+    status: z.enum(['starting', 'running', 'exited', 'stopped', 'failed', 'lost']),
+    /** Its exit status. Null while it runs, and when it was killed and left none. */
+    exit: z.number().int().nullable(),
+    stoppedBy: stoppedOnMachineSchema.nullable(),
+    ranMs: z.number().nullable(),
+    /** How much it wrote. */
+    bytes: z.number().nullable(),
+    lines: z.number().nullable(),
+    /** The end of what it wrote, once it has ended. */
+    tail: z.string().nullable(),
+    /** The file all of its output is in, on the machine. */
+    log: z.string().nullable(),
+    /** Why it failed or was lost. */
+    error: z.string().nullable(),
+    startedAt: timestampSchema,
+    endedAt: timestampSchema.nullable(),
+    /** For one that has not ended: the end of what it has written so far. Null when that could not be read. */
+    output: z.string().nullable().optional(),
+  })
+  .meta({ id: 'MachineCommand' });
+export type MachineCommand = z.infer<typeof machineCommandSchema>;
+
+export const runMachineCommandRequestSchema = z
+  .strictObject({
+    /** Run by bash, with no input. */
+    command: z.string().refine((command) => command.trim() !== '', 'A command is not empty'),
+    /** Where it starts: absolute, or from `~`. The home folder of the daemon's user without it. */
+    cwd: z
+      .string()
+      .regex(/^(\/|~$|~\/)/, 'A directory is a path that starts with / or ~')
+      .optional(),
+    /** Seconds it may run before it is stopped. */
+    timeout: z.number().positive().optional(),
+    /** Seconds the call waits for it to end: 30 without it. It goes on when they run out. */
+    wait: z.number().min(0).max(COMMAND_WAIT_MAX_S).optional(),
+  })
+  .meta({ id: 'RunMachineCommandRequest' });
+
+export const listMachineCommandsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const getMachineCommandQuerySchema = z.object({
+  /** Seconds to wait for it to end. None without it. */
+  wait: z.coerce.number().min(0).max(COMMAND_WAIT_MAX_S).optional(),
+});
+
+/** Which bytes of a file: all of it from its start without `from`, 8 MiB at most at once. */
+export const readMachineFileQuerySchema = z.object({
+  /** Absolute, from `~`, or from the home folder of the daemon's user. */
+  path: z.string().min(1),
+  from: z.coerce.number().int().min(0).optional(),
+  max: z.coerce.number().int().min(1).max(FILE_BYTES).optional(),
+});
+
+export const writeMachineFileQuerySchema = z.object({
+  path: z.string().min(1),
+  /** Where the bytes go: 0 without it, in place of all the file had. Otherwise the file's size. */
+  from: z.coerce.number().int().min(0).optional(),
+});
+
+/** A file that was written, as the machine names it, and how large it is now. */
+export const machineFileSchema = z
+  .object({ path: z.string(), size: z.number().int().nonnegative() })
+  .meta({ id: 'MachineFile' });

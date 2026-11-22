@@ -3884,6 +3884,770 @@
         }
       }
     },
+    "/v1/machines/{machine}/commands": {
+      "post": {
+        "operationId": "machineCommands.run",
+        "summary": "Runs a command of the machine's own, for no actor, and answers with how it ended, or with it running when its wait ran out.",
+        "tags": [
+          "machineCommands"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:run"
+        },
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind machine, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunMachineCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCommand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: machine_offline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Failed: unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "machineCommands.list",
+        "summary": "Lists a machine's own commands, newest first.",
+        "tags": [
+          "machineCommands"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:run"
+        },
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind machine, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCommandList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{machine}/commands/{command}": {
+      "get": {
+        "operationId": "machineCommands.get",
+        "summary": "Reads a command of a machine's own, with the end of its output.",
+        "tags": [
+          "machineCommands"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:run"
+        },
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind machine, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "command",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^c[1-9][0-9]{0,8}$"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 300
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCommand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{machine}/commands/{command}/stop": {
+      "post": {
+        "operationId": "machineCommands.stop",
+        "summary": "Stops a command of a machine's own, and answers once it has ended.",
+        "tags": [
+          "machineCommands"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:run"
+        },
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind machine, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "command",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^c[1-9][0-9]{0,8}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCommand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/machines/{machine}/files": {
+      "get": {
+        "operationId": "machineFiles.read",
+        "summary": "Reads the bytes of a file of a machine, as they are. `x-file-size` says how large the file is.",
+        "tags": [
+          "machineFiles"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:run"
+        },
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind machine, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8388608
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The bytes.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request, machine_refused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: machine_offline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Failed: unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "machineFiles.write",
+        "summary": "Writes the request's body, as the bytes it is, to a file of a machine: 8 MiB at most at once. Its folders are made.",
+        "tags": [
+          "machineFiles"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:run"
+        },
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind machine, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineFile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request, machine_refused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: machine_offline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Failed: too_large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Failed: unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/machines/{machine}/enrol": {
       "post": {
         "operationId": "machines.enrol",
@@ -9327,6 +10091,189 @@
           "lastSeenAt"
         ]
       },
+      "MachineCommand": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^c[1-9][0-9]{0,8}$"
+          },
+          "machine": {
+            "type": "string",
+            "pattern": "^mch_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind machine, made by the engine.",
+            "examples": [
+              "mch_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          },
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "starting",
+              "running",
+              "exited",
+              "stopped",
+              "failed",
+              "lost"
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stoppedBy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "stop",
+                  "timeout",
+                  "output"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ranMs": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "bytes": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lines": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch.",
+            "examples": [
+              1795305600000
+            ]
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch.",
+                "examples": [
+                  1795305600000
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "output": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "machine",
+          "command",
+          "cwd",
+          "timeout",
+          "status",
+          "exit",
+          "stoppedBy",
+          "ranMs",
+          "bytes",
+          "lines",
+          "tail",
+          "log",
+          "error",
+          "startedAt",
+          "endedAt"
+        ]
+      },
+      "MachineCommandList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineCommand"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "MachineFile": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "path",
+          "size"
+        ]
+      },
       "MachineList": {
         "type": "object",
         "properties": {
@@ -10119,6 +11066,31 @@
         "required": [
           "token",
           "password"
+        ],
+        "additionalProperties": false
+      },
+      "RunMachineCommandRequest": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string",
+            "pattern": "^(\\/|~$|~\\/)"
+          },
+          "timeout": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "wait": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 300
+          }
+        },
+        "required": [
+          "command"
         ],
         "additionalProperties": false
       },
