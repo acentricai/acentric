@@ -11,7 +11,6 @@ import type { ModelRunner, Providers } from '@acentric/ai';
 import {
   SUPPORTED_BUNDLE_PROTOCOLS,
   agentDefinitionSchema,
-  makeId,
   supportsBundleProtocol,
 } from '@acentric/protocol';
 import type {
@@ -54,6 +53,7 @@ import {
 import { contextOf, issuesText } from './executor.ts';
 import type { CallContext, CallResult, Executor } from './executor.ts';
 import { Semaphore } from './limits.ts';
+import { IdSource } from './ids.ts';
 import { DEFAULT_RULES } from './machine.ts';
 import type { Rules } from './machine.ts';
 import type { Secrets } from './secrets.ts';
@@ -124,7 +124,7 @@ export class Engine {
   readonly #store: Store;
   readonly #executor: Executor;
   readonly #clock: Clock;
-  readonly #entropy: Entropy;
+  readonly #ids: IdSource;
   readonly #timer: Timer;
   readonly #host: Host;
   readonly #slots: Semaphore;
@@ -152,7 +152,7 @@ export class Engine {
     this.#store = options.store;
     this.#executor = options.executor;
     this.#clock = options.clock ?? Date.now;
-    this.#entropy = options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10)));
+    this.#ids = new IdSource(options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10))));
     this.#timer = options.timer ?? wait;
     this.#slots = new Semaphore(options.maxConcurrentTurns ?? 100);
     this.#maxHot = options.maxHotActors ?? 1000;
@@ -280,8 +280,8 @@ export class Engine {
     }
 
     const now = this.#clock();
-    const agentId = existing?.id ?? makeId('agent', { now, random: this.#entropy() });
-    const id = makeId('deployment', { now, random: this.#entropy() });
+    const agentId = existing?.id ?? this.#ids.make('agent', now);
+    const id = this.#ids.make('deployment', now);
     const refuse = async (error: Error): Promise<never> => {
       await this.#executor.unload(id);
       throw error;
@@ -477,7 +477,7 @@ export class Engine {
     const definition = await this.#definition(deployment.id);
     const now = this.#clock();
     const actor: Actor = {
-      id: makeId('actor', { now, random: this.#entropy() }),
+      id: this.#ids.make('actor', now),
       name: given.name ?? null,
       externalId: given.externalId ?? null,
       agent: agent.id,
@@ -612,7 +612,7 @@ export class Engine {
 
     const now = this.#clock();
     const input: Input = {
-      id: makeId('input', { now, random: this.#entropy() }),
+      id: this.#ids.make('input', now),
       actor: actorId,
       type: sent.type,
       externalId: sent.externalId ?? null,

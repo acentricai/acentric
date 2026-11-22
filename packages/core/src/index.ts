@@ -14,5 +14,6 @@ export { ActorDriver } from './driver.ts';
 export type { ActorUpdate, Clock, Timer } from './driver.ts';
 export * from './secrets.ts';
 export * from './keys.ts';
+export * from './ids.ts';
 export * from './engine.ts';
 export * from './runners.ts';

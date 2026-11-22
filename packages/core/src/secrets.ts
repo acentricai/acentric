@@ -97,6 +97,14 @@ export class Secrets {
     return this.#store.secretNames(agent);
   }
 
+  /** The agent's secrets as they are listed, in order: their names and when each was set. */
+  async list(agent: AgentId): Promise<{ name: string; updatedAt: number }[]> {
+    return (await this.#store.allSecrets())
+      .filter((secret) => secret.agent === agent)
+      .map(({ name, updatedAt }) => ({ name, updatedAt }))
+      .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  }
+
   /** Removes the secret. False when there was none of that name. */
   delete(agent: AgentId, name: string): Promise<boolean> {
     return this.#store.deleteSecret(agent, name);

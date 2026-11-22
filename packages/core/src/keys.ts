@@ -27,6 +27,7 @@ import type {
 } from '@acentric/protocol';
 
 import { EngineError } from './errors.ts';
+import { IdSource } from './ids.ts';
 import type { Store, StoredKey } from './store.ts';
 
 /** The request came with no key, or with one that is not known, was revoked or has expired. */
@@ -131,7 +132,7 @@ export class Keys {
   readonly #settingsHash: Buffer | undefined;
   readonly #agentOf: (actor: ActorId) => Promise<AgentId | undefined>;
   readonly #clock: () => number;
-  readonly #entropy: () => Uint8Array;
+  readonly #ids: IdSource;
   /** When each key's last use was last written down. */
   readonly #touched = new Map<KeyId, number>();
 
@@ -157,7 +158,7 @@ export class Keys {
     this.#store = options.store;
     this.#agentOf = options.agentOf;
     this.#clock = options.clock ?? Date.now;
-    this.#entropy = options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10)));
+    this.#ids = new IdSource(options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10))));
   }
 
   /** Who the key an engine is started with is. */
@@ -331,7 +332,7 @@ export class Keys {
     },
   ): Promise<{ readonly key: Key; readonly token: string }> {
     const now = this.#clock();
-    const id = makeId('key', { now, random: this.#entropy() });
+    const id = this.#ids.make('key', now);
     const secret = randomBytes(32).toString('base64url');
     const key: Key = {
       id,

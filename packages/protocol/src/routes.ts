@@ -505,8 +505,10 @@ type SchemaOf<
 
 /** What a caller of route `I` gives for its path's parameters. */
 export type ParamsOf<I extends RouteId> = z.input<SchemaOf<I, 'params'>>;
-/** What a caller of route `I` may give in its query. */
+/** What a caller of route `I` may give in its query, as it is written in a URL. */
 export type QueryOf<I extends RouteId> = z.input<SchemaOf<I, 'query'>>;
+/** A route's query as the server reads it: a number where the URL has its digits, and so on. */
+export type QueryValuesOf<I extends RouteId> = z.output<SchemaOf<I, 'query'>>;
 /** What a caller of route `I` sends as its body. */
 export type BodyOf<I extends RouteId> = z.input<SchemaOf<I, 'body'>>;
 /** What route `I` answers with. */
