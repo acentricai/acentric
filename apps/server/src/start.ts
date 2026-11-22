@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 import { builtInProviders } from '@acentric/ai';
 import type { ModelRunner, Providers } from '@acentric/ai';
-import { Engine, Keys, Secrets, providerRunners } from '@acentric/core';
+import { Audit, Engine, Keys, People, Secrets, providerRunners } from '@acentric/core';
 import type { RunnerSource } from '@acentric/core';
 import { IsolateExecutor } from '@acentric/executor';
 import { SqliteStore } from '@acentric/store';
@@ -20,6 +20,11 @@ export type Started = {
   readonly server: Server;
   /** The key of a server that had none, to be shown once. Undefined when it had a way in. */
   readonly firstKey: string | undefined;
+  /**
+   * For a server with no person yet: the link that makes its owner, to be shown once. A new
+   * one is made each time such a server starts.
+   */
+  readonly setupLink: string | undefined;
   /** How many actors had something owed when the server started, and were picked up. */
   readonly recovered: number;
   /** Stops everything. What is in the middle of a turn stays owed, and is picked up next time. */
@@ -36,6 +41,8 @@ export async function start(
     /** Lines the processes agents' code runs in write. To stderr without it. */
     readonly log?: (line: string) => void;
     readonly checkAnswers?: boolean;
+    /** How hard a password's hash is to make (see `People`). Tests ask for less. */
+    readonly passwordCost?: number;
   },
 ): Promise<Started> {
   await mkdir(settings.data, { recursive: true });
@@ -58,18 +65,29 @@ export async function start(
     secrets,
     runner: more.runner ?? providerRunners(providers, (id) => settings.credentials[id]),
   });
+  const audit = new Audit({ store });
+  const people = new People({
+    store,
+    audit,
+    ...(more.passwordCost === undefined ? {} : { passwordCost: more.passwordCost }),
+  });
   const keys = new Keys({
     store,
     ...(settings.adminKey === undefined ? {} : { settingsKey: settings.adminKey }),
     agentOf: async (actor) => (await store.loadActor(actor))?.actor.agent,
+    // A person's key does no more than the person may now.
+    holderOf: (user) => people.holder(user),
   });
 
   try {
     const firstKey = await keys.first();
+    const setupToken = await people.setupLink();
     const recovered = await engine.recover();
     const server = await startServer({
       engine,
       keys,
+      people,
+      audit,
       secrets,
       version: more.version,
       port: settings.port,
@@ -79,6 +97,10 @@ export async function start(
     return {
       server,
       firstKey,
+      setupLink:
+        setupToken === undefined
+          ? undefined
+          : linkOf(settings.publicUrl ?? server.url, 'setup', setupToken),
       recovered,
       async close(options) {
         await server.close(options);
@@ -91,5 +113,30 @@ export async function start(
     await executor.close();
     await store.close();
     throw error;
+  }
+}
+
+/** A link a person opens, to a page of the dashboard: it ends in what is used once. */
+function linkOf(base: string, page: 'setup' | 'reset', token: string): string {
+  return `${base}/${page}?token=${token}`;
+}
+
+/**
+ * A link that sets a person's password again, made on the server itself: the way back in for
+ * an owner who is locked out. It opens the database alone, so it is run beside a server that
+ * is up as well as one that is not.
+ */
+export async function resetLink(
+  settings: Settings,
+  email: string,
+): Promise<{ readonly link: string; readonly token: string; readonly expiresAt: number }> {
+  const store = await SqliteStore.open(join(settings.data, 'engine.sqlite'));
+  try {
+    const people = new People({ store, audit: new Audit({ store }) });
+    const { token, expiresAt } = await people.resetLinkFor(email);
+    const base = settings.publicUrl ?? `http://${settings.host}:${String(settings.port)}`;
+    return { link: linkOf(base, 'reset', token), token, expiresAt };
+  } finally {
+    await store.close();
   }
 }

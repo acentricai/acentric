@@ -16,7 +16,7 @@ import type { Client } from '@acentric/client';
 import type { ActorEvent, ActorId } from '@acentric/protocol';
 
 import { bundle } from '../../../packages/executor/test/bundle.ts';
-import { readSettings, start } from '../src/index.ts';
+import { readSettings, resetLink, start } from '../src/index.ts';
 
 /** A model that looks an order up when it is asked something, and says what it found. */
 const model: ModelRunner = {
@@ -208,6 +208,57 @@ describe('a server', () => {
         (entry) => entry.message.role,
       ),
     ).toEqual(['user', 'assistant', 'tool_result', 'assistant']);
+    await second.close();
+  }, 60_000);
+
+  it('prints a link that makes its owner, and a link that lets an owner who is locked out back in', async () => {
+    const settings = readSettings({
+      ACENTRIC_PORT: '0',
+      ACENTRIC_DATA: join(dir, 'people'),
+      ACENTRIC_PUBLIC_URL: 'https://engine.example.com/',
+      ACENTRIC_CODE_PROCESSES: '1',
+    });
+    const more = {
+      version: 'test',
+      providers: new Providers([fakeProvider(model)]),
+      runner: model,
+      log: () => {},
+      checkAnswers: true,
+      passwordCost: 1024,
+    };
+    const first = await start(settings, more);
+    // Where people reach the server, not where it listens.
+    expect(first.setupLink).toMatch(/^https:\/\/engine\.example\.com\/setup\?token=al_/);
+    const token = new URL(first.setupLink as string).searchParams.get('token') as string;
+    const anyone = createClient({ baseUrl: first.server.url });
+    const owner = await anyone.call('setup.complete', {
+      body: { token, email: 'ada@example.com', password: 'correct horse battery', client: 'cli' },
+    });
+    const ada = createClient({ baseUrl: first.server.url, token: owner.token as string });
+    expect(await ada.call('me.get')).toMatchObject({ type: 'user', role: 'owner' });
+    await first.close();
+
+    // Started again, there is a person: no link is made, and her session is still good.
+    const second = await start(settings, more);
+    expect(second.setupLink).toBeUndefined();
+    const again = createClient({ baseUrl: second.server.url, token: owner.token as string });
+    expect((await again.call('me.get')).type).toBe('user');
+
+    // She forgets her password. The link is made on the server itself, while it is up.
+    const made = await resetLink(settings, 'ada@example.com');
+    expect(made.link).toMatch(/^https:\/\/engine\.example\.com\/reset\?token=al_/);
+    const fresh = createClient({ baseUrl: second.server.url });
+    await fresh.call('password.reset', {
+      body: { token: made.token, password: 'a new one, long enough' },
+    });
+    await expect(again.call('me.get')).rejects.toMatchObject({ code: 'unauthenticated' });
+    const back = await fresh.call('auth.signIn', {
+      body: { email: 'ada@example.com', password: 'a new one, long enough', client: 'cli' },
+    });
+    expect(back.user.role).toBe('owner');
+    await expect(resetLink(settings, 'nobody@example.com')).rejects.toMatchObject({
+      code: 'not_found',
+    });
     await second.close();
   }, 60_000);
 });

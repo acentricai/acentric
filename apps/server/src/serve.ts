@@ -4,7 +4,7 @@
 import type { AddressInfo } from 'node:net';
 
 import { serve as listen } from '@hono/node-server';
-import type { Engine, Keys, Secrets } from '@acentric/core';
+import type { Audit, Engine, Keys, People, Secrets } from '@acentric/core';
 
 import { createApp } from './app.ts';
 import { Streams } from './events.ts';
@@ -12,6 +12,8 @@ import { Streams } from './events.ts';
 export type ServerOptions = {
   readonly engine: Engine;
   readonly keys: Keys;
+  readonly people: People;
+  readonly audit: Audit;
   readonly secrets: Secrets;
   readonly version: string;
   /** 0 takes any free port. */

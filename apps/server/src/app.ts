@@ -14,7 +14,7 @@ import type { z } from 'zod';
 
 import { authenticate, authorize } from './auth.ts';
 import { ApiFailure, failureOf } from './errors.ts';
-import { handlers } from './handlers.ts';
+import { Reply, handlers } from './handlers.ts';
 import type { Parts } from './handlers.ts';
 
 export type AppOptions = Omit<Parts, 'streams'> & {
@@ -73,7 +73,7 @@ async function jsonOf(request: Request, most: number): Promise<unknown> {
 }
 
 export function createApp(options: AppOptions): Hono {
-  const { engine, keys } = options;
+  const { engine, keys, people } = options;
   const report =
     options.report ??
     ((error: unknown, requestId: string) => {
@@ -96,9 +96,17 @@ export function createApp(options: AppOptions): Hono {
       const requestId = randomBytes(8).toString('hex');
       const { req } = context;
       try {
-        const principal = await authenticate(keys, req.raw);
         const params = route.params === undefined ? {} : read(route.params, req.param(), 'path');
-        const granted = await authorize(engine, principal, route.auth, params as never);
+        // A route that makes a credential is called without one.
+        const granted =
+          route.auth.on === 'none'
+            ? {}
+            : await authorize(
+                engine,
+                await authenticate(keys, people, req.raw),
+                route.auth,
+                params as never,
+              );
         const query =
           route.query === undefined ? undefined : read(route.query, req.query(), 'query');
         const most = id === 'deployments.create' ? MAX_DEPLOY_BYTES : MAX_BODY_BYTES;
@@ -107,12 +115,16 @@ export function createApp(options: AppOptions): Hono {
             ? undefined
             : read(route.body, await jsonOf(req.raw, most), 'body');
 
-        const answer = await handler(
-          { ...granted, params, query, body, request: req.raw },
-          options,
-        );
-        if (answer instanceof Response) return answer;
-        if (route.response === undefined) return new Response(null, { status: route.status });
+        const given = await handler({ ...granted, params, query, body, request: req.raw }, options);
+        if (given instanceof Response) return given;
+        const answer: unknown = given instanceof Reply ? given.body : given;
+        const headers = {
+          'x-request-id': requestId,
+          ...(given instanceof Reply ? given.headers : {}),
+        };
+        if (route.response === undefined) {
+          return new Response(null, { status: route.status, headers });
+        }
         if (options.checkAnswers === true) {
           const checked = route.response.safeParse(answer);
           if (!checked.success) {
@@ -122,13 +134,18 @@ export function createApp(options: AppOptions): Hono {
         // A route that makes something unless it is there already says which it was.
         const existed =
           route.existing !== undefined && (answer as { created?: boolean }).created === false;
-        return Response.json(answer, {
-          status: existed ? route.existing : route.status,
-          headers: { 'x-request-id': requestId },
-        });
+        return Response.json(answer, { status: existed ? route.existing : route.status, headers });
       } catch (error) {
         const { status, body } = failureOf(error, requestId, report);
-        return Response.json(body, { status, headers: { 'x-request-id': requestId } });
+        // One who is to wait is told for how long.
+        const wait = (error as { retryAfterMs?: unknown } | null)?.retryAfterMs;
+        return Response.json(body, {
+          status,
+          headers: {
+            'x-request-id': requestId,
+            ...(typeof wait === 'number' ? { 'retry-after': String(Math.ceil(wait / 1000)) } : {}),
+          },
+        });
       }
     });
   }
