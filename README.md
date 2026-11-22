@@ -10,7 +10,8 @@ which connect out to the engine, or ones the engine makes at a sandbox provider.
 > Fireworks and Anthropic), the framework an agent is written with, agents deployed as versions
 > that their running actors follow, agents' code run apart from the engine in isolates of
 > `workerd`, and a server with an HTTP API, API keys, sign-in for people with roles, an audit
-> log, model accounts and usage, and a typed client. It has no command and no dashboard yet.
+> log, model accounts and usage, a typed client, and the `acentric` command. It has no dashboard
+> yet.
 
 ## Running the server
 
@@ -37,14 +38,30 @@ docker run -p 4000:4000 -v acentric-data:/data \
 - `ACENTRIC_SECRET_KEY` is what agents' secrets and the keys of model accounts are sealed
   with. Without it, the server keeps neither.
 - A provider's models are called with a model account: a key of the provider's, added with
-  `POST /v1/accounts` and checked with the provider before it is kept. No key is read from the
-  environment. The first account of a provider is its default, and an agent can be given
+  `acentric accounts add` and checked with the provider before it is kept. No key is read from
+  the environment. The first account of a provider is its default, and an agent can be given
   another.
 - Every call of a model is written down with what it used and cost. `GET /v1/usage` adds it
   up, by agent, actor, account, provider, model or day.
 - Its API is described at `/v1/openapi.json`, and `@acentric/client` calls it.
 
 Every setting is listed at the top of `apps/server/src/settings.ts`.
+
+## Using it
+
+The `acentric` command is installed from your own server, so it is always the server's version:
+
+```sh
+curl -fsSL http://localhost:4000/install-cli.sh | sh
+acentric login                                 # asks for the API key the server printed
+acentric init my-agents && cd my-agents        # a project with one agent
+acentric deploy                                # bundles the agent and deploys it
+acentric accounts add anthropic main           # the key its model is called with
+acentric actors create my-agents               # a running agent
+acentric actors send <actor> "Hello" --follow  # talk to it
+```
+
+[apps/cli/README.md](apps/cli/README.md) has every command.
 
 ## What is here
 
