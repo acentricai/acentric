@@ -528,6 +528,10 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'addDeployment',
   'setActive',
   'deleteAgent',
+  'deleteActor',
+  'removeExpired',
+  'pruneAudit',
+  'pruneUsage',
   'setAgentAccount',
   'addAccount',
   'saveAccount',
@@ -777,6 +781,7 @@ export function operations(db: DatabaseSync) {
         'DELETE FROM compactions WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
         id,
       );
+      run('DELETE FROM commands WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
       const actors = all<{ id: ActorId }>(
         'DELETE FROM actors WHERE agent_id = ? RETURNING id',
         id,
@@ -792,6 +797,69 @@ export function operations(db: DatabaseSync) {
         );
       }
       return { deployments, actors };
+    },
+
+    deleteActor(id: ActorId): ActorId[] | undefined {
+      // The actor, and the subagents under it, however deep.
+      const ids = all<{ id: ActorId }>(
+        `WITH RECURSIVE tree(id) AS (
+           SELECT id FROM actors WHERE id = ?
+           UNION ALL SELECT actors.id FROM actors JOIN tree ON actors.parent_id = tree.id
+         )
+         SELECT id FROM tree`,
+        id,
+      ).map((row) => row.id);
+      if (ids.length === 0) return undefined;
+      const these = JSON.stringify(ids);
+      for (const table of [
+        'messages',
+        'inputs',
+        'actor_blobs',
+        'tasks',
+        'scripts',
+        'script_calls',
+        'compactions',
+        'commands',
+      ]) {
+        run(`DELETE FROM ${table} WHERE actor_id IN (SELECT value FROM json_each(?))`, these);
+      }
+      run('DELETE FROM actors WHERE id IN (SELECT value FROM json_each(?))', these);
+      return ids;
+    },
+
+    archivedBefore(before: number, limit: number): ActorId[] {
+      return all<{ id: ActorId }>(
+        `SELECT id FROM actors
+         WHERE archived_at IS NOT NULL AND archived_at < ? AND parent_id IS NULL
+         ORDER BY archived_at, id LIMIT ?`,
+        before,
+        limit,
+      ).map((row) => row.id);
+    },
+
+    removeExpired(now: number): { sessions: number; links: number } {
+      return {
+        sessions: run("DELETE FROM sessions WHERE json_extract(session, '$.expiresAt') < ?", now),
+        links: run("DELETE FROM links WHERE json_extract(link, '$.expiresAt') < ?", now),
+      };
+    },
+
+    pruneAudit(before: number, limit: number): number {
+      return run(
+        `DELETE FROM audit_events WHERE id IN (
+           SELECT id FROM audit_events WHERE json_extract(event, '$.at') < ? ORDER BY id LIMIT ?
+         )`,
+        before,
+        limit,
+      );
+    },
+
+    pruneUsage(before: number, limit: number): number {
+      return run(
+        'DELETE FROM usage WHERE rowid IN (SELECT rowid FROM usage WHERE at < ? ORDER BY at LIMIT ?)',
+        before,
+        limit,
+      );
     },
 
     setAgentAccount(agent: AgentId, account: AccountId | null): Agent | undefined {
