@@ -15,7 +15,7 @@ import type {
   StoredCommand,
   UsageFilter,
 } from '@acentric/core';
-import { FILE_BYTES } from '@acentric/protocol';
+import { FILE_BYTES, idsOf } from '@acentric/protocol';
 import type {
   Actor,
   Agent,
@@ -432,9 +432,15 @@ export const handlers: Handlers = {
   },
   'machines.list': async ({ query }, { engine }) => {
     const machines = machinesOf(engine);
-    if (query.name === undefined) return { items: await machines.list() };
+    const agents = idsOf(query.agent, 'agent');
+    const actors = idsOf(query.actor, 'actor');
+    const usedBy =
+      query.agent === undefined && query.actor === undefined ? undefined : { agents, actors };
+    if (query.name === undefined) return { items: await machines.list(usedBy) };
     const one = await machines.find(query.name);
-    return { items: one === undefined ? [] : [one] };
+    const used = one === undefined || usedBy === undefined ? [] : await machines.list(usedBy);
+    const kept = usedBy === undefined || used.some((machine) => machine.id === one?.id);
+    return { items: one === undefined || !kept ? [] : [one] };
   },
   'machines.get': ({ params }, { engine }) => machinesOf(engine).get(params.machine),
   'machines.update': async (asked, { engine, audit }) => {

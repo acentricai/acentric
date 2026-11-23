@@ -1758,6 +1758,22 @@ export function operations(db: DatabaseSync) {
       return all<MachineRow>('SELECT * FROM machines ORDER BY created_at, id').map(machineOf);
     },
 
+    machinesOfActors(query: {
+      readonly agents: readonly AgentId[];
+      readonly actors: readonly ActorId[];
+    }): MachineId[] {
+      if (query.agents.length === 0 && query.actors.length === 0) return [];
+      const marks = (count: number) => (count === 0 ? 'NULL' : Array(count).fill('?').join(', '));
+      return all<{ machine: MachineId }>(
+        `SELECT DISTINCT json_extract(machine, '$.id') AS machine FROM actors
+         WHERE machine IS NOT NULL
+           AND ((agent_id IN (${marks(query.agents.length)}) AND status != 'archived')
+             OR id IN (${marks(query.actors.length)}))`,
+        ...query.agents,
+        ...query.actors,
+      ).map((row) => row.machine);
+    },
+
     changeMachine(id: MachineId, patch: MachinePatch): StoredMachine | undefined {
       if (get('SELECT 1 FROM machines WHERE id = ?', id) === undefined) return undefined;
       if (

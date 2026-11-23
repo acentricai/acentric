@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 
-import { agentIdSchema, machineIdSchema, sandboxProviderIdSchema } from '../ids.ts';
+import { agentIdSchema, idListSchema, machineIdSchema, sandboxProviderIdSchema } from '../ids.ts';
 import { FILE_BYTES, stoppedOnMachineSchema } from '../machine.ts';
 import { nameSchema } from '../names.ts';
 import { timestampSchema } from '../primitives.ts';
@@ -77,6 +77,13 @@ export type UpdateMachineRequest = z.infer<typeof updateMachineRequestSchema>;
 export const listMachinesQuerySchema = z.object({
   /** The machine of this name, if there is one. */
   name: nameSchema.optional(),
+  /**
+   * Only the machines the actors of these agents work on, those that are not archived. With
+   * `actor` too, the machines of either.
+   */
+  agent: idListSchema('agent').optional(),
+  /** Only the machines these actors work on. */
+  actor: idListSchema('actor').optional(),
 });
 
 /** What a daemon enrols with: the machine's token, and the public half of its key. */
