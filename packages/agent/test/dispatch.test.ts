@@ -708,3 +708,173 @@ describe("an agent's schedule handler", () => {
     expect(timed.describe().features).toEqual(['schedule']);
   });
 });
+
+describe("an agent's subagents", () => {
+  const lead = entryOf(
+    new Agent({
+      provider: 'anthropic',
+      instructions: 'You lead.',
+      machine: true,
+      subagents: [
+        { id: 'helper', description: 'Does part of the work.' },
+        {
+          id: 'reviewer',
+          description: 'Reviews a change.',
+          params: {
+            schema: z.object({ strict: z.boolean().describe('How hard it looks.') }),
+            create: ({ strict }, given) => ({
+              machine: given.machine,
+              reasoning: strict ? 'high' : 'low',
+              configuration: { strict, for: given.actor },
+            }),
+          },
+        },
+        {
+          id: 'apart',
+          description: 'Works with no machine.',
+          params: { create: () => ({ machine: null, modelId: 'claude-haiku-5-5' }) },
+        },
+        {
+          id: 'wrong',
+          description: 'Is created with what no actor is.',
+          params: {
+            schema: z.object({ how: z.string() }),
+            create: ({ how }) => {
+              if (how === 'field') return { name: 'x' } as never;
+              if (how === 'machine') return { machine: { id: 'mch_1', cwd: 'relative' } };
+              if (how === 'reasoning') return { reasoning: 'extreme' as never };
+              if (how === 'nothing') return 5 as never;
+              throw new Error('no reviewer on a Sunday');
+            },
+          },
+        },
+      ],
+    }),
+  );
+  const machine = { id: makeId('machine', source(3)), cwd: '~/work', env: { KEY: 'k-1' } };
+  const on: BundleContext = { ...context, configuration: null, machine };
+  const create = (id: string, params: unknown) =>
+    lead.call(`subagents.${id}.create`, params as never, on, host());
+
+  it('are part of what the agent says it is, each with what the model gives to spawn one', () => {
+    const { subagents, features } = lead.describe();
+    expect(features).toEqual(['machine', 'subagents']);
+    expect(subagents).toEqual([
+      { agent: 'helper', description: 'Does part of the work.', creates: false },
+      {
+        agent: 'reviewer',
+        description: 'Reviews a change.',
+        creates: true,
+        schema: expect.objectContaining({
+          type: 'object',
+          properties: { strict: { type: 'boolean', description: 'How hard it looks.' } },
+          required: ['strict'],
+        }) as object,
+      },
+      { agent: 'apart', description: 'Works with no machine.', creates: true },
+      {
+        agent: 'wrong',
+        description: 'Is created with what no actor is.',
+        creates: true,
+        schema: expect.any(Object) as object,
+      },
+    ]);
+    expect(agentDefinitionSchema.parse(lead.describe()).subagents).toHaveLength(4);
+  });
+
+  it('are created with what the agent’s code says, from what the model gave and the actor that spawns', async () => {
+    expect(await create('reviewer', { strict: true })).toEqual({
+      ok: true,
+      value: {
+        // Its machine as the code was given it: the data, and none of the functions.
+        machine,
+        reasoning: 'high',
+        configuration: { strict: true, for: context.actor },
+      },
+    });
+    expect(await create('apart', {})).toEqual({
+      ok: true,
+      value: { machine: null, modelId: 'claude-haiku-5-5' },
+    });
+    // One whose agent says nothing of how is created with nothing said.
+    expect(await create('helper', {})).toEqual({ ok: true, value: {} });
+    expect(await create('helper', null)).toEqual({ ok: true, value: {} });
+  });
+
+  it('are not created with what their schema does not take, or by what takes nothing', async () => {
+    expect(await create('reviewer', { strict: 'very' })).toMatchObject({
+      ok: false,
+      kind: 'invalid',
+      issues: [{ path: ['strict'] }],
+    });
+    for (const id of ['helper', 'apart']) {
+      expect(await create(id, { strict: true })).toEqual({
+        ok: false,
+        kind: 'invalid',
+        issues: [{ message: `${id} takes no params` }],
+      });
+    }
+    expect(await create('nobody', {})).toMatchObject({
+      ok: false,
+      error: { message: 'The agent has no subagent nobody' },
+    });
+  });
+
+  it('fail when the code returns what an actor is not created with, or throws', async () => {
+    const wrong: readonly (readonly [string, string])[] = [
+      ['field', 'create of the subagent wrong returned name, which an actor is not created with'],
+      [
+        'machine',
+        'create of the subagent wrong: machine.cwd is a path on the machine that starts with / or ~',
+      ],
+      [
+        'reasoning',
+        'create of the subagent wrong: reasoning is one of low, medium, high, xhigh, max',
+      ],
+      ['nothing', 'create of the subagent wrong did not return an object'],
+      ['throw', 'no reviewer on a Sunday'],
+    ];
+    for (const [how, message] of wrong) {
+      expect(await create('wrong', { how })).toEqual({
+        ok: false,
+        kind: 'error',
+        error: { name: 'Error', message },
+      });
+    }
+  });
+
+  it('are refused as part of an agent when one is no subagent', () => {
+    const refused: readonly (readonly [unknown[], string])[] = [
+      [[5], 'subagents[0] is not a subagent'],
+      [[{ description: 'x' }], 'subagents[0] has no id'],
+      [[{ id: 'a' }], 'The subagent a has no description'],
+      [
+        [
+          { id: 'a', description: 'x' },
+          { id: 'a', description: 'y' },
+        ],
+        'The subagent a is listed twice',
+      ],
+      [[{ id: 'a', description: 'x', params: 5 }], 'params of the subagent a is not an object'],
+      [
+        [{ id: 'a', description: 'x', params: {} }],
+        'params of the subagent a has no create function',
+      ],
+      [
+        [{ id: 'a', description: 'x', params: { schema: 5, create: () => ({}) } }],
+        'params.schema of the subagent a is not a schema',
+      ],
+      [
+        [{ id: 'a', description: 'x', params: { schema: z.string(), create: () => ({}) } }],
+        'What a subagent is spawned with is an object: params.schema of a is not of one',
+      ],
+    ];
+    for (const [subagents, message] of refused) {
+      expect(() =>
+        entryOf(
+          new Agent({ provider: 'openai', instructions: '', subagents: subagents as never }),
+        ).describe(),
+      ).toThrow(message);
+    }
+  });
+});

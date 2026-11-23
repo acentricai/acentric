@@ -122,6 +122,72 @@ function describeTool(tool: unknown, index: number, names: Set<string>): ToolDec
   return { name, description, parameters: schema, retrySafe: retrySafe === true };
 }
 
+type SubagentDeclaration = NonNullable<AgentDefinition['subagents']>[number];
+
+function describeSubagent(subagent: unknown, index: number, ids: Set<string>): SubagentDeclaration {
+  if (!isDict(subagent)) throw new InvalidAgent(`subagents[${String(index)}] is not a subagent`);
+  const { id, description, params } = subagent;
+  if (typeof id !== 'string' || id === '') {
+    throw new InvalidAgent(`subagents[${String(index)}] has no id`);
+  }
+  if (ids.has(id)) throw new InvalidAgent(`The subagent ${id} is listed twice`);
+  ids.add(id);
+  if (typeof description !== 'string' || description === '') {
+    throw new InvalidAgent(`The subagent ${id} has no description`);
+  }
+  if (params === undefined) return { agent: id, description, creates: false };
+  if (!isDict(params)) throw new InvalidAgent(`params of the subagent ${id} is not an object`);
+  const { schema, create } = params;
+  if (!isFn(create)) throw new InvalidAgent(`params of the subagent ${id} has no create function`);
+  if (schema === undefined) return { agent: id, description, creates: true };
+  if (validateOf(schema) === undefined) {
+    throw new InvalidAgent(`params.schema of the subagent ${id} is not a schema`);
+  }
+  let told: JsonObject | undefined;
+  try {
+    told = jsonSchemaOf(schema);
+  } catch (error) {
+    throw new InvalidAgent(
+      `params.schema of the subagent ${id} failed to give its JSON Schema: ${messageOf(error)}`,
+    );
+  }
+  if (told === undefined) {
+    throw new InvalidAgent(
+      `params.schema of the subagent ${id} cannot give its JSON Schema, which the model is told`,
+    );
+  }
+  if (told['type'] !== 'object') {
+    throw new InvalidAgent(
+      `What a subagent is spawned with is an object: params.schema of ${id} is not of one`,
+    );
+  }
+  return { agent: id, description, creates: true, schema: told };
+}
+
+const REASONING = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/** What is wrong with a value that is to be a subagent's machine, when something is. */
+function machineProblem(value: unknown): string | undefined {
+  if (!isDict(value)) return 'machine is an object with id and cwd';
+  const { id, cwd, env, ...rest } = value;
+  const unknown = Object.keys(rest)[0];
+  if (unknown !== undefined) return `machine has no field ${unknown}`;
+  if (typeof id !== 'string' || id === '') return 'machine.id is the ID of a machine';
+  if (typeof cwd !== 'string' || !(cwd.startsWith('/') || cwd === '~' || cwd.startsWith('~/'))) {
+    return 'machine.cwd is a path on the machine that starts with / or ~';
+  }
+  if (env !== undefined) {
+    if (!isDict(env)) return 'machine.env is variables by name, such as { "X_API_KEY": "..." }';
+    for (const [name, text] of Object.entries(env)) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+        return `machine.${JSON.stringify(name)} is not a variable's name: letters, digits and _, not starting with a digit`;
+      }
+      if (typeof text !== 'string') return `machine.env.${name} is a string`;
+    }
+  }
+  return undefined;
+}
+
 /** What the agent asks of its provider that only that provider has. */
 function providerOptionsOf(agent: Dict): JsonObject | undefined {
   const search = agent['webSearch'];
@@ -200,6 +266,10 @@ function describe(agent: Dict): AgentDefinition {
   } catch {
     // As for an input.
   }
+  const listed: readonly unknown[] = Array.isArray(agent['subagents']) ? agent['subagents'] : [];
+  const ids = new Set<string>();
+  const subagents = listed.map((subagent, index) => describeSubagent(subagent, index, ids));
+
   const schedule = agent['schedule'];
   if (schedule !== undefined && (!isDict(schedule) || !isFn(schedule['handler']))) {
     throw new InvalidAgent("The agent's schedule has no handler");
@@ -213,6 +283,7 @@ function describe(agent: Dict): AgentDefinition {
     tools: offered,
     inputs: declared,
     ...(providerOptions === undefined ? {} : { providerOptions }),
+    ...(subagents.length === 0 ? {} : { subagents }),
     ...(secrets.length === 0 ? {} : { secrets: [...new Set(secrets as string[])] }),
     ...(features.length === 0 ? {} : { features }),
   };
@@ -436,6 +507,61 @@ async function call(
     if ('issues' in checked) return checked;
     const handler = input['handler'] as (payload: unknown, context: Dict) => unknown;
     return { value: content(await handler(checked.value, context), `The input ${type}`) };
+  }
+
+  if (part === 'subagents' && path.endsWith('.create')) {
+    // An agent's name may have dots in it: it is everything between the first part and the last.
+    const id = path.slice('subagents.'.length, -'.create'.length);
+    const listed: readonly unknown[] = Array.isArray(agent['subagents']) ? agent['subagents'] : [];
+    const subagent = listed.find((one): one is Dict => isDict(one) && one['id'] === id);
+    if (subagent === undefined) throw new Error(`The agent has no subagent ${id}`);
+    const params = isDict(subagent['params']) ? subagent['params'] : undefined;
+    const given: unknown = argument ?? {};
+    // One with no schema is given nothing by the model.
+    if (params?.['schema'] === undefined) {
+      if (isDict(given) && Object.keys(given).length > 0) {
+        return { issues: [{ message: `${id} takes no params` }] };
+      }
+      if (params === undefined) return { value: {} };
+    }
+    let args: unknown;
+    if (params['schema'] !== undefined) {
+      const checked = await validate(params['schema'], given);
+      if ('issues' in checked) return checked;
+      args = checked.value;
+    }
+    const made = await (params['create'] as (args: unknown, context: Dict) => unknown)(
+      args,
+      context,
+    );
+    if (!isDict(made)) throw new Error(`create of the subagent ${id} did not return an object`);
+    const { machine, modelId, reasoning, configuration, ...rest } = made;
+    const unknown = Object.keys(rest)[0];
+    if (unknown !== undefined) {
+      throw new Error(
+        `create of the subagent ${id} returned ${unknown}, which an actor is not created with`,
+      );
+    }
+    if (machine !== undefined && machine !== null) {
+      const wrong = machineProblem(machine);
+      if (wrong !== undefined) throw new Error(`create of the subagent ${id}: ${wrong}`);
+    }
+    if (modelId !== undefined && (typeof modelId !== 'string' || modelId === '')) {
+      throw new Error(`create of the subagent ${id}: modelId is a string`);
+    }
+    if (reasoning !== undefined && !REASONING.includes(reasoning as string)) {
+      throw new Error(`create of the subagent ${id}: reasoning is one of ${REASONING.join(', ')}`);
+    }
+    return {
+      value: {
+        ...(machine === undefined ? {} : { machine: json(machine, 'The machine') }),
+        ...(modelId === undefined ? {} : { modelId }),
+        ...(reasoning === undefined ? {} : { reasoning: reasoning as string }),
+        ...(configuration === undefined
+          ? {}
+          : { configuration: json(configuration, `The configuration create of ${id} returned`) }),
+      },
+    };
   }
 
   if (path === 'schedule.handler') {
