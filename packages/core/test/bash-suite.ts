@@ -134,7 +134,12 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
         await one.say(actor.id, 'Hello.');
         await one.it.settled(actor.id);
         const [step] = one.steps;
-        expect(step?.tools.map((tool) => tool.name)).toEqual(['lookup_order', 'bash', 'stop']);
+        expect(step?.tools.map((tool) => tool.name)).toEqual([
+          'lookup_order',
+          'bash',
+          'schedule',
+          'stop',
+        ]);
         expect(step?.tools[1]).toMatchObject({
           description: expect.stringMatching(/^Runs a command with bash on your machine/),
           parameters: {
@@ -153,7 +158,9 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
           '`bash` runs commands on your machine. It runs Linux (x64), and your working directory is ~/work.',
         );
         expect(step?.instructions).not.toContain('view_image');
-        expect(step?.instructions).not.toContain('`schedule`');
+        expect(step?.instructions).toContain(
+          '- `schedule` sends you a note later: for something the harness cannot tell you about',
+        );
         expect(step?.instructions.endsWith('\n\nYou answer questions about orders.')).toBe(true);
       });
 
@@ -162,7 +169,12 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
         const actor = await one.createActor();
         await one.say(actor.id, 'Hello.');
         await one.it.settled(actor.id);
-        expect(one.steps[0]?.tools.map((tool) => tool.name)).toEqual(['lookup_order']);
+        // It can still send itself a note later, and stop one.
+        expect(one.steps[0]?.tools.map((tool) => tool.name)).toEqual([
+          'lookup_order',
+          'schedule',
+          'stop',
+        ]);
         expect(one.steps[0]?.instructions).toBe(told('You answer questions about orders.'));
         expect(one.steps[0]?.instructions).not.toContain('# Your machine');
         expect(one.steps[0]?.instructions).not.toContain('# Tasks');
@@ -429,6 +441,7 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
         expect(one.steps[0]?.tools.map((tool) => tool.name)).toEqual([
           'lookup_order',
           'bash',
+          'schedule',
           'stop',
           'view_image',
         ]);
@@ -440,7 +453,11 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
         const plain = await one.createActor({ modelId: 'fake-eyes', version: 1 });
         await one.say(plain.id, 'Hello.');
         await one.it.settled(plain.id);
-        expect(one.steps[1]?.tools.map((tool) => tool.name)).toEqual(['lookup_order']);
+        expect(one.steps[1]?.tools.map((tool) => tool.name)).toEqual([
+          'lookup_order',
+          'schedule',
+          'stop',
+        ]);
       });
 
       it('shows the model an image from the machine, as the result of its call', async () => {

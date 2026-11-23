@@ -306,6 +306,22 @@ export function executorSuite(
         expect([...(files.get('inbox/logo.png') as Buffer)]).toEqual([137, 80, 78, 71, 0, 255]);
       });
 
+      it('are written by what says what the notice of a schedule that fired says', async () => {
+        const { host, files } = filesOf();
+        const fired = {
+          note: 'Check the deploy.',
+          dueAt: 1_795_305_600_000,
+          firedAt: 1_795_305_600_250,
+        };
+        expect(await executor.call(keeper, 'schedule.handler', fired, on, signal(), host)).toEqual({
+          ok: true,
+          value: 'Check the deploy.\nIt is in notes/due.txt.',
+        });
+        expect(files.get('notes/due.txt')?.toString()).toBe(
+          'Check the deploy. (due 2026-11-22T00:00:00.000Z)',
+        );
+      });
+
       it('move in parts: bytes more than one request carries, and as many as its code may move', async () => {
         const { host, files, asked } = filesOf();
         // 9 MiB: two requests each way.

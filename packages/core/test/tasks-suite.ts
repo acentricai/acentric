@@ -118,8 +118,8 @@ export function tasksSuite(name: string, open: () => Promise<Store>): void {
         await one.say(actor.id, 'Hello?');
         await one.it.settled(actor.id);
         const tools = one.steps[0]?.tools ?? [];
-        expect(tools.map((tool) => tool.name)).toEqual(['lookup_order', 'job', 'stop']);
-        expect(tools[1]).toMatchObject({
+        expect(tools.map((tool) => tool.name)).toEqual(['lookup_order', 'schedule', 'job', 'stop']);
+        expect(tools[2]).toMatchObject({
           type: 'function',
           description: 'Starts a job.',
           parameters: {
@@ -132,16 +132,20 @@ export function tasksSuite(name: string, open: () => Promise<Store>): void {
             required: ['what'],
           },
         });
-        expect(tools[2]).toMatchObject({ parameters: { required: ['task'] } });
+        expect(tools[3]).toMatchObject({ parameters: { required: ['task'] } });
         await one.it.close();
       });
 
-      it('are none on an engine with no kind of task: a model is offered what its agent has', async () => {
+      it('are the two every engine has, on one with no kind of its own: a note for later, and stop', async () => {
         const one = engine([says('Hello.')], {}, []);
         const actor = await one.createActor();
         await one.say(actor.id, 'Hello?');
         await one.it.settled(actor.id);
-        expect(one.steps[0]?.tools.map((tool) => tool.name)).toEqual(['lookup_order']);
+        expect(one.steps[0]?.tools.map((tool) => tool.name)).toEqual([
+          'lookup_order',
+          'schedule',
+          'stop',
+        ]);
         await one.it.close();
       });
 
@@ -178,7 +182,9 @@ export function tasksSuite(name: string, open: () => Promise<Store>): void {
         const actor = await one.createActor();
         await one.say(actor.id, 'Remind me.');
         await one.it.settled(actor.id);
-        const properties = one.steps[0]?.tools[1]?.parameters['properties'];
+        const properties = one.steps[0]?.tools.find((tool) => tool.name === 'job')?.parameters[
+          'properties'
+        ];
         expect(Object.keys(properties as object)).toEqual(['what']);
         expect(textOf((await conversation(actor.id))[2])).toBe(
           'set for later · task j1 · log /jobs/j1',
