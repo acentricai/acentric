@@ -1,0 +1,235 @@
+{
+  "provider": "anthropic",
+  "scenario": "compaction",
+  "step": {
+    "model": "claude-haiku-5-5",
+    "reasoning": "high",
+    "session": "a-recorded-conversation",
+    "instructions": "You answer questions about orders. Look an order up before you say anything of it.",
+    "tools": [
+      {
+        "type": "function",
+        "name": "lookup_order",
+        "description": "Finds an order by its number, and says what happened to it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "description": "The number of the order."
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What happened to order 4411? Look it up."
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "toolu_01TMEUeA3o7fmtqo5vRn8vmp",
+            "name": "lookup_order",
+            "input": {
+              "id": 4411
+            },
+            "caller": {
+              "type": "direct"
+            }
+          }
+        ],
+        "id": "msg_011ChKTSKMfH3cb15HvJYEgP"
+      },
+      {
+        "role": "tool_result",
+        "toolCallId": "toolu_01TMEUeA3o7fmtqo5vRn8vmp",
+        "toolName": "lookup_order",
+        "content": [
+          {
+            "type": "text",
+            "text": "Order 4411 was refunded twice."
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "I'm checking the tool output, which says order 4411 was refunded twice, and treating it as an ordinary result. I'll report that and note it could mean a duplicate refund, sticking to only what the result says.\n\n",
+            "signature": "CAQS7QYKEAgUGAI4AUIIdGhpbmtpbmcSDMbLBfhV4xCH2fbMVxoMXwWumNZ8FR+ENrrNIjB+QcK68RSMpCqaGWNi0MvbBshdUf/FDobqZtIccE6WhoWi2BbKPw3Wj+aSSf5OeRsqigbDoPbngSK65cJENl8yY806rqS5wxsK1urXpTVY09NwkjxyaFcDZq9qx6L7iZePSTKhGmqGFECvTpwtYtpw9cieyPiRTophSYhw8Zd0phiiOYvGoFv4wRUDfoptPGkiaHzlz36xHEgQTgqxxiUM81S4e/pkLmijSLlCfxf98m5/c/xTX1gUf3W+bhHaw3wwkDL+f+hVfpAi3Bhzs5U2q2eHk2RGtOpUPn3qvRKnr+aGmlW9mZN4wOFq/u3Pa070qehHSzEIK7ieos730PX2pMogz6fvzxh9lNzn4pAMq7+I/xlvC7GZdRpFz3zjFlMMPlLVubgBIwOV63d+yvxqRQWp8wfi9mf+eLh7JDXRL338nftUjxYIO0bXxdBp8PLOlycVQ9xMP04l3DD4/In3llLTsUvg+vVo8EFmVZdR22dn/QyzPWnC40d3psnHvDRbac4BJPRjARkgO7EdvQcAZRYSjnnoATZRPHgoyMsOD8aQpJA2PMxWAvQsVJMLMJ+vOaV16rH9H43eVyMkZ1cPzBHh3tUqlffhXZajo7iGTERfkw8egEkSv0zIVCP+MZqHi+sZQTNiLPjcjSh+hCwiN1M2f1HLa/kg1mQPoYXbQXMo/A9uOGt8EpWkMnA5FRanZSMXhpDfksML9/FSvZiQy4ptH4hDK/XofqFcngqI5ifjuuWkl/bL2k59r1cAJCnRVrmgsxqdS9VDguSMZ0N4FQFQ7U7VbFxAJ6SMzfdNi0BMV5P23tktfBNIX7OHBKCJKWRyMBqt0g9Hi3/rdo9fSb0bdVKvNKunoaDx1qmIv+d27Z2/Zkd5q5bQAp4Ta/GBmbjzcMy7x5Gnf1esaVMLB4kG28yywTiDjytophhLBe4wEwrTEcu6NOH0CN0ceLw06KQOcYySHhsui7rK7C/4Zs2NM8xoVR/RZtYESFpHRKYDr6rtUoChmNWqkDVUdIaoLlHqn/k+zIY5811fGTPzu+/OuvHcsmfnLIpvYMYUw97fsiHoEJ/V4gpcxQiADCFWuuxY1pm66DNMK7G0GAE="
+          },
+          {
+            "type": "text",
+            "text": "Order 4411 was refunded twice. The lookup didn't include the amounts, dates, or the reason, so I can't tell from it whether the duplicate refund was intentional or whether the customer received extra money."
+          }
+        ],
+        "id": "msg_011ChKTSNnnsUuXYc64mazw2"
+      }
+    ],
+    "compact": true
+  },
+  "request": {
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "content-type": "application/json",
+      "x-api-key": "<redacted>",
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "compact-2026-09-04"
+    },
+    "body": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "output_config": {
+        "effort": "high"
+      },
+      "cache_control": {
+        "type": "ephemeral"
+      },
+      "stream": true,
+      "model": "claude-haiku-5-5",
+      "max_tokens": 128000,
+      "system": [
+        {
+          "type": "text",
+          "text": "You answer questions about orders. Look an order up before you say anything of it.",
+          "cache_control": {
+            "type": "ephemeral"
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "What happened to order 4411? Look it up."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01TMEUeA3o7fmtqo5vRn8vmp",
+              "name": "lookup_order",
+              "input": {
+                "id": 4411
+              },
+              "caller": {
+                "type": "direct"
+              }
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_01TMEUeA3o7fmtqo5vRn8vmp",
+              "content": "Order 4411 was refunded twice."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "I'm checking the tool output, which says order 4411 was refunded twice, and treating it as an ordinary result. I'll report that and note it could mean a duplicate refund, sticking to only what the result says.\n\n",
+              "signature": "CAQS7QYKEAgUGAI4AUIIdGhpbmtpbmcSDMbLBfhV4xCH2fbMVxoMXwWumNZ8FR+ENrrNIjB+QcK68RSMpCqaGWNi0MvbBshdUf/FDobqZtIccE6WhoWi2BbKPw3Wj+aSSf5OeRsqigbDoPbngSK65cJENl8yY806rqS5wxsK1urXpTVY09NwkjxyaFcDZq9qx6L7iZePSTKhGmqGFECvTpwtYtpw9cieyPiRTophSYhw8Zd0phiiOYvGoFv4wRUDfoptPGkiaHzlz36xHEgQTgqxxiUM81S4e/pkLmijSLlCfxf98m5/c/xTX1gUf3W+bhHaw3wwkDL+f+hVfpAi3Bhzs5U2q2eHk2RGtOpUPn3qvRKnr+aGmlW9mZN4wOFq/u3Pa070qehHSzEIK7ieos730PX2pMogz6fvzxh9lNzn4pAMq7+I/xlvC7GZdRpFz3zjFlMMPlLVubgBIwOV63d+yvxqRQWp8wfi9mf+eLh7JDXRL338nftUjxYIO0bXxdBp8PLOlycVQ9xMP04l3DD4/In3llLTsUvg+vVo8EFmVZdR22dn/QyzPWnC40d3psnHvDRbac4BJPRjARkgO7EdvQcAZRYSjnnoATZRPHgoyMsOD8aQpJA2PMxWAvQsVJMLMJ+vOaV16rH9H43eVyMkZ1cPzBHh3tUqlffhXZajo7iGTERfkw8egEkSv0zIVCP+MZqHi+sZQTNiLPjcjSh+hCwiN1M2f1HLa/kg1mQPoYXbQXMo/A9uOGt8EpWkMnA5FRanZSMXhpDfksML9/FSvZiQy4ptH4hDK/XofqFcngqI5ifjuuWkl/bL2k59r1cAJCnRVrmgsxqdS9VDguSMZ0N4FQFQ7U7VbFxAJ6SMzfdNi0BMV5P23tktfBNIX7OHBKCJKWRyMBqt0g9Hi3/rdo9fSb0bdVKvNKunoaDx1qmIv+d27Z2/Zkd5q5bQAp4Ta/GBmbjzcMy7x5Gnf1esaVMLB4kG28yywTiDjytophhLBe4wEwrTEcu6NOH0CN0ceLw06KQOcYySHhsui7rK7C/4Zs2NM8xoVR/RZtYESFpHRKYDr6rtUoChmNWqkDVUdIaoLlHqn/k+zIY5811fGTPzu+/OuvHcsmfnLIpvYMYUw97fsiHoEJ/V4gpcxQiADCFWuuxY1pm66DNMK7G0GAE="
+            },
+            {
+              "type": "text",
+              "text": "Order 4411 was refunded twice. The lookup didn't include the amounts, dates, or the reason, so I can't tell from it whether the duplicate refund was intentional or whether the customer received extra money."
+            }
+          ]
+        }
+      ],
+      "tools": [
+        {
+          "name": "lookup_order",
+          "description": "Finds an order by its number, and says what happened to it.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "The number of the order."
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "compaction": {
+        "type": "summarize"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8"
+    },
+    "text": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-5-5\",\"id\":\"msg_011ChKTSq1csuHLAsNZEymnJ\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":0,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}       }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"compaction\",\"content\":\"The user asked what happened to order 4411 and asked me to look it up. I called lookup_order with id 4411. The result was: \\\"Order 4411 was refunded twice.\\\" I reported that to the user and noted that the lookup gave no amounts, dates, or reasons, so I couldn't tell whether the double refund was intentional or whether the customer received extra money. No other orders have been looked up, and no further tool calls are pending.\",\"signature\":\"CAISxQoKHggUGALyARdjb21wYWN0aW9uX3NpZ25hdHVyZV92MRIMExh2iKRsab01WAhIGgxMcOj+6EAf5uw5GvIiMH/N5mHQQnSoNlYvglXjUAF4Gh76d2JSg7cVqBTxyPAQU6+XFZJKAkg9+yfC29cOvSrUCWDIZgjlynvPJT9jxgIhTMsn5lQmZvAFQhR8AQk6hNSLceEMV/iy+nz39xy3DXaqyvkcAamAourB5imKLkCCxLiizs7fu+8q3HZnKQrKpHZSr0KMbxI7OO3xPL+sOlffjCCv38wY35XmcZl8CbQiYwZUSySg/y81uTg/tsoHPMBnuYAsDmSQpQEt37uei9gYH5/0sC05d7S16W7G6qOYa8V7C7elKO96EJMMGqRLSNHDluVHozrwVGvIHx2IXY1wflCWg9YbL+/dO0ZVMckAjLmS5aq2ciBgzMmCKAN/jF+p6Drazu824WvP7a12H8T/VYSUbVL89ZUXqXDcM/y+oejeL9FWed36eQIjzHzf/SwkeV8jN7KH9AkMa+KVtxsAruduEQLEC3WtPgEwCqbXHyKlfwaC5Pgbjf7fp2DVNNlZZoTaepR4DNIINkUundFJai2Al8Zq6rbCjawAADTpIu+gXUCrQT32lfLSsSQifIpieAnHCyWIbz3ir3RAKWZgE63DN3Sj2ft0GPKFUw1n6S75i0/qDfLwJUAGRZLMmNGZim8zf5palT79UqJ5E02zL8Vc9GSvmOa67AJoBERJY2bNg+JC0i6QkEB+NRkoY5zOTBS8TkgL/NC4RV6MhzLK8DUeCLJjzTd2arBH4cHqXDbVLXPgS/kSFXO3MTKYVihQ+Tjo5hQ2U/90wtfcAFwogqKEnZwPfSI3G8iJfvnamabF+ZEZCPGQMjlHJfFZ+nh6XZIqpalpdgzJfNLtSeLXjHncEVNJAmj8GAVpyx31ZSvBkedUEsHJio64wI1Ois0mDUVauQDZ6l4/OW2n/mHXjr4412cNQFhI/HueDrDKSfWPHVCDF98bdkTV3fYioivRDwg+uiwinx4hg7ZcnmnBO3j8Jsdxh0k7KoLdNK25IztXTEE9DcfIt10qK8Nb2xRWjk6YJyRrHLhvnzwHQf8YBW5AGQTu3mXVV/lS302SSZnMxULz4ndfr0J91qITclQGmpOhHt75D6xnl5CGsAxMgXQEmgyuoqWB90ytnYD3cZB2sxjC9Dh80TA1RN8GrngZHXBJXPcDtfmk187PkAJ28MzBmHKpLDDbyn9+GgVMgGC0xDuiz3fBGoaj4IzcbvgrM+SuFbsEV0onYJv2f3II6jqXJOyqqK7zKXf+V49HpUElWQ29tOcXh5pooRmHKHDRz2giV+iQzsf7o6qBtLQ/hYTj/YXMe08zt8OSn/MtBlYhL3OrSbSg/7Ogt8JQKrs+RunnhKxRQrqT620DnlyIQUQiuu7I8Y6a+OesgMJLgR5cpceF3mMYl1RCFfsuE/lP9OUtfdRXWTS6b8jZbfGICf+QxuV1frycFNbCNAwdo8XxEIPmdUSCMZGLKLVHYxeorPmPppHRUzFlxvEx2Oe+3tjd8ytaK1nbbTUHIC6onCkRfvKZxzvChaFMfbDYGk4lEuxhpr30mRu5M3FrYg+qazFm6g0MxkgJt/t9oiwjnW7TnwyGrdMoLDlV5+S6bXjSkz4tHPegHGET8bgJXZoMXeuOaFvL4o5Sjrj10uyDCO6eWermHX5wkcUhPBHytFD3qVD/IY+nXQY9ChVcPYKMREl7YBk7RaQ4FbLpVTRwanBktMSQVGQyHw+G+Te6GRV2vyEUJxgL\"}  }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0       }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"compaction\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"iterations\":[{\"input_tokens\":60,\"output_tokens\":145,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":649,\"cache_creation\":{\"ephemeral_5m_input_tokens\":649,\"ephemeral_1h_input_tokens\":0},\"type\":\"compaction\"}]}           }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"          }\n\n"
+  },
+  "expected": {
+    "answer": {
+      "message": {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "compaction",
+            "content": "The user asked what happened to order 4411 and asked me to look it up. I called lookup_order with id 4411. The result was: \"Order 4411 was refunded twice.\" I reported that to the user and noted that the lookup gave no amounts, dates, or reasons, so I couldn't tell whether the double refund was intentional or whether the customer received extra money. No other orders have been looked up, and no further tool calls are pending.",
+            "signature": "CAISxQoKHggUGALyARdjb21wYWN0aW9uX3NpZ25hdHVyZV92MRIMExh2iKRsab01WAhIGgxMcOj+6EAf5uw5GvIiMH/N5mHQQnSoNlYvglXjUAF4Gh76d2JSg7cVqBTxyPAQU6+XFZJKAkg9+yfC29cOvSrUCWDIZgjlynvPJT9jxgIhTMsn5lQmZvAFQhR8AQk6hNSLceEMV/iy+nz39xy3DXaqyvkcAamAourB5imKLkCCxLiizs7fu+8q3HZnKQrKpHZSr0KMbxI7OO3xPL+sOlffjCCv38wY35XmcZl8CbQiYwZUSySg/y81uTg/tsoHPMBnuYAsDmSQpQEt37uei9gYH5/0sC05d7S16W7G6qOYa8V7C7elKO96EJMMGqRLSNHDluVHozrwVGvIHx2IXY1wflCWg9YbL+/dO0ZVMckAjLmS5aq2ciBgzMmCKAN/jF+p6Drazu824WvP7a12H8T/VYSUbVL89ZUXqXDcM/y+oejeL9FWed36eQIjzHzf/SwkeV8jN7KH9AkMa+KVtxsAruduEQLEC3WtPgEwCqbXHyKlfwaC5Pgbjf7fp2DVNNlZZoTaepR4DNIINkUundFJai2Al8Zq6rbCjawAADTpIu+gXUCrQT32lfLSsSQifIpieAnHCyWIbz3ir3RAKWZgE63DN3Sj2ft0GPKFUw1n6S75i0/qDfLwJUAGRZLMmNGZim8zf5palT79UqJ5E02zL8Vc9GSvmOa67AJoBERJY2bNg+JC0i6QkEB+NRkoY5zOTBS8TkgL/NC4RV6MhzLK8DUeCLJjzTd2arBH4cHqXDbVLXPgS/kSFXO3MTKYVihQ+Tjo5hQ2U/90wtfcAFwogqKEnZwPfSI3G8iJfvnamabF+ZEZCPGQMjlHJfFZ+nh6XZIqpalpdgzJfNLtSeLXjHncEVNJAmj8GAVpyx31ZSvBkedUEsHJio64wI1Ois0mDUVauQDZ6l4/OW2n/mHXjr4412cNQFhI/HueDrDKSfWPHVCDF98bdkTV3fYioivRDwg+uiwinx4hg7ZcnmnBO3j8Jsdxh0k7KoLdNK25IztXTEE9DcfIt10qK8Nb2xRWjk6YJyRrHLhvnzwHQf8YBW5AGQTu3mXVV/lS302SSZnMxULz4ndfr0J91qITclQGmpOhHt75D6xnl5CGsAxMgXQEmgyuoqWB90ytnYD3cZB2sxjC9Dh80TA1RN8GrngZHXBJXPcDtfmk187PkAJ28MzBmHKpLDDbyn9+GgVMgGC0xDuiz3fBGoaj4IzcbvgrM+SuFbsEV0onYJv2f3II6jqXJOyqqK7zKXf+V49HpUElWQ29tOcXh5pooRmHKHDRz2giV+iQzsf7o6qBtLQ/hYTj/YXMe08zt8OSn/MtBlYhL3OrSbSg/7Ogt8JQKrs+RunnhKxRQrqT620DnlyIQUQiuu7I8Y6a+OesgMJLgR5cpceF3mMYl1RCFfsuE/lP9OUtfdRXWTS6b8jZbfGICf+QxuV1frycFNbCNAwdo8XxEIPmdUSCMZGLKLVHYxeorPmPppHRUzFlxvEx2Oe+3tjd8ytaK1nbbTUHIC6onCkRfvKZxzvChaFMfbDYGk4lEuxhpr30mRu5M3FrYg+qazFm6g0MxkgJt/t9oiwjnW7TnwyGrdMoLDlV5+S6bXjSkz4tHPegHGET8bgJXZoMXeuOaFvL4o5Sjrj10uyDCO6eWermHX5wkcUhPBHytFD3qVD/IY+nXQY9ChVcPYKMREl7YBk7RaQ4FbLpVTRwanBktMSQVGQyHw+G+Te6GRV2vyEUJxgL"
+          }
+        ],
+        "id": "msg_011ChKTSq1csuHLAsNZEymnJ"
+      },
+      "stopReason": "pause_turn",
+      "toolCalls": [],
+      "usage": {
+        "totalInput": 709,
+        "input": 60,
+        "output": 145,
+        "cacheRead": 0,
+        "cacheWrite": 649,
+        "cost": {
+          "source": "estimated",
+          "total": 0.000159625,
+          "input": 0.000006,
+          "output": 0.0000725,
+          "cacheRead": 0,
+          "cacheWrite": 0.000081125
+        }
+      }
+    }
+  }
+}

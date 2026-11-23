@@ -129,6 +129,7 @@ const SHARED = {
   instructionsInInput: true,
   options,
   hostedTools,
+  compacts: true,
   searchPrice: 0.01,
   reasoningChange: (_model: string, reasoning: string) => ({
     type: 'configuration_update',
@@ -182,6 +183,7 @@ export const chatGptProfile: ResponsesProfile = {
   },
   // The plan pays, not by the token: what is noted is what the same call costs at the API's
   // standard prices.
+  plan: true,
   priceMultiplier: () => 1,
   classify(failure) {
     const kind = failure.code ?? failure.type;

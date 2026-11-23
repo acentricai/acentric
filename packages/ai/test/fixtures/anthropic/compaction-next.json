@@ -1,0 +1,278 @@
+{
+  "provider": "anthropic",
+  "scenario": "compaction-next",
+  "step": {
+    "model": "claude-haiku-5-5",
+    "reasoning": "high",
+    "session": "a-recorded-conversation",
+    "instructions": "You answer questions about orders. Look an order up before you say anything of it.",
+    "tools": [
+      {
+        "type": "function",
+        "name": "lookup_order",
+        "description": "Finds an order by its number, and says what happened to it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "description": "The number of the order."
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "compaction",
+            "content": "The user asked what happened to order 4411 and asked me to look it up. I called lookup_order with id 4411. The result was: \"Order 4411 was refunded twice.\" I reported that to the user and noted that the lookup gave no amounts, dates, or reasons, so I couldn't tell whether the double refund was intentional or whether the customer received extra money. No other orders have been looked up, and no further tool calls are pending.",
+            "signature": "CAISxQoKHggUGALyARdjb21wYWN0aW9uX3NpZ25hdHVyZV92MRIMExh2iKRsab01WAhIGgxMcOj+6EAf5uw5GvIiMH/N5mHQQnSoNlYvglXjUAF4Gh76d2JSg7cVqBTxyPAQU6+XFZJKAkg9+yfC29cOvSrUCWDIZgjlynvPJT9jxgIhTMsn5lQmZvAFQhR8AQk6hNSLceEMV/iy+nz39xy3DXaqyvkcAamAourB5imKLkCCxLiizs7fu+8q3HZnKQrKpHZSr0KMbxI7OO3xPL+sOlffjCCv38wY35XmcZl8CbQiYwZUSySg/y81uTg/tsoHPMBnuYAsDmSQpQEt37uei9gYH5/0sC05d7S16W7G6qOYa8V7C7elKO96EJMMGqRLSNHDluVHozrwVGvIHx2IXY1wflCWg9YbL+/dO0ZVMckAjLmS5aq2ciBgzMmCKAN/jF+p6Drazu824WvP7a12H8T/VYSUbVL89ZUXqXDcM/y+oejeL9FWed36eQIjzHzf/SwkeV8jN7KH9AkMa+KVtxsAruduEQLEC3WtPgEwCqbXHyKlfwaC5Pgbjf7fp2DVNNlZZoTaepR4DNIINkUundFJai2Al8Zq6rbCjawAADTpIu+gXUCrQT32lfLSsSQifIpieAnHCyWIbz3ir3RAKWZgE63DN3Sj2ft0GPKFUw1n6S75i0/qDfLwJUAGRZLMmNGZim8zf5palT79UqJ5E02zL8Vc9GSvmOa67AJoBERJY2bNg+JC0i6QkEB+NRkoY5zOTBS8TkgL/NC4RV6MhzLK8DUeCLJjzTd2arBH4cHqXDbVLXPgS/kSFXO3MTKYVihQ+Tjo5hQ2U/90wtfcAFwogqKEnZwPfSI3G8iJfvnamabF+ZEZCPGQMjlHJfFZ+nh6XZIqpalpdgzJfNLtSeLXjHncEVNJAmj8GAVpyx31ZSvBkedUEsHJio64wI1Ois0mDUVauQDZ6l4/OW2n/mHXjr4412cNQFhI/HueDrDKSfWPHVCDF98bdkTV3fYioivRDwg+uiwinx4hg7ZcnmnBO3j8Jsdxh0k7KoLdNK25IztXTEE9DcfIt10qK8Nb2xRWjk6YJyRrHLhvnzwHQf8YBW5AGQTu3mXVV/lS302SSZnMxULz4ndfr0J91qITclQGmpOhHt75D6xnl5CGsAxMgXQEmgyuoqWB90ytnYD3cZB2sxjC9Dh80TA1RN8GrngZHXBJXPcDtfmk187PkAJ28MzBmHKpLDDbyn9+GgVMgGC0xDuiz3fBGoaj4IzcbvgrM+SuFbsEV0onYJv2f3II6jqXJOyqqK7zKXf+V49HpUElWQ29tOcXh5pooRmHKHDRz2giV+iQzsf7o6qBtLQ/hYTj/YXMe08zt8OSn/MtBlYhL3OrSbSg/7Ogt8JQKrs+RunnhKxRQrqT620DnlyIQUQiuu7I8Y6a+OesgMJLgR5cpceF3mMYl1RCFfsuE/lP9OUtfdRXWTS6b8jZbfGICf+QxuV1frycFNbCNAwdo8XxEIPmdUSCMZGLKLVHYxeorPmPppHRUzFlxvEx2Oe+3tjd8ytaK1nbbTUHIC6onCkRfvKZxzvChaFMfbDYGk4lEuxhpr30mRu5M3FrYg+qazFm6g0MxkgJt/t9oiwjnW7TnwyGrdMoLDlV5+S6bXjSkz4tHPegHGET8bgJXZoMXeuOaFvL4o5Sjrj10uyDCO6eWermHX5wkcUhPBHytFD3qVD/IY+nXQY9ChVcPYKMREl7YBk7RaQ4FbLpVTRwanBktMSQVGQyHw+G+Te6GRV2vyEUJxgL"
+          }
+        ],
+        "id": "msg_011ChKTSq1csuHLAsNZEymnJ"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What happened to order 4412? Look it up. Before you do, work out in your head which is larger, 17 * 23 + 19 * 31 or 29 * 29 + 11 * 13, and say which with your answer."
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "I'm multiplying out two pairs of numbers, 17×23 and 19×31 for one sum, and 29×29 and 11×13 for the other, which gives 980 and 984, so the second is larger by 4. Next I'll look up the order 4412 and make the tool call, since the user wants the answer worked out mentally, I can just state the result.\n\n",
+            "signature": "CAQSxwcKEAgUGAI4AUIIdGhpbmtpbmcSDEGHQ/SB3XOmH32XLhoMSZzDGswy0HH/mNwsIjDbYFcqvXQpJP0XoYOrKcrfBUUxZuSHOgpXpR/eSzKWAnKPONYLlvZTwfq6D3rJd8Qq5AaknWOou6hXFxO++q0FQ0cewqqLGlxozDLY3h4rnEDZwjBP58IQQYg7WU3sHXqZZ5sXnkyAIPN4hgLCVeEpr6ep+Gnrz71XPmMqc17ybg7h290LZ8RNKx7ynlADhcdNtsNv4fMkDxqBljj2NEz6UGqVNutMDawzCwEaQNFeBI/eAtJRjK1QFxbntgLhK3v5AwQK5dCLXL1wTJJeds7g6wTnBBNpp8iSuVyFU6s+1t+0hfyxzmxNrAlpREr9GDBVu1uJxslOz03fIK4lIAaIGGaesj+rAdIw4JKFa/pAExjQRPFchObeqLdDwJ5+Q7RBMKg7LRXIeH8q1ZXg4PXhleKVC29VosQztFnT9diyz+KL/P6SE+3E/gpYqJLJjzprY5RcpKkdrvh4gyRUJjVelkfiTfZehHlcCRThQwO+y6C0WiI7lmQcQB4FBuQ6its3VG8xR7KsHRfFuw2+8uD1vrT8sat+UVDkR8bAH4SdEuL5Ct8a1CZB9g25TkYFVxpi22N2VcmE/YmVCf01PZUFB5UOCkbaIpbyiIMFAZtFoQbaQunzRhdtOqPIK8XVBJXxWNVf5vrU1kiRCaacsIVewQDnWqQzCiqu0oNBExZpLmSjHDTEH62YzaV3pcPudJQ+F8xkbj2nu9C+gNLc111WFu7oJn/FDLor3olS3O7s+oRZIcEPpLMuFVbcT09H9n8xQg3fd7VVHGt6cCduIOxYI4aLd6NPQui70t/M0Z21Eie/M0rpNLCqeFVfzkLF1ZL2nXsiG+5NJlTzTLH6HXAr4V/Z0MGU3krIHKoo2sdKuZSrFiOEfOPnMLw4ZAES6qvixznLcval+AW+eLKUgF8TCOAnX1xFdMidF4Z2c7kBowI3GmAGUUb/lisZfaGDwsz3hDR5YMQAwCHkEfI6fvaPrlFIKGf0yS/xXyzyIN2KL8xSSpzLySovMiimL9ut5V5VxJm82PJ7x1t6Db4CV+m7d93nBrrXuGf+LBDEaidjY4Wyj2yy/UQSfClasD8Ky+JDjXM1I7EFs26AtRoWUKG8MtlxwQeIvJb+fah+TGa4lLzVdVBTWJXttuLdYQhr1gUi/vtYbe0SHV2O8wx9V4wzaJ3phHTLFKP0pRx07xqC9G8xkec3Z3XaGxEZZky9tqlyh5Z8983SGAE="
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_01PgLoN3uv9tVZSozDXovC8V",
+            "name": "lookup_order",
+            "input": {
+              "id": 4412
+            },
+            "caller": {
+              "type": "direct"
+            }
+          }
+        ],
+        "id": "msg_011ChKTSVmium5urScHaTJ3E"
+      },
+      {
+        "role": "tool_result",
+        "toolCallId": "toolu_01PgLoN3uv9tVZSozDXovC8V",
+        "toolName": "lookup_order",
+        "content": [
+          {
+            "type": "text",
+            "text": "Order 4412 was refunded twice."
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "text",
+            "text": "The second expression, 29 * 29 + 11 * 13, is larger. It equals 984, while the first equals 980.\n\nOrder 4412 was also refunded twice. Like order 4411, the lookup gave no amounts, dates, or reasons."
+          }
+        ],
+        "id": "msg_011ChKTShhacbogCvwmoDjJz"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Say in one sentence what happened to both orders. Look nothing up."
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "content-type": "application/json",
+      "x-api-key": "<redacted>",
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "compact-2026-09-04"
+    },
+    "body": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "output_config": {
+        "effort": "high"
+      },
+      "cache_control": {
+        "type": "ephemeral"
+      },
+      "stream": true,
+      "model": "claude-haiku-5-5",
+      "max_tokens": 128000,
+      "system": [
+        {
+          "type": "text",
+          "text": "You answer questions about orders. Look an order up before you say anything of it.",
+          "cache_control": {
+            "type": "ephemeral"
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "compaction",
+              "content": "The user asked what happened to order 4411 and asked me to look it up. I called lookup_order with id 4411. The result was: \"Order 4411 was refunded twice.\" I reported that to the user and noted that the lookup gave no amounts, dates, or reasons, so I couldn't tell whether the double refund was intentional or whether the customer received extra money. No other orders have been looked up, and no further tool calls are pending.",
+              "signature": "CAISxQoKHggUGALyARdjb21wYWN0aW9uX3NpZ25hdHVyZV92MRIMExh2iKRsab01WAhIGgxMcOj+6EAf5uw5GvIiMH/N5mHQQnSoNlYvglXjUAF4Gh76d2JSg7cVqBTxyPAQU6+XFZJKAkg9+yfC29cOvSrUCWDIZgjlynvPJT9jxgIhTMsn5lQmZvAFQhR8AQk6hNSLceEMV/iy+nz39xy3DXaqyvkcAamAourB5imKLkCCxLiizs7fu+8q3HZnKQrKpHZSr0KMbxI7OO3xPL+sOlffjCCv38wY35XmcZl8CbQiYwZUSySg/y81uTg/tsoHPMBnuYAsDmSQpQEt37uei9gYH5/0sC05d7S16W7G6qOYa8V7C7elKO96EJMMGqRLSNHDluVHozrwVGvIHx2IXY1wflCWg9YbL+/dO0ZVMckAjLmS5aq2ciBgzMmCKAN/jF+p6Drazu824WvP7a12H8T/VYSUbVL89ZUXqXDcM/y+oejeL9FWed36eQIjzHzf/SwkeV8jN7KH9AkMa+KVtxsAruduEQLEC3WtPgEwCqbXHyKlfwaC5Pgbjf7fp2DVNNlZZoTaepR4DNIINkUundFJai2Al8Zq6rbCjawAADTpIu+gXUCrQT32lfLSsSQifIpieAnHCyWIbz3ir3RAKWZgE63DN3Sj2ft0GPKFUw1n6S75i0/qDfLwJUAGRZLMmNGZim8zf5palT79UqJ5E02zL8Vc9GSvmOa67AJoBERJY2bNg+JC0i6QkEB+NRkoY5zOTBS8TkgL/NC4RV6MhzLK8DUeCLJjzTd2arBH4cHqXDbVLXPgS/kSFXO3MTKYVihQ+Tjo5hQ2U/90wtfcAFwogqKEnZwPfSI3G8iJfvnamabF+ZEZCPGQMjlHJfFZ+nh6XZIqpalpdgzJfNLtSeLXjHncEVNJAmj8GAVpyx31ZSvBkedUEsHJio64wI1Ois0mDUVauQDZ6l4/OW2n/mHXjr4412cNQFhI/HueDrDKSfWPHVCDF98bdkTV3fYioivRDwg+uiwinx4hg7ZcnmnBO3j8Jsdxh0k7KoLdNK25IztXTEE9DcfIt10qK8Nb2xRWjk6YJyRrHLhvnzwHQf8YBW5AGQTu3mXVV/lS302SSZnMxULz4ndfr0J91qITclQGmpOhHt75D6xnl5CGsAxMgXQEmgyuoqWB90ytnYD3cZB2sxjC9Dh80TA1RN8GrngZHXBJXPcDtfmk187PkAJ28MzBmHKpLDDbyn9+GgVMgGC0xDuiz3fBGoaj4IzcbvgrM+SuFbsEV0onYJv2f3II6jqXJOyqqK7zKXf+V49HpUElWQ29tOcXh5pooRmHKHDRz2giV+iQzsf7o6qBtLQ/hYTj/YXMe08zt8OSn/MtBlYhL3OrSbSg/7Ogt8JQKrs+RunnhKxRQrqT620DnlyIQUQiuu7I8Y6a+OesgMJLgR5cpceF3mMYl1RCFfsuE/lP9OUtfdRXWTS6b8jZbfGICf+QxuV1frycFNbCNAwdo8XxEIPmdUSCMZGLKLVHYxeorPmPppHRUzFlxvEx2Oe+3tjd8ytaK1nbbTUHIC6onCkRfvKZxzvChaFMfbDYGk4lEuxhpr30mRu5M3FrYg+qazFm6g0MxkgJt/t9oiwjnW7TnwyGrdMoLDlV5+S6bXjSkz4tHPegHGET8bgJXZoMXeuOaFvL4o5Sjrj10uyDCO6eWermHX5wkcUhPBHytFD3qVD/IY+nXQY9ChVcPYKMREl7YBk7RaQ4FbLpVTRwanBktMSQVGQyHw+G+Te6GRV2vyEUJxgL"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "What happened to order 4412? Look it up. Before you do, work out in your head which is larger, 17 * 23 + 19 * 31 or 29 * 29 + 11 * 13, and say which with your answer."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "I'm multiplying out two pairs of numbers, 17×23 and 19×31 for one sum, and 29×29 and 11×13 for the other, which gives 980 and 984, so the second is larger by 4. Next I'll look up the order 4412 and make the tool call, since the user wants the answer worked out mentally, I can just state the result.\n\n",
+              "signature": "CAQSxwcKEAgUGAI4AUIIdGhpbmtpbmcSDEGHQ/SB3XOmH32XLhoMSZzDGswy0HH/mNwsIjDbYFcqvXQpJP0XoYOrKcrfBUUxZuSHOgpXpR/eSzKWAnKPONYLlvZTwfq6D3rJd8Qq5AaknWOou6hXFxO++q0FQ0cewqqLGlxozDLY3h4rnEDZwjBP58IQQYg7WU3sHXqZZ5sXnkyAIPN4hgLCVeEpr6ep+Gnrz71XPmMqc17ybg7h290LZ8RNKx7ynlADhcdNtsNv4fMkDxqBljj2NEz6UGqVNutMDawzCwEaQNFeBI/eAtJRjK1QFxbntgLhK3v5AwQK5dCLXL1wTJJeds7g6wTnBBNpp8iSuVyFU6s+1t+0hfyxzmxNrAlpREr9GDBVu1uJxslOz03fIK4lIAaIGGaesj+rAdIw4JKFa/pAExjQRPFchObeqLdDwJ5+Q7RBMKg7LRXIeH8q1ZXg4PXhleKVC29VosQztFnT9diyz+KL/P6SE+3E/gpYqJLJjzprY5RcpKkdrvh4gyRUJjVelkfiTfZehHlcCRThQwO+y6C0WiI7lmQcQB4FBuQ6its3VG8xR7KsHRfFuw2+8uD1vrT8sat+UVDkR8bAH4SdEuL5Ct8a1CZB9g25TkYFVxpi22N2VcmE/YmVCf01PZUFB5UOCkbaIpbyiIMFAZtFoQbaQunzRhdtOqPIK8XVBJXxWNVf5vrU1kiRCaacsIVewQDnWqQzCiqu0oNBExZpLmSjHDTEH62YzaV3pcPudJQ+F8xkbj2nu9C+gNLc111WFu7oJn/FDLor3olS3O7s+oRZIcEPpLMuFVbcT09H9n8xQg3fd7VVHGt6cCduIOxYI4aLd6NPQui70t/M0Z21Eie/M0rpNLCqeFVfzkLF1ZL2nXsiG+5NJlTzTLH6HXAr4V/Z0MGU3krIHKoo2sdKuZSrFiOEfOPnMLw4ZAES6qvixznLcval+AW+eLKUgF8TCOAnX1xFdMidF4Z2c7kBowI3GmAGUUb/lisZfaGDwsz3hDR5YMQAwCHkEfI6fvaPrlFIKGf0yS/xXyzyIN2KL8xSSpzLySovMiimL9ut5V5VxJm82PJ7x1t6Db4CV+m7d93nBrrXuGf+LBDEaidjY4Wyj2yy/UQSfClasD8Ky+JDjXM1I7EFs26AtRoWUKG8MtlxwQeIvJb+fah+TGa4lLzVdVBTWJXttuLdYQhr1gUi/vtYbe0SHV2O8wx9V4wzaJ3phHTLFKP0pRx07xqC9G8xkec3Z3XaGxEZZky9tqlyh5Z8983SGAE="
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_01PgLoN3uv9tVZSozDXovC8V",
+              "name": "lookup_order",
+              "input": {
+                "id": 4412
+              },
+              "caller": {
+                "type": "direct"
+              }
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_01PgLoN3uv9tVZSozDXovC8V",
+              "content": "Order 4412 was refunded twice."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "The second expression, 29 * 29 + 11 * 13, is larger. It equals 984, while the first equals 980.\n\nOrder 4412 was also refunded twice. Like order 4411, the lookup gave no amounts, dates, or reasons."
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Say in one sentence what happened to both orders. Look nothing up."
+            }
+          ]
+        }
+      ],
+      "tools": [
+        {
+          "name": "lookup_order",
+          "description": "Finds an order by its number, and says what happened to it.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "The number of the order."
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8"
+    },
+    "text": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-5-5\",\"id\":\"msg_011ChKTSvM5wUTWkXHsDGrXF\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":932,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":932,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":6,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}              }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}         }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"I\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"'m checking the\"}         }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" lookup results,\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" and both orders,\"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" 4411 and 4412\"}             }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\", show\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" up\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" as ref\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"unded twice.\"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"\\n\\n\"}      }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"CAQSowcKEAgUGAI4AUIIdGhpbmtpbmcSDJR+ZgdQV3/jwa8uWxoM+QDX/UbxYBvrbcBYIjDlr5kqj4aH271sI/BfQIsPn+Xpn3tY8s7wmu5H5X9d4cFvLSKPctiecdx/HVyzuTEqwAbFBqMjHsNGXDNPGtN8Ul+kJjPme/BZDGh2v8+WHTJp5C+9xbWD6D8Cpm60OvwQfASSzAQHDiBH9x7Q/TQIinjJXPNuK2qDPagZhlHao6CxGfnod8TJLpl1o+frlwEsEsAL0tpZn/84SJ96qtwJW1vli/35/LCmPWx72ezV5cjNpuB+j9ykFYonmyf/xxjiFOB7dbCy4jQ6Zc9Nw095CT30QTJWRUnFQdMCcVi4CgRmyvnb4Lk2pcVzp2uR+7TxJEk11spLTzJxv+K5/pgUcXlaMjLXbBiZHIoIH0b5pp+u2zSa2b2fedpyEAICd51Hgpm5swRGwwrDJc+AseyjvQMUKmxSLtwg3M6YsqmztsX/KO+2fk2Igv5P38dPvsUa2RaujlD8Fl9Yn9IXUQHW6G4S7F5D5NnEeNTT4xnnZ+nnsaxzWql+3pgEgiXwP/UCUjdhweIgOkEVgUh0/U6RUWXCwBujiwMNqsl+h7tkP4R0VtzAlt/9x4Ab9HknUE2xpAwumyE8aHHhOt/hmLgmgS0b3N82PvPpkJAL8bKugk53iT+VZM4nBfdm86bCNfWS+WW+Om3eLSGasJRHRndM8I284H4UgiQ0JRaYCxalDJKGTgvm1CqO2nTkGkifS8BvqOpNp+9f8dgjR2kXdFXUP8lmnk2UVi9c60g51HxGoiuyVXRhAfYlgTSN0UJMXbrbUETyf1CPAKeMsGKeIMapL4wsdksapR9bTOOGlpnnPzl/mgtH9zcNLWHsBgjBBg9+T7D74IvdcmWlVGok0CQkhhKKxQuZoa2OuW0VGWXvSpHjHlA5zHXfgs3NYZDPLzg4y4RuqJ1Dkk9x0zOw/DBJNYh0FsJl+6+AcRjZpSRb2YWKsot7uikhflanPSpj/wHcnjZK5wlogCYlWKCDPjDAhSowGf5UEQOE4ZTtK+TBoSSxbZl8oMGSkJ9YhX1Wk2dDPJCtNjRbEsxDXH6scwNBINNvaF3JX1weR34V2+5I+NSkROj5NQtFecjURoBu5k7ZGogDd4mAYPhKnbHos2TLEeMjshQpu7GFECtTtnz5S5R4ShX4OTYB8PipOTDD6cRM7MMKgO4CwxMf9Iun+s9gIg1lGAE=\"}              }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0         }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Orders 4411 \"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"and 4412 were both ref\"}         }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"unded twice, and the l\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"ookups\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" gave no amounts, d\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"ates, or reasons.\"}     }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1 }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":932,\"cache_read_input_tokens\":0,\"output_tokens\":94,\"output_tokens_details\":{\"thinking_tokens\":52},\"iterations\":[{\"input_tokens\":4,\"output_tokens\":94,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":932,\"cache_creation\":{\"ephemeral_5m_input_tokens\":932,\"ephemeral_1h_input_tokens\":0},\"type\":\"message\"}]}              }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"           }\n\n"
+  },
+  "expected": {
+    "answer": {
+      "message": {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "I'm checking the lookup results, and both orders, 4411 and 4412, show up as refunded twice.\n\n",
+            "signature": "CAQSowcKEAgUGAI4AUIIdGhpbmtpbmcSDJR+ZgdQV3/jwa8uWxoM+QDX/UbxYBvrbcBYIjDlr5kqj4aH271sI/BfQIsPn+Xpn3tY8s7wmu5H5X9d4cFvLSKPctiecdx/HVyzuTEqwAbFBqMjHsNGXDNPGtN8Ul+kJjPme/BZDGh2v8+WHTJp5C+9xbWD6D8Cpm60OvwQfASSzAQHDiBH9x7Q/TQIinjJXPNuK2qDPagZhlHao6CxGfnod8TJLpl1o+frlwEsEsAL0tpZn/84SJ96qtwJW1vli/35/LCmPWx72ezV5cjNpuB+j9ykFYonmyf/xxjiFOB7dbCy4jQ6Zc9Nw095CT30QTJWRUnFQdMCcVi4CgRmyvnb4Lk2pcVzp2uR+7TxJEk11spLTzJxv+K5/pgUcXlaMjLXbBiZHIoIH0b5pp+u2zSa2b2fedpyEAICd51Hgpm5swRGwwrDJc+AseyjvQMUKmxSLtwg3M6YsqmztsX/KO+2fk2Igv5P38dPvsUa2RaujlD8Fl9Yn9IXUQHW6G4S7F5D5NnEeNTT4xnnZ+nnsaxzWql+3pgEgiXwP/UCUjdhweIgOkEVgUh0/U6RUWXCwBujiwMNqsl+h7tkP4R0VtzAlt/9x4Ab9HknUE2xpAwumyE8aHHhOt/hmLgmgS0b3N82PvPpkJAL8bKugk53iT+VZM4nBfdm86bCNfWS+WW+Om3eLSGasJRHRndM8I284H4UgiQ0JRaYCxalDJKGTgvm1CqO2nTkGkifS8BvqOpNp+9f8dgjR2kXdFXUP8lmnk2UVi9c60g51HxGoiuyVXRhAfYlgTSN0UJMXbrbUETyf1CPAKeMsGKeIMapL4wsdksapR9bTOOGlpnnPzl/mgtH9zcNLWHsBgjBBg9+T7D74IvdcmWlVGok0CQkhhKKxQuZoa2OuW0VGWXvSpHjHlA5zHXfgs3NYZDPLzg4y4RuqJ1Dkk9x0zOw/DBJNYh0FsJl+6+AcRjZpSRb2YWKsot7uikhflanPSpj/wHcnjZK5wlogCYlWKCDPjDAhSowGf5UEQOE4ZTtK+TBoSSxbZl8oMGSkJ9YhX1Wk2dDPJCtNjRbEsxDXH6scwNBINNvaF3JX1weR34V2+5I+NSkROj5NQtFecjURoBu5k7ZGogDd4mAYPhKnbHos2TLEeMjshQpu7GFECtTtnz5S5R4ShX4OTYB8PipOTDD6cRM7MMKgO4CwxMf9Iun+s9gIg1lGAE="
+          },
+          {
+            "type": "text",
+            "text": "Orders 4411 and 4412 were both refunded twice, and the lookups gave no amounts, dates, or reasons."
+          }
+        ],
+        "id": "msg_011ChKTSvM5wUTWkXHsDGrXF"
+      },
+      "stopReason": "stop",
+      "toolCalls": [],
+      "usage": {
+        "totalInput": 936,
+        "input": 4,
+        "output": 94,
+        "cacheRead": 0,
+        "cacheWrite": 932,
+        "reasoning": 52,
+        "cost": {
+          "source": "estimated",
+          "total": 0.0001639,
+          "input": 4.0000000000000003e-7,
+          "output": 0.000047,
+          "cacheRead": 0,
+          "cacheWrite": 0.0001165
+        }
+      }
+    }
+  }
+}

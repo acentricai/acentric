@@ -16,6 +16,9 @@ function refuse(profile: ResponsesProfile, message: string): never {
   throw new ModelFailure(message, 'invalid_request', { provider: profile.id });
 }
 
+/** What ends the input of a request that asks for a compaction. */
+export const COMPACTION_TRIGGER = { type: 'compaction_trigger' };
+
 export function buildBody(step: ModelStep, profile: ResponsesProfile): JsonObject {
   const input = step.messages.flatMap((message, index) =>
     items(message, `messages[${String(index)}]`, profile),
@@ -44,7 +47,12 @@ export function buildBody(step: ModelStep, profile: ResponsesProfile): JsonObjec
     ...(profile.streams ? { stream: true } : {}),
     model: step.model,
     ...(instructions === undefined || inInput ? {} : { instructions }),
-    input: inInput ? [first, ...input] : input,
+    // An item that ends the input asks for the conversation to be compacted, not answered.
+    input: [
+      ...(inInput ? [first] : []),
+      ...input,
+      ...(step.compact === true && profile.compacts === true ? [COMPACTION_TRIGGER] : []),
+    ],
     ...(tools.length > 0 ? { tools } : {}),
   };
 }

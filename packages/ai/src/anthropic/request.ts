@@ -35,13 +35,30 @@ const CACHED = { cache_control: { type: 'ephemeral' } };
 /** The beta of a reasoning effort set by a system message, from that message on. */
 export const MESSAGE_EFFORT_BETA = 'mid-conversation-output-config-2026-07-01';
 
+/**
+ * The beta a summary is asked of Anthropic under, and every later request that carries the
+ * block it answered with.
+ */
+export const COMPACTION_BETA = 'compact-2026-09-04';
+
+/** Whether a message of a request is what a compaction left: an answer that holds its block. */
+const isCompacted = (message: JsonObject | undefined): boolean =>
+  message?.['role'] === 'assistant' &&
+  Array.isArray(message['content']) &&
+  (message['content'] as readonly JsonObject[]).some((block) => block['type'] === 'compaction');
+
 /** The betas a request has to name for what is in it, for the `anthropic-beta` header. */
 export function betasOf(body: JsonObject): string[] {
   const messages = body['messages'] as readonly JsonObject[];
   const effortInMessages = messages.some(
     (message) => message['role'] === 'system' && message['output_config'] !== undefined,
   );
-  return effortInMessages ? [MESSAGE_EFFORT_BETA] : [];
+  // A request that asks for a summary, and one whose conversation starts with one.
+  const compaction = body['compaction'] !== undefined || isCompacted(messages[0]);
+  return [
+    ...(effortInMessages ? [MESSAGE_EFFORT_BETA] : []),
+    ...(compaction ? [COMPACTION_BETA] : []),
+  ];
 }
 
 function refuse(message: string): never {
@@ -82,6 +99,9 @@ export function buildBody(step: ModelStep, models: readonly ModelInfo[]): JsonOb
       : { system: [{ type: 'text', text: step.instructions, ...CACHED }] }),
     messages,
     ...(tools.length > 0 ? { tools } : {}),
+    // A summary of what it is sent, in place of an answer. The instructions and the tools are
+    // those of the calls around it: the reasoning of the turns after it stays good only so.
+    ...(step.compact === true ? { compaction: { type: 'summarize' } } : {}),
   };
 }
 

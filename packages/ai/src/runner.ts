@@ -40,6 +40,11 @@ export type ModelStep = {
   readonly session?: string;
   /** What the agent asks of its provider that only that provider has, as the provider read it. */
   readonly options?: ProviderFields;
+  /**
+   * Asks the provider to compact what it is sent, in place of answering: its answer is what
+   * stands for the conversation from then on. Only for a provider that `compacts`.
+   */
+  readonly compact?: true;
 };
 
 /** What one call of the model came to. */

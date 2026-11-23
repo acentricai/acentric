@@ -126,6 +126,15 @@ export const anthropic: Provider = {
 
   withoutReasoning: (message) => withoutTypes(message, ['thinking', 'redacted_thinking']),
 
+  // It summarizes the older part, on request: one signed block, which the recent turns follow.
+  compacts: 'older',
+  compacted(message) {
+    const blocks = message.content.filter(
+      (block) => block['type'] === 'compaction' && typeof block['content'] === 'string',
+    );
+    return blocks.length === 1 ? { ...message, content: blocks } : undefined;
+  },
+
   // A system message that says nothing, and sets the effort from where it is.
   reasoningChange: (_model, reasoning) => ({
     role: 'system',

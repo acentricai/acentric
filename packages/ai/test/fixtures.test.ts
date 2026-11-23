@@ -30,6 +30,7 @@ describe.each(providers.list().map((provider) => provider.id))(
     it('has every scenario recorded', () => {
       expect(fixturesOf(id).map((one) => one.scenario)).toEqual([
         'bad-key',
+        ...(provider.compacts === undefined ? [] : ['compaction-next', 'compaction']),
         'text',
         'tool-call',
         'tool-result',
@@ -37,6 +38,62 @@ describe.each(providers.list().map((provider) => provider.id))(
         ...(searches ? ['web-search-next', 'web-search'] : []),
       ]);
     });
+
+    it.runIf(provider.compacts !== undefined)(
+      'compacts a conversation itself when asked, and answers with what stands for it',
+      async () => {
+        const { recorded, sent, answer } = await run('compaction');
+        expect(recorded.step.compact).toBe(true);
+        expect(sent).toEqual([recorded.request]);
+        expect(answer).toEqual((recorded.expected as { answer: ModelAnswer }).answer);
+        // It answered nothing: all there is in it is the one thing that stands for the conversation.
+        expect(answer.toolCalls).toEqual([]);
+        expect(provider.read(answer.message).text).toBe('');
+        const left = provider.compacted?.(answer.message);
+        expect(left?.content).toHaveLength(1);
+        expect(left?.content[0]?.['type']).toBe('compaction');
+        // And it is exactly as it came: it is signed, or cannot be read at all.
+        expect(answer.message.content).toContainEqual(left?.content[0]);
+        // The call is paid for like any other.
+        expect(answer.usage?.cost?.total).toBeGreaterThan(0);
+        // An answer that is no compaction has nothing of the kind in it.
+        expect(provider.compacted?.((await run('text')).answer.message)).toBeUndefined();
+      },
+    );
+
+    it.runIf(provider.compacts !== undefined)(
+      'goes on from what a compaction left, and keeps the reasoning of the turns after it',
+      async () => {
+        const { answer: compacted } = await run('compaction');
+        const { recorded, sent, answer } = await run('compaction-next');
+        expect(sent).toEqual([recorded.request]);
+        const body = JSON.stringify(sent[0]?.body);
+        // What stands for the conversation is sent as it came.
+        const [left] = provider.compacted?.(compacted.message)?.content ?? [];
+        expect(body).toContain(JSON.stringify(left));
+        // Every answer that is sent after it is sent whole, its reasoning included: the
+        // provider took them, which is what this was recorded to show.
+        const kept = recorded.step.messages.flatMap((message) =>
+          message.role === 'assistant' && provider.compacted?.(message) === undefined
+            ? [message]
+            : [],
+        );
+        for (const message of kept) {
+          for (const part of message.content as readonly object[]) {
+            expect(body).toContain(JSON.stringify(part));
+          }
+        }
+        const reasoned = kept.flatMap((message) =>
+          (message.content as readonly { type?: string }[]).filter((part) =>
+            /thinking|reasoning/.test(String(part.type)),
+          ),
+        );
+        // Where the turns after it are kept as they were, one of them was thought about.
+        expect(reasoned.length).toBeGreaterThanOrEqual(provider.compacts === 'older' ? 1 : 0);
+        expect(answer.stopReason).toBe('stop');
+        expect(provider.read(answer.message).text).toMatch(/4411/);
+      },
+    );
 
     it.runIf(searches)(
       'counts the searches its own web search made, and what they cost',
