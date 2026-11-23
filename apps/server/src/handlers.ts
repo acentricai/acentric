@@ -34,7 +34,6 @@ import type { z } from 'zod';
 import { personOf, sessionCookie } from './auth.ts';
 import type { Granted } from './auth.ts';
 import { ApiFailure } from './errors.ts';
-import { listBackups } from './backups/schedule.ts';
 import type { Backups } from './backups/schedule.ts';
 import type { Streams } from './events.ts';
 
@@ -779,6 +778,7 @@ export const handlers: Handlers = {
   },
   'backups.list': async (_asked, { backups }) => {
     if (backups === undefined) throw noBackups();
+    const { items, bucketError } = await backups.list();
     return {
       dir: backups.dir,
       sameDisk: await backups.sameDisk(),
@@ -786,12 +786,16 @@ export const handlers: Handlers = {
       keep: backups.keep,
       next: backups.next,
       last: backups.last,
-      items: await listBackups(backups.dir),
+      bucket:
+        backups.bucketUrl === undefined ? null : { url: backups.bucketUrl, error: bucketError },
+      items,
     };
   },
-  'backups.create': (asked, { backups }) => {
+  'backups.create': async (asked, { backups }) => {
     if (backups === undefined) throw noBackups();
-    return backups.take('manual', refOf(asked));
+    const file = await backups.take('manual', refOf(asked));
+    // Taken, it is in the folder, and in the bucket when there is one.
+    return { ...file, onServer: true, inBucket: backups.bucketUrl !== undefined };
   },
 };
 

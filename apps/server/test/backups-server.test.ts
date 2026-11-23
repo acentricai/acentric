@@ -7,22 +7,26 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Audit, MemoryStore } from '@acentric/core';
 import { SCHEMA_VERSION } from '@acentric/store';
 
 import { checkBackup } from '../src/backups/archive.ts';
+import { Bucket, placeOf } from '../src/backups/bucket.ts';
 import { DataInUse } from '../src/backups/lock.ts';
 import { Backups, listBackups } from '../src/backups/schedule.ts';
 import { readSettings, start } from '../src/index.ts';
 import { backUpBeforeUpgrade } from '../src/start.ts';
+import { fakeS3 } from './fake-s3.ts';
+import type { FakeS3 } from './fake-s3.ts';
 
 const REPO = join(import.meta.dirname, '..', '..', '..');
 const BIN = join(REPO, 'apps', 'server', 'dist', 'bin.js');
@@ -63,10 +67,11 @@ function run(
   args: string[],
   data: string,
   input?: string,
+  more: Record<string, string> = {},
 ): Promise<{ code: number | null; out: Buffer; err: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [BIN, ...args], {
-      env: { ...process.env, ...env(data) },
+      env: { ...process.env, ...env(data, more) },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const out: Buffer[] = [];
@@ -257,5 +262,140 @@ describe('the backup commands', () => {
     expect(restored.err).toContain('what was there before is in');
     // And a server starts on what was put back.
     await (await serve(data)).close();
+  }, 120_000);
+});
+
+describe('backups copied to a bucket', () => {
+  let s3: FakeS3;
+  const bucketEnv = (prefix = 'acentric'): Record<string, string> => ({
+    ACENTRIC_BACKUP_URL: `s3://test-bucket/${prefix}`,
+    AWS_ENDPOINT_URL_S3: s3.url,
+    AWS_REGION: 'us-east-1',
+  });
+  beforeAll(async () => {
+    s3 = await fakeS3();
+    // What the bucket is reached with is AWS's own, from the environment.
+    vi.stubEnv('AWS_ACCESS_KEY_ID', 'test-access-key');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'test-secret-key');
+    vi.stubEnv('AWS_PROFILE', '');
+    return async () => {
+      vi.unstubAllEnvs();
+      await s3.close();
+    };
+  });
+
+  it('are there whole, said to be, and as many of each kind are kept there', async () => {
+    const data = folder();
+    const server = await serve(data, { ...bucketEnv(), ACENTRIC_BACKUP_KEEP: '1' });
+    try {
+      const first = await call(server.server.url, '/v1/backups', 'POST');
+      expect(first.status).toBe(201);
+      expect(first.body).toMatchObject({ onServer: true, inBucket: true });
+      const name = String(first.body['name']);
+      const there = s3.objects.get(`test-bucket/acentric/${name}`);
+      expect(there?.equals(readFileSync(join(data, 'backups', name)))).toBe(true);
+
+      const status = await call(server.server.url, '/v1/backups');
+      expect(status.body['bucket']).toEqual({ url: 's3://test-bucket/acentric', error: null });
+      expect(status.body['items']).toMatchObject([{ name, onServer: true, inBucket: true }]);
+
+      // One of each kind is kept: the next manual one takes its place, there as well.
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      const second = await call(server.server.url, '/v1/backups', 'POST');
+      const keys = [...s3.objects.keys()].filter((key) => key.startsWith('test-bucket/acentric/'));
+      expect(keys).toEqual([`test-bucket/acentric/${String(second.body['name'])}`]);
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it('list those only in the bucket, as after the server’s disk was lost', async () => {
+    const data = folder();
+    const server = await serve(data, bucketEnv('lost'));
+    try {
+      const made = await call(server.server.url, '/v1/backups', 'POST');
+      rmSync(join(data, 'backups', String(made.body['name'])));
+      const status = await call(server.server.url, '/v1/backups');
+      expect(status.body['items']).toMatchObject([
+        { name: made.body['name'], onServer: false, inBucket: true },
+      ]);
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it('fail when one cannot be copied, and say it is in the folder still', async () => {
+    const data = folder();
+    const server = await serve(data, bucketEnv('down'));
+    try {
+      s3.failing = true;
+      const made = await call(server.server.url, '/v1/backups', 'POST');
+      expect(made.status).toBeGreaterThanOrEqual(500);
+      const status = await call(server.server.url, '/v1/backups');
+      const last = status.body['last'] as { ok: boolean; error: string };
+      expect(last.ok).toBe(false);
+      expect(last.error).toMatch(/is in .+, and was not copied to the bucket: Copying .+ failed/);
+      expect((status.body['bucket'] as { error: string }).error).toContain(
+        'Listing s3://test-bucket/down failed',
+      );
+      expect(status.body['items']).toMatchObject([{ onServer: true, inBucket: false }]);
+      const audit = await call(server.server.url, '/v1/audit-events?action=backup.failed');
+      expect((audit.body['items'] as { detail: { name?: string } }[])[0]?.detail.name).toMatch(
+        /-manual-0\.15\.0\.tar$/,
+      );
+    } finally {
+      s3.failing = false;
+      await server.close();
+    }
+  }, 60_000);
+
+  it('are put in parts when large, and read back whole', async () => {
+    const place = placeOf('s3://test-bucket/large', {
+      AWS_ENDPOINT_URL_S3: s3.url,
+      AWS_REGION: 'us-east-1',
+    });
+    if (place === undefined) throw new Error('not a place');
+    const bucket = new Bucket(place);
+    try {
+      const file = join(folder(), 'large.tar');
+      const bytes = Buffer.alloc(20 * 1_048_576 + 123, 7);
+      bytes.write('the start', 0);
+      writeFileSync(file, bytes);
+      const before = s3.multipart.count;
+      await bucket.put(file, 'large.tar');
+      expect(s3.multipart.count).toBe(before + 1);
+      expect(s3.objects.get('test-bucket/large/large.tar')?.equals(bytes)).toBe(true);
+      const chunks: Buffer[] = [];
+      for await (const chunk of await bucket.read('large.tar')) chunks.push(chunk as Buffer);
+      expect(Buffer.concat(chunks).equals(bytes)).toBe(true);
+      await expect(bucket.read('none.tar')).rejects.toThrow(
+        'There is no backup at s3://test-bucket/large/none.tar',
+      );
+    } finally {
+      bucket.close();
+    }
+  }, 60_000);
+
+  it('are checked and put back from the bucket, by their URL', async () => {
+    if (!existsSync(BIN)) throw new Error(`${BIN} is not built: run \`pnpm build\``);
+    const data = folder();
+    const server = await serve(data, bucketEnv('restore'));
+    let name: string;
+    try {
+      name = String((await call(server.server.url, '/v1/backups', 'POST')).body['name']);
+    } finally {
+      await server.close();
+    }
+    const url = `s3://test-bucket/restore/${name}`;
+    const more = bucketEnv('restore');
+    const checked = await run(['check-backup', url], data, undefined, more);
+    expect(checked.err).toContain('a whole manual backup of 0.15.0');
+    expect(checked.code).toBe(0);
+    const restored = await run(['restore', url], data, undefined, more);
+    expect(restored.err).toContain('restored the backup of 0.15.0');
+    expect(restored.code).toBe(0);
+    const none = await run(['restore', 's3://test-bucket/restore/none.tar'], data, undefined, more);
+    expect(none.code).toBe(1);
+    expect(none.err).toContain('There is no backup at s3://test-bucket/restore/none.tar');
   }, 120_000);
 });

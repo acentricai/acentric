@@ -4,7 +4,9 @@
 // the audit log.
 //
 // A backup is written under a name of its own, and named for what it is once it is whole: a
-// file of a backup's name is one that was finished.
+// file of a backup's name is one that was finished. With a bucket, each is then copied there
+// as well, and the bucket keeps as many of each kind as the folder does: a backup that is in
+// the folder and could not be copied is one that failed.
 
 import { createWriteStream } from 'node:fs';
 import { mkdir, readdir, rename, rm, stat, statfs } from 'node:fs/promises';
@@ -15,6 +17,7 @@ import type { Audit } from '@acentric/core';
 import type { PrincipalRef } from '@acentric/protocol';
 
 import { DATABASE, makeBackup } from './archive.ts';
+import type { Bucket } from './bucket.ts';
 import type { BackupKind, Manifest } from './archive.ts';
 
 /** A backup in the folder: `acentric-<time>-<kind>-<version>.tar`. */
@@ -30,6 +33,9 @@ export type BackupFile = {
   readonly bytes: number;
 };
 
+/** A backup, where it is: in the folder on the server, in the bucket, or both. */
+export type PlacedBackup = BackupFile & { readonly onServer: boolean; readonly inBucket: boolean };
+
 /** What became of the last backup. */
 export type LastBackup =
   | { readonly ok: true; readonly at: number; readonly name: string }
@@ -44,24 +50,42 @@ const stamp = (at: number): string =>
 const timeOf = (text: string): number =>
   Date.parse(text.replace(/T(\d\d)-(\d\d)-(\d\d)Z$/, 'T$1:$2:$3Z'));
 
+/** The backup a file of `name` is, or undefined when that is not a backup's name. */
+function fileOf(name: string, bytes: number): BackupFile | undefined {
+  const match = NAME.exec(name);
+  if (match === null) return undefined;
+  return {
+    name,
+    kind: match[2] as BackupKind,
+    version: match[3] ?? '',
+    createdAt: timeOf(match[1] ?? ''),
+    bytes,
+  };
+}
+
+const newestFirst = <T extends BackupFile>(files: T[]): T[] =>
+  files.toSorted((a, b) => b.createdAt - a.createdAt || (a.name < b.name ? 1 : -1));
+
 /** The backups in `dir`, newest first. */
 export async function listBackups(dir: string): Promise<BackupFile[]> {
   const names = await readdir(dir).catch(() => [] as string[]);
   const files: BackupFile[] = [];
   for (const name of names) {
-    const match = NAME.exec(name);
-    if (match === null) continue;
     const there = await stat(join(dir, name)).catch(() => undefined);
-    if (there === undefined) continue;
-    files.push({
-      name,
-      kind: match[2] as BackupKind,
-      version: match[3] ?? '',
-      createdAt: timeOf(match[1] ?? ''),
-      bytes: there.size,
-    });
+    const file = there === undefined ? undefined : fileOf(name, there.size);
+    if (file !== undefined) files.push(file);
   }
-  return files.toSorted((a, b) => b.createdAt - a.createdAt || (a.name < b.name ? 1 : -1));
+  return newestFirst(files);
+}
+
+/** The backups in `bucket`, newest first. */
+export async function listBucket(bucket: Bucket): Promise<BackupFile[]> {
+  const files: BackupFile[] = [];
+  for (const object of await bucket.list()) {
+    const file = fileOf(object.name, object.bytes);
+    if (file !== undefined) files.push(file);
+  }
+  return newestFirst(files);
 }
 
 /** What a backup of `data` needs on disk, and some to spare: its database and blobs. */
@@ -86,6 +110,7 @@ export class Backups {
   readonly #version: string;
   readonly #withoutRemovals: <T>(work: () => Promise<T>) => Promise<T>;
   readonly #audit: Audit | undefined;
+  readonly #bucket: Bucket | undefined;
   readonly #clock: () => number;
   readonly #log: (line: string) => void;
   /** The backup being taken: the next waits for it. */
@@ -103,6 +128,8 @@ export class Backups {
     readonly version: string;
     readonly withoutRemovals: <T>(work: () => Promise<T>) => Promise<T>;
     readonly audit?: Audit;
+    /** The bucket each is copied to as well. */
+    readonly bucket?: Bucket;
     readonly clock?: () => number;
     readonly log?: (line: string) => void;
   }) {
@@ -113,6 +140,7 @@ export class Backups {
     this.#version = options.version;
     this.#withoutRemovals = options.withoutRemovals;
     this.#audit = options.audit;
+    this.#bucket = options.bucket;
     this.#clock = options.clock ?? Date.now;
     this.#log = options.log ?? ((line) => console.log(line));
   }
@@ -133,6 +161,38 @@ export class Backups {
   get last(): LastBackup | null {
     return this.#last;
   }
+  /** Where in a bucket each is copied to as well. Undefined when there is none. */
+  get bucketUrl(): string | undefined {
+    return this.#bucket?.url;
+  }
+
+  /**
+   * The backups there are, in the folder and in the bucket, newest first; and what went wrong
+   * listing the bucket, when something did.
+   */
+  async list(): Promise<{ readonly items: PlacedBackup[]; readonly bucketError: string | null }> {
+    const here = await listBackups(this.#dir);
+    let there: BackupFile[] = [];
+    let bucketError: string | null = null;
+    if (this.#bucket !== undefined) {
+      try {
+        there = await listBucket(this.#bucket);
+      } catch (error) {
+        bucketError = error instanceof Error ? error.message : String(error);
+      }
+    }
+    const inBucket = new Set(there.map((file) => file.name));
+    const onServer = new Set(here.map((file) => file.name));
+    return {
+      items: newestFirst([
+        ...here.map((file) => ({ ...file, onServer: true, inBucket: inBucket.has(file.name) })),
+        ...there
+          .filter((file) => !onServer.has(file.name))
+          .map((file) => ({ ...file, onServer: false, inBucket: true })),
+      ]),
+      bucketError,
+    };
+  }
 
   /** Whether the backups are on the disk of what they back up, and so lost with it. */
   async sameDisk(): Promise<boolean> {
@@ -149,6 +209,17 @@ export class Backups {
     const now = this.#clock();
     const due = newest === undefined ? now : newest.createdAt + this.#everyMs;
     this.#schedule(Math.max(due, now + 60_000));
+    // Said at the start, and not only at the first backup: a bucket it cannot reach.
+    if (this.#bucket !== undefined) {
+      const bucket = this.#bucket;
+      void bucket.list().then(
+        () => this.#log(`backups are copied to ${bucket.url} as well`),
+        (error: unknown) =>
+          this.#log(
+            `backups are not copied to ${bucket.url}: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+      );
+    }
   }
 
   #schedule(at: number): void {
@@ -180,21 +251,46 @@ export class Backups {
 
   async #take(kind: BackupKind, by: PrincipalRef): Promise<BackupFile> {
     const started = this.#clock();
+    let written: BackupFile | undefined;
     try {
       const file = await this.#write(kind);
+      written = file;
+      await this.#prune(kind);
+      if (this.#bucket !== undefined) {
+        try {
+          await this.#bucket.put(join(this.#dir, file.name), file.name);
+        } catch (error) {
+          throw new Error(
+            `${file.name} is in ${this.#dir}, and was not copied to the bucket: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          );
+        }
+      }
       this.#last = { ok: true, at: this.#clock(), name: file.name };
       await this.#audit?.record({
         by,
         action: 'backup.made',
-        detail: { name: file.name, kind, bytes: file.bytes, ms: this.#clock() - started },
+        detail: {
+          name: file.name,
+          kind,
+          bytes: file.bytes,
+          ms: this.#clock() - started,
+          ...(this.#bucket === undefined ? {} : { bucket: this.#bucket.url }),
+        },
       });
-      this.#log(`backed up to ${join(this.#dir, file.name)}`);
-      await this.#prune(kind);
+      this.#log(
+        `backed up to ${join(this.#dir, file.name)}${this.#bucket === undefined ? '' : ` and ${this.#bucket.url}`}`,
+      );
+      await this.#pruneBucket(kind);
       return file;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.#last = { ok: false, at: this.#clock(), error: message };
-      await this.#audit?.record({ by, action: 'backup.failed', detail: { kind, error: message } });
+      await this.#audit?.record({
+        by,
+        action: 'backup.failed',
+        detail: { kind, error: message, ...(written === undefined ? {} : { name: written.name }) },
+      });
       this.#log(`the backup failed: ${message}`);
       throw error;
     }
@@ -240,11 +336,33 @@ export class Backups {
     };
   }
 
-  /** Removes the oldest backups of `kind` past how many are kept. */
+  /** How many of `kind` are kept. */
+  #keeps(kind: BackupKind): number {
+    return kind === 'before-upgrade' ? Math.min(this.#keep, 2) : this.#keep;
+  }
+
+  /** Removes the oldest backups of `kind` in the folder past how many are kept. */
   async #prune(kind: BackupKind): Promise<void> {
-    const keep = kind === 'before-upgrade' ? Math.min(this.#keep, 2) : this.#keep;
     const own = (await listBackups(this.#dir)).filter((file) => file.kind === kind);
-    for (const file of own.slice(keep)) await rm(join(this.#dir, file.name), { force: true });
+    for (const file of own.slice(this.#keeps(kind))) {
+      await rm(join(this.#dir, file.name), { force: true });
+    }
+  }
+
+  /**
+   * Removes the oldest backups of `kind` in the bucket past how many are kept. What goes wrong
+   * is said, and the backup that was copied is still one that was made.
+   */
+  async #pruneBucket(kind: BackupKind): Promise<void> {
+    if (this.#bucket === undefined) return;
+    try {
+      const own = (await listBucket(this.#bucket)).filter((file) => file.kind === kind);
+      for (const file of own.slice(this.#keeps(kind))) await this.#bucket.remove(file.name);
+    } catch (error) {
+      this.#log(
+        `the oldest backups in ${this.#bucket.url} were not removed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /** Stops scheduling, and waits for a backup being taken. */
@@ -253,5 +371,6 @@ export class Backups {
     this.#next = null;
     if (this.#timer !== undefined) clearTimeout(this.#timer);
     await this.#running;
+    this.#bucket?.close();
   }
 }

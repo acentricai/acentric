@@ -26,6 +26,7 @@ describe('a server’s settings', () => {
       dir: `${settings.data}/backups`,
       everyMs: 86_400_000,
       keep: 3,
+      bucket: undefined,
     });
   });
 
@@ -36,10 +37,41 @@ describe('a server’s settings', () => {
         ACENTRIC_BACKUP_EVERY: '6h',
         ACENTRIC_BACKUP_KEEP: '10',
       }).backups,
-    ).toEqual({ dir: '/backups', everyMs: 21_600_000, keep: 10 });
+    ).toEqual({ dir: '/backups', everyMs: 21_600_000, keep: 10, bucket: undefined });
     expect(readSettings({ ACENTRIC_BACKUP_EVERY: '30m' }).backups?.everyMs).toBe(1_800_000);
     expect(readSettings({ ACENTRIC_BACKUP_EVERY: '7d' }).backups?.everyMs).toBe(604_800_000);
     expect(readSettings({ ACENTRIC_BACKUP_EVERY: 'off' }).backups).toBeUndefined();
+  });
+
+  it('say the bucket backups are copied to, and where a store that is not S3 is', () => {
+    expect(readSettings({ ACENTRIC_BACKUP_URL: 's3://my-bucket' }).backups?.bucket).toEqual({
+      url: 's3://my-bucket',
+      bucket: 'my-bucket',
+      prefix: '',
+      endpoint: undefined,
+      region: undefined,
+    });
+    expect(
+      readSettings({
+        ACENTRIC_BACKUP_URL: 's3://my-bucket/acentric/prod/',
+        AWS_ENDPOINT_URL_S3: 'http://minio:9000',
+        AWS_REGION: 'eu-west-1',
+      }).backups?.bucket,
+    ).toEqual({
+      url: 's3://my-bucket/acentric/prod',
+      bucket: 'my-bucket',
+      prefix: 'acentric/prod/',
+      endpoint: 'http://minio:9000',
+      region: 'eu-west-1',
+    });
+    for (const url of ['my-bucket', 'https://my-bucket.s3.amazonaws.com', 's3://My_Bucket']) {
+      expect(() => readSettings({ ACENTRIC_BACKUP_URL: url })).toThrow(
+        /ACENTRIC_BACKUP_URL is a bucket and the folder in it/,
+      );
+    }
+    expect(() =>
+      readSettings({ ACENTRIC_BACKUP_URL: 's3://my-bucket', ACENTRIC_BACKUP_EVERY: 'off' }),
+    ).toThrow(/ACENTRIC_BACKUP_EVERY=off is for a server that takes none/);
   });
 
   it('are read from its environment', () => {

@@ -27,6 +27,12 @@
 //                           30m or 7d; and before a new version changes its database. `off`, for
 //                           neither
 //   ACENTRIC_BACKUP_KEEP    how many of its backups of each kind it keeps: 3 without it
+//   ACENTRIC_BACKUP_URL     a bucket each backup is copied to as well, once it is whole, such as
+//                           s3://my-bucket/acentric: at S3, or at a store that speaks its API at
+//                           AWS_ENDPOINT_URL_S3. It keeps as many of each kind as the folder
+//                           does. Reached with AWS's own credentials: the environment's, a
+//                           profile's, or the role of the instance, container or pod. Without
+//                           it, they are in the folder only
 //   ACENTRIC_DASHBOARD      the folder of the dashboard's build (apps/dashboard/dist), which the
 //                           server then serves at every path that is not the API's. Without
 //                           it, it serves none, and the links it makes have no page behind them
@@ -57,6 +63,9 @@ import { resolve } from 'node:path';
 import { secretKeyOf } from '@acentric/core';
 import type { SecretKeys } from '@acentric/core';
 import { checkDockerHost } from '@acentric/sandbox';
+
+import { placeOf } from './backups/bucket.ts';
+import type { BucketPlace } from './backups/bucket.ts';
 import type { BoatOptions, DockerOptions } from '@acentric/sandbox';
 import type { Network } from '@acentric/executor';
 
@@ -90,6 +99,8 @@ export type BackupSettings = {
   readonly everyMs: number;
   /** How many of each kind are kept. */
   readonly keep: number;
+  /** The bucket each is copied to as well. Undefined when there is none. */
+  readonly bucket: BucketPlace | undefined;
 };
 
 /** A time such as 30m, 24h or 7d, in milliseconds: from ten minutes to a year. */
@@ -233,6 +244,18 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
 
   const data = resolve(given('ACENTRIC_DATA') ?? './data');
   const every = given('ACENTRIC_BACKUP_EVERY') ?? '24h';
+  const url = given('ACENTRIC_BACKUP_URL');
+  const bucket = url === undefined ? undefined : placeOf(url, env);
+  if (url !== undefined && bucket === undefined) {
+    throw new InvalidSettings(
+      `ACENTRIC_BACKUP_URL is a bucket and the folder in it, such as s3://my-bucket/acentric, and is ${url}`,
+    );
+  }
+  if (url !== undefined && every === 'off') {
+    throw new InvalidSettings(
+      'ACENTRIC_BACKUP_URL is where the server copies its backups, and ACENTRIC_BACKUP_EVERY=off is for a server that takes none',
+    );
+  }
   const backups: BackupSettings | undefined =
     every === 'off'
       ? undefined
@@ -240,6 +263,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
           dir: resolve(given('ACENTRIC_BACKUP_DIR') ?? `${data}/backups`),
           everyMs: durationOf('ACENTRIC_BACKUP_EVERY', every),
           keep: wholeNumber('ACENTRIC_BACKUP_KEEP', 3, 1, 1000),
+          bucket,
         };
 
   return {

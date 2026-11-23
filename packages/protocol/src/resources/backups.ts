@@ -1,6 +1,7 @@
 // The server's own backups: where they go, how often, what became of the last, and those there
-// are. A backup is not read through the API: it has every conversation and every sealed secret
-// in it, and is had by whoever runs the server, from its folder.
+// are, on the server and in the bucket they are copied to. A backup is not read through the
+// API: it has every conversation and every sealed secret in it, and is had by whoever runs the
+// server, from its folder or its bucket.
 
 import { z } from 'zod';
 
@@ -19,6 +20,10 @@ export const backupSchema = z
     version: z.string(),
     createdAt: timestampSchema,
     bytes: z.number().int().nonnegative(),
+    /** Whether it is in the folder on the server. */
+    onServer: z.boolean(),
+    /** Whether it is in the bucket backups are copied to. */
+    inBucket: z.boolean(),
   })
   .meta({ id: 'Backup' });
 export type Backup = z.infer<typeof backupSchema>;
@@ -29,6 +34,8 @@ export const backupsSchema = z
     dir: z.string(),
     /** Whether that is the disk of what they back up: they are lost with it. */
     sameDisk: z.boolean(),
+    /** The bucket each is copied to as well, and what went wrong listing it, when something did. */
+    bucket: z.object({ url: z.string(), error: z.string().nullable() }).nullable(),
     /** How often one is taken. */
     everyMs: z.number().int().positive(),
     /** How many of each kind are kept. */
