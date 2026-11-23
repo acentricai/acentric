@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { makeId } from '@acentric/protocol';
 import type { Actor, AgentId, ContentPart, Message } from '@acentric/protocol';
@@ -338,6 +338,41 @@ describe('a blob', () => {
     expect(await blobs.withBytes([{ role: 'user', content: kept }])).toEqual([
       { role: 'user', content: [image(png.data)] },
     ]);
+  });
+});
+
+describe('while a backup copies the blobs', () => {
+  it('none is removed, new ones are kept, and what was to be removed goes after', async () => {
+    const { blobs, bytes, store, agent, actor } = world();
+    const orders = await agent('orders');
+    const billing = await agent('billing');
+    const gone = await actor(orders);
+    const staying = await actor(billing);
+    const old = picture(1);
+    await blobs.keep(gone.id, [image(old.data)]);
+    await store.deleteAgent(orders);
+
+    let release = () => {};
+    const copying = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let held = false;
+    const backup = blobs.withoutRemovals(async () => {
+      held = true;
+      await copying;
+      return 'copied';
+    });
+    await vi.waitFor(() => expect(held).toBe(true));
+    // Removing is put off, and keeping goes on.
+    expect(await blobs.collect()).toBe(0);
+    expect(await bytes?.list()).toEqual([old.digest]);
+    const fresh = picture(2);
+    await blobs.keep(staying.id, [image(fresh.data)]);
+    expect((await blobs.read(staying.id, fresh.digest))?.bytes).toEqual(fresh.bytes);
+
+    release();
+    expect(await backup).toBe('copied');
+    await vi.waitFor(async () => expect(await bytes?.list()).toEqual([fresh.digest]));
   });
 });
 
