@@ -63,6 +63,16 @@ const AGENTS: { [code: string]: InlineAgent } = {
   'orders@2': { definition: { ...definition, instructions: 'You are kind.' }, functions },
   'billing@1': { definition: { ...definition, instructions: 'You bill.' }, functions },
   'machines@1': { definition: { ...definition, features: ['machine'] }, functions },
+  // An agent whose actors can spawn actors of `billing`.
+  'lead@1': {
+    definition: {
+      ...definition,
+      instructions: 'You lead.',
+      features: ['subagents'],
+      subagents: [{ agent: 'billing', description: 'Bills an order.', creates: false }],
+    },
+    functions,
+  },
 };
 
 export type Api = Awaited<ReturnType<typeof api>>;

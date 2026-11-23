@@ -329,6 +329,16 @@ export const routes = defineRoutes({
     status: 200,
     errors: [],
   },
+  'actors.subagents': {
+    method: 'GET',
+    path: '/v1/actors/{actor}/subagents',
+    summary: 'Lists the actors an actor spawned, in the order it spawned them.',
+    auth: onActor('actors:read'),
+    params: z.object({ actor: actorIdSchema }),
+    response: z.object({ items: z.array(actorSchema) }).meta({ id: 'SubagentList' }),
+    status: 200,
+    errors: ['not_found'],
+  },
   'actors.get': {
     method: 'GET',
     path: '/v1/actors/{actor}',

@@ -9,7 +9,7 @@
 // through when its key reaches that agent or actor and holds the route's permission. What a
 // key does not reach is, to it, not there: it is answered as what does not exist is.
 
-import { Forbidden, Unauthenticated, reaches } from '@acentric/core';
+import { Forbidden, Unauthenticated, reachOf, reaches } from '@acentric/core';
 import type { Engine, Keys, People } from '@acentric/core';
 import type {
   Actor,
@@ -127,10 +127,15 @@ export async function authorize(
     case 'actor': {
       const id = params[auth.param] as ActorId;
       const actor = await engine.getActor(id);
-      if (!reaches(scope, { agent: actor.agent, actor: actor.id })) {
-        throw new ApiFailure('not_found', `There is no actor ${id}`);
+      if (reaches(scope, { agent: actor.agent, actor: actor.id })) {
+        return { principal, scope, actor };
       }
-      return { principal, scope, actor };
+      // An actor that one it reaches spawned is its to read, and no more.
+      const reach = actor.parent === null ? 'none' : reachOf(scope, await engine.lineage(id));
+      if (reach === 'read' && auth.permission === 'actors:read') return { principal, scope, actor };
+      // What can be watched and not touched says so. What cannot be seen is not there.
+      if (reach === 'read') throw new Forbidden(`This key can read the actor ${id}, and no more`);
+      throw new ApiFailure('not_found', `There is no actor ${id}`);
     }
   }
 }

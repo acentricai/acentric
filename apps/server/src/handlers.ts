@@ -412,6 +412,10 @@ export const handlers: Handlers = {
 
   // Machines
 
+  'actors.subagents': async ({ params }, { engine }) => ({
+    items: await engine.children(params.actor),
+  }),
+
   'machines.create': async (asked, { engine, audit }) => {
     const added = await machinesOf(engine).add(defined(asked.body));
     await audit.record({
