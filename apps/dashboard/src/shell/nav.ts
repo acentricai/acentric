@@ -2,10 +2,11 @@
 // with no tabs goes.
 
 import { agentsSection } from '../agents/index.ts';
+import { machinesSection } from '../machines/index.ts';
 import type { Me } from '../me.ts';
 import type { Section, Tab } from '../sections.ts';
 
-export const SECTIONS: readonly Section[] = [agentsSection];
+export const SECTIONS: readonly Section[] = [agentsSection, machinesSection];
 
 /** The sections and tabs this person sees. */
 export function visibleSections(

@@ -1,0 +1,225 @@
+/* Machine Pane's pages: the rules of its own dashboard (machine.css, and the parts of app.css,
+   components.css, keys.css and account.css its pages use) that the shared design system files
+   lack. Scoped to its pages, or to its menu's panel, which is drawn on <body>. */
+
+/* ---------- Pages ---------- */
+
+.machines-page .page__title,
+.sandboxes-page .page__title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 32px;
+  letter-spacing: -0.03em;
+  animation: rise 400ms var(--ease-reveal) both;
+}
+
+.machine-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.machines-page td,
+.sandboxes-page td {
+  white-space: nowrap;
+}
+
+.sandboxes-page .page__back {
+  margin: 0 0 12px;
+}
+
+.machines-page code,
+.sandboxes-page code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* The row menu's column: as narrow as its button, at the row's right end.
+   Positioned, so its visually hidden heading stays inside the scrolling table. */
+.machines-page .ac-table .ac-table__actions,
+.sandboxes-page .ac-table .ac-table__actions {
+  position: relative;
+  width: 1%;
+  text-align: right;
+}
+
+.machines-page .ac-table__actions .more-menu,
+.sandboxes-page .ac-table__actions .more-menu {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.connect-steps {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connect-steps .command {
+  width: 100%;
+}
+
+/* Escaped invisible characters remain recognizable without competing with the text. */
+.text-escape {
+  color: var(--ink-muted);
+  font-family: 'Fragment Mono', monospace;
+}
+
+.machines-page [dir='ltr'],
+.sandboxes-page [dir='ltr'] {
+  unicode-bidi: isolate;
+}
+
+.copy-notice {
+  margin-inline-start: 8px;
+}
+
+@media (max-width: 450px) {
+  .machines-page .page__head,
+  .sandboxes-page .page__head {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+}
+
+/* ---------- The org's signing secret, under the machines ---------- */
+
+.signing-secret {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: var(--space-6);
+  margin-top: 40px;
+  padding: var(--space-6) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.signing-secret__value {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.key-mask {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.secret-once {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.secret-once__value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  .signing-secret {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- The row menu ---------- */
+
+/* Open: the button keeps the wash it has on hover. */
+.more-menu__button[aria-expanded='true'] {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+/* Drawn over the page, so no scrolling table cuts it off; Menu places it. */
+.pop.more-menu__pop {
+  position: fixed;
+  z-index: 30;
+  display: grid;
+  width: 180px;
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  box-shadow: var(--shadow-pop);
+  transform-origin: top right;
+  animation: machine-pane-pop 160ms var(--ease-out) both;
+}
+
+.more-menu__pop .pop__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: 400 14px/20px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.more-menu__pop .pop__item > svg {
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.more-menu__pop .pop__item:hover,
+.more-menu__pop .pop__item:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.more-menu__pop .pop__item--danger,
+.more-menu__pop .pop__item--danger > svg {
+  color: var(--danger);
+}
+
+.more-menu__pop .pop__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes machine-pane-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .machines-page .page__title,
+  .sandboxes-page .page__title,
+  .pop.more-menu__pop {
+    animation: none !important;
+  }
+}
+
+/* Which agents may work on a machine: a box for all of them, then one for each. */
+.agents-field {
+  display: grid;
+  gap: 8px;
+}
