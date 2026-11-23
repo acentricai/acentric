@@ -735,11 +735,8 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       it('deletes it and the subagents under it, with all they had, and nothing else', async () => {
         const id = await stored('orders');
         const lead = await create({}, id);
-        const child = await create({ parent: { id: lead.id, name: 'billing', call: 'c1' } }, id);
-        const grandchild = await create(
-          { parent: { id: child.id, name: 'refunds', call: 'c2' } },
-          id,
-        );
+        const child = await create({ parent: { id: lead.id, name: 'billing' } }, id);
+        const grandchild = await create({ parent: { id: child.id, name: 'refunds' } }, id);
         const other = await create({}, id);
         for (const actor of [lead, child, grandchild, other]) {
           await store.addInput(inputOf(actor, 'hello'));
@@ -765,7 +762,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           await create({}, id),
           await create({}, id),
         ];
-        const child = await create({ parent: { id: third.id, name: 'billing', call: 'c1' } }, id);
+        const child = await create({ parent: { id: third.id, name: 'billing' } }, id);
         for (const [actor, at] of [
           [second, NOW + 10],
           [first, NOW + 5],
