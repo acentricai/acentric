@@ -78,5 +78,5 @@ and the newest backup in the bucket put back on it.
 `test.sh` makes it in an account, waits for its certificate from Let's Encrypt for
 `<ip>.sslip.io`, checks the server's version, its dashboard and scripts, that a backup is in the
 bucket by the instance's role, that the instance made again has what the server kept, and that
-the snapshots are scheduled; then removes all of it. It is run by hand, with an account's
+the snapshots are scheduled; then removes all of it, the data volume's last snapshot too. It is run by hand, with an account's
 credentials; CI checks that the recipe is well formed.
