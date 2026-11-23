@@ -19,6 +19,7 @@ import { Hono } from 'hono';
 import type { z } from 'zod';
 
 import { authenticate, authorize } from './auth.ts';
+import { serveDashboard } from './dashboard.ts';
 import { serveDownloads } from './downloads.ts';
 import type { Downloads } from './downloads.ts';
 import { ApiFailure, failureOf } from './errors.ts';
@@ -38,6 +39,8 @@ export type AppOptions = Omit<Parts, 'streams'> & {
   readonly checkAnswers?: boolean;
   /** What the server hands out to be installed elsewhere: the command. Nothing, without it. */
   readonly downloads?: Downloads;
+  /** The folder of the dashboard's build, which the server serves at every other path. None, without it. */
+  readonly dashboard?: string;
 };
 
 /** The most a request's body is, in bytes: a deploy's code, and what goes around it. */
@@ -171,6 +174,9 @@ export function createApp(options: AppOptions): Hono {
       }
     });
   }
+
+  // Last: every GET no route above answered is the dashboard's.
+  if (options.dashboard !== undefined) serveDashboard(app, options.dashboard);
 
   app.notFound(() => {
     const requestId = randomBytes(8).toString('hex');
