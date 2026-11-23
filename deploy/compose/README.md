@@ -44,5 +44,6 @@ port in `ACENTRIC_PUBLIC_URL` too. People then use that address: plain HTTP is s
 
 `test.sh` brings it up with Caddy's own certificate for `localhost`, and checks through Caddy
 that HTTPS works and HTTP is sent to it, that the server is on no other port, that its scripts
-have its address, that the command it hands out deploys an agent, and that an actor's events
-come as they happen. CI runs it.
+have its address, that the command it hands out deploys an agent, that an actor's events come as
+they happen, and that a machine's daemon enrols and stays connected through Caddy when it is told
+Caddy's authority with `SSL_CERT_FILE`, and does not when it is not. CI runs it.
