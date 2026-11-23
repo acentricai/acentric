@@ -1,0 +1,20 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: acentric
+  namespace: acentric
+spec:
+  parentRefs:
+    # The cluster's Gateway that ends HTTPS for this name.
+    - name: gateway
+      namespace: gateway
+  hostnames:
+    - engine.example.com
+  rules:
+    - backendRefs:
+        - name: acentric
+          port: 80
+      # Machines' WebSockets and actors' event streams stay open: no time is a request's last.
+      timeouts:
+        request: 0s
+        backendRequest: 0s

@@ -1,0 +1,7 @@
+# The server behind an Ingress, for a cluster that has an Ingress controller rather than the
+# Gateway API. Set the name people use, the class and the certificate in ingress.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+  - ingress.yaml

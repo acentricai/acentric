@@ -1,0 +1,32 @@
+# What an Ingress controller must do for the server is its own to say, in annotations. The ones
+# here are for the NGINX controllers' annotations; README.md says what each is for, so that
+# another controller can be set to the same.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: acentric
+  namespace: acentric
+  annotations:
+    # Machines' WebSockets and actors' event streams stay open for an hour without a word.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
+    # Events are sent as they come, not held back to be sent together.
+    nginx.ingress.kubernetes.io/proxy-buffering: 'off'
+    # A deployment's code can be 40 MB.
+    nginx.ingress.kubernetes.io/proxy-body-size: 64m
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [engine.example.com]
+      secretName: acentric-tls
+  rules:
+    - host: engine.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: acentric
+                port:
+                  name: http

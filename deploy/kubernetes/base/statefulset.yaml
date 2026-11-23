@@ -1,0 +1,74 @@
+# One server, and never two: everything it keeps is one SQLite database and the files beside
+# it, on one volume that one pod writes. A StatefulSet of one replica stops the pod it has before
+# it starts the next, so an upgrade never has two servers on that volume. Never scale it up.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: acentric
+spec:
+  replicas: 1
+  serviceName: acentric
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    spec:
+      # No variables of the namespace's Services: Kubernetes would name the Service's own
+      # ACENTRIC_PORT, which is the port the server is told to listen on.
+      enableServiceLinks: false
+      # A turn that is going on is written down before the server stops.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: server
+          image: ghcr.io/acentricai/acentric-server
+          ports:
+            - name: http
+              containerPort: 4000
+          envFrom:
+            - configMapRef:
+                name: acentric-settings
+            # ACENTRIC_SECRET_KEY, and ACENTRIC_ADMIN_KEY when it is given: made as README.md
+            # says, and kept out of this folder.
+            - secretRef:
+                name: acentric-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+  volumeClaimTemplates:
+    # A block volume, which one node mounts: never a network file system, which SQLite is not
+    # safe on. The cluster's default storage class without a name.
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 20Gi
