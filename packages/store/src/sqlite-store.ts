@@ -17,6 +17,7 @@ import type {
   NewCommand,
   StoredCommand,
   Stopping,
+  StoredCompaction,
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
@@ -36,6 +37,7 @@ import type {
   StoredSession,
   StoredUser,
   UsageFilter,
+  UsageRecord,
 } from '@acentric/core';
 import type {
   AccountId,
@@ -427,6 +429,19 @@ export class SqliteStore implements Store {
 
   usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport> {
     return this.#read.ask('usage' satisfies Operation, filter, by);
+  }
+
+  recordUsage(record: UsageRecord): Promise<void> {
+    return this.#write.ask('recordUsage' satisfies Operation, record);
+  }
+
+  // What a model is sent is read where it was written, so that it is never behind.
+  latestCompaction(actor: ActorId): Promise<StoredCompaction | undefined> {
+    return this.#write.ask('latestCompaction' satisfies Operation, actor);
+  }
+
+  listCompactions(actor: ActorId): Promise<StoredCompaction[]> {
+    return this.#write.ask('listCompactions' satisfies Operation, actor);
   }
 
   addKey(key: StoredKey): Promise<void> {

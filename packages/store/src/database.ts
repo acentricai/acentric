@@ -14,6 +14,7 @@ import type {
   NewCommand,
   StoredCommand,
   Stopping,
+  StoredCompaction,
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
@@ -33,6 +34,7 @@ import type {
   StoredUser,
   Turn,
   UsageFilter,
+  UsageRecord,
 } from '@acentric/core';
 import type {
   AccountId,
@@ -464,6 +466,12 @@ function recordOf(row: ActorRow): ActorRecord {
   };
 }
 
+type CompactionRow = { compaction: string; replacement: string };
+
+function compactionOf(row: CompactionRow): StoredCompaction {
+  return { ...JSON.parse(row.compaction), replacement: JSON.parse(row.replacement) };
+}
+
 function inputOf(row: InputRow): Input {
   return {
     id: row.id,
@@ -516,6 +524,7 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'setStopping',
   'setActorEnv',
   'commit',
+  'recordUsage',
   'addInput',
   'addMachine',
   'changeMachine',
@@ -718,6 +727,10 @@ export function operations(db: DatabaseSync) {
         id,
       );
       run('DELETE FROM tasks WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
+      run(
+        'DELETE FROM compactions WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
+        id,
+      );
       const actors = all<{ id: ActorId }>(
         'DELETE FROM actors WHERE agent_id = ? RETURNING id',
         id,
@@ -849,6 +862,7 @@ export function operations(db: DatabaseSync) {
       only('account_id = ?', filter.account);
       only('provider = ?', filter.provider);
       only('model = ?', filter.model);
+      only('kind = ?', filter.kind);
       const left = where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`;
       const totals = totalsOfRow(
         get<SumsRow>(`SELECT ${SUMS} FROM usage${left}`, ...values) as SumsRow,
@@ -1239,7 +1253,7 @@ export function operations(db: DatabaseSync) {
       );
     },
 
-    commit(id: ActorId, epoch: number, change: Change): void {
+    recordUsage(used: UsageRecord): void {
       /** The actor at the top of an actor's tree of subagents: itself, for one created from outside. */
       const rootOf = (actor: ActorId): ActorId => {
         let top = actor;
@@ -1252,6 +1266,51 @@ export function operations(db: DatabaseSync) {
           top = row.parent_id;
         }
       };
+      const counted = used.usage;
+      run(
+        `INSERT INTO usage (at, actor_id, root_actor_id, kind, agent_id, version, account_id,
+           provider, model, failure, total_input, input, output, reasoning, cache_read,
+           cache_write, web_searches, cost, cost_source, duration_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        used.at,
+        used.actor,
+        rootOf(used.actor),
+        used.kind ?? 'turn',
+        used.agent,
+        used.version,
+        used.account,
+        used.provider,
+        used.model,
+        used.failure,
+        counted?.totalInput ?? 0,
+        counted?.input ?? 0,
+        counted?.output ?? 0,
+        counted?.reasoning ?? 0,
+        counted?.cacheRead ?? 0,
+        counted?.cacheWrite ?? 0,
+        counted?.webSearches ?? 0,
+        counted?.cost?.total ?? null,
+        counted?.cost?.source ?? null,
+        used.durationMs,
+      );
+    },
+
+    latestCompaction(actor: ActorId): StoredCompaction | undefined {
+      const row = get<CompactionRow>(
+        'SELECT compaction, replacement FROM compactions WHERE actor_id = ? ORDER BY at_seq DESC LIMIT 1',
+        actor,
+      );
+      return row === undefined ? undefined : compactionOf(row);
+    },
+
+    listCompactions(actor: ActorId): StoredCompaction[] {
+      return all<CompactionRow>(
+        'SELECT compaction, replacement FROM compactions WHERE actor_id = ? ORDER BY at_seq DESC',
+        actor,
+      ).map(compactionOf);
+    },
+
+    commit(id: ActorId, epoch: number, change: Change): void {
       // What of the actor itself changes, each as the column it is and what goes in it.
       const { set, sent } = change;
       const json = (value: Json | null | undefined) =>
@@ -1306,33 +1365,15 @@ export function operations(db: DatabaseSync) {
         if (row === undefined) throw new Error(`There is no actor ${id}`);
         throw new Refused('StaleEpoch', [id, epoch, row.epoch]);
       }
-      if (change.usage !== null) {
-        const { usage: used } = change;
-        const counted = used.usage;
+      if (change.usage !== null) this.recordUsage(change.usage);
+      if (change.compaction !== undefined) {
+        const { replacement, ...compaction } = change.compaction;
         run(
-          `INSERT INTO usage (at, actor_id, root_actor_id, agent_id, version, account_id, provider,
-             model, failure, total_input, input, output, reasoning, cache_read, cache_write,
-             web_searches, cost, cost_source, duration_ms)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          used.at,
-          used.actor,
-          rootOf(used.actor),
-          used.agent,
-          used.version,
-          used.account,
-          used.provider,
-          used.model,
-          used.failure,
-          counted?.totalInput ?? 0,
-          counted?.input ?? 0,
-          counted?.output ?? 0,
-          counted?.reasoning ?? 0,
-          counted?.cacheRead ?? 0,
-          counted?.cacheWrite ?? 0,
-          counted?.webSearches ?? 0,
-          counted?.cost?.total ?? null,
-          counted?.cost?.source ?? null,
-          used.durationMs,
+          `INSERT INTO compactions (actor_id, at_seq, compaction, replacement) VALUES (?, ?, ?, ?)`,
+          id,
+          compaction.atSeq,
+          JSON.stringify(compaction),
+          JSON.stringify(replacement),
         );
       }
       for (const entry of change.append) {

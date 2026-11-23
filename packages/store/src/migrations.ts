@@ -41,6 +41,8 @@ const MIGRATIONS: readonly string[] = [
     actor_id TEXT NOT NULL,
     -- The actor at the top of its tree of subagents: itself, for one created from outside.
     root_actor_id TEXT NOT NULL,
+    -- What the call was for: 'turn', or 'compaction' for one that compacted a conversation.
+    kind TEXT NOT NULL DEFAULT 'turn',
     agent_id TEXT NOT NULL,
     version INTEGER NOT NULL,
     account_id TEXT,
@@ -65,6 +67,19 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX usage_at ON usage (at);
   CREATE INDEX usage_actor ON usage (actor_id, at);
   CREATE INDEX usage_root ON usage (root_actor_id, at);
+
+  -- What an actor's model is sent in place of the older part of its conversation. Nothing is
+  -- taken out of the conversation: the newest of these says what stands for its start.
+  CREATE TABLE compactions (
+    actor_id TEXT NOT NULL,
+    -- The place in the conversation it was made at.
+    at_seq INTEGER NOT NULL,
+    -- JSON: the compaction as the API shows it.
+    compaction TEXT NOT NULL,
+    -- JSON: the messages that stand for everything before the place it keeps from.
+    replacement TEXT NOT NULL,
+    PRIMARY KEY (actor_id, at_seq)
+  ) STRICT;
   CREATE INDEX usage_agent ON usage (agent_id, at);
 
   -- A deployment of an agent. A row is never changed.

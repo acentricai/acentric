@@ -27,7 +27,7 @@ import type {
 } from '@acentric/protocol';
 
 import { patched } from './state.ts';
-import type { ActorRecord, Change, Turn } from './state.ts';
+import type { ActorRecord, Change, StoredCompaction, Turn } from './state.ts';
 import { EmailTaken, NameTaken, OutOfOrder, StaleEpoch } from './store.ts';
 import type {
   ActorsQuery,
@@ -120,6 +120,8 @@ export class MemoryStore implements Store {
   /** The call that spawned each subagent, and the actors that are being stopped, each by whom. */
   readonly #spawnedBy = new Map<ActorId, string>();
   readonly #stopping = new Map<ActorId, Stopping>();
+  /** Each actor's compactions, newest first. */
+  readonly #compactions = new Map<ActorId, StoredCompaction[]>();
   readonly #sandboxProviders = new Map<SandboxProviderId, StoredSandboxProvider>();
   /** By `actor/task`. */
   readonly #commands = new Map<string, StoredCommand>();
@@ -199,6 +201,7 @@ export class MemoryStore implements Store {
       this.#entries.delete(actor);
       this.#blobRefs.delete(actor);
       this.#tasks.delete(actor);
+      this.#compactions.delete(actor);
       this.#envs.delete(actor);
     }
     for (const [machineId, machine] of this.#machines) {
@@ -524,6 +527,18 @@ export class MemoryStore implements Store {
     return pageOf(all, (actor) => actor.id, query);
   }
 
+  async recordUsage(record: UsageRecord): Promise<void> {
+    this.#usage.push({ ...copy(record), root: this.#rootOf(record.actor) });
+  }
+
+  async latestCompaction(actor: ActorId): Promise<StoredCompaction | undefined> {
+    return copy(this.#compactions.get(actor)?.[0]);
+  }
+
+  async listCompactions(actor: ActorId): Promise<StoredCompaction[]> {
+    return copy(this.#compactions.get(actor) ?? []);
+  }
+
   /** The actor at the top of an actor's tree of subagents: itself, for one created from outside. */
   #rootOf(actor: ActorId): ActorId {
     let top = actor;
@@ -551,8 +566,9 @@ export class MemoryStore implements Store {
       kept.configurationGiven = copy(change.set.configurationGiven);
     }
     if (change.set?.reasoningSent !== undefined) kept.reasoningSent = change.set.reasoningSent;
-    if (change.usage !== null) {
-      this.#usage.push({ ...copy(change.usage), root: this.#rootOf(change.usage.actor) });
+    if (change.usage !== null) await this.recordUsage(change.usage);
+    if (change.compaction !== undefined) {
+      this.#compactions.set(id, [copy(change.compaction), ...(this.#compactions.get(id) ?? [])]);
     }
     if (change.sent !== null) {
       kept.sent = change.sent.fingerprint;

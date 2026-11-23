@@ -9,6 +9,7 @@ import type {
   AgentId,
   Usage,
   UsageGroup,
+  UsageKind,
   UsageReport,
   UsageTotals,
 } from '@acentric/protocol';
@@ -17,6 +18,8 @@ import type {
 export type UsageRecord = {
   readonly at: number;
   readonly actor: ActorId;
+  /** What the call was for. A turn of its actor's, without it. */
+  readonly kind?: UsageKind;
   /**
    * The actor at the top of its tree of subagents: itself, for one created from outside. The
    * store that keeps the record says which.
@@ -49,6 +52,8 @@ export type UsageFilter = {
   readonly account?: AccountId;
   readonly provider?: string;
   readonly model?: string;
+  /** The calls of turns, or those that compacted a conversation. */
+  readonly kind?: UsageKind;
 };
 
 const NONE: UsageTotals = {
@@ -107,7 +112,8 @@ export function passes(record: UsageRecord, filter: UsageFilter): boolean {
     (filter.root === undefined || (record.root ?? record.actor) === filter.root) &&
     (filter.account === undefined || record.account === filter.account) &&
     (filter.provider === undefined || record.provider === filter.provider) &&
-    (filter.model === undefined || record.model === filter.model)
+    (filter.model === undefined || record.model === filter.model) &&
+    (filter.kind === undefined || (record.kind ?? 'turn') === filter.kind)
   );
 }
 
