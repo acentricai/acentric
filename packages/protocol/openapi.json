@@ -9496,6 +9496,30 @@
               "additionalProperties": false
             }
           },
+          "mcps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "name",
+                "url"
+              ]
+            }
+          },
           "subagents": {
             "type": "array",
             "items": {

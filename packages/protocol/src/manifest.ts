@@ -76,6 +76,17 @@ export const subagentDeclarationSchema = z.object({
 });
 export type SubagentDeclaration = z.infer<typeof subagentDeclarationSchema>;
 
+/** An MCP server whose tools the model's scripts can call, as far as it is data. */
+export const mcpServerDeclarationSchema = z.object({
+  /** How the agent names it: letters, digits, `_` and `-`, 64 at most. */
+  name: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  /** Its MCP endpoint: an http or https URL. */
+  url: z.url(),
+  /** What it is for, as the agent says it: the model is not told its tools ahead. */
+  description: z.string().min(1).optional(),
+});
+export type McpServerDeclaration = z.infer<typeof mcpServerDeclarationSchema>;
+
 /** An agent's definition, as far as it is data: what its code said when the engine asked. */
 export const agentDefinitionSchema = z
   .object({
@@ -104,6 +115,11 @@ export const agentDefinitionSchema = z
         }),
       )
       .optional(),
+    /**
+     * The MCP servers whose tools its model's scripts can call. The headers a server is sent
+     * are not here: the agent's code makes them when the engine asks.
+     */
+    mcps: z.array(mcpServerDeclarationSchema).optional(),
     /** The agents its actors can spawn actors of. */
     subagents: z.array(subagentDeclarationSchema).optional(),
     /** The secrets its code reads, by name, so that one that is not set can be told of. */
