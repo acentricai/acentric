@@ -108,6 +108,9 @@ export function createApp(options: AppOptions): Hono {
 
   // Not of the API: whether the server is up, and what the API is.
   app.get('/health', (context) => context.json({ ok: true, version: options.version }));
+  // Whether the process is there, as while it upgrades (see upgrading.ts): what restarts a
+  // server that died asks this, and what sends it requests asks /health.
+  app.get('/health/live', (context) => context.json({ ok: true, version: options.version }));
   const openApi = buildOpenApi(routes, { title: 'Acentric', version: API_VERSION });
   app.get('/v1/openapi.json', (context) => context.json(openApi));
 

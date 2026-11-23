@@ -34,7 +34,7 @@ export const DASHBOARD_HEADERS: { readonly [name: string]: string } = {
 
 /** Whether a path is the API's own, found or not: never the dashboard's. */
 const isApi = (path: string): boolean =>
-  path === '/v1' || path.startsWith('/v1/') || path === '/health';
+  path === '/v1' || path.startsWith('/v1/') || path === '/health' || path === '/health/live';
 
 /**
  * Serves the dashboard's files from `folder` on every GET the routes before it did not answer.
