@@ -1,0 +1,35 @@
+# The Acentric server as a systemd service, run from its image by Docker. How to use it is in
+# README.md beside this file:
+#
+#   sudo install -m 600 acentric.env.example /etc/acentric/acentric.env   # then fill it in
+#   sudo install -m 644 acentric.service /etc/systemd/system/
+#   sudo systemctl enable --now acentric
+#
+# It listens on 127.0.0.1:4000 only: a proxy on this machine ends HTTPS in front of it.
+
+[Unit]
+Description=Acentric server
+Documentation=https://github.com/acentricai/acentric/tree/main/deploy/systemd
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/acentric/acentric.env
+# The container goes when it stops, and is made again from the image when it starts: what the
+# server keeps is in the volume acentric-data.
+# One left by a Docker that stopped with it running is stopped, which removes it, first.
+ExecStartPre=-/usr/bin/docker stop --time 60 acentric
+ExecStart=/usr/bin/docker run --rm --name acentric \
+  --env-file /etc/acentric/acentric.env \
+  --publish 127.0.0.1:4000:4000 \
+  --volume acentric-data:/data \
+  ghcr.io/acentricai/acentric-server:${ACENTRIC_VERSION}
+# A turn that is going on is written down before the server stops.
+ExecStop=/usr/bin/docker stop --time 60 acentric
+TimeoutStopSec=90
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
