@@ -14,8 +14,10 @@ import {
   scriptTools,
   searchTools,
   syntaxProblem,
+  valueOfMcp,
   valueOfTool,
 } from '../src/code.ts';
+import type { McpCatalog } from '../src/mcp.ts';
 import { scaffoldOf } from '../src/scaffold.ts';
 
 type Declared = AgentDefinition['tools'][number];
@@ -35,6 +37,13 @@ const agent = (...tools: Declared[]): AgentDefinition => ({
   tools,
   inputs: [],
 });
+/** A tool of a server, as the server lists it. */
+const served = (
+  server: string,
+  name: string,
+  description: string,
+  more: Partial<McpCatalog['tools'][number]> = {},
+): McpCatalog['tools'][number] => ({ server, name, description, retrySafe: false, ...more });
 const object = (properties: { readonly [key: string]: Json }): Declared['parameters'] => ({
   type: 'object',
   properties,
@@ -52,6 +61,25 @@ describe('an agent with code mode', () => {
     expect(told).toContain('Your tools:\n```ts\ndeclare const tools: {');
     expect(told).toMatch(/\/\*\* For scripts\. \*\/\s+in_scripts\(args:/);
     expect(told).not.toContain('a_tool');
+    // What is told of code mode is of what the agent has, and no more.
+    expect(told).not.toMatch(/MCP|searchTools|ALL_TOOLS/);
+  });
+
+  it('is one with an MCP server too, with or without a tool of its own for scripts', () => {
+    const direct = tool('a_tool', 'Does a thing.', { codemode: false });
+    const withServers: AgentDefinition = {
+      ...agent(direct),
+      mcps: [
+        { name: 'docs', url: 'https://example.com/mcp' },
+        { name: 'wiki', url: 'https://example.com/wiki', description: 'What the team wrote.' },
+      ],
+    };
+    expect(hasCodeMode(withServers)).toBe(true);
+    const told = describeCode(withServers);
+    expect(told).toContain('- docs\n- wiki: What the team wrote.\n');
+    expect(told).toContain('searchTools');
+    expect(told).not.toMatch(/Your tools:|a_tool/);
+    expect(hasCodeMode({ ...agent(direct), mcps: [] })).toBe(false);
   });
 
   it('has its model told how a script works, by whether it has a machine too', () => {
@@ -98,6 +126,80 @@ describe('what a script is made of', () => {
     expect(tools[0]).toMatchObject({ name: 'send-mail', retrySafe: false });
     expect(tools[1]).toMatchObject({ name: 'send_mail', retrySafe: true });
     expect(tools[2]?.signature).toMatch(/^lookup\(args: \{[\s\S]*id\?: string;[\s\S]*\}\)/);
+  });
+
+  it('names a server’s tool by its server, with what the server calls it kept for the call', () => {
+    const tools = scriptTools(agent(tool('send-mail', 'Sends mail.')), {
+      tools: [
+        served('my-server', 'do.it', 'Does it.', { retrySafe: true }),
+        served('my-server', 'do_it', 'Does it, the other way.'),
+        served('other', 'create_issue', 'Opens an issue in a repository.', {
+          inputSchema: object({ title: { type: 'string' } }),
+          outputSchema: object({ number: { type: 'number' } }),
+        }),
+      ],
+      down: [],
+    });
+    expect(tools.map((one) => one.js)).toEqual([
+      'send_mail',
+      'mcp__my_server__do_it',
+      'mcp__my_server__do_it_2',
+      'mcp__other__create_issue',
+    ]);
+    expect(tools[1]).toMatchObject({ server: 'my-server', tool: 'do.it', retrySafe: true });
+    expect(tools[2]).toMatchObject({ name: 'mcp__my_server__do_it_2', retrySafe: false });
+    // What it takes and what it gives are in its declaration.
+    expect(tools[3]?.signature).toMatch(
+      /^mcp__other__create_issue\(args: \{[\s\S]*title\?: string;[\s\S]*\}\): Promise<\{[\s\S]*number\?: number;/,
+    );
+  });
+
+  it('finds a server’s tools by its name, and among one server’s alone when asked', () => {
+    const tools = scriptTools(agent(tool('send-mail', 'Sends mail.')), {
+      tools: [
+        served('wiki', 'read_contents', 'Reads the documentation of a repository.'),
+        served('wiki', 'ask_question', 'Asks a question about a repository.'),
+        served('tracker', 'create_issue', 'Opens an issue in a repository.'),
+      ],
+      down: [],
+    });
+    const names = (query: string, options = {}): string[] =>
+      searchTools(tools, query, options).map((one) => one.name);
+    expect(names('wiki').toSorted()).toEqual([
+      'mcp__wiki__ask_question',
+      'mcp__wiki__read_contents',
+    ]);
+    expect(names('', { server: 'wiki' })).toEqual([
+      'mcp__wiki__ask_question',
+      'mcp__wiki__read_contents',
+    ]);
+    expect(names('repository', { server: 'tracker' })).toEqual(['mcp__tracker__create_issue']);
+    expect(names('issue', { server: 'wiki' })).toEqual([]);
+    // A tool's own name gives it first.
+    expect(names('mcp__wiki__ask_question')[0]).toBe('mcp__wiki__ask_question');
+  });
+
+  it('gives a script a server’s answer as what it is', () => {
+    const text = (value: string) => ({ type: 'text', text: value });
+    expect(valueOfMcp({ content: [text('{"a": 1}')] })).toEqual({ ok: true, value: { a: 1 } });
+    expect(valueOfMcp({ content: [text('[1, 2]')] })).toEqual({ ok: true, value: [1, 2] });
+    expect(valueOfMcp({ content: [text('{not json')] })).toEqual({ ok: true, value: '{not json' });
+    expect(valueOfMcp({ content: [text('12')] })).toEqual({ ok: true, value: '12' });
+    expect(valueOfMcp({ content: [text('a'), text('b')] })).toEqual({ ok: true, value: 'a\nb' });
+    expect(valueOfMcp({ content: [text('ignored')], structuredContent: { b: 2 } })).toEqual({
+      ok: true,
+      value: { b: 2 },
+    });
+    expect(valueOfMcp({ content: [text('no'), text('really')], isError: true })).toEqual({
+      ok: false,
+      message: 'no\nreally',
+    });
+    expect(valueOfMcp({ content: [], isError: true })).toEqual({
+      ok: false,
+      message: 'The tool failed, and did not say why',
+    });
+    const mixed = [text('a'), { type: 'image', data: 'AAAA', mimeType: 'image/png' }];
+    expect(valueOfMcp({ content: mixed })).toEqual({ ok: true, value: mixed });
   });
 
   it('finds tools by the words of their names first, then of their descriptions', () => {

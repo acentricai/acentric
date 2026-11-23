@@ -146,7 +146,8 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
       it('is refused when the agent uses what the engine has not: a provider, or a feature', async () => {
         const versions = {
           'elsewhere@1': { definition: { provider: 'elsewhere' } },
-          'machines@1': { definition: { features: ['machine', 'mcps'] } },
+          // A feature of some later framework, which no engine of today has.
+          'machines@1': { definition: { features: ['machine', 'telepathy'] } },
         };
         const one = w.engine([], { versions });
         const deploy = (on: typeof one, agent: string, code: string) =>
@@ -157,11 +158,11 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
         await expect(provider).rejects.toThrow(/elsewhere.*it has fake/);
         const features = deploy(one, 'machines', 'machines@1');
         await expect(features).rejects.toMatchObject({ code: 'unsupported_feature' });
-        await expect(features).rejects.toThrow(/machine, mcps/);
+        await expect(features).rejects.toThrow(/machine, telepathy/);
         expect((await store.listAgents()).items).toEqual([]);
 
         // An engine that has them takes it.
-        const two = w.engine([], { versions, options: { features: ['machine', 'mcps'] } });
+        const two = w.engine([], { versions, options: { features: ['machine', 'telepathy'] } });
         expect((await deploy(two, 'machines', 'machines@1')).created).toBe(true);
       });
 

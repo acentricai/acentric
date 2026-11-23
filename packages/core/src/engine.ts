@@ -48,6 +48,8 @@ import type {
 import type { Access } from './accounts.ts';
 import { bashKind } from './bash.ts';
 import { codeKind } from './code.ts';
+import { Mcp } from './mcp.ts';
+import type { McpOptions } from './mcp.ts';
 import { Blobs } from './blobs.ts';
 import { NOTICE, Tasks } from './tasks.ts';
 import type { EngineTool, TaskKind, TaskTimes } from './tasks.ts';
@@ -139,6 +141,11 @@ export type EngineOptions = {
   readonly kinds?: readonly TaskKind[];
   /** How long a call waits for its task, and the like. For tests. */
   readonly taskTimes?: Partial<TaskTimes>;
+  /**
+   * How the MCP servers of agents are reached: the fetch they are reached with, in place of
+   * the global one, and how long one has to answer.
+   */
+  readonly mcp?: Pick<McpOptions, 'fetch' | 'timeoutMs' | 'cacheMs'>;
   /**
    * Has the engine keep machines: computers its actors' commands run on (see `machines.ts`).
    * With it an agent may say `machine: true`, and its actors' models have `bash`. Without it
@@ -345,6 +352,7 @@ export class Engine {
       'subagents',
       'compaction-settings',
       'codemode',
+      'mcps',
       ...(this.machines === undefined ? [] : ['machine']),
     ];
     // Every actor's model can send its later self a note.
@@ -364,6 +372,19 @@ export class Engine {
     // A model whose agent has tools for scripts writes scripts that call them.
     const code = codeKind({
       store: options.store,
+      mcp: new Mcp({
+        clock: this.#clock,
+        // A server's headers are the agent's code's to make, and are to be quick.
+        call: (actor, path, argument) =>
+          this.#timed(
+            actor.deployment.id,
+            path,
+            argument,
+            contextOf(actor),
+            new AbortController().signal,
+          ),
+        ...options.mcp,
+      }),
       clock: this.#clock,
       report,
       actorOf: async (actor) => (await this.#store.loadActor(actor))?.actor,
