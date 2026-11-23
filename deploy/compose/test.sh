@@ -12,6 +12,8 @@
 
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
+# Docker's own folder, with its plugins, stays where it is when the command's home is changed.
+export DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.docker}"
 version=${ACENTRIC_VERSION:?the image version to test, such as 0.15.0}
 http_port=${HTTP_PORT:-8080}
 https_port=${HTTPS_PORT:-8443}
@@ -32,6 +34,8 @@ ACENTRIC_ADMIN_KEY=$(openssl rand -hex 24)
 EOF
 fi
 key=$(sed -n 's/^ACENTRIC_ADMIN_KEY=//p' "$work/.env")
+# The test's own names, as its volumes are kept from one run to the next.
+run=$(date +%s)
 compose() { ACENTRIC_VERSION=$version docker compose -p "$project" --project-directory "$work" "$@"; }
 step() { printf '\n== %s\n' "$*"; }
 fail() { printf 'FAILED: %s\n' "$*" >&2; compose logs --tail 40 >&2 || true; exit 1; }
@@ -118,14 +122,14 @@ machine_of() {
 }
 field() { node -e "let s='';process.stdin.on('data',(d)=>s+=d).on('end',()=>console.log(JSON.parse(s)$1))"; }
 # Without it, Caddy's authority is one the daemon does not know: it does not enrol.
-made=$(machine_of untrusted)
+made=$(machine_of "untrusted-$run")
 if MACHINE_DIR="$work/untrusted" "$work/acentric-machine" enrol --server "$url" \
   --id "$(echo "$made" | field .machine.id)" --token "$(echo "$made" | field .token)" 2> "$work/untrusted.txt"; then
   fail "a daemon enrolled with an engine whose certificate it has no authority for"
 fi
 echo "without it: $(head -c 160 "$work/untrusted.txt")"
 # With it named by SSL_CERT_FILE, as for an organisation's own authority, it enrols and stays.
-made=$(machine_of trusted)
+made=$(machine_of "trusted-$run")
 machine=$(echo "$made" | field .machine.id)
 export SSL_CERT_FILE="$work/root.crt" MACHINE_DIR="$work/machine" MACHINE_SHELL=none
 rm -rf "$work/machine"
@@ -138,5 +142,24 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 echo "machine $machine is online, through Caddy"
+
+step "The server's own backup, taken when asked, in its volume"
+taken=$(get -H "authorization: Bearer $key" -X POST "$url/v1/backups" | field .name)
+compose exec -T server ls /backups | grep -qx "$taken" || fail "$taken is not in /backups"
+echo "$taken is in /backups"
+
+step "A backup taken beside the running server, checked, and put back with it stopped"
+compose exec -T server acentric-server backup > "$work/backup.tar"
+compose exec -T server acentric-server check-backup < "$work/backup.tar"
+# What is done after the backup, which putting it back takes back.
+machine_of "after-backup-$run" > /dev/null
+compose stop server
+compose run --rm --no-deps -T server acentric-server restore < "$work/backup.tar"
+compose up --detach --wait --wait-timeout 180
+machines=$(get -H "authorization: Bearer $key" "$url/v1/machines")
+echo "$machines" | grep -q "\"trusted-$run\"" || fail "what was backed up is not there"
+if echo "$machines" | grep -q "\"after-backup-$run\""; then fail "what came after the backup is still there"; fi
+compose exec -T server sh -c 'ls -d /data/before-restore-*' || fail "what was there before is not kept"
+echo "put back: what was backed up is there, what came after is not, and what was is kept aside"
 
 step "Passed"

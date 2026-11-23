@@ -76,7 +76,22 @@ install -m 644 "$here/acentric.service" /etc/systemd/system/acentric.service
 systemctl daemon-reload
 systemctl start acentric
 check docker
-rm -f /etc/systemd/system/acentric.service
+
+step "A backup taken beside it, and put back with it stopped"
+systemctl start acentric
+up
+backup=$(mktemp)
+docker exec acentric acentric-server backup > "$backup"
+get -H 'content-type: application/json' -d '{"name":"after-backup"}' "$url/v1/machines" > /dev/null
+systemctl stop acentric
+docker run --rm -i --env-file /etc/acentric/acentric.env --volume acentric-data:/data \
+  "$image" acentric-server restore < "$backup"
+systemctl start acentric
+up
+if get "$url/v1/machines" | grep -q '"after-backup"'; then fail "what came after the backup is still there"; fi
+echo "put back: what came after the backup is not there"
+systemctl stop acentric
+rm -f "$backup" /etc/systemd/system/acentric.service
 
 step "acentric.container, by Podman"
 docker save "$image" | podman load > /dev/null

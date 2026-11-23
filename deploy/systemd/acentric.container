@@ -21,6 +21,8 @@ EnvironmentFile=/etc/acentric/acentric.env
 PublishPort=127.0.0.1:4000:4000
 # What the server keeps: its database, and conversations' images and files beside it.
 Volume=acentric-data:/data
+# Its own backups, every day and before an upgrade.
+Volume=acentric-backups:/backups
 # A turn that is going on is written down before the server stops.
 StopTimeout=60
 

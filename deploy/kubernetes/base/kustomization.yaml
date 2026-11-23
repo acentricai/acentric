@@ -21,3 +21,5 @@ configMapGenerator:
   - name: acentric-settings
     literals:
       - ACENTRIC_PUBLIC_URL=https://engine.example.com
+      # Its own backups, every day and before an upgrade, on a volume of theirs.
+      - ACENTRIC_BACKUP_DIR=/backups

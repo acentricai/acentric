@@ -41,6 +41,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: backups
+              mountPath: /backups
           startupProbe:
             httpGet: { path: /health, port: http }
             periodSeconds: 2
@@ -72,3 +74,13 @@ spec:
         resources:
           requests:
             storage: 20Gi
+    # The server's own backups: a volume apart from the data's, so that it is not lost with it.
+    # A storage class of another kind, or a snapshot of it elsewhere, is what survives the
+    # cluster's storage.
+    - metadata:
+        name: backups
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 40Gi

@@ -37,11 +37,30 @@ name in its first line, gets and renews the HTTPS certificate. Another proxy mus
 WebSockets, not buffer responses, leave quiet connections open for an hour, and take a request
 of 40 MB.
 
+## Backups
+
+The server backs itself up every day, and before an upgrade, into the volume `acentric-backups`
+([BACKUPS.md](../../BACKUPS.md)). A backup to copy elsewhere (`podman` for `docker` with the
+Quadlet):
+
+```sh
+sudo docker exec acentric acentric-server backup > "acentric-$(date -u +%F).tar"
+```
+
+To put one back, with the service stopped:
+
+```sh
+sudo systemctl stop acentric
+sudo docker run --rm -i --env-file /etc/acentric/acentric.env --volume acentric-data:/data \
+  ghcr.io/acentricai/acentric-server:0.15.0 acentric-server restore < acentric-2026-11-23.tar
+sudo systemctl start acentric
+```
+
 ## Upgrading
 
-Back up the volume with the service stopped, set the new version (`ACENTRIC_VERSION` in
-`/etc/acentric/acentric.env` for Docker, `Image=` in `acentric.container` for Podman), and
-`sudo systemctl restart acentric`.
+Set the new version (`ACENTRIC_VERSION` in `/etc/acentric/acentric.env` for Docker, `Image=` in
+`acentric.container` for Podman), and `sudo systemctl restart acentric`: the new version backs the
+database up before it changes it.
 
 ## Tested
 

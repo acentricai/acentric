@@ -24,6 +24,7 @@ ExecStart=/usr/bin/docker run --rm --name acentric \
   --env-file /etc/acentric/acentric.env \
   --publish 127.0.0.1:4000:4000 \
   --volume acentric-data:/data \
+  --volume acentric-backups:/backups \
   ghcr.io/acentricai/acentric-server:${ACENTRIC_VERSION}
 # A turn that is going on is written down before the server stops.
 ExecStop=/usr/bin/docker stop --time 60 acentric
