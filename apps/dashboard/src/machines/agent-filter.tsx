@@ -3,7 +3,15 @@
 // shown are those the actors of the agents chosen work on, and those of the actors chosen.
 
 import { IconChevronRight } from '@tabler/icons-react';
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from 'react';
 
 import { useActiveActors, useActorNames, useAgents } from './queries.ts';
 import { FilterOption, FilterPill } from './ui.tsx';
@@ -61,8 +69,7 @@ export function AgentFilter({
     const pop = row.closest('.filter-chip__pop')?.getBoundingClientRect();
     const chip = row.closest('.filter-chip')?.getBoundingClientRect();
     if (pop === undefined || chip === undefined) return;
-    // Its first actor level with the agent: the list's padding and heading are above it.
-    const top = row.getBoundingClientRect().top - chip.top - 7;
+    const top = row.getBoundingClientRect().top - chip.top;
     setBeside({ agent, name, top, left: pop.right - chip.left + 4, focus });
   };
 
@@ -166,6 +173,14 @@ function ActorsBeside({
   const ref = useRef<HTMLDivElement>(null);
   const focus = beside.focus;
   const ready = actors.data !== undefined;
+  // Raised so that what is first in it, below its heading, is level with the agent.
+  const [lift, setLift] = useState(0);
+  useLayoutEffect(() => {
+    const list = ref.current;
+    const first = list?.querySelector<HTMLElement>('.filter-chip__option, .filter-chip__none');
+    if (list === null || first === null || first === undefined) return;
+    setLift(first.getBoundingClientRect().top - list.getBoundingClientRect().top);
+  }, [ready, beside.agent]);
   useEffect(() => {
     if (focus && ready) ref.current?.querySelector<HTMLElement>('input')?.focus();
   }, [focus, ready, beside.agent]);
@@ -176,7 +191,7 @@ function ActorsBeside({
       role="group"
       aria-label={`Active actors of ${beside.name}`}
       className="pop filter-chip__beside"
-      style={{ top: beside.top, left: beside.left }}
+      style={{ top: beside.top - lift, left: beside.left }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onKeyDown={(event) => {
