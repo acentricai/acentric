@@ -15,6 +15,7 @@ describe('a server’s settings', () => {
       network: { reach: 'public', allow: [] },
       codeProcesses: 2,
       downloads: undefined,
+      dashboard: undefined,
       // It makes sandboxes nowhere until it is told where, and from what.
       docker: undefined,
       boat: {},
@@ -59,6 +60,13 @@ describe('a server’s settings', () => {
     const two = readSettings({ ACENTRIC_SECRET_KEY: older, ACENTRIC_SECRET_KEYS_OLD: KEY });
     expect(two.secretKeys?.current).not.toBe(current);
     expect(Object.keys(two.secretKeys?.keys ?? {})).toContain(current);
+  });
+
+  it('say where the dashboard’s build is, from where the server is started', () => {
+    expect(readSettings({ ACENTRIC_DASHBOARD: '/srv/dashboard' }).dashboard).toBe('/srv/dashboard');
+    expect(readSettings({ ACENTRIC_DASHBOARD: 'apps/dashboard/dist' }).dashboard).toBe(
+      `${process.cwd()}/apps/dashboard/dist`,
+    );
   });
 
   it('say which snapshot sandboxes are made from at Boat', () => {
