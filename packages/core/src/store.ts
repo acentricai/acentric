@@ -423,6 +423,21 @@ export interface Store {
   deleteAgent(
     id: AgentId,
   ): Promise<{ readonly deployments: DeploymentId[]; readonly actors: ActorId[] } | undefined>;
+  /**
+   * Deletes an actor and every subagent under it, with their conversations, mailboxes,
+   * compactions, tasks, scripts and commands, and their hold on blobs. What they cost stays in
+   * the usage. All of it, or none. It gives the actors that went, the one asked for first, or
+   * undefined when there is no such actor.
+   */
+  deleteActor(id: ActorId): Promise<ActorId[] | undefined>;
+  /** Actors that are no subagent, archived before `before`: the longest archived first. */
+  archivedBefore(before: number, limit: number): Promise<ActorId[]>;
+  /** Removes sessions and links that expired before `now`, and says how many of each went. */
+  removeExpired(now: number): Promise<{ readonly sessions: number; readonly links: number }>;
+  /** Removes audit events from before `before`, the oldest first, `limit` at most: how many went. */
+  pruneAudit(before: number, limit: number): Promise<number>;
+  /** Removes usage from before `before`, the oldest first, `limit` at most: how many went. */
+  pruneUsage(before: number, limit: number): Promise<number>;
 
   /**
    * Gives an agent a model account, or with null none: it then uses its provider's default.

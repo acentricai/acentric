@@ -238,6 +238,26 @@ export class SqliteStore implements Store {
     return this.#write.ask('deleteAgent' satisfies Operation, id);
   }
 
+  deleteActor(id: ActorId): Promise<ActorId[] | undefined> {
+    return this.#write.ask('deleteActor' satisfies Operation, id);
+  }
+
+  archivedBefore(before: number, limit: number): Promise<ActorId[]> {
+    return this.#read.ask('archivedBefore' satisfies Operation, before, limit);
+  }
+
+  removeExpired(now: number): Promise<{ sessions: number; links: number }> {
+    return this.#write.ask('removeExpired' satisfies Operation, now);
+  }
+
+  pruneAudit(before: number, limit: number): Promise<number> {
+    return this.#write.ask('pruneAudit' satisfies Operation, before, limit);
+  }
+
+  pruneUsage(before: number, limit: number): Promise<number> {
+    return this.#write.ask('pruneUsage' satisfies Operation, before, limit);
+  }
+
   setAgentAccount(agent: AgentId, account: AccountId | null): Promise<Agent | undefined> {
     return this.#write.ask('setAgentAccount' satisfies Operation, agent, account);
   }

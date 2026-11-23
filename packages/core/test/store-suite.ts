@@ -731,6 +731,55 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       });
     });
 
+    describe('deleting an actor', () => {
+      it('deletes it and the subagents under it, with all they had, and nothing else', async () => {
+        const id = await stored('orders');
+        const lead = await create({}, id);
+        const child = await create({ parent: { id: lead.id, name: 'billing', call: 'c1' } }, id);
+        const grandchild = await create(
+          { parent: { id: child.id, name: 'refunds', call: 'c2' } },
+          id,
+        );
+        const other = await create({}, id);
+        for (const actor of [lead, child, grandchild, other]) {
+          await store.addInput(inputOf(actor, 'hello'));
+          await store.commit(actor.id, 0, change({ append: [said(1, 'hello')] }));
+        }
+
+        expect(await store.deleteActor(lead.id)).toEqual([lead.id, child.id, grandchild.id]);
+        for (const gone of [lead, child, grandchild]) {
+          expect(await store.loadActor(gone.id)).toBeUndefined();
+          expect(await store.conversation(gone.id)).toEqual([]);
+          expect(await store.pendingInputs(gone.id)).toEqual([]);
+        }
+        // Its agent, and the other actor, are as they were.
+        expect(await store.loadAgent(id)).toBeDefined();
+        expect(await store.conversation(other.id)).toHaveLength(1);
+        expect(await store.deleteActor(lead.id)).toBeUndefined();
+      });
+
+      it('finds those archived longest, and none that is a subagent', async () => {
+        const id = await stored('orders');
+        const [first, second, third] = [
+          await create({}, id),
+          await create({}, id),
+          await create({}, id),
+        ];
+        const child = await create({ parent: { id: third.id, name: 'billing', call: 'c1' } }, id);
+        for (const [actor, at] of [
+          [second, NOW + 10],
+          [first, NOW + 5],
+          [third, NOW + 50],
+          [child, NOW + 1],
+        ] as const) {
+          await store.commit(actor.id, 0, change({ status: 'archived', archivedAt: at }));
+        }
+        expect(await store.archivedBefore(NOW + 20, 10)).toEqual([first.id, second.id]);
+        expect(await store.archivedBefore(NOW + 100, 1)).toEqual([first.id]);
+        expect(await store.archivedBefore(NOW, 10)).toEqual([]);
+      });
+    });
+
     describe('API keys', () => {
       const keyOf = (parent: KeyId | null = null): StoredKey => {
         const id = makeId('key', { now: NOW, random: random() });
@@ -872,6 +921,26 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         expect(await store.listSessions(grace.user.id)).toEqual([hers.session]);
       });
 
+      it('are removed, with links, once they have expired', async () => {
+        const ada = personOf('ada@example.com');
+        await store.addUser(ada);
+        const [old, current] = [sessionOf(ada.user.id), sessionOf(ada.user.id)];
+        await store.addSession(old);
+        await store.addSession(current);
+        await store.touchSession(old.session.id, NOW, NOW + 10);
+        const expired = linkOf('invite', { expiresAt: NOW + 10 });
+        const live = linkOf('invite');
+        await store.addLink(expired);
+        await store.addLink(live);
+
+        expect(await store.removeExpired(NOW + 500)).toEqual({ sessions: 1, links: 1 });
+        expect(await store.loadSession(old.session.id)).toBeUndefined();
+        expect(await store.loadSession(current.session.id)).toEqual(current);
+        expect(await store.loadLink(expired.id)).toBeUndefined();
+        expect(await store.loadLink(live.id)).toEqual(live);
+        expect(await store.removeExpired(NOW + 500)).toEqual({ sessions: 0, links: 0 });
+      });
+
       it('are made by a link that is used once: of two who use it, one does', async () => {
         const invite = linkOf('invite', { note: 'for Grace' });
         const setup = linkOf('setup', { role: 'owner' });
@@ -945,6 +1014,26 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           third,
           first,
         ]);
+      });
+    });
+
+    describe('the audit log, pruned', () => {
+      it('loses what is older, the oldest first, as many as it is told at most', async () => {
+        const events: AuditEvent[] = [0, 1, 2, 3].map((index) => ({
+          id: makeId('auditEvent', { now: NOW + index * 10, random: random() }),
+          at: NOW + index * 10,
+          by: { type: 'system' },
+          action: 'key.create',
+          target: null,
+          detail: null,
+        }));
+        for (const event of events) await store.addAuditEvent(event);
+        expect(await store.pruneAudit(NOW + 25, 2)).toBe(2);
+        expect(await store.pruneAudit(NOW + 25, 2)).toBe(1);
+        expect(await store.pruneAudit(NOW + 25, 2)).toBe(0);
+        expect((await store.listAuditEvents({ limit: 10 })).items.map((event) => event.id)).toEqual(
+          [events[3]?.id],
+        );
       });
     });
 
@@ -1084,6 +1173,16 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           epoch += 1;
         }
       };
+
+      it('loses what is older, the oldest first, as many as it is told at most', async () => {
+        const actor = await create();
+        for (const at of [NOW, NOW + DAY, NOW + 2 * DAY])
+          await store.recordUsage(usedBy(actor, { at }));
+        expect(await store.pruneUsage(NOW + 1.5 * DAY, 1)).toBe(1);
+        expect(await store.pruneUsage(NOW + 1.5 * DAY, 10)).toBe(1);
+        expect(await store.pruneUsage(NOW + 1.5 * DAY, 10)).toBe(0);
+        expect((await store.usage({ actor: actor.id })).totals.calls).toBe(1);
+      });
 
       it('is written with the step that ends a call, and adds up', async () => {
         const actor = await create();

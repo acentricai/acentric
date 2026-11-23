@@ -200,24 +200,93 @@ export class MemoryStore implements Store {
     const actors = [...this.#actors.values()]
       .filter((kept) => kept.actor.agent === id)
       .map((kept) => kept.actor.id);
-    for (const actor of actors) {
-      this.#actors.delete(actor);
-      this.#inputs.delete(actor);
-      this.#entries.delete(actor);
-      this.#blobRefs.delete(actor);
-      this.#tasks.delete(actor);
-      for (const key of this.#scripts.keys()) {
-        if (key.startsWith(`${actor}/`)) this.#scripts.delete(key);
-      }
-      this.#compactions.delete(actor);
-      this.#envs.delete(actor);
-    }
+    for (const actor of actors) this.#forget(actor);
     for (const [machineId, machine] of this.#machines) {
       if (machine.agents === '*' || !machine.agents.includes(id)) continue;
       const agents = machine.agents.filter((one) => one !== id);
       this.#machines.set(machineId, { ...machine, agents });
     }
     return { deployments, actors };
+  }
+
+  /** Everything of one actor's. */
+  #forget(actor: ActorId): void {
+    this.#actors.delete(actor);
+    this.#inputs.delete(actor);
+    this.#entries.delete(actor);
+    this.#blobRefs.delete(actor);
+    this.#tasks.delete(actor);
+    for (const key of this.#scripts.keys()) {
+      if (key.startsWith(`${actor}/`)) this.#scripts.delete(key);
+    }
+    this.#compactions.delete(actor);
+    this.#envs.delete(actor);
+    for (const [key, command] of this.#commands) {
+      if (command.actor === actor) this.#commands.delete(key);
+    }
+  }
+
+  async deleteActor(id: ActorId): Promise<ActorId[] | undefined> {
+    if (!this.#actors.has(id)) return undefined;
+    const ids: ActorId[] = [id];
+    for (let at = 0; at < ids.length; at += 1) {
+      for (const kept of this.#actors.values()) {
+        if (kept.actor.parent?.id === ids[at]) ids.push(kept.actor.id);
+      }
+    }
+    for (const actor of ids) this.#forget(actor);
+    return ids;
+  }
+
+  async archivedBefore(before: number, limit: number): Promise<ActorId[]> {
+    return [...this.#actors.values()]
+      .map((kept) => kept.actor)
+      .filter(
+        (actor) => actor.archivedAt !== null && actor.archivedAt < before && actor.parent === null,
+      )
+      .toSorted((a, b) => (a.archivedAt ?? 0) - (b.archivedAt ?? 0) || (a.id < b.id ? -1 : 1))
+      .slice(0, limit)
+      .map((actor) => actor.id);
+  }
+
+  async removeExpired(now: number): Promise<{ sessions: number; links: number }> {
+    let sessions = 0;
+    for (const [id, kept] of this.#sessions) {
+      if (kept.session.expiresAt < now) {
+        this.#sessions.delete(id);
+        sessions += 1;
+      }
+    }
+    let links = 0;
+    for (const [id, link] of this.#links) {
+      if (link.expiresAt < now) {
+        this.#links.delete(id);
+        links += 1;
+      }
+    }
+    return { sessions, links };
+  }
+
+  async pruneAudit(before: number, limit: number): Promise<number> {
+    let removed = 0;
+    for (let at = 0; at < this.#audit.length && removed < limit;) {
+      if ((this.#audit[at]?.at ?? 0) < before) {
+        this.#audit.splice(at, 1);
+        removed += 1;
+      } else at += 1;
+    }
+    return removed;
+  }
+
+  async pruneUsage(before: number, limit: number): Promise<number> {
+    let removed = 0;
+    for (let at = 0; at < this.#usage.length && removed < limit;) {
+      if ((this.#usage[at]?.at ?? 0) < before) {
+        this.#usage.splice(at, 1);
+        removed += 1;
+      } else at += 1;
+    }
+    return removed;
   }
 
   async addBlob(actor: ActorId, blob: StoredBlob): Promise<boolean> {
