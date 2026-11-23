@@ -34,6 +34,12 @@
 //                           does. Reached with AWS's own credentials: the environment's, a
 //                           profile's, or the role of the instance, container or pod. Without
 //                           it, they are in the folder only
+//   ACENTRIC_LOG_FORMAT     how the server writes its log: `text` (without it), a line for a
+//                           person to read, or `json`, an object to a line, for what collects it
+//   ACENTRIC_LOG_LEVEL      the least it writes: debug, info (without it), warn or error
+//   ACENTRIC_METRICS_PORT   a port of its own the server answers Prometheus at, /metrics, on
+//                           ACENTRIC_HOST: for what is inside its network, not the API's port,
+//                           which people reach. Without it, no metrics are served
 //   ACENTRIC_DASHBOARD      the folder of the dashboard's build (apps/dashboard/dist), which the
 //                           server then serves at every path that is not the API's. Without
 //                           it, it serves none, and the links it makes have no page behind them
@@ -73,6 +79,8 @@ import { checkDockerHost } from '@acentric/sandbox';
 
 import { placeOf } from './backups/bucket.ts';
 import type { BucketPlace } from './backups/bucket.ts';
+import { FORMATS, LEVELS } from './log.ts';
+import type { Format, Level } from './log.ts';
 import type { BoatOptions, DockerOptions } from '@acentric/sandbox';
 import type { Network } from '@acentric/executor';
 
@@ -97,6 +105,10 @@ export type Settings = {
   readonly docker: DockerOptions | undefined;
   /** The server's own backups. Undefined when they are off. */
   readonly backups: BackupSettings | undefined;
+  /** How the server writes its log, and the least it writes. */
+  readonly log: { readonly format: Format; readonly level: Level };
+  /** The port metrics are served at. Undefined when none are. */
+  readonly metricsPort: number | undefined;
 };
 
 export type BackupSettings = {
@@ -270,6 +282,25 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     }
   }
 
+  const format = given('ACENTRIC_LOG_FORMAT') ?? 'text';
+  if (!(FORMATS as readonly string[]).includes(format)) {
+    throw new InvalidSettings(`ACENTRIC_LOG_FORMAT is text or json, and is ${format}`);
+  }
+  const level = given('ACENTRIC_LOG_LEVEL') ?? 'info';
+  if (!(LEVELS as readonly string[]).includes(level)) {
+    throw new InvalidSettings(`ACENTRIC_LOG_LEVEL is ${LEVELS.join(', ')}, and is ${level}`);
+  }
+  const port = wholeNumber('ACENTRIC_PORT', 4000, 0, 65_535);
+  const metricsPort =
+    given('ACENTRIC_METRICS_PORT') === undefined
+      ? undefined
+      : wholeNumber('ACENTRIC_METRICS_PORT', 0, 0, 65_535);
+  if (metricsPort !== undefined && metricsPort !== 0 && metricsPort === port) {
+    throw new InvalidSettings(
+      'ACENTRIC_METRICS_PORT is a port of its own: not ACENTRIC_PORT, which people reach',
+    );
+  }
+
   const data = resolve(given('ACENTRIC_DATA') ?? './data');
   const every = given('ACENTRIC_BACKUP_EVERY') ?? '24h';
   const url = given('ACENTRIC_BACKUP_URL');
@@ -295,7 +326,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
         };
 
   return {
-    port: wholeNumber('ACENTRIC_PORT', 4000, 0, 65_535),
+    port,
     host: given('ACENTRIC_HOST') ?? '127.0.0.1',
     data,
     publicUrl,
@@ -310,6 +341,8 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
       ...(boatUrl === undefined ? {} : { url: boatUrl }),
     },
     backups,
+    log: { format: format as Format, level: level as Level },
+    metricsPort,
     docker:
       dockerHost === undefined || dockerImage === undefined
         ? undefined

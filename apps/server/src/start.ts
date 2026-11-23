@@ -2,8 +2,8 @@
 // engine and the API, each given to the next. And all of it stopped, in the order that loses
 // nothing.
 
-import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { existsSync, statSync } from 'node:fs';
+import { mkdir, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -21,12 +21,22 @@ import { Bucket } from './backups/bucket.ts';
 import { Backups } from './backups/schedule.ts';
 
 import { machinePrograms } from './downloads.ts';
+import { createLogger } from './log.ts';
+import type { Logger } from './log.ts';
+import { Metrics, serveMetrics } from './metrics.ts';
+import { observing } from './observe.ts';
 import { startServer } from './serve.ts';
 import { reseal, sealedKeys } from './sealed.ts';
 import { holdPort } from './upgrading.ts';
 import type { Holding } from './upgrading.ts';
 import type { Server } from './serve.ts';
 import type { Settings } from './settings.ts';
+
+/**
+ * How long a server told to stop goes on answering, once /health says it is stopping: for
+ * what is in front to see that, and send requests elsewhere.
+ */
+export const DRAIN_MS = 3_000;
 
 /** Where in the data a server that had no key writes the first one it made. */
 export const FIRST_KEY_FILE = 'first-admin-key';
@@ -45,6 +55,13 @@ export type Started = {
   readonly setupLink: string | undefined;
   /** How many actors had something owed when the server started, and were picked up. */
   readonly recovered: number;
+  /** Where the metrics are, when the server serves them. */
+  readonly metricsUrl: string | undefined;
+  /**
+   * Says, at /health, that the server takes no more requests, ahead of `close`: for what is in
+   * front to send them elsewhere first.
+   */
+  drain(): void;
   /** Stops everything. What is in the middle of a turn stays owed, and is picked up next time. */
   close(options?: { readonly graceMs?: number }): Promise<void>;
 };
@@ -57,8 +74,13 @@ export async function start(
     readonly providers?: Providers;
     /** In place of the model accounts: what calls every actor's model. */
     readonly runner?: ModelRunner | RunnerSource;
-    /** Lines the processes agents' code runs in write. To stderr without it. */
+    /**
+     * Where each line of the server's log goes, as its settings say to write it: stdout, and
+     * stderr for warnings and errors, without it. Tests give one that keeps them.
+     */
     readonly log?: (line: string) => void;
+    /** The server's log, in place of the one its settings and `log` make. */
+    readonly logger?: Logger;
     readonly checkAnswers?: boolean;
     /** How hard a password's hash is to make (see `People`). Tests ask for less. */
     readonly passwordCost?: number;
@@ -70,6 +92,13 @@ export async function start(
     readonly schema?: number;
   },
 ): Promise<Started> {
+  const write = more.log;
+  const logger =
+    more.logger ??
+    createLogger({
+      ...settings.log,
+      ...(write === undefined ? {} : { write: (line) => write(line) }),
+    });
   await mkdir(settings.data, { recursive: true });
   // One server on a folder of data: a second, or a restore, is refused while this one runs.
   const lock = lockData(settings.data);
@@ -84,10 +113,10 @@ export async function start(
     const schema = schemaOf(join(settings.data, DATABASE));
     const current = more.schema ?? SCHEMA_VERSION;
     if (settings.port !== 0 && schema !== undefined && schema < current) {
-      console.log(`upgrading the database to ${more.version}: the server answers once it has`);
+      logger.info(`upgrading the database to ${more.version}: the server answers once it has`);
       holding = await holdPort({ host: settings.host, port: settings.port, version: more.version });
     }
-    await backUpBeforeUpgrade(settings, more.version, current);
+    await backUpBeforeUpgrade(settings, more.version, current, logger);
   } catch (error) {
     await release();
     lock.release();
@@ -101,7 +130,9 @@ export async function start(
     lock.release();
     throw error;
   }
-  for (const line of keysSaid(settings)) console.log(line);
+  for (const line of keysSaid(settings)) logger.warn(line);
+  const metrics = settings.metricsPort === undefined ? undefined : new Metrics(more.version);
+  const told = observing(logger, metrics);
   const secrets = new Secrets({
     store,
     ...(settings.secretKeys === undefined ? {} : { keys: settings.secretKeys }),
@@ -110,11 +141,14 @@ export async function start(
     network: settings.network,
     processes: settings.codeProcesses,
     secrets: (agent, name) => secrets.get(agent, name),
-    ...(more.log === undefined ? {} : { log: more.log }),
+    log: (line) => logger.warn(line, { from: 'workerd' }),
   });
   const providers = more.providers ?? builtInProviders();
   const programs = machinePrograms(settings.downloads);
-  const audit = new Audit({ store });
+  const audit = new Audit({
+    store,
+    report: (error) => logger.error('the audit log could not be written to', {}, error),
+  });
   // A model is called with a model account, and with nothing else: no key is read from the
   // environment.
   const accounts = new Accounts({ store, secrets, providers, audit });
@@ -140,6 +174,9 @@ export async function start(
       ...(settings.publicUrl === undefined ? {} : { publicUrl: settings.publicUrl }),
       ...more.sandboxes,
     },
+    // What an actor, a machine, a task or a sandbox could not go on from.
+    report: (error) => logger.error('the engine failed at something', {}, error),
+    observer: told.observer,
   });
   const people = new People({
     store,
@@ -166,9 +203,12 @@ export async function start(
           // Blobs are kept as ever while one is taken, and none is removed.
           withoutRemovals: (work) => engine.blobs.withoutRemovals(work),
           audit,
+          log: (line) => logger.info(line),
           ...bucketOf(settings),
         });
 
+  let draining = false;
+  let metricsServer: Awaited<ReturnType<typeof serveMetrics>> | undefined;
   try {
     const firstKey = await keys.first();
     const setupToken = await people.setupLink();
@@ -187,6 +227,24 @@ export async function start(
       version: more.version,
       port: settings.port,
       host: settings.host,
+      report: (error, requestId) => logger.error('a request failed', { requestId }, error),
+      answered: told.answered,
+      ready: async () => {
+        const problems: string[] = [];
+        if (draining) problems.push('it is stopping');
+        try {
+          // A query of the database, which has its own thread: one that answers at all.
+          await store.secretNames('agt_ready' as never);
+        } catch (error) {
+          problems.push(
+            `its database does not answer: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        if (!executor.stats().processes.some((one) => one.state === 'live')) {
+          problems.push("no process runs agents' code");
+        }
+        return problems;
+      },
       ...(more.checkAnswers === undefined ? {} : { checkAnswers: more.checkAnswers }),
       ...(settings.dashboard === undefined ? {} : { dashboard: settings.dashboard }),
       ...(settings.downloads === undefined
@@ -200,9 +258,24 @@ export async function start(
           }),
     });
     await backups?.start();
+    if (metrics !== undefined && settings.metricsPort !== undefined) {
+      gaugesOf(metrics, {
+        data: settings.data,
+        working: told.working,
+        streams: server.streams,
+        connected: () => engine.machines?.connected ?? 0,
+        executor,
+        backups,
+      });
+      metricsServer = await serveMetrics(metrics, settings.host, settings.metricsPort);
+    }
     return {
       server,
       firstKey,
+      metricsUrl: metricsServer?.url,
+      drain() {
+        draining = true;
+      },
       setupLink:
         setupToken === undefined
           ? undefined
@@ -210,8 +283,11 @@ export async function start(
       recovered,
       async close(options) {
         // No backup is started from now on, and one being taken is finished first.
+        draining = true;
         await backups?.close();
         await server.close(options);
+        await metricsServer?.close();
+        metrics?.close();
         await executor.close();
         await store.close();
         lock.release();
@@ -219,6 +295,8 @@ export async function start(
     };
   } catch (error) {
     await release();
+    await metricsServer?.close();
+    metrics?.close();
     await backups?.close();
     await engine.close({ graceMs: 0 });
     await executor.close();
@@ -238,11 +316,12 @@ export async function backUpBeforeUpgrade(
   version: string,
   /** The schema this version's database is: the store's, but for tests. */
   current: number = SCHEMA_VERSION,
+  logger: Logger = createLogger(settings.log),
 ): Promise<boolean> {
   if (settings.backups === undefined) return false;
   const schema = schemaOf(join(settings.data, DATABASE));
   if (schema === undefined || schema >= current) return false;
-  console.log(`this version changes the database: backing it up first, to ${settings.backups.dir}`);
+  logger.info(`this version changes the database: backing it up first, to ${settings.backups.dir}`);
   const before = new Backups({
     data: settings.data,
     dir: settings.backups.dir,
@@ -252,6 +331,7 @@ export async function backUpBeforeUpgrade(
     version,
     // No server is running on it: nothing is removed meanwhile.
     withoutRemovals: (work) => work(),
+    log: (line) => logger.info(line),
     ...bucketOf(settings),
   });
   try {
@@ -271,6 +351,103 @@ export async function backUpBeforeUpgrade(
 function bucketOf(settings: Settings): { bucket?: Bucket } {
   const place = settings.backups?.bucket;
   return place === undefined ? {} : { bucket: new Bucket(place) };
+}
+
+/** The metrics read when they are asked for: what is so now, rather than what happened. */
+function gaugesOf(
+  metrics: Metrics,
+  parts: {
+    readonly data: string;
+    readonly working: () => number;
+    readonly streams: () => number;
+    readonly connected: () => number;
+    readonly executor: IsolateExecutor;
+    readonly backups: Backups | undefined;
+  },
+): void {
+  const one = (value: number) => [{ value }];
+  metrics.gauge('acentric_actors_working', 'Actors of this server in a turn now.', () =>
+    one(parts.working()),
+  );
+  metrics.gauge('acentric_event_streams_open', "Actors' event streams open now.", () =>
+    one(parts.streams()),
+  );
+  metrics.gauge('acentric_machines_connected', "Machines' daemons connected now.", () =>
+    one(parts.connected()),
+  );
+  metrics.gauge('acentric_code_processes', "Processes that run agents' code, by state.", () => {
+    const { processes } = parts.executor.stats();
+    return ['live', 'draining'].map((state) => ({
+      labels: { state },
+      value: processes.filter((process) => process.state === state).length,
+    }));
+  });
+  metrics.gauge(
+    'acentric_code_process_restarts',
+    "How many times the processes that run agents' code were replaced, since the server started.",
+    () => {
+      const slots = new Map<number, number>();
+      for (const process of parts.executor.stats().processes)
+        slots.set(process.slot, process.restarts);
+      return one([...slots.values()].reduce((sum, restarts) => sum + restarts, 0));
+    },
+  );
+  const sizeOf = (path: string) => {
+    try {
+      return statSync(path).size;
+    } catch {
+      return 0;
+    }
+  };
+  metrics.gauge('acentric_database_bytes', 'The database, and its write-ahead log.', () => [
+    { labels: { file: 'database' }, value: sizeOf(join(parts.data, DATABASE)) },
+    { labels: { file: 'wal' }, value: sizeOf(join(parts.data, `${DATABASE}-wal`)) },
+  ]);
+  // The blobs are counted again at most every five minutes: there may be many.
+  const blobs = { bytes: 0, count: 0, at: 0, counting: false };
+  const countBlobs = async () => {
+    blobs.counting = true;
+    let bytes = 0;
+    let count = 0;
+    try {
+      for (const entry of await readdir(join(parts.data, 'blobs'), {
+        recursive: true,
+        withFileTypes: true,
+      })) {
+        if (!entry.isFile()) continue;
+        bytes += (await stat(join(entry.parentPath, entry.name)).catch(() => undefined))?.size ?? 0;
+        count += 1;
+      }
+      Object.assign(blobs, { bytes, count, at: Date.now() });
+    } catch {
+      // A folder that is not there yet has none.
+    } finally {
+      blobs.counting = false;
+    }
+  };
+  void countBlobs();
+  metrics.gauge(
+    'acentric_blobs',
+    "Conversations' images and files: how many, and their bytes.",
+    () => {
+      if (!blobs.counting && Date.now() - blobs.at > 300_000) void countBlobs();
+      return [
+        { labels: { of: 'count' }, value: blobs.count },
+        { labels: { of: 'bytes' }, value: blobs.bytes },
+      ];
+    },
+  );
+  const { backups } = parts;
+  if (backups !== undefined) {
+    metrics.gauge(
+      'acentric_backup_newest_timestamp_seconds',
+      'When the newest backup in the folder was taken, in seconds since 1970.',
+      () => (backups.newestAt === undefined ? [] : one(backups.newestAt / 1000)),
+    );
+    metrics.gauge('acentric_backup_failures', 'Backups that failed since the server started.', () =>
+      one(backups.failures),
+    );
+  }
 }
 
 /**

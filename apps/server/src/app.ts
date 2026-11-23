@@ -19,10 +19,12 @@ import { Hono } from 'hono';
 import type { z } from 'zod';
 
 import { authenticate, authorize } from './auth.ts';
+import type { Granted } from './auth.ts';
 import { serveDashboard } from './dashboard.ts';
 import { serveDownloads } from './downloads.ts';
 import type { Downloads } from './downloads.ts';
 import { ApiFailure, failureOf } from './errors.ts';
+import type { Answered } from './observe.ts';
 import { Reply, handlers } from './handlers.ts';
 import type { Parts } from './handlers.ts';
 
@@ -41,6 +43,13 @@ export type AppOptions = Omit<Parts, 'streams'> & {
   readonly downloads?: Downloads;
   /** The folder of the dashboard's build, which the server serves at every other path. None, without it. */
   readonly dashboard?: string;
+  /** Told of each request once it is answered: for the log and the metrics. */
+  readonly answered?: (request: Answered) => void;
+  /**
+   * What keeps the server from taking requests now, such as a database that does not answer:
+   * `/health` says the server is not ready while there is any. Nothing, without it.
+   */
+  readonly ready?: () => Promise<readonly string[]>;
 };
 
 /** The most a request's body is, in bytes: a deploy's code, and what goes around it. */
@@ -94,6 +103,27 @@ export function createApp(options: AppOptions): Hono {
     });
   const app = new Hono();
 
+  // Each request, once it is answered: by its route, for an API's, and whose it was.
+  const known = new WeakMap<Request, { route: string; requestId: string; by?: string }>();
+  const { answered } = options;
+  if (answered !== undefined) {
+    app.use('*', async (context, next) => {
+      const began = performance.now();
+      await next();
+      const { req } = context;
+      const of = known.get(req.raw);
+      answered({
+        route:
+          of?.route ?? (req.path === '/health' || req.path === '/health/live' ? 'health' : 'other'),
+        method: req.method,
+        status: context.res.status,
+        ms: performance.now() - began,
+        ...(of === undefined ? {} : { requestId: of.requestId }),
+        ...(of?.by === undefined ? {} : { by: of.by }),
+      });
+    });
+  }
+
   // A server that hands out the command says which one with every answer, so that a command
   // installed from it sees when the server has another version.
   if (options.downloads !== undefined) {
@@ -107,7 +137,13 @@ export function createApp(options: AppOptions): Hono {
   }
 
   // Not of the API: whether the server is up, and what the API is.
-  app.get('/health', (context) => context.json({ ok: true, version: options.version }));
+  app.get('/health', async (context) => {
+    const problems = (await options.ready?.()) ?? [];
+    if (problems.length > 0) {
+      return context.json({ ok: false, version: options.version, problems }, 503);
+    }
+    return context.json({ ok: true, version: options.version });
+  });
   // Whether the process is there, as while it upgrades (see upgrading.ts): what restarts a
   // server that died asks this, and what sends it requests asks /health.
   app.get('/health/live', (context) => context.json({ ok: true, version: options.version }));
@@ -123,6 +159,8 @@ export function createApp(options: AppOptions): Hono {
     app.on(route.method, path, async (context) => {
       const requestId = randomBytes(8).toString('hex');
       const { req } = context;
+      const of: { route: string; requestId: string; by?: string } = { route: id, requestId };
+      known.set(req.raw, of);
       try {
         const params = route.params === undefined ? {} : read(route.params, req.param(), 'path');
         // A route that makes a credential is called without one.
@@ -135,6 +173,8 @@ export function createApp(options: AppOptions): Hono {
                 route.auth,
                 params as never,
               );
+        const who = (granted as Partial<Granted>).principal;
+        if (who !== undefined) of.by = who.type === 'key' ? who.key : who.user;
         const query =
           route.query === undefined ? undefined : read(route.query, req.query(), 'query');
         const most = id === 'deployments.create' ? MAX_DEPLOY_BYTES : MAX_BODY_BYTES;
