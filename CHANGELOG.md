@@ -30,6 +30,10 @@ What changed in each version, for the people who run a server. What a version pr
 - **`/health` means it.** It answers 503 with why when the database does not answer, no
   process runs agents' code, or the server is stopping (for three seconds before it takes no
   more). Quiet connections are kept 65 seconds, past what is in front keeps them.
+- **How many turns at once.** `ACENTRIC_MAX_TURNS` (100 without it) is how many actors are in
+  a turn at once: measured, it is what holds a server back first, and a machine of 2 vCPU and
+  4 GB takes 1,000. [LIMITS.md](LIMITS.md) has what was measured, and how large a machine to
+  run. The metrics say turns running and waiting, actors in memory, and the server's CPU.
 - **Deleting an actor.** An archived actor, with its subagents and their conversations, is
   deleted with `DELETE /v1/actors/{actor}`, `acentric actors delete <actor> --yes`, or the
   dashboard; what it cost stays in the usage.

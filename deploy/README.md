@@ -58,6 +58,9 @@ an older server does not have: for 0.15.0, take them from its tag (`git checkout
 - **Backups.** The server backs itself up every day and before an upgrade, into a volume of
   the backups' own, and copies each to a bucket with `ACENTRIC_BACKUP_URL`: give it one. [BACKUPS.md](../BACKUPS.md) says how, and each
   recipe's README how a backup is taken and put back there.
+- **How large.** One server takes about 1,000 actors in a turn at once on 2 vCPU and 4 GB, with
+  `ACENTRIC_MAX_TURNS` raised from its 100 to let it; past that, a faster disk:
+  [LIMITS.md](../LIMITS.md).
 - **What it keeps.** Everything is kept until it is deleted, or until `ACENTRIC_RETAIN_*` say
   how long: [DATA.md](../DATA.md).
 - **Upgrading.** An exact version, changed on purpose: see [VERSIONS.md](../VERSIONS.md).
