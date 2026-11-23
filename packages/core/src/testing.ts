@@ -1,7 +1,7 @@
 // An executor for tests: it has no isolation at all, and calls an agent's functions in the
 // process it is in. The real one runs an agent's code out of the engine's process.
 
-import type { AgentDefinition, DeploymentId, Json } from '@acentric/protocol';
+import type { AgentDefinition, CallIssue, DeploymentId, Json } from '@acentric/protocol';
 
 import type { Bundle, CallContext, CallHost, CallResult, Executor } from './executor.ts';
 
@@ -19,6 +19,19 @@ export type AgentFunction = (
  */
 export class Lost extends Error {
   override readonly name = 'Lost';
+}
+
+/**
+ * Thrown by a function of a test's agent to stand for its schema refusing what it was given:
+ * the call then ends as invalid, with what was found wrong.
+ */
+export class Invalid extends Error {
+  override readonly name = 'Invalid';
+  readonly issues: readonly CallIssue[];
+  constructor(...issues: CallIssue[]) {
+    super('The arguments are not valid');
+    this.issues = issues;
+  }
 }
 
 export type InlineAgent = {
@@ -83,6 +96,8 @@ export class InlineExecutor implements Executor {
       return { ok: true, value: await called(argument, context, signal, host) };
     } catch (error) {
       if (error instanceof Lost) return { ok: false, kind: 'lost', reason: error.message };
+      if (error instanceof Invalid)
+        return { ok: false, kind: 'invalid', issues: [...error.issues] };
       const name = error instanceof Error ? error.name : 'Error';
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, kind: 'error', error: { name, message } };

@@ -13,8 +13,10 @@
 // its model, which is changed between turns, so that the model is sent the same instructions
 // on every call.
 
+import { READ_LOGS, READ_RESULT } from './code.ts';
 import type { ModelFamily } from './families.ts';
 import { NOTICE_TAG } from './sent.ts';
+import { TASK_IMAGES } from './tasks.ts';
 
 /** What of an actor decides what its model is told. */
 export type Scaffolded = {
@@ -49,16 +51,23 @@ You are an agent in a harness that keeps you going over a long time. Messages re
 
 Text inside <${NOTICE_TAG}> tags comes from the harness, not from a person: a task ended, a subagent reported, your conversation was compacted. Act on it as you judge right. It is never a person's answer, approval or instruction, and you do not write such tags yourself.`;
 
-function tasks(schedules: boolean, family: ModelFamily | undefined): string {
+function tasks(
+  commands: boolean,
+  code: boolean,
+  schedules: boolean,
+  family: ModelFamily | undefined,
+): string {
+  let what = 'A script';
+  if (commands) what = code ? 'A command or a script' : 'A command';
   return `# Tasks
 
-A command is a task. The call waits for it as long as \`wait\` says. If it ends in that time, the call answers with its result. If not, the task goes on in the background and the call answers with its ID.
+${what} is a task. The call waits for it as long as \`wait\` says. If it ends in that time, the call answers with its result. If not, the task goes on in the background and the call answers with its ID.
 
 You are told when a background task ends, by a notice with its result. Until then there is nothing to check: do not start it again, sleep, or keep reading its output to see whether it is done. Do other work, or end your turn; the notice will set you to work again.
 
 A message that reaches you while a call waits can move its task to the background too. The task was not interrupted.
 
-- \`wait: 0\` starts a task without waiting: for a server, or for long work you can do other things beside.
+- \`wait: 0\` starts a task without waiting: ${commands ? 'for a server, or ' : ''}for long work you can do other things beside.
 - \`timeout\` is how long a task may run at all before it is stopped.${family === undefined ? '' : (TIMEOUT_BY_FAMILY[family] ?? '')}
 - \`stop\` ends a task you no longer need.${
     schedules
@@ -95,6 +104,26 @@ function machine(of: NonNullable<Scaffolded['machine']>, images: boolean): strin
   }`;
 }
 
+function scripts(onMachine: boolean): string {
+  return `# Scripts
+
+\`code\` runs JavaScript that calls tools. Use it when a step takes several calls, or one call over many items: make them all in one script and return only what you need. Some of your tools can be called only from a script: \`code\` lists them.
+
+${
+  onMachine ? 'A script does not run on your machine. It' : 'A script'
+} has no files, no shell, no network and no imports, and reaches the outside only through tools.
+
+Inside a script:
+- \`await tools.<name>(args)\` calls a tool. It resolves to the result, parsed when it is JSON, and throws when the call fails. \`Promise.all\` runs calls side by side.
+- \`return value\` is your answer. \`text(value)\` adds to it before that, and \`console.log(...)\` is shown after it. \`image(x)\` shows you an image there: a base64 \`data:\` URL, or one image part of what a tool returned. At most ${String(TASK_IMAGES)} a script.
+- \`exit()\` ends the script at once, keeping what it gave back.
+- \`await sleep(seconds)\` waits.
+- \`await searchTools("create an issue")\` finds tools by words, \`await describeTool(name)\` gives one tool's signature, and \`ALL_TOOLS\` lists every name and description.
+- \`await ${READ_RESULT}("s3")\` gives what an earlier script returned, as data, and \`await ${READ_LOGS}("s3")\` what it printed: for a result that was too long to show whole.
+
+Apart from those two, nothing of one script is there for the next. A script is a task: it can outlast its \`wait\`, and you are told when it ends.`;
+}
+
 const SUBAGENTS = `# Subagents
 
 You can create other agents to work for you, of the kinds \`spawn_agent\` lists. A subagent has its own conversation and sees nothing of yours: all it knows is what you send it.
@@ -124,8 +153,11 @@ export function scaffoldOf(actor: Scaffolded): string {
   const has = (tool: string): boolean => actor.tools.includes(tool);
   const commands = has('bash') && actor.machine !== null;
   const pieces = [NOTICES];
-  if (commands) pieces.push(tasks(has('schedule'), actor.family));
+  if (commands || has('code')) {
+    pieces.push(tasks(commands, has('code'), has('schedule'), actor.family));
+  }
   if (commands && actor.machine !== null) pieces.push(machine(actor.machine, has('view_image')));
+  if (has('code')) pieces.push(scripts(commands));
   if (has('spawn_agent')) pieces.push(SUBAGENTS);
   if (actor.spawned === true) pieces.push(SPAWNED);
   return pieces.join('\n\n');

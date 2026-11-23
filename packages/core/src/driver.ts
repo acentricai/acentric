@@ -195,6 +195,11 @@ export function contentOf(value: Json): ContentPart[] {
   return parts.success ? parts.data : [{ type: 'text', text: JSON.stringify(value) }];
 }
 
+/** The agent's own tools a model is offered: all but those of its scripts. */
+export function offeredTools(definition: AgentDefinition): AgentDefinition['tools'] {
+  return definition.tools.filter((tool) => tool.codemode !== true);
+}
+
 /** Whether an input is one a call lets go of its task for: a person's, and no notice of the engine's. */
 const isUserMail = (input: Input): boolean => input.type !== NOTICE && input.quiet !== true;
 
@@ -901,8 +906,9 @@ export class ActorDriver {
     // A tool of the engine's own that starts a task, or `stop`. A call of one finds its task
     // again, so it is made again after a restart, whatever was begun before it.
     const { tasks } = this.#host;
+    const definition = await this.#host.definition(actor.deployment.id);
     if (tasks.handles(call.name)) {
-      const own = tasks.tools(actor).find((tool) => tool.name === call.name);
+      const own = tasks.tools(actor, definition).find((tool) => tool.name === call.name);
       const given = own === undefined ? call.arguments : withoutEmpty(call.arguments, own);
       if (typeof given !== 'object' || given === null || Array.isArray(given)) {
         return answer(
@@ -914,6 +920,7 @@ export class ActorDriver {
         actor,
         { id: call.id, name: call.name, args: given },
         { signal, hasUserMail: () => this.mail.some(isUserMail) },
+        definition,
       );
       if (told === undefined) return undefined;
       const content = await this.#host.blobs.keep(actor.id, [
@@ -922,7 +929,6 @@ export class ActorDriver {
       return answer(content, told.isError === true);
     }
 
-    const definition = await this.#host.definition(actor.deployment.id);
     // A tool of the engine's own that answers at once. It is safe to make again.
     const ownTool = this.#host
       .ownTools(actor, definition)
@@ -942,8 +948,8 @@ export class ActorDriver {
           : [...told.content];
       return answer(await this.#host.blobs.keep(actor.id, parts), told.isError === true);
     }
-    const { tools } = definition;
-    const tool = tools.find((declared) => declared.name === call.name);
+    // A tool of its scripts is not one the model calls.
+    const tool = offeredTools(definition).find((declared) => declared.name === call.name);
     if (tool === undefined) {
       return answer([{ type: 'text', text: `There is no tool ${call.name}` }], true);
     }
@@ -1010,7 +1016,7 @@ export class ActorDriver {
     const definition = await this.#host.definition(actor.deployment.id);
     // The engine's own tools, after the agent's.
     const own = [
-      ...this.#host.tasks.tools(actor, (definition.subagents ?? []).length > 0),
+      ...this.#host.tasks.tools(actor, definition),
       ...this.#host.ownTools(actor, definition).map((one) => offered(one, actor, definition)),
     ];
     const instructions = this.#host.instructions(actor, definition, own);
@@ -1046,7 +1052,7 @@ export class ActorDriver {
       reasoning: this.record.reasoningSent ?? actor.reasoning,
       instructions,
       tools: [
-        ...definition.tools.map((tool): EngineTool => ({
+        ...offeredTools(definition).map((tool): EngineTool => ({
           type: 'function',
           name: tool.name,
           description: tool.description,
