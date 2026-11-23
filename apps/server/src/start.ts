@@ -301,7 +301,9 @@ export function keysSaid(settings: Settings): string[] {
   }
   for (const id of Object.keys(given?.keys ?? {})) {
     if (id !== given?.current && !counts.has(id)) {
-      lines.push(`ACENTRIC_SECRET_KEYS_OLD has ${id}, which nothing is sealed with: it may be taken out.`);
+      lines.push(
+        `ACENTRIC_SECRET_KEYS_OLD has ${id}, which nothing is sealed with: it may be taken out.`,
+      );
     }
   }
   return lines;
