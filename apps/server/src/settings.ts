@@ -9,7 +9,8 @@
 //                           what the links it makes start with. Without it, where it listens
 //   ACENTRIC_ADMIN_KEY      an API key that may do everything, of 24 characters or more: what
 //                           other keys are made with. Without it, a server that has no key yet
-//                           makes one, and prints it once
+//                           makes one, and writes it to <ACENTRIC_DATA>/first-admin-key, for
+//                           its user alone: never to the log
 //   ACENTRIC_SECRET_KEY     the key agents' secrets and the keys of model accounts are sealed
 //                           with: 32 bytes, as 64 hex characters or as base64. Without it, the
 //                           server keeps neither

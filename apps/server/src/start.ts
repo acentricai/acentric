@@ -27,9 +27,15 @@ import type { Holding } from './upgrading.ts';
 import type { Server } from './serve.ts';
 import type { Settings } from './settings.ts';
 
+/** Where in the data a server that had no key writes the first one it made. */
+export const FIRST_KEY_FILE = 'first-admin-key';
+
 export type Started = {
   readonly server: Server;
-  /** The key of a server that had none, to be shown once. Undefined when it had a way in. */
+  /**
+   * The key of a server that had none, for its program to write to FIRST_KEY_FILE. Undefined
+   * when it had a way in.
+   */
   readonly firstKey: string | undefined;
   /**
    * For a server with no person yet: the link that makes its owner, to be shown once. A new
