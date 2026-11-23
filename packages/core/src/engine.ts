@@ -1270,6 +1270,26 @@ export class Engine {
   }
 
   /**
+   * How loaded the engine is now: turns going on, of how many at most at once; turns that wait
+   * for one of those; and actors kept in memory between turns, of how many at most.
+   */
+  get load(): {
+    readonly turns: number;
+    readonly maxTurns: number;
+    readonly waiting: number;
+    readonly hot: number;
+    readonly maxHot: number;
+  } {
+    return {
+      turns: this.#slots.held,
+      maxTurns: this.#slots.size,
+      waiting: this.#slots.waiting,
+      hot: this.#drivers.size,
+      maxHot: this.#maxHot,
+    };
+  }
+
+  /**
    * Deletes an archived actor and every subagent under it, with their conversations, tasks,
    * scripts and commands; the images and files only they referred to go too. What they cost
    * stays in the usage. One that is not archived is refused: it is archived first, which ends

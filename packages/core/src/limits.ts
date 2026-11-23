@@ -2,6 +2,7 @@
 
 /** So many holders at once. One that asks when all are taken waits its turn, in the order asked. */
 export class Semaphore {
+  readonly size: number;
   #free: number;
   #waiting: ((held: boolean) => void)[] = [];
   #closed = false;
@@ -10,7 +11,18 @@ export class Semaphore {
     if (!Number.isInteger(size) || size < 1) {
       throw new RangeError(`A limit is a whole number, 1 or more: got ${String(size)}`);
     }
+    this.size = size;
     this.#free = size;
+  }
+
+  /** How many are held now. */
+  get held(): number {
+    return this.size - this.#free;
+  }
+
+  /** How many wait for one. */
+  get waiting(): number {
+    return this.#waiting.length;
   }
 
   /** Resolves with true once one is held, or with false when it was closed: nothing is held then. */
