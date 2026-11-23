@@ -48,8 +48,9 @@ on the fixed commit, or make the next patch version.
 ## Trying it without releasing
 
 A pull request that changes the `Dockerfile`, the workflow, the sandbox's files or
-`CHANGELOG.md` runs the same workflow without pushing: it builds both images for both systems
-and starts the arm64 server. To build them locally:
+`CHANGELOG.md` runs the same workflow without pushing: it builds the arm64 server and starts
+it. CI builds and starts the amd64 server for every pull request that changes code. To build
+both images for both systems locally:
 
 ```sh
 docker buildx build --platform linux/amd64,linux/arm64 --target server .
