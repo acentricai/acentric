@@ -8,8 +8,18 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import type { Backup } from '@acentric/protocol';
 
-import { size } from '../format.ts';
-import { Ago, Button, FormError, LoadError, Notice, PageHeader, Skeleton, Table } from '../ui.tsx';
+import { fullTime, size } from '../format.ts';
+import {
+  Ago,
+  Button,
+  FormError,
+  LoadError,
+  Notice,
+  PageHeader,
+  Skeleton,
+  Table,
+  useNow,
+} from '../ui.tsx';
 import { engine, isApiError, queryClient } from './api.ts';
 
 export const backupQueries = { status: ['backups'] as const };
@@ -23,6 +33,23 @@ export function everyText(ms: number): string {
         ? ['hour', ms / 3_600_000]
         : ['minute', Math.round(ms / 60_000)];
   return amount === 1 ? `every ${unit}` : `every ${String(amount)} ${unit}s`;
+}
+
+/** When a time to come is, from now: `in 40s`, `in 3m`, `in 5h`, `in 2d`. */
+export function inText(at: number, now: number): string {
+  const seconds = Math.max(0, Math.ceil((at - now) / 1000));
+  if (seconds < 60) return `in ${String(seconds)}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `in ${String(minutes)}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `in ${String(hours)}h`;
+  return `in ${String(Math.round(hours / 24))}d`;
+}
+
+/** When the next backup is taken. */
+function Next({ at }: { at: number }) {
+  const now = useNow();
+  return <span title={fullTime(at)}>{inText(at, now)}</span>;
 }
 
 /** What a backup is, in words. */
@@ -81,7 +108,7 @@ export function BackupsPage() {
               <Notice title="No backup has been taken since the server started">
                 {data.next !== null && (
                   <>
-                    The next is taken <Ago at={data.next} />.
+                    The next is taken <Next at={data.next} />.
                   </>
                 )}
               </Notice>
@@ -91,7 +118,7 @@ export function BackupsPage() {
                 {data.next !== null && (
                   <>
                     {' '}
-                    The next is taken <Ago at={data.next} />.
+                    The next is taken <Next at={data.next} />.
                   </>
                 )}
               </Notice>
