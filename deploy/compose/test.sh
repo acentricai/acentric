@@ -1,0 +1,104 @@
+#!/bin/sh
+# Brings this recipe up on this machine, as it is, with Caddy's own certificate for localhost,
+# and checks what a server behind it is used for, through Caddy:
+#
+#   ACENTRIC_VERSION=0.15.0 deploy/compose/test.sh     # an image of GHCR's
+#   ACENTRIC_VERSION=test deploy/compose/test.sh       # ghcr.io/acentricai/acentric-server:test,
+#                                                      # tagged from a build of this repository
+#
+# It needs Docker with Compose, curl, openssl and Node 24 or newer. The command it installs goes
+# into a home of its own, under the work folder. It stops what it started, and leaves Docker's
+# volumes of the test project (acentric-recipe-test_*) for another run.
+
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+version=${ACENTRIC_VERSION:?the image version to test, such as 0.15.0}
+http_port=${HTTP_PORT:-8080}
+https_port=${HTTPS_PORT:-8443}
+url="https://localhost:$https_port"
+work=${WORK:-${TMPDIR:-/tmp}/acentric-recipe-test}
+project=acentric-recipe-test
+mkdir -p "$work"
+cp "$here/compose.yaml" "$here/Caddyfile" "$work/"
+
+# The settings of a test server, made once and kept with its volumes.
+if [ ! -f "$work/.env" ]; then
+  cat > "$work/.env" <<EOF
+ACENTRIC_PUBLIC_URL=$url
+ACENTRIC_HTTP_PORT=$http_port
+ACENTRIC_HTTPS_PORT=$https_port
+ACENTRIC_SECRET_KEY=$(openssl rand -hex 32)
+ACENTRIC_ADMIN_KEY=$(openssl rand -hex 24)
+EOF
+fi
+key=$(sed -n 's/^ACENTRIC_ADMIN_KEY=//p' "$work/.env")
+compose() { ACENTRIC_VERSION=$version docker compose -p "$project" --project-directory "$work" "$@"; }
+step() { printf '\n== %s\n' "$*"; }
+fail() { printf 'FAILED: %s\n' "$*" >&2; compose logs --tail 40 >&2 || true; exit 1; }
+trap 'compose down >/dev/null 2>&1 || true' EXIT
+
+step "Up, with the server healthy before Caddy starts"
+compose up --detach --wait --wait-timeout 180
+
+step "Caddy's own root certificate, which its certificate for localhost is signed by"
+for attempt in $(seq 1 30); do
+  compose cp caddy:/data/caddy/pki/authorities/local/root.crt "$work/root.crt" >/dev/null 2>&1 && break
+  [ "$attempt" = 30 ] && fail "Caddy made no certificate"
+  sleep 1
+done
+get() { curl --fail --silent --show-error --cacert "$work/root.crt" "$@"; }
+
+step "HTTPS, to the server's version"
+for attempt in $(seq 1 30); do
+  health=$(get "$url/health" 2>/dev/null) && break
+  [ "$attempt" = 30 ] && fail "no answer at $url/health"
+  sleep 1
+done
+echo "$health"
+echo "$health" | grep -q '"ok":true' || fail "the server is not up"
+
+step "Plain HTTP is sent to HTTPS (to port 443: on other ports, people use the HTTPS address)"
+location=$(curl --silent --output /dev/null --write-out '%{redirect_url}' "http://localhost:$http_port/health")
+echo "$location"
+case "$location" in https://localhost*) ;; *) fail "http is not sent to https" ;; esac
+
+step "The server's own port is on no port of this machine"
+if curl --silent --max-time 3 --output /dev/null http://localhost:4000/health; then
+  fail "the server is reached without Caddy"
+fi
+echo "not reached"
+
+step "The dashboard, and the address its links and scripts start with"
+get "$url/setup" | grep -q '<div id="root">' || fail "no dashboard"
+get "$url/install-cli.sh" | grep -q "SERVER='$url'" || fail "install-cli.sh has another address"
+get "$url/install.sh" | grep -q "$url" || fail "install.sh has another address"
+echo "both scripts have $url"
+
+step "The command, installed from the server, makes a project and deploys its agent"
+home="$work/home"
+mkdir -p "$home/bin"
+# curl and Node trust Caddy's root here, as a machine whose own trust has it would. A curl in
+# front of the one there is, as not every curl reads CURL_CA_BUNDLE (macOS's does not).
+real_curl=$(command -v curl)
+printf '#!/bin/sh\nexec "%s" --cacert "%s" "$@"\n' "$real_curl" "$work/root.crt" > "$home/bin/curl"
+chmod +x "$home/bin/curl"
+export HOME="$home" PATH="$home/bin:$PATH" ACENTRIC_DIR="$home/.acentric" \
+  NODE_EXTRA_CA_CERTS="$work/root.crt" ENGINE_URL="$url" ENGINE_API_KEY="$key"
+get "$url/install-cli.sh" | sh
+acentric="$home/.acentric/bin/acentric"
+rm -rf "$work/project"
+(cd "$work" && "$acentric" init project --agent hello)
+(cd "$work/project" && "$acentric" deploy)
+
+step "An actor, and its events as they come through Caddy"
+agent=$(get -H "authorization: Bearer $key" "$url/v1/agents?name=hello" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>console.log(JSON.parse(s).items[0].id))')
+actor=$(get -H "authorization: Bearer $key" -H 'content-type: application/json' -d '{}' \
+  "$url/v1/agents/$agent/actors" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>console.log(JSON.parse(s).actor.id))')
+echo "actor $actor"
+# The stream is held open: what came in its first seconds is what Caddy let through at once.
+curl --silent --no-buffer --max-time 5 --cacert "$work/root.crt" -H "authorization: Bearer $key" \
+  "$url/v1/actors/$actor/events" > "$work/events.txt" || true
+head -c 300 "$work/events.txt"; echo
+grep -q '^event:' "$work/events.txt" || fail "no event came through"
+
+step "Passed"
