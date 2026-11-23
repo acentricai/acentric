@@ -139,7 +139,7 @@ jobs:
           cache-from: type=gha
       # Signed by this workflow's identity at GitHub, with no key kept anywhere: a signature
       # says the image was built by this file, at this tag, in this repository.
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.3
         if: env.PUSH == 'true'
       - name: Sign
         if: env.PUSH == 'true'
@@ -170,7 +170,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.3
         if: github.event_name == 'push'
       - name: The images are signed by this workflow, at this tag
         if: github.event_name == 'push'
