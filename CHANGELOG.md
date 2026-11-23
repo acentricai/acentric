@@ -30,6 +30,14 @@ What changed in each version, for the people who run a server. What a version pr
 - **`/health` means it.** It answers 503 with why when the database does not answer, no
   process runs agents' code, or the server is stopping (for three seconds before it takes no
   more). Quiet connections are kept 65 seconds, past what is in front keeps them.
+- **Deleting an actor.** An archived actor, with its subagents and their conversations, is
+  deleted with `DELETE /v1/actors/{actor}`, `acentric actors delete <actor> --yes`, or the
+  dashboard; what it cost stays in the usage.
+- **Old data removed.** Expired sessions and links always; archived actors, the audit log
+  and usage past `ACENTRIC_RETAIN_ARCHIVED`, `ACENTRIC_RETAIN_AUDIT` and
+  `ACENTRIC_RETAIN_USAGE`, when they are set ([DATA.md](DATA.md)). A new database gives back to
+  the disk what is removed; `acentric-server compact` has one made before do so.
+- **Fixed:** deleting an agent left its actors' machine commands in the database.
 - **Fixed:** the Kubernetes recipe's settings, replaced in its README's example, dropped
   `ACENTRIC_BACKUP_DIR`, so backups were on the data's volume: they are merged now.
 - **Fixed:** a backup now names the key of actors' variables among the keys it needs; the

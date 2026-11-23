@@ -33,6 +33,10 @@ services:
       # pass on: for a Prometheus on this network (see README.md).
       ACENTRIC_LOG_FORMAT: ${ACENTRIC_LOG_FORMAT:-text}
       ACENTRIC_METRICS_PORT: ${ACENTRIC_METRICS_PORT:-}
+      # How long archived actors, the audit log and usage are kept: for ever, without them.
+      ACENTRIC_RETAIN_ARCHIVED: ${ACENTRIC_RETAIN_ARCHIVED:-}
+      ACENTRIC_RETAIN_AUDIT: ${ACENTRIC_RETAIN_AUDIT:-}
+      ACENTRIC_RETAIN_USAGE: ${ACENTRIC_RETAIN_USAGE:-}
     secrets: [secret-key, admin-key]
     volumes:
       # Everything the server keeps: its database, and conversations' images and files beside
