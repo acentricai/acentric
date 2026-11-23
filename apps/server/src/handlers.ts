@@ -34,6 +34,8 @@ import type { z } from 'zod';
 import { personOf, sessionCookie } from './auth.ts';
 import type { Granted } from './auth.ts';
 import { ApiFailure } from './errors.ts';
+import { listBackups } from './backups/schedule.ts';
+import type { Backups } from './backups/schedule.ts';
 import type { Streams } from './events.ts';
 
 export type Parts = {
@@ -44,6 +46,8 @@ export type Parts = {
   readonly secrets: Secrets;
   readonly accounts: Accounts;
   readonly streams: Streams;
+  /** The server's own backups. Undefined for a server that takes none. */
+  readonly backups?: Backups;
 };
 
 /** An answer with headers of its own: what sets, or clears, the dashboard's cookie. */
@@ -114,6 +118,13 @@ const refOf = (granted: Granted): PrincipalRef =>
   granted.principal.type === 'key'
     ? { type: 'key', id: granted.principal.key }
     : { type: 'user', id: granted.principal.user };
+
+/** A server whose backups are off: ACENTRIC_BACKUP_EVERY=off. */
+const noBackups = () =>
+  new ApiFailure(
+    'unavailable',
+    'This server takes no backups of its own: ACENTRIC_BACKUP_EVERY is off',
+  );
 
 const summaryOf = ({ definition: _definition, ...summary }: Deployment): DeploymentSummary =>
   summary;
@@ -765,6 +776,22 @@ export const handlers: Handlers = {
   'audit.list': ({ query }, { audit }) => {
     const { limit, cursor, action } = query;
     return audit.list({ limit, ...defined({ cursor, action }) });
+  },
+  'backups.list': async (_asked, { backups }) => {
+    if (backups === undefined) throw noBackups();
+    return {
+      dir: backups.dir,
+      sameDisk: await backups.sameDisk(),
+      everyMs: backups.everyMs,
+      keep: backups.keep,
+      next: backups.next,
+      last: backups.last,
+      items: await listBackups(backups.dir),
+    };
+  },
+  'backups.create': (asked, { backups }) => {
+    if (backups === undefined) throw noBackups();
+    return backups.take('manual', refOf(asked));
   },
 };
 

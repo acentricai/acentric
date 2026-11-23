@@ -43,6 +43,8 @@ export const PERMISSIONS = [
   'audit:read',
   /** Reading what model calls used and cost. */
   'usage:read',
+  /** Reading where the server's backups stand, and having one taken. */
+  'backups:manage',
 ] as const;
 
 export const permissionSchema = z.enum(PERMISSIONS);
@@ -111,6 +113,7 @@ const ADMIN: readonly Permission[] = [
   'accounts:manage',
   'users:manage',
   'audit:read',
+  'backups:manage',
 ];
 
 /**

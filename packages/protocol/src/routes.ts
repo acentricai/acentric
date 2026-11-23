@@ -34,6 +34,7 @@ import {
   usageQuerySchema,
   usageReportSchema,
 } from './resources/accounts.ts';
+import { backupSchema, backupsSchema } from './resources/backups.ts';
 import {
   actorSchema,
   conversationEntrySchema,
@@ -1053,6 +1054,25 @@ export const routes = defineRoutes({
     response: page('AuditEventPage', auditEventSchema),
     status: 200,
     errors: [],
+  },
+  'backups.list': {
+    method: 'GET',
+    path: '/v1/backups',
+    summary: "Where the server's own backups go, what became of the last, and those there are.",
+    auth: { on: 'engine', permission: 'backups:manage' },
+    response: backupsSchema,
+    status: 200,
+    errors: ['unavailable'],
+  },
+  'backups.create': {
+    method: 'POST',
+    path: '/v1/backups',
+    summary:
+      "Has the server back itself up now, into its backups' folder, and answers once it has.",
+    auth: { on: 'engine', permission: 'backups:manage' },
+    response: backupSchema,
+    status: 201,
+    errors: ['unavailable'],
   },
 });
 

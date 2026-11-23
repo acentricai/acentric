@@ -21,6 +21,7 @@ export * from './resources/actors.ts';
 export * from './resources/tasks.ts';
 export * from './resources/people.ts';
 export * from './resources/accounts.ts';
+export * from './resources/backups.ts';
 export * from './routes.ts';
 export * from './events.ts';
 export * from './openapi.ts';
