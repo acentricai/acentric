@@ -417,3 +417,7 @@
   overflow-y: auto;
   transform-origin: top left;
 }
+
+.filter-chip__beside .pop__heading {
+  margin: 0;
+}
