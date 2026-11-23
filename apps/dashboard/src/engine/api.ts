@@ -1,5 +1,5 @@
-// The server's calls the Engine section's pages make: API keys, people and their invites, and the
-// audit log.
+// The server's calls the Engine section's pages make: API keys, people and their invites, the
+// server's backups, and the audit log.
 
 import type { CreateKeyRequest, Role } from '@acentric/protocol';
 
@@ -41,6 +41,10 @@ export const engine = {
     api.call('invites.create', { body: { role, ...(note === undefined ? {} : { note }) } }),
   revokeInvite: (invite: string) =>
     api.call('invites.revoke', { params: { invite: invite as never } }),
+
+  // Backups
+  backups: (signal?: AbortSignal) => api.call('backups.list', withSignal(signal)),
+  takeBackup: () => api.call('backups.create'),
 
   // The audit log
   audit: (query: { action?: string; cursor?: string }, signal?: AbortSignal) =>

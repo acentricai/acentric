@@ -27,7 +27,17 @@ const tabs = (role: Role) =>
 
 describe('the sidebar', () => {
   it('has the sections a person’s role may use: machines, accounts and people for an admin or an owner', () => {
-    const all = ['agents', 'machines', 'sandboxes', 'accounts', 'usage', 'keys', 'people', 'audit'];
+    const all = [
+      'agents',
+      'machines',
+      'sandboxes',
+      'accounts',
+      'usage',
+      'keys',
+      'people',
+      'backups',
+      'audit',
+    ];
     expect(tabs('owner')).toEqual(all);
     expect(tabs('admin')).toEqual(all);
     expect(tabs('member')).toEqual(['agents', 'usage', 'keys']);
@@ -62,6 +72,7 @@ describe('the sidebar', () => {
       '/usage',
       '/keys',
       '/people',
+      '/backups',
       '/audit',
     ]);
     expect(within(sidebar).getByText('ada@example.test')).toBeTruthy();
