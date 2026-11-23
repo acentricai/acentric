@@ -35,12 +35,11 @@ The release workflow (`.github/workflows/release.yml`) then:
 If a step fails, nothing after it happens. Fix it on `main`, delete the tag and push it again
 on the fixed commit, or make the next patch version.
 
-## Before the first release
+## After the first release
 
-- **Who may pull.** A package that a private repository's workflow pushes to GHCR is private
-  too: only members of the organisation can pull it. To let anyone pull it, an organisation
-  owner makes each package public, once, in its settings on GitHub (Packages, then the
-  package, then Package settings, then Change visibility).
+- **Who may pull.** Look at each package's visibility on GitHub once it exists (the
+  organisation's Packages, then the package). If it is private, an organisation owner makes
+  it public, once, in its Package settings. Public packages are free to store and to pull.
 - **What signing makes public.** Cosign records each signature in Sigstore's public
   transparency log, with the identity that signed it: this repository's name and the release
   workflow's path and tag.
