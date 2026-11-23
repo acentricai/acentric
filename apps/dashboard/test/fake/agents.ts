@@ -222,15 +222,13 @@ export function agentsArea(shared: Shared) {
       );
       return json(200, { items, nextCursor: null });
     }
-    if (method === 'GET' && path === '/v1/usage') {
+    // An actor's spending with its subagents: the LLM area answers the rest of usage.
+    if (method === 'GET' && path === '/v1/usage' && query.get('root') !== null) {
       const root = query.get('root');
       const under = shared.actors.filter((one) => one.id === root || one.parent?.id === root);
       const cost = under.reduce((sum, one) => sum + (spent.get(one.id) ?? 0), 0);
       return json(200, { totals: totalsOf(cost, under.length) });
     }
-    if (method === 'GET' && path === '/v1/accounts')
-      return json(200, { items: [], nextCursor: null });
-
     const ofActor = /^\/v1\/actors\/([^/]+)(.*)$/.exec(path);
     if (ofActor !== null) {
       const one = actor(ofActor[1] ?? '');
