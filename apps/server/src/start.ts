@@ -123,6 +123,7 @@ export async function start(
       port: settings.port,
       host: settings.host,
       ...(more.checkAnswers === undefined ? {} : { checkAnswers: more.checkAnswers }),
+      ...(settings.dashboard === undefined ? {} : { dashboard: settings.dashboard }),
       ...(settings.downloads === undefined
         ? {}
         : {

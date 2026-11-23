@@ -20,6 +20,9 @@
 //   ACENTRIC_AGENT_NETWORK_ALLOW  with `public`: private addresses and ranges agents' code
 //                           may reach as well, separated by commas, such as 10.0.0.0/8
 //   ACENTRIC_CODE_PROCESSES how many processes agents' code runs in. 2 without it
+//   ACENTRIC_DASHBOARD      the folder of the dashboard's build (apps/dashboard/dist), which the
+//                           server then serves at every path that is not the API's. Without
+//                           it, it serves none, and the links it makes have no page behind them
 //   ACENTRIC_DOWNLOADS      a folder with the acentric command (`acentric.mjs`) and the script
 //                           that installs it (`install-cli.sh`), which the server then hands
 //                           out at `/install-cli.sh`. Without it, it hands out neither
@@ -63,6 +66,8 @@ export type Settings = {
   readonly codeProcesses: number;
   /** The folder of what the server hands out to be installed elsewhere. */
   readonly downloads: string | undefined;
+  /** The folder of the dashboard's build. */
+  readonly dashboard: string | undefined;
   /** What sandboxes at Boat are made with: the snapshot they are made from, when one was given. */
   readonly boat: BoatOptions;
   /** The Docker sandboxes are made at, as containers. Undefined when none are. */
@@ -147,6 +152,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
   }
 
   const downloads = given('ACENTRIC_DOWNLOADS');
+  const dashboard = given('ACENTRIC_DASHBOARD');
 
   const boatTemplate = given('ACENTRIC_BOAT_TEMPLATE');
   const boatUrl = given('ACENTRIC_BOAT_API_URL');
@@ -200,6 +206,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
     downloads: downloads === undefined ? undefined : resolve(downloads),
+    dashboard: dashboard === undefined ? undefined : resolve(dashboard),
     boat: {
       ...(boatTemplate === undefined ? {} : { template: boatTemplate }),
       ...(boatUrl === undefined ? {} : { url: boatUrl }),
