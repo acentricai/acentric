@@ -200,6 +200,10 @@ function describe(agent: Dict): AgentDefinition {
   } catch {
     // As for an input.
   }
+  const schedule = agent['schedule'];
+  if (schedule !== undefined && (!isDict(schedule) || !isFn(schedule['handler']))) {
+    throw new InvalidAgent("The agent's schedule has no handler");
+  }
   const providerOptions = providerOptionsOf(agent);
   const features = featuresOf(agent, tools);
   return {
@@ -432,6 +436,22 @@ async function call(
     if ('issues' in checked) return checked;
     const handler = input['handler'] as (payload: unknown, context: Dict) => unknown;
     return { value: content(await handler(checked.value, context), `The input ${type}`) };
+  }
+
+  if (path === 'schedule.handler') {
+    const handler = isDict(agent['schedule']) ? agent['schedule']['handler'] : undefined;
+    if (!isFn(handler)) throw new Error('The agent has no schedule handler');
+    const fired = argument as {
+      readonly note: string;
+      readonly dueAt: number;
+      readonly firedAt: number;
+    };
+    const returned = await (handler as (fired: Dict, context: Dict) => unknown)(
+      { note: fired.note, dueAt: new Date(fired.dueAt), firedAt: new Date(fired.firedAt) },
+      context,
+    );
+    if (typeof returned !== 'string') throw new Error('it returned what is not text');
+    return { value: returned };
   }
 
   throw new Error(`The agent has nothing at ${path}`);
