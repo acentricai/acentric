@@ -4,6 +4,8 @@
 // what a page's check returns over the URL's own, so one that is left out would come through as
 // the URL had it.
 
+import { ID_LIST_MAX, isId } from '@acentric/protocol';
+
 type Raw = Record<string, unknown>;
 
 /** Where to go after signing in: a path on this site only, never another origin. */
@@ -31,15 +33,38 @@ export function signInSearch(search: Raw): SignInSearch {
   return { redirect: safeRedirect(search['redirect']) };
 }
 
-export type MachinesSearch = { type?: string | undefined };
+export type MachinesSearch = {
+  type?: string | undefined;
+  agent?: string | undefined;
+  actor?: string | undefined;
+};
 
 /**
- * The Machines page's filter: `personal`, and the IDs of sandbox accounts, separated by commas.
- * What is none of them is left out.
+ * The Machines page's filters, each a list separated by commas: of types, `personal` and the IDs
+ * of sandbox accounts; and of the agents and the actors whose machines are shown. What is none of
+ * them is left out.
  */
 export function machinesSearch(search: Raw): MachinesSearch {
-  const types = typesOf(search['type']);
-  return { type: types.length === 0 ? undefined : types.join(',') };
+  const list = (items: readonly string[]) => (items.length === 0 ? undefined : items.join(','));
+  return {
+    type: list(typesOf(search['type'])),
+    agent: list(idsIn(search['agent'], 'agent')),
+    actor: list(idsIn(search['actor'], 'actor')),
+  };
+}
+
+/** A filter of the Machines page, as its URL names it. */
+export type MachinesFilter = 'type' | 'agent' | 'actor';
+
+/** What a filter of the Machines page has chosen, from its part of the URL. */
+export function chosenIn(search: MachinesSearch, filter: MachinesFilter): string[] {
+  return filter === 'type' ? typesOf(search.type) : idsIn(search[filter], filter);
+}
+
+/** The IDs of one kind a list separated by commas names, once each, at most as many as a query takes. */
+export function idsIn(given: unknown, kind: 'agent' | 'actor'): string[] {
+  const parts = typeof given === 'string' ? given.split(',') : [];
+  return [...new Set(parts.filter((part) => isId(kind, part)))].slice(0, ID_LIST_MAX);
 }
 
 /** The types a filter of the Machines page names, once each. */

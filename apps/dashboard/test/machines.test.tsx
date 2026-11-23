@@ -6,12 +6,16 @@ import { describe, expect, it } from 'vitest';
 import { enrolCommands, installCommand } from '../src/machines/machines.tsx';
 import { sandboxDeletion, shortSandboxId } from '../src/machines/sandboxes.tsx';
 import { open } from './render.tsx';
-import { fakeServer, machineOf } from './server.ts';
+import { actorOf, fakeServer, machineOf } from './server.ts';
+
+type AgentId = `agt_${string}`;
+const ORDERS = `agt_${'0'.repeat(25)}1` as AgentId;
+const BILLING = `agt_${'0'.repeat(25)}2` as AgentId;
 
 const signedIn = () => {
   const server = fakeServer();
   server.person('ada@example.test', 'a-password-for-tests', true);
-  server.agents.push({ id: 'agt_orders', name: 'orders' }, { id: 'agt_billing', name: 'billing' });
+  server.agents.push({ id: ORDERS, name: 'orders' }, { id: BILLING, name: 'billing' });
   return server;
 };
 const dialog = () => screen.getByRole('dialog');
@@ -28,7 +32,7 @@ describe('the Machines page', () => {
     const server = signedIn();
     server.machines.push(
       machineOf('build-box', {
-        agents: ['agt_orders'],
+        agents: [ORDERS],
         enrolled: true,
         online: true,
         os: 'darwin',
@@ -83,7 +87,7 @@ describe('the Machines page', () => {
       server.calls.find((call) => call.path === '/v1/machines' && call.method === 'POST')?.body,
     ).toEqual({
       name: 'build-box',
-      agents: ['agt_orders'],
+      agents: [ORDERS],
     });
     const added = server.machines[0];
     const shown = dialog().textContent ?? '';
@@ -124,7 +128,7 @@ describe('the Machines page', () => {
     fireEvent.click(within(dialog()).getByLabelText('All agents, and any deployed later'));
     fireEvent.click(await within(dialog()).findByLabelText('billing'));
     press('Save', dialog());
-    await waitFor(() => expect(server.machines[0]?.agents).toEqual(['agt_billing']));
+    await waitFor(() => expect(server.machines[0]?.agents).toEqual([BILLING]));
     expect(await screen.findByText('billing')).toBeTruthy();
   });
 
@@ -264,7 +268,123 @@ describe('the Machines page’s filter', () => {
     const server = withTypes();
     server.machines.splice(0, 1);
     open('/machines?type=personal', server);
-    expect(await screen.findByText('No machines of the types chosen.')).toBeTruthy();
+    expect(await screen.findByText('No machines match the filters.')).toBeTruthy();
+  });
+});
+
+describe('the Machines page’s Agents filter', () => {
+  const actorId = (n: number) => `act_${'0'.repeat(25)}${String(n)}`;
+  const withActors = () => {
+    const server = signedIn();
+    const [box, laptop, spare] = [machineOf('box'), machineOf('laptop'), machineOf('spare')];
+    server.machines.push(box, laptop, spare);
+    const on = (machine: { id: string }) => ({
+      machine: { id: machine.id as never, cwd: '~/work', env: [] },
+    });
+    server.actors.push(
+      actorOf(actorId(1), ORDERS, { name: 'eu-desk', createdAt: 2, ...on(box) }),
+      actorOf(actorId(2), ORDERS, { status: 'working', createdAt: 1, ...on(laptop) }),
+      actorOf(actorId(3), ORDERS, { name: 'gone', status: 'archived', ...on(spare) }),
+      actorOf(actorId(4), BILLING, { name: 'invoices', ...on(spare) }),
+    );
+    return server;
+  };
+  const shown = () =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[0]?.textContent);
+  const bar = () => document.querySelector('.filter-bar') as HTMLElement;
+  const agents = async () => {
+    fireEvent.click(within(bar()).getByRole('button', { name: /^Agents/ }));
+    return within(bar()).findByRole('group', { name: 'Agents' });
+  };
+  const actorsOf = async (agent: string) => {
+    fireEvent.mouseEnter(screen.getByLabelText(agent).closest('.filter-chip__row') as Element);
+    return screen.findByRole('group', { name: `Active actors of ${agent}` });
+  };
+
+  it('lists the agents deployed, and shows the machines of an agent’s actors not archived', async () => {
+    const page = open('/machines', withActors());
+    await screen.findByText('spare');
+    const list = await agents();
+    expect(
+      within(list)
+        .getAllByRole('checkbox')
+        .map((box) => box.closest('label')?.textContent),
+    ).toEqual(['orders', 'billing']);
+    fireEvent.click(within(list).getByLabelText('orders'));
+    await waitFor(() => expect(shown()).toEqual(['box', 'laptop']));
+    expect(page.where()).toBe(`/machines?agent=${ORDERS}`);
+    expect(screen.getByRole('button', { name: 'Agents: orders' }).textContent).toBe('Agentsorders');
+    fireEvent.click(within(list).getByLabelText('billing'));
+    await waitFor(() => expect(shown()).toEqual(['box', 'laptop', 'spare']));
+    expect(screen.getByRole('button', { name: 'Agents: orders, billing' })).toBeTruthy();
+  });
+
+  it('shows an agent’s active actors beside it, and the machines of those ticked', async () => {
+    const page = open('/machines', withActors());
+    await screen.findByText('spare');
+    await agents();
+    const actors = await actorsOf('orders');
+    // Those archived are not offered, the newest is first, and one with no name is its ID.
+    await waitFor(() =>
+      expect(
+        within(actors)
+          .getAllByRole('checkbox')
+          .map((box) => box.closest('label')?.textContent),
+      ).toEqual(['eu-desk', actorId(2)]),
+    );
+    fireEvent.click(within(actors).getByLabelText('eu-desk'));
+    await waitFor(() => expect(shown()).toEqual(['box']));
+    expect(page.where()).toBe(`/machines?actor=${actorId(1)}`);
+    expect(screen.getByRole('button', { name: 'Agents: eu-desk' })).toBeTruthy();
+    // Another agent's actor is beside that agent, and both are kept.
+    const billing = await actorsOf('billing');
+    await waitFor(() => expect(within(billing).getByLabelText('invoices')).toBeTruthy());
+    fireEvent.click(within(billing).getByLabelText('invoices'));
+    await waitFor(() => expect(shown()).toEqual(['box', 'spare']));
+    expect(screen.getByRole('button', { name: 'Agents: eu-desk, invoices' }).textContent).toBe(
+      'Agents2 selected',
+    );
+  });
+
+  it('is read from the address, with the Type filter, and cleared at once', async () => {
+    const page = open(
+      `/machines?type=personal&agent=${BILLING},agt_nonsense&actor=${actorId(3)}`,
+      withActors(),
+    );
+    // An actor named is shown though it is archived.
+    await waitFor(() => expect(shown()).toEqual(['spare']));
+    expect(await screen.findByRole('button', { name: 'Agents: billing, gone' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Agents' }));
+    await waitFor(() => expect(shown()).toEqual(['box', 'laptop', 'spare']));
+    expect(page.where()).toBe('/machines?type=personal');
+  });
+
+  it('is reached from the keyboard: the arrow opens an agent’s actors, and back', async () => {
+    open('/machines', withActors());
+    await screen.findByText('spare');
+    await agents();
+    const arrow = screen.getByRole('button', { name: 'Actors of orders' });
+    fireEvent.keyDown(arrow, { key: 'ArrowRight' });
+    const actors = await screen.findByRole('group', { name: 'Active actors of orders' });
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(actors).getByLabelText('eu-desk')),
+    );
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowLeft' });
+    await waitFor(() => expect(document.activeElement).toBe(arrow));
+    expect(screen.queryByRole('group', { name: 'Active actors of orders' })).toBeNull();
+  });
+
+  it('says so when an agent has no active actors', async () => {
+    const server = withActors();
+    server.actors.splice(3, 1);
+    open('/machines', server);
+    await screen.findByText('spare');
+    await agents();
+    const actors = await actorsOf('billing');
+    expect(await within(actors).findByText('No active actors.')).toBeTruthy();
   });
 });
 

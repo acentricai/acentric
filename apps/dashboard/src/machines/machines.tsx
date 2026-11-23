@@ -1,6 +1,7 @@
 // `/machines`: the engine's machines, with which agents may work on each, a new enrolment token,
-// and remove in each row, and how to add one. A filter under the heading shows those of the
-// types chosen: personal machines, which no provider made, and each sandbox account's.
+// and remove in each row, and how to add one. Filters under the heading show those of the types
+// chosen, personal machines, which no provider made, and each sandbox account's; and those the
+// actors of the agents chosen, or the actors chosen, work on.
 
 import { IconKey, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
@@ -12,8 +13,10 @@ import { queryClient } from '../api.ts';
 import { AgentsField, agentsText, useAgentNames } from './agents.tsx';
 import { engine, shellQuote } from './api.ts';
 import { PERSONAL } from '../url.ts';
+import type { MachinesFilter } from '../url.ts';
 import { fullTime } from './format.ts';
-import { keys, useMachines, useProviders } from './queries.ts';
+import { AgentFilter } from './agent-filter.tsx';
+import { keys, useAgents, useMachines, useProviders } from './queries.ts';
 import { sandboxDeletion } from './sandboxes.tsx';
 import { displayText, safeText } from './text.tsx';
 import {
@@ -71,16 +74,29 @@ export function ofTypes(machine: Machine, types: readonly string[]): boolean {
 
 export function MachinesPage({
   types = [],
-  onToggleType = () => {},
-  onClearTypes = () => {},
+  agents = [],
+  actors = [],
+  onToggle = () => {},
+  onClear = () => {},
 }: {
   /** The types the filter has chosen: `personal`, and the IDs of sandbox accounts. */
   types?: readonly string[];
-  /** Ticks a type of the filter, or unticks it. */
-  onToggleType?: (type: string) => void;
-  onClearTypes?: () => void;
+  /** The agents and the actors whose machines are shown. */
+  agents?: readonly string[];
+  actors?: readonly string[];
+  /** Ticks a choice of a filter, or unticks it. */
+  onToggle?: (filter: MachinesFilter, value: string) => void;
+  /** Clears a filter: the Agents filter is its agents and its actors. */
+  onClear?: (filter: 'type' | 'agents') => void;
 }) {
-  const machines = useMachines();
+  const deployed = useAgents();
+  // An agent that is no longer there filters nothing out.
+  const agentsChosen =
+    deployed.data === undefined
+      ? agents
+      : agents.filter((agent) => deployed.data.some((one) => one.id === agent));
+  const machines = useMachines(true, { agents: agentsChosen, actors });
+  const byActors = agentsChosen.length > 0 || actors.length > 0;
   const names = useAgentNames();
   const providers = useProviders();
   const choices: Choice[] = [
@@ -108,8 +124,15 @@ export function MachinesPage({
           name="Type"
           choices={choices}
           chosen={chosen}
-          onToggle={onToggleType}
-          onClear={onClearTypes}
+          onToggle={(type) => onToggle('type', type)}
+          onClear={() => onClear('type')}
+        />
+        <AgentFilter
+          agents={agentsChosen}
+          actors={actors}
+          onToggleAgent={(agent) => onToggle('agent', agent)}
+          onToggleActor={(actor) => onToggle('actor', actor)}
+          onClear={() => onClear('agents')}
         />
       </div>
       {(machines.isError || machines.failureReason !== null) && (
@@ -202,10 +225,10 @@ export function MachinesPage({
           },
         ]}
       />
-      {machines.data?.items.length === 0 ? (
+      {machines.data?.items.length === 0 && !byActors ? (
         <p className="table-empty">No machines. Add one to give actors a place to run commands.</p>
       ) : (
-        shown?.length === 0 && <p className="table-empty">No machines of the types chosen.</p>
+        shown?.length === 0 && <p className="table-empty">No machines match the filters.</p>
       )}
       {adding && <AddDialog onClose={() => setAdding(false)} />}
       {action?.kind === 'agents' && (

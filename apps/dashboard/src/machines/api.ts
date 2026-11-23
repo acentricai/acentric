@@ -10,9 +10,19 @@ import { api } from '../api.ts';
 
 export { isApiError, isTransientRead } from '../api.ts';
 
+/** Agents and actors whose machines are asked for: none of either is every machine. */
+export type UsedBy = { readonly agents: readonly string[]; readonly actors: readonly string[] };
+
 export const engine = {
-  machines: (signal?: AbortSignal) =>
-    api.call('machines.list', signal === undefined ? {} : { signal }),
+  /** The machines, or with agents or actors, those their actors work on. */
+  machines: (usedBy: UsedBy, signal?: AbortSignal) =>
+    api.call('machines.list', {
+      query: {
+        ...(usedBy.agents.length === 0 ? {} : { agent: usedBy.agents.join(',') }),
+        ...(usedBy.actors.length === 0 ? {} : { actor: usedBy.actors.join(',') }),
+      },
+      ...(signal === undefined ? {} : { signal }),
+    }),
   addMachine: (name: string, agents: MachineAgents) =>
     api.call('machines.create', { body: { name, agents } }),
   allowAgents: (machine: string, agents: MachineAgents) =>
@@ -24,6 +34,17 @@ export const engine = {
   /** The agents there are: as many as one page holds, which is more than a machine is chosen from. */
   agents: (signal?: AbortSignal) =>
     api.call('agents.list', { query: { limit: 200 }, ...(signal === undefined ? {} : { signal }) }),
+  /** An agent's actors that are in a state: as many as one page holds. */
+  actors: (agent: string, status: 'idle' | 'working', signal?: AbortSignal) =>
+    api.call('actors.list', {
+      query: { agent: agent as never, status, limit: 200 },
+      ...(signal === undefined ? {} : { signal }),
+    }),
+  actor: (actor: string, signal?: AbortSignal) =>
+    api.call('actors.get', {
+      params: { actor: actor as never },
+      ...(signal === undefined ? {} : { signal }),
+    }),
   providers: (signal?: AbortSignal) =>
     api.call('sandboxProviders.list', signal === undefined ? {} : { signal }),
   addProvider: (kind: SandboxProviderAccount['kind'], name: string, apiKey: string) =>

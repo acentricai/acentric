@@ -13,8 +13,8 @@ import { createElement } from 'react';
 import { may, type Me } from '../me.ts';
 import type { Section } from '../sections.ts';
 import { MachinesPage } from './machines.tsx';
-import { machinesSearch, typesOf } from '../url.ts';
-import type { MachinesSearch } from '../url.ts';
+import { chosenIn, machinesSearch } from '../url.ts';
+import type { MachinesFilter, MachinesSearch } from '../url.ts';
 import { ProviderPage, ProvidersPage } from './sandboxes.tsx';
 
 const manages = (me: Me) => may(me, 'machines:manage');
@@ -25,22 +25,31 @@ function routes(parent: AnyRoute): AnyRoute[] {
     path: 'machines',
     validateSearch: machinesSearch,
     component: function Machines() {
-      const { type } = machines.useSearch() as MachinesSearch;
+      const search = machines.useSearch() as MachinesSearch;
       const navigate = machines.useNavigate();
+      const list = (items: readonly string[]) => (items.length === 0 ? undefined : items.join(','));
       return createElement(MachinesPage, {
-        types: typesOf(type),
+        types: chosenIn(search, 'type'),
+        agents: chosenIn(search, 'agent'),
+        actors: chosenIn(search, 'actor'),
         // From the address as it is when the choice is made, not as this page was drawn.
-        onToggleType: (toggled: string) =>
+        onToggle: (filter: MachinesFilter, toggled: string) =>
           void navigate({
             search: (before: MachinesSearch) => {
-              const now = typesOf(before.type);
+              const now = chosenIn(before, filter);
               const next = now.includes(toggled)
                 ? now.filter((each) => each !== toggled)
                 : [...now, toggled];
-              return { type: next.length === 0 ? undefined : next.join(',') };
+              return { ...before, [filter]: list(next) };
             },
           }),
-        onClearTypes: () => void navigate({ search: { type: undefined } }),
+        onClear: (filter: 'type' | 'agents') =>
+          void navigate({
+            search: (before: MachinesSearch) =>
+              filter === 'type'
+                ? { ...before, type: undefined }
+                : { ...before, agent: undefined, actor: undefined },
+          }),
       });
     },
   });
