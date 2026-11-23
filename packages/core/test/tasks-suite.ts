@@ -667,13 +667,18 @@ export function tasksSuite(name: string, open: () => Promise<Store>): void {
 
     describe('an abort', () => {
       it('stops the turn and every task, and what waits starts no turn until something new does', async () => {
-        const one = engine([
-          calls(
-            { id: 'c1', name: 'job', arguments: { what: 'a', wait: 0 } },
-            { id: 'c2', name: 'job', arguments: { what: 'b' } },
-          ),
-          says('All of it is known.'),
-        ]);
+        const one = engine(
+          [
+            calls(
+              { id: 'c1', name: 'job', arguments: { what: 'a', wait: 0 } },
+              { id: 'c2', name: 'job', arguments: { what: 'b' } },
+            ),
+            says('All of it is known.'),
+          ],
+          // The message that arrives lets go of no task here, however long the abort is in
+          // coming: it is the abort that ends the call.
+          { taskTimes: { ...TIMES, floorMs: 60_000 } },
+        );
         const actor = await one.createActor();
         await one.say(actor.id, 'Do both.');
         await eventually(() => work.has('j1') && work.has('j2'));
