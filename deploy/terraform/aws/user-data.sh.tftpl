@@ -13,7 +13,7 @@ for attempt in $(seq 1 300); do
   sleep 2
 done
 [ -e "$device" ] || { echo "the data volume ${volume_id} was not attached"; exit 1; }
-blkid "$device" > /dev/null 2>&1 || mkfs.xfs -L acentric-data "$device"
+blkid "$device" > /dev/null 2>&1 || mkfs.xfs -L acentric "$device"
 mkdir -p /var/lib/acentric
 uuid=$(blkid -s UUID -o value "$device")
 grep -q "$uuid" /etc/fstab || echo "UUID=$uuid /var/lib/acentric xfs defaults,nofail 0 2" >> /etc/fstab
