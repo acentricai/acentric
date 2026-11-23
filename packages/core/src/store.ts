@@ -704,6 +704,14 @@ export interface Store {
   /** Every machine, in the order they were added. */
   listMachines(): Promise<StoredMachine[]>;
   /**
+   * The machines actors work on, once each: those of the actors of `agents` that are not
+   * archived, and those of `actors`.
+   */
+  machinesOfActors(query: {
+    readonly agents: readonly AgentId[];
+    readonly actors: readonly ActorId[];
+  }): Promise<MachineId[]>;
+  /**
    * Changes what a patch names of a machine, and gives the machine as it then is. Undefined
    * when there is no such machine. Rejects with `NameTaken` when its name is now another's.
    */

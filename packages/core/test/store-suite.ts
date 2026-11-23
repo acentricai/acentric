@@ -632,6 +632,32 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         expect(await seqs({ after: 1, before: 5 })).toEqual([2, 3, 4]);
         expect(await seqs({ after: 3 })).toEqual([4, 5]);
       });
+
+      it('give the machines agents’ actors work on, those archived only when named, each once', async () => {
+        const machine = () => makeId('machine', { now: NOW, random: random() });
+        const [one, two, three] = [machine(), machine(), machine()];
+        const [lead, helper, other] = [agentId(), agentId(), agentId()];
+        await create({ machine: { id: one, cwd: '/work', env: [] } }, lead);
+        await create({ machine: { id: one, cwd: '/elsewhere', env: [] } }, lead);
+        await create({}, lead);
+        const gone = await create({ machine: { id: two, cwd: '/work', env: [] } }, lead);
+        await store.commit(gone.id, 0, change({ status: 'archived', archivedAt: NOW + 1 }));
+        const helping = await create({ machine: { id: three, cwd: '/work', env: [] } }, helper);
+        await create({ machine: { id: two, cwd: '/work', env: [] } }, other);
+        const machines = async (query: Parameters<Store['machinesOfActors']>[0]) =>
+          (await store.machinesOfActors(query)).toSorted();
+
+        expect(await machines({ agents: [lead], actors: [] })).toEqual([one]);
+        expect(await machines({ agents: [], actors: [gone.id] })).toEqual([two]);
+        expect(await machines({ agents: [lead], actors: [helping.id] })).toEqual(
+          [one, three].toSorted(),
+        );
+        expect(await machines({ agents: [lead, helper, other], actors: [] })).toEqual(
+          [one, two, three].toSorted(),
+        );
+        expect(await machines({ agents: [], actors: [] })).toEqual([]);
+        expect(await machines({ agents: [agentId()], actors: [] })).toEqual([]);
+      });
     });
 
     describe('deleting an agent', () => {

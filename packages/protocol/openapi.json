@@ -3635,6 +3635,30 @@
                 "support"
               ]
             }
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "required": false,
+            "description": "IDs of kind agent, separated by commas.",
+            "schema": {
+              "type": "string",
+              "examples": [
+                "agt_01jd3m5kq8f4xv9t6w2rhb0c7n,agt_01jd3m5kq8f4xv9t6w2rhb0c7p"
+              ]
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "description": "IDs of kind actor, separated by commas.",
+            "schema": {
+              "type": "string",
+              "examples": [
+                "act_01jd3m5kq8f4xv9t6w2rhb0c7n,act_01jd3m5kq8f4xv9t6w2rhb0c7p"
+              ]
+            }
           }
         ],
         "responses": {

@@ -122,6 +122,36 @@ export function parseId(
   return { kind, createdAt: Number(bits >> 80n) };
 }
 
+/** The most IDs one parameter of a query names. */
+export const ID_LIST_MAX = 100;
+
+/**
+ * IDs of `kind`, as a query takes several: in one parameter, separated by commas. It is read as
+ * the text it is; `idsOf` gives the IDs.
+ */
+export function idListSchema<K extends IdKind>(kind: K): z.ZodType<string, string> {
+  const prefix = ID_PREFIXES[kind];
+  return z
+    .string()
+    .refine(
+      (text) => {
+        const parts = text.split(',');
+        return parts.length <= ID_LIST_MAX && parts.every((part) => PATTERNS[kind].test(part));
+      },
+      `IDs of kind ${kind}, separated by commas: ${prefix}_ and 26 characters each, ${String(ID_LIST_MAX)} at most`,
+    )
+    .meta({
+      description: `IDs of kind ${kind}, separated by commas.`,
+      examples: [`${prefix}_01jd3m5kq8f4xv9t6w2rhb0c7n,${prefix}_01jd3m5kq8f4xv9t6w2rhb0c7p`],
+    });
+}
+
+/** The IDs a list of them names, once each. */
+export function idsOf<K extends IdKind>(text: string | undefined, kind: K): Id<K>[] {
+  if (text === undefined) return [];
+  return [...new Set(text.split(','))].filter((part): part is Id<K> => isId(kind, part));
+}
+
 /** The schema of an ID of `kind`. */
 export function idSchema<K extends IdKind>(kind: K): z.ZodType<Id<K>, Id<K>> {
   const prefix = ID_PREFIXES[kind];

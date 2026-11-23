@@ -25,6 +25,7 @@ import { createHash, createPublicKey, randomBytes, timingSafeEqual, verify } fro
 
 import { COMMAND_NAME, FILE_BYTES, fromDaemonSchema, proofText } from '@acentric/protocol';
 import type {
+  ActorId,
   AgentId,
   CommandEnded,
   CommandRef,
@@ -401,9 +402,18 @@ export class Machines {
     return stored === undefined ? undefined : this.#info(stored);
   }
 
-  /** Every machine, in the order they were added. */
-  async list(): Promise<Machine[]> {
-    return (await this.#store.listMachines()).map((stored) => this.#info(stored));
+  /**
+   * The machines, in the order they were added. With `usedBy`, only those the actors of its
+   * agents that are not archived, or its actors, work on.
+   */
+  async list(usedBy?: {
+    readonly agents: readonly AgentId[];
+    readonly actors: readonly ActorId[];
+  }): Promise<Machine[]> {
+    const all = await this.#store.listMachines();
+    if (usedBy === undefined) return all.map((stored) => this.#info(stored));
+    const used = new Set(await this.#store.machinesOfActors(usedBy));
+    return all.filter((stored) => used.has(stored.id)).map((stored) => this.#info(stored));
   }
 
   /** Removes a machine. Its daemon is disconnected, and what the engine had running there is lost. */

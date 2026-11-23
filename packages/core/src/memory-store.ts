@@ -825,6 +825,19 @@ export class MemoryStore implements Store {
     return copy([...this.#machines.values()]);
   }
 
+  async machinesOfActors(query: {
+    readonly agents: readonly AgentId[];
+    readonly actors: readonly ActorId[];
+  }): Promise<MachineId[]> {
+    const used = new Set<MachineId>();
+    for (const { actor } of this.#actors.values()) {
+      if (actor.machine === null) continue;
+      const ofAgent = query.agents.includes(actor.agent) && actor.status !== 'archived';
+      if (ofAgent || query.actors.includes(actor.id)) used.add(actor.machine.id);
+    }
+    return [...used];
+  }
+
   async changeMachine(id: MachineId, patch: MachinePatch): Promise<StoredMachine | undefined> {
     const machine = this.#machines.get(id);
     if (machine === undefined) return undefined;

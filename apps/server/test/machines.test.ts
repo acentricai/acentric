@@ -260,6 +260,50 @@ describe('an actor on a machine', () => {
     ).toEqual({ code: 'invalid_request', status: 400 });
     expect(failures).toEqual([]);
   });
+
+  it('lists the machines it works on, by its agent or by itself, and by name among them', async () => {
+    const { admin, deploy, failures } = await api([], { machines: true });
+    const { agent } = await deploy('workers', 'machines@1');
+    const add = async (name: string) => {
+      const { machine } = await admin.call('machines.create', {
+        body: { name, agents: [agent.id] },
+      });
+      return machine.id;
+    };
+    const [box, spare] = [await add('box'), await add('spare'), await add('idle')];
+    const on = async (id: string) =>
+      (
+        await admin.call('actors.create', {
+          params: { agent: agent.id },
+          body: { machine: { id: id as never, cwd: '~/work' } },
+        })
+      ).actor;
+    const working = await on(box);
+    const archived = await on(spare);
+    await admin.call('actors.archive', { params: { actor: archived.id } });
+    const names = async (query: object) =>
+      (await admin.call('machines.list', { query: query as never })).items.map(
+        (machine) => machine.name,
+      );
+
+    expect(await names({})).toEqual(['box', 'spare', 'idle']);
+    expect(await names({ agent: agent.id })).toEqual(['box']);
+    expect(await names({ actor: archived.id })).toEqual(['spare']);
+    expect(await names({ agent: agent.id, actor: `${archived.id},${working.id}` })).toEqual([
+      'box',
+      'spare',
+    ]);
+    expect(await names({ agent: agent.id, name: 'box' })).toEqual(['box']);
+    expect(await names({ agent: agent.id, name: 'spare' })).toEqual([]);
+    expect(await names({ name: 'idle' })).toEqual(['idle']);
+    for (const query of [{ agent: 'box' }, { actor: agent.id }, { agent: '' }]) {
+      expect(await refusal(admin.call('machines.list', { query: query as never }))).toEqual({
+        code: 'invalid_request',
+        status: 400,
+      });
+    }
+    expect(failures).toEqual([]);
+  });
 });
 
 describe('the variables of an actor’s commands', () => {

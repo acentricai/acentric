@@ -362,6 +362,13 @@ export class SqliteStore implements Store {
     return this.#write.ask('listMachines' satisfies Operation);
   }
 
+  machinesOfActors(query: {
+    readonly agents: readonly AgentId[];
+    readonly actors: readonly ActorId[];
+  }): Promise<MachineId[]> {
+    return this.#read.ask('machinesOfActors' satisfies Operation, query);
+  }
+
   changeMachine(id: MachineId, patch: MachinePatch): Promise<StoredMachine | undefined> {
     return this.#write.ask('changeMachine' satisfies Operation, id, patch);
   }
