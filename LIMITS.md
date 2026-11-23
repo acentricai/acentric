@@ -7,11 +7,13 @@ machine is given a larger one.
 
 ## What holds a server back, in order
 
-1. **`ACENTRIC_MAX_TURNS`, 100 without it.** It is how many actors are in a turn at once; the
-   rest wait their turn, in order. A turn mostly waits for its model, so with a model of a few
-   seconds a call, 100 at once is about 1,000 turns a minute, with the machine nearly idle: at
-   200 actors waiting, a 4-vCPU server was at 14% of its CPU. Every machine measured here took
-   1,000 at once with room to spare. Set it to what the machine takes (below).
+1. **`ACENTRIC_MAX_TURNS`, 1,000 without it.** It is how many actors are in a turn at once; the
+   rest wait their turn, in order. A turn mostly waits for its model, so this, not the machine,
+   is what holds a server back first when it is too low: at 100, as it was before, a server
+   did about 1,000 turns a minute with the machine nearly idle (at 200 actors waiting, a
+   4-vCPU server was at 14% of its CPU). Every machine measured here took 1,000 at once with
+   room to spare, so that is what it is without the setting. Lower it for a smaller machine,
+   or raise it on a faster disk (below).
 2. **The disk.** Each turn is about four commits to the database, and each commit waits for the
    disk to say it is written. On an EBS gp3 volume that is about 2 ms, some 500 a second, and
    a server does about **12,000 to 14,000 turns a minute**, whatever its CPU: on a 4-vCPU machine
@@ -126,7 +128,7 @@ alone.
 
 |                                     |                                                                  |
 | ----------------------------------- | ---------------------------------------------------------------- |
-| Actors in a turn at once            | `ACENTRIC_MAX_TURNS`, 100 without it                             |
+| Actors in a turn at once            | `ACENTRIC_MAX_TURNS`, 1,000 without it                           |
 | Actors kept in memory between turns | 1,000                                                            |
 | Processes of agents' code           | `ACENTRIC_CODE_PROCESSES`, 2 without it; each replaced past 1 GB |
 | An agent's code                     | 10 MB                                                            |

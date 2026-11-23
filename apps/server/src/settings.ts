@@ -22,8 +22,8 @@
 //                           may reach as well, separated by commas, such as 10.0.0.0/8
 //   ACENTRIC_CODE_PROCESSES how many processes agents' code runs in. 2 without it
 //   ACENTRIC_MAX_TURNS      how many actors are in a turn at once: the rest wait their turn, in
-//                           order. 100 without it. A turn mostly waits for its model, so this,
-//                           not the machine, is what holds a server back first (LIMITS.md)
+//                           order. 1000 without it, what a machine of 2 vCPU and 4 GB takes, as
+//                           measured (LIMITS.md)
 //   ACENTRIC_BACKUP_DIR     the folder the server's own backups go in: <ACENTRIC_DATA>/backups
 //                           without it, which is on the same disk as what it backs up. Another
 //                           disk's is what survives losing that one
@@ -367,7 +367,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     secretKeys,
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
-    maxTurns: wholeNumber('ACENTRIC_MAX_TURNS', 100, 1, 10_000),
+    maxTurns: wholeNumber('ACENTRIC_MAX_TURNS', 1000, 1, 10_000),
     downloads: downloads === undefined ? undefined : resolve(downloads),
     dashboard: dashboard === undefined ? undefined : resolve(dashboard),
     boat: {

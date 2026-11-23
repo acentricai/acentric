@@ -118,7 +118,7 @@ describe('a server’s settings', () => {
   });
 
   it('say how many actors are in a turn at once', () => {
-    expect(readSettings({}).maxTurns).toBe(100);
+    expect(readSettings({}).maxTurns).toBe(1000);
     expect(readSettings({ ACENTRIC_MAX_TURNS: '400' }).maxTurns).toBe(400);
     expect(() => readSettings({ ACENTRIC_MAX_TURNS: '0' })).toThrow(
       'ACENTRIC_MAX_TURNS is a whole number from 1 to 10000, and is 0',
