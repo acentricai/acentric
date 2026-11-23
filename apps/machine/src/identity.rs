@@ -78,10 +78,7 @@ pub fn enrol(dir: &Path, server: &str, id: &str, token: &str) -> Result<(), Stri
     getrandom::fill(&mut seed).map_err(|error| format!("no key could be made: {error}"))?;
     let key = SigningKey::from_bytes(&seed);
     let body = serde_json::json!({ "token": token, "publicKey": public_key(&key) }).to_string();
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .http_status_as_error(false)
-        .build()
-        .into();
+    let agent = crate::tls::agent()?;
     let mut answer = agent
         .post(format!("{server}/v1/machines/{id}/enrol"))
         .header("content-type", "application/json")
