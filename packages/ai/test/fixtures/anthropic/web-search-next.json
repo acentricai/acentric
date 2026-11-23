@@ -1,0 +1,363 @@
+{
+  "provider": "anthropic",
+  "scenario": "web-search-next",
+  "step": {
+    "model": "claude-haiku-5-5",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "Search the web once before you answer. Answer in one short sentence.",
+    "tools": [],
+    "options": {
+      "webSearch": true
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What does the page at example.com say it is for?"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "I'm checking what example.com says its purpose is, so I'll run one search for it.\n\n",
+            "signature": "CAQSxwUKEAgUGAI4AUIIdGhpbmtpbmcSDD8zl7NBH6ds8yKvaRoMoGjUSBEjqIBtodJWIjCnzduToAJ40WKHQPEvaUAdkfOQ+8ufbcofeHEyajqWhjRFCzEXhReMJ2sPTpEJkkUq5ASNBQs0EFvh+OpDxERfGsgi0fNSYhGWNKIFkvqmd57GyHvhpfhM2c3Uk3GBGOqVZsDDeecqxO5orlOm9oLZBPJPe7DQNdGKx7IK81SHIP0YiyiUAC0ViWoebOA6KlHjwQVuR8sC1MB4/tkrTF8E8YtMwJv+sXCdgOBre9YQ9XE5b4PyO0CyJkdtdbVwNlGlr8tCWSSWAFh8oc+V4vxra/fq96UJlPDxibKyiPVPoccxQGDm46ODNY/p3iRnNBZ/GecAh0p6zkCzHowDEdgXmciKmL6CUH83o2Z0FYVN2t2k7r31kHTzpyNeb01/VK7DcQt/y02I0zM2ZiifSKg5tWwULPcEqBBaA7tcNuUxKChYG3H1spWlEA4RivtNjpx17X/yuNBmQpK+CBcpCkg13ZTQKbVVjSWEN697Go6/GKOWJAcOmkj5r54OMS8NQtZ3ASAlfWhm8eCEcbT7tK48zLIOihiYKFWl2wE49kuPBZRocfDavu5duKiJYpWPSA7v56Iktt1UWZD3NfeZMwNrVb0vKLFkt1QdaJjAtLwxoHZmFAUj6FsKuN6Q52WwXnOoX+013duKM5OXLB3ZmvZ7XGzy9izlYrwm6dAD+m0DOqI6bj5A1GGvqFay0exr50MEtMXRIDBz4d0zb4xxUnVmJkbcHrM6Ermn3S6emUaJvN85Uh/Yb5HMOD9jN2crlVJQFKrnqAfniz0NRzQqaz/Xlcs+/RNA/07OykbdKxEzjY5XvdnHPDj2zGPwra/tReEUc4Jo6VZCB2eYMjSJVYFcJaQ8BdCVttcU1e5o4ur+7M13yYS4UGYYAQ=="
+          },
+          {
+            "type": "server_tool_use",
+            "id": "srvtoolu_01FW1wQTRCmaGy8e576SuYmX",
+            "name": "web_search",
+            "input": {
+              "query": "example.com page purpose"
+            }
+          },
+          {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_01FW1wQTRCmaGy8e576SuYmX",
+            "content": [
+              {
+                "type": "web_search_result",
+                "title": "Example.com Just Launched The Biggest Redesign In Decades",
+                "url": "https://www.debugbear.com/blog/example-dot-com-redesign-history",
+                "encrypted_content": "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",
+                "page_age": "47 days ago"
+              },
+              {
+                "type": "web_search_result",
+                "title": "Example.com",
+                "url": "https://website.fandom.com/wiki/Example.com",
+                "encrypted_content": "EsYKCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDAJYW4dEYKzEakRgtBoMr/Lqs6mksYgLKbNDIjAnKIp7YS7t74jGio+gVD8Cum5up1j3l3qx7CoCIty/+X0j33xYa1Iy8kNZ18YevGcqyQnZ3OMtlPq2xV6t+sPRo5O85JaidF7zRDbv9uysGwD/X2EwIgoW6b22HMtIupKSrsmGDyQObBKt+qEraqGVCZa84eNcBrW66WXMod8wMihCFQtT3+PCfNirgl8tYfvHRBBICbwaPgLWgqOx9ILvAmW3XHIvs/ixXUbg3DKidhqPoatJ73piAR009zgp4ayapfwjESlYlGia7Ab0qSIX7K6yj5ZOWrxfycpwEHkImqwvKpQEax0vK6OQqBCIHgaANVPfaTROdEwf9lhnvlxJiyQ+H7dGwqPbwNLJQ60JHpm4LS22BW84eiTXTfm2DTT0J9rCTMSVK6XcuxYV/H1stP2XM7M7MnYf6RZuPv79jF68e5QMYGMi3aAXyUPEC1vmvKgcB0afeUQXgVX+Q7QmvWWzrouc667YgzNYNv+Jea4HySz5lqifanY7F3SqObp7MFPetJ2rTJq6VksWfNPjzr/UPXqrV+HMS8xPBhCrfsN3TzFIXx3ry+EapdJIB3m4DDEMrbT8JsGVGG9AaEBdw6ohaeXseqTvjltYpX2nNNRTGMNlp/7SSf2Q08FmnQl9ODkPraKjveaVUZ3Uwg0ui9uOqQhH7o+EQZhcY33phjVtaCXPi9MB+p4lRrt7RnyrJqZ6Jro3UadNCJkhfbTvOMrchwcEuRrXwqNTP2GYxDZBaHqLVpkZCGfnFfnYSBSG5eIbDvh/yRHHKAP+oZP6z+p7RlKTKsXdapRSaExDhEKkFGeKNuNO2DcV6I8zuVpCwaGuZOfXOMuZBLQ9Gd/Nl6aVvJYu27PBRu0bnPXBzn7MU++2sobDFxkPDAzxUx5Cu5gydjAYCX4/9k50QdlAjFhggoXeh60Kuk9HxQeMMcrq3D+q8c9E1bBvNrVVgRjJ6OIJ6K6gGKjmKoADyllS8GU2OczdhYJsz36gVTUqUS4pMo2j/DGBff8GGfI+zeTpMq0I1FfC09UoBEGH9E4rIquov61ZN5jFWh0QEBAKLq8H5jAMBrPur7bpIIwLDXfiu0/qRTYMgJT85QwEMsP822qoBl0zYWTrFtzte2KAcQQSAVdr3oeDQC44AujJCApB2CD0lK0JvIZGB1MjHTURfX4jbdrX5BjgVeYavGAi3R1bdTlGgAfoMa66BHYNRNVfpqV+jHIdy33F25v+6QJTA4YVUMB+qX/pfJ/Uom7o371AUqwpvBsSjIAOXgKxTiye3BNpebFEOyyW7/K43dSLTDconW3NzStNhTYbP5qLGv+QWyQAMK4LOAHJD6xXMDmpYEicsC2IUDtxDU5bs7+aF1fazKrSNYml57L6srSb7Hhkc8JHVoQR7vhj/Uv49ReAbosYsj8rM/MXUiKbhMjQW6zSRVIu4OfhVycZAAoHNGM9N8KBRxt+BGIDQhJ5OQ+R4917yTsQr7JAJeQ7nX86sslLDWgNDpahRq0sok/lN2yZ4JUQH6y02LyqeVn4Y1s/lJ5uqLWV7HAteQUob2oQ8OzZE7UQ6tKD6LmsePwjRXBewBas5NEvpa9+w8KmchT+VXGu90bJ6eqr6fN6LrriltxBpPqz88d8yqomwvP3brCnqdDDKBlsiRVS4G9HMywsbf+6d4zIrirWyo9JTL82SPaO0JPDdj+VtcLlGAM=",
+                "page_age": "116 days ago"
+              },
+              {
+                "type": "web_search_result",
+                "title": ">(No @example.com) The example.{com,org,net} domain was created for this purpose...",
+                "url": "https://news.ycombinator.com/item?id=42765588",
+                "encrypted_content": "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",
+                "page_age": "672 days ago"
+              },
+              {
+                "type": "web_search_result",
+                "title": "Understanding Example.com: The Official Domain for Technical Documentation and Testing - Beanstalk Studio",
+                "url": "https://beanstalk.studio-shed.com/statement/insight/example-com-yoc6n8n9x",
+                "encrypted_content": "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",
+                "page_age": "19 days ago"
+              },
+              {
+                "type": "web_search_result",
+                "title": "Example Domains",
+                "url": "https://www.iana.org/help/example-domains",
+                "encrypted_content": "EroHCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDN6JDzu7gXH3HJVi/hoMPuuG+/HDLs6XeYW6IjAsjxnpnaM3acx71ks91FHue7QQRaGanGrbwkZLmrGbBesb0lrTqIgNjdgWO08xqiMqvQbpT9jm+ktoL4Xxgxm62Oi45Qr6ebi30zJH2oC+cFf2w6WNBoxH4pnnQSyOlwYvOqd/cPad21fAEfLq79t6gMH806h/YgCLJs3D3JcSTz9GyKm+a03yVjo8qdFowHGNaQrnaCN17lTmecs7nPOlum89bhaIi3mRK4u9b44RHUOdlyU3akf6ZqTvbR4PXwb/q/1rvOAwgYvBCPrICwdsBfqdCJhZuofbczDqQCNi5WnUGdeVYUC2FShf/OdB49++Hm9jUQLTq832jRcn6p7EV7eeemTWC00WjNb9MLw253SU92O/0UO1fVsjKnGSBRAFhe6sVFTnTxx3AyGhvEqhBxZ3+YtZEtLK7zhxzRvruuH5jb+FQcbwmF20wU+hgebO1f6nO6KMUDYwdSUDpAu9JyYQIQS3VUym9TAMQ1pFQ6naWTOj7CIwX5cXxaYxDKy5srNFhRL7WXKm/6w+FndU/mBrthpU5ZXgiYxePAK0v6QtfUjWfnDo5gRYf/O2FP0ONrAvrShBmq+P2c7RsrecQFj7CRyDH96WfjYnw2ExqkV+R2cLtb9d5659leS1D/IExeDGNPNDkMmvV0Krh8OBQx5iQTerQVoZ1kq3ZRs3Sa9EOv7v/swqUkNCkR0QJoj+dp9CIepDGOiPiWzNjAP4LrJkJOsbJ2ax2Q0ryfAPjcleBPmaAxf50/avv9/3u+AfBhThx2jeKIv+ysvhJUwn6JzwwPoFlwv7GZKACQMrdzs29UCGw2cKudOAPo/wzhQ7S4qoRkr6WlIoyuCLV662kEbB5/6JM9I6mss4NVuPr7P87oTu9i/zHL08TQRFYn4yn2fUEBjQolfBLcXsuW/4GZcLZ1zIOrEzOWPo+i5FTPwC0EcRrH6s17E50CbuO1SsNOvXEfbQ9HtWFmZg/bh4gLV0YLKhep7aR0mscQsALfce5e2igkOlqHndl8hrQd0jlrKuSOpskHlwE7Vii1zbJVgTUfpSaeHiF0n1ayGOKJ4FxJljhQTST1b0foDugjYBFTMyXjEyM06n31ToeWbiN4PMPA7rhwOanbz92I+b6zN3rBqViX9QFSNuNXaEB2bpZpKl/lZp8QtY8O79VH8+GAM=",
+                "page_age": "57 days ago"
+              },
+              {
+                "type": "web_search_result",
+                "title": "What's the example.com domain? - PlotHost",
+                "url": "https://www.plothost.com/kb/example-com-domain/",
+                "encrypted_content": "EsQNCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDHyUc5j4ewhc2L94IxoMbfFsHZMB2HC84XqWIjBilQaDvfq64vd5bbdL6qehORkHzzldrmMiLaNNM2W0hM5QB82ifvTjx5QqkcBlQf8qxwxjWEklzho1cRQeske1hotAyDc0sWv+TVv5X9bvfU3a4Fo+7H4LobMr05nwzJAYMTwn6XIcRcMOQ+fISBaoWINHGGWLKyneWSiFTmWvX6Lg88Hrdb2udxFO/dG20YKct63f+Na9QPjsB52wRtujsjZHuhC2sXfKrnA9yT7tcUu0SXnuFnxhA1liU91Rs8D5sjfK5mqGdfQb3ANaJIwauETWeiW1kEUNajJfDYjF6ZiksRDtYs3NVaor+q78xdex4S4SDc0fkkyJL/nYne2544xKulCEBPXPw7ymTXkpALsltlPW/JnIIg0kW7nFAhuc+jRuazP7tz6iBHdLWcvpYeroZ/h7uwDhVrreXySo6uJP1IZ0Uv9OnIlP8zBQoY3cyu5EXHvIqACL3WYsRt/Cgo8Y4kP/gtM6jHdOF+krzIhUfF0Ado7uOnGtk/iNQyDgITqgpGbufISlyU3cN1VFTC32IM/N7zT/+DJOfspAL975Ta8PZDGLMT5TZsTxQ1AIvMTMoXzawoypdmqj1nFk21wuU3+HS63CRQFoJ6/GDXgHjwuT+/FAU5+K03Vwt4K0SxHg/liAfnwwg/UBRgn5NzgbKarkVaCozm0M5zV4YM7/RdlggvncH0UcJNMmFrOt6buFjOMMC0E6UT+5HyAerLd8j0fHQP3k6cZ1Q6vrhhXwbq6fv5uNU5uiajBc9jOhXd8TlZ0K3pCXqdZd9plB7lyLjmPGivtEX3BlYzNLroi05c7eoV2l7Lo8MoXqy8pJbmaKovVNso25aylIuhoBFRVbBx0kSR+ZpPGzlKADdGeRzcQ7AIF+8VZKJwim38XTe62eV/54izTyDHsxiamY3+Rrm6ex+pvebV0NNQf+UMGbcZhpa9gmbJ8yvJ4eMiUctyV3HlG4cxIEHTgGAIT8b4LND4doW5mYzBvbu1AHyqwrP8xgWPySE3FCglHaIEU1pwGSZfOFvvMrnpVUe6RLYjwlDTeY89RHYHieCBsoVi/D1Wyzuweq1XxgFIY0zgJQB/Zh0ucm1ckWglLVUirTRqvdcnzxFItxt154e81/GoXqXSDC+CrU6BwHNXUyIZzeg6zqiC+EZnxHX8nnmuUqWyEhym0wEF9GYWSkTHMc5YEllZfuDq+bnvlHwTRURtZgrn1zSiipA5dFVNFKcQTvvtCrIPVk+yEt03ucKoHqwDiV2im3hGItiQCBlo+dRIDRMNLWOavuWc+GCEGu7IykZiolX/zhqttW+ausNln7xmFcKtoqEtgPpAVI/QJjaPq1tPeuTY0BTn4CvzMuP9l0Hg3PMyp+N6wmTkqVKx5U/EDogwRlBqkQcKJ3iZi8ydIzvDhEv2/mrYqBbVrEJGI+nGIRO6Lzq6zvT3SxMxWvuanEcVd+DtRCe7F9MXW7u363aRAHwX7R2DTOuZoKHXxj43LyX9cSERA9zyckGM36imoFerIcxcI3++iUuV62zX196dDk+uK7j+9X63pWpedk9znqHCAA/Sk7v09IiS12QOQkDA/xlmADEf749N8Iz0ikU50picpCv/8IDw2R/szMvCex5LM7flLG60MfzDOUS8PCxBfFtLEaUAgDXbcmNYPymruIMy3SofI5MSeHnpo6BhPvyC83vmKa+AcWSs582P/wRUqAG3XYY7MMfxQoEH4liGf4aoI4GflGy3zKULw14DTy3zaFr6OQfhEXkD5CIYyKMaLodkZO5M6xuGOWYhpUXEosECEmslLxbHkf3Gw4w4HRoNfQvpu6iMK12DBwv+N+K4PS1VlmwF+2Fjvb1d4DXgk186WfloF0UbNgLtHf9/oxWWawkzQ2gfw8ziyDz0zthv945VET+k+aF/hWGbpnSCCxI779lVIqInCUSDPpVrZXY+nN5eAWk5rju8e+DygC25vmUachVWxyYYwMwwBRgbiwQQdoy8fBtRk28Omv/Hb7o8AEy60Ifzmidunr7G8T1/Mptd5fo9xihoieZhlpJaC0fTewv6iwjfbc8e+MQfDbfg13tOM9qpAzu74FJqKbaKaJy+FhlKNV+cAcKq8C8hhGpoL2yW2D39CGvWdGKDBIL0E21UGE9vSMoSpg0SB4C2Liv0QA7CvCdqhrDKNFamUGr6Ba8Mrmqj6zFxFC7x9dihmULps+wRgD",
+                "page_age": "1854 days ago"
+              },
+              {
+                "type": "web_search_result",
+                "title": "Example.com",
+                "url": "https://en.wikipedia.org/wiki/Example.com",
+                "encrypted_content": "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",
+                "page_age": null
+              },
+              {
+                "type": "web_search_result",
+                "title": "Typo traps: analyzing traffic to exmaple.com (or is it example.com?)",
+                "url": "https://blog.cloudflare.com/typo-traps-analyzing-traffic-to-exmaple-com-or-is-it-example-com/",
+                "encrypted_content": "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",
+                "page_age": "130 days ago"
+              },
+              {
+                "type": "web_search_result",
+                "title": "Home page",
+                "url": "https://en.wikipedia.org/wiki/Home_page",
+                "encrypted_content": "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",
+                "page_age": null
+              }
+            ],
+            "caller": {
+              "type": "direct"
+            }
+          },
+          {
+            "type": "thinking",
+            "thinking": "I'm settling on a single short sentence with citations, and I'll word the IANA point in my own terms so it doesn't echo the source's phrasing.\n\nI'm working out how to word the reserved-domain point so it's a paraphrase with a citation, not a copy of the source's clauses. I'll cite the IANA page for the documentation-use purpose and keep it to one sentence.\n\n",
+            "signature": "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"
+          },
+          {
+            "type": "text",
+            "text": "According to IANA's help page, the example.com landing page explains that the domain exists to supply placeholder names for illustrative use in written materials, and it isn't meant for live services "
+          },
+          {
+            "citations": [
+              {
+                "type": "web_search_result_location",
+                "cited_text": "We provide a web service on the example domain hosts to provide basic information on the purpose of the domain. ",
+                "url": "https://www.iana.org/help/example-domains",
+                "title": "Example Domains",
+                "encrypted_index": "Eo8BCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDKot8vZ4/jTaru/zURoMMbV9UTkZNG3CWGaWIjB8C6WHzuSonbimQakMBrg3rACoV/q1ZtVXrlBC6j2zcXtuI9DyHhw/Kb3XTFILwoUqE7zlaqw4BzC33k04I9deeIxi23YYBA=="
+              }
+            ],
+            "type": "text",
+            "text": "IANA provides a web service on these hosts to give basic information about the domain's purpose."
+          }
+        ],
+        "id": "msg_011ChKRVCFt2sm68NTuUZyxk"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Say that once more in other words. Do not search."
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "content-type": "application/json",
+      "x-api-key": "<redacted>",
+      "anthropic-version": "2023-06-01"
+    },
+    "body": {
+      "thinking": {
+        "type": "adaptive",
+        "display": "summarized"
+      },
+      "output_config": {
+        "effort": "low"
+      },
+      "cache_control": {
+        "type": "ephemeral"
+      },
+      "stream": true,
+      "model": "claude-haiku-5-5",
+      "max_tokens": 128000,
+      "system": [
+        {
+          "type": "text",
+          "text": "Search the web once before you answer. Answer in one short sentence.",
+          "cache_control": {
+            "type": "ephemeral"
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "What does the page at example.com say it is for?"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "I'm checking what example.com says its purpose is, so I'll run one search for it.\n\n",
+              "signature": "CAQSxwUKEAgUGAI4AUIIdGhpbmtpbmcSDD8zl7NBH6ds8yKvaRoMoGjUSBEjqIBtodJWIjCnzduToAJ40WKHQPEvaUAdkfOQ+8ufbcofeHEyajqWhjRFCzEXhReMJ2sPTpEJkkUq5ASNBQs0EFvh+OpDxERfGsgi0fNSYhGWNKIFkvqmd57GyHvhpfhM2c3Uk3GBGOqVZsDDeecqxO5orlOm9oLZBPJPe7DQNdGKx7IK81SHIP0YiyiUAC0ViWoebOA6KlHjwQVuR8sC1MB4/tkrTF8E8YtMwJv+sXCdgOBre9YQ9XE5b4PyO0CyJkdtdbVwNlGlr8tCWSSWAFh8oc+V4vxra/fq96UJlPDxibKyiPVPoccxQGDm46ODNY/p3iRnNBZ/GecAh0p6zkCzHowDEdgXmciKmL6CUH83o2Z0FYVN2t2k7r31kHTzpyNeb01/VK7DcQt/y02I0zM2ZiifSKg5tWwULPcEqBBaA7tcNuUxKChYG3H1spWlEA4RivtNjpx17X/yuNBmQpK+CBcpCkg13ZTQKbVVjSWEN697Go6/GKOWJAcOmkj5r54OMS8NQtZ3ASAlfWhm8eCEcbT7tK48zLIOihiYKFWl2wE49kuPBZRocfDavu5duKiJYpWPSA7v56Iktt1UWZD3NfeZMwNrVb0vKLFkt1QdaJjAtLwxoHZmFAUj6FsKuN6Q52WwXnOoX+013duKM5OXLB3ZmvZ7XGzy9izlYrwm6dAD+m0DOqI6bj5A1GGvqFay0exr50MEtMXRIDBz4d0zb4xxUnVmJkbcHrM6Ermn3S6emUaJvN85Uh/Yb5HMOD9jN2crlVJQFKrnqAfniz0NRzQqaz/Xlcs+/RNA/07OykbdKxEzjY5XvdnHPDj2zGPwra/tReEUc4Jo6VZCB2eYMjSJVYFcJaQ8BdCVttcU1e5o4ur+7M13yYS4UGYYAQ=="
+            },
+            {
+              "type": "server_tool_use",
+              "id": "srvtoolu_01FW1wQTRCmaGy8e576SuYmX",
+              "name": "web_search",
+              "input": {
+                "query": "example.com page purpose"
+              }
+            },
+            {
+              "type": "web_search_tool_result",
+              "tool_use_id": "srvtoolu_01FW1wQTRCmaGy8e576SuYmX",
+              "content": [
+                {
+                  "type": "web_search_result",
+                  "title": "Example.com Just Launched The Biggest Redesign In Decades",
+                  "url": "https://www.debugbear.com/blog/example-dot-com-redesign-history",
+                  "encrypted_content": "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",
+                  "page_age": "47 days ago"
+                },
+                {
+                  "type": "web_search_result",
+                  "title": "Example.com",
+                  "url": "https://website.fandom.com/wiki/Example.com",
+                  "encrypted_content": "EsYKCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDAJYW4dEYKzEakRgtBoMr/Lqs6mksYgLKbNDIjAnKIp7YS7t74jGio+gVD8Cum5up1j3l3qx7CoCIty/+X0j33xYa1Iy8kNZ18YevGcqyQnZ3OMtlPq2xV6t+sPRo5O85JaidF7zRDbv9uysGwD/X2EwIgoW6b22HMtIupKSrsmGDyQObBKt+qEraqGVCZa84eNcBrW66WXMod8wMihCFQtT3+PCfNirgl8tYfvHRBBICbwaPgLWgqOx9ILvAmW3XHIvs/ixXUbg3DKidhqPoatJ73piAR009zgp4ayapfwjESlYlGia7Ab0qSIX7K6yj5ZOWrxfycpwEHkImqwvKpQEax0vK6OQqBCIHgaANVPfaTROdEwf9lhnvlxJiyQ+H7dGwqPbwNLJQ60JHpm4LS22BW84eiTXTfm2DTT0J9rCTMSVK6XcuxYV/H1stP2XM7M7MnYf6RZuPv79jF68e5QMYGMi3aAXyUPEC1vmvKgcB0afeUQXgVX+Q7QmvWWzrouc667YgzNYNv+Jea4HySz5lqifanY7F3SqObp7MFPetJ2rTJq6VksWfNPjzr/UPXqrV+HMS8xPBhCrfsN3TzFIXx3ry+EapdJIB3m4DDEMrbT8JsGVGG9AaEBdw6ohaeXseqTvjltYpX2nNNRTGMNlp/7SSf2Q08FmnQl9ODkPraKjveaVUZ3Uwg0ui9uOqQhH7o+EQZhcY33phjVtaCXPi9MB+p4lRrt7RnyrJqZ6Jro3UadNCJkhfbTvOMrchwcEuRrXwqNTP2GYxDZBaHqLVpkZCGfnFfnYSBSG5eIbDvh/yRHHKAP+oZP6z+p7RlKTKsXdapRSaExDhEKkFGeKNuNO2DcV6I8zuVpCwaGuZOfXOMuZBLQ9Gd/Nl6aVvJYu27PBRu0bnPXBzn7MU++2sobDFxkPDAzxUx5Cu5gydjAYCX4/9k50QdlAjFhggoXeh60Kuk9HxQeMMcrq3D+q8c9E1bBvNrVVgRjJ6OIJ6K6gGKjmKoADyllS8GU2OczdhYJsz36gVTUqUS4pMo2j/DGBff8GGfI+zeTpMq0I1FfC09UoBEGH9E4rIquov61ZN5jFWh0QEBAKLq8H5jAMBrPur7bpIIwLDXfiu0/qRTYMgJT85QwEMsP822qoBl0zYWTrFtzte2KAcQQSAVdr3oeDQC44AujJCApB2CD0lK0JvIZGB1MjHTURfX4jbdrX5BjgVeYavGAi3R1bdTlGgAfoMa66BHYNRNVfpqV+jHIdy33F25v+6QJTA4YVUMB+qX/pfJ/Uom7o371AUqwpvBsSjIAOXgKxTiye3BNpebFEOyyW7/K43dSLTDconW3NzStNhTYbP5qLGv+QWyQAMK4LOAHJD6xXMDmpYEicsC2IUDtxDU5bs7+aF1fazKrSNYml57L6srSb7Hhkc8JHVoQR7vhj/Uv49ReAbosYsj8rM/MXUiKbhMjQW6zSRVIu4OfhVycZAAoHNGM9N8KBRxt+BGIDQhJ5OQ+R4917yTsQr7JAJeQ7nX86sslLDWgNDpahRq0sok/lN2yZ4JUQH6y02LyqeVn4Y1s/lJ5uqLWV7HAteQUob2oQ8OzZE7UQ6tKD6LmsePwjRXBewBas5NEvpa9+w8KmchT+VXGu90bJ6eqr6fN6LrriltxBpPqz88d8yqomwvP3brCnqdDDKBlsiRVS4G9HMywsbf+6d4zIrirWyo9JTL82SPaO0JPDdj+VtcLlGAM=",
+                  "page_age": "116 days ago"
+                },
+                {
+                  "type": "web_search_result",
+                  "title": ">(No @example.com) The example.{com,org,net} domain was created for this purpose...",
+                  "url": "https://news.ycombinator.com/item?id=42765588",
+                  "encrypted_content": "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",
+                  "page_age": "672 days ago"
+                },
+                {
+                  "type": "web_search_result",
+                  "title": "Understanding Example.com: The Official Domain for Technical Documentation and Testing - Beanstalk Studio",
+                  "url": "https://beanstalk.studio-shed.com/statement/insight/example-com-yoc6n8n9x",
+                  "encrypted_content": "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",
+                  "page_age": "19 days ago"
+                },
+                {
+                  "type": "web_search_result",
+                  "title": "Example Domains",
+                  "url": "https://www.iana.org/help/example-domains",
+                  "encrypted_content": "EroHCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDN6JDzu7gXH3HJVi/hoMPuuG+/HDLs6XeYW6IjAsjxnpnaM3acx71ks91FHue7QQRaGanGrbwkZLmrGbBesb0lrTqIgNjdgWO08xqiMqvQbpT9jm+ktoL4Xxgxm62Oi45Qr6ebi30zJH2oC+cFf2w6WNBoxH4pnnQSyOlwYvOqd/cPad21fAEfLq79t6gMH806h/YgCLJs3D3JcSTz9GyKm+a03yVjo8qdFowHGNaQrnaCN17lTmecs7nPOlum89bhaIi3mRK4u9b44RHUOdlyU3akf6ZqTvbR4PXwb/q/1rvOAwgYvBCPrICwdsBfqdCJhZuofbczDqQCNi5WnUGdeVYUC2FShf/OdB49++Hm9jUQLTq832jRcn6p7EV7eeemTWC00WjNb9MLw253SU92O/0UO1fVsjKnGSBRAFhe6sVFTnTxx3AyGhvEqhBxZ3+YtZEtLK7zhxzRvruuH5jb+FQcbwmF20wU+hgebO1f6nO6KMUDYwdSUDpAu9JyYQIQS3VUym9TAMQ1pFQ6naWTOj7CIwX5cXxaYxDKy5srNFhRL7WXKm/6w+FndU/mBrthpU5ZXgiYxePAK0v6QtfUjWfnDo5gRYf/O2FP0ONrAvrShBmq+P2c7RsrecQFj7CRyDH96WfjYnw2ExqkV+R2cLtb9d5659leS1D/IExeDGNPNDkMmvV0Krh8OBQx5iQTerQVoZ1kq3ZRs3Sa9EOv7v/swqUkNCkR0QJoj+dp9CIepDGOiPiWzNjAP4LrJkJOsbJ2ax2Q0ryfAPjcleBPmaAxf50/avv9/3u+AfBhThx2jeKIv+ysvhJUwn6JzwwPoFlwv7GZKACQMrdzs29UCGw2cKudOAPo/wzhQ7S4qoRkr6WlIoyuCLV662kEbB5/6JM9I6mss4NVuPr7P87oTu9i/zHL08TQRFYn4yn2fUEBjQolfBLcXsuW/4GZcLZ1zIOrEzOWPo+i5FTPwC0EcRrH6s17E50CbuO1SsNOvXEfbQ9HtWFmZg/bh4gLV0YLKhep7aR0mscQsALfce5e2igkOlqHndl8hrQd0jlrKuSOpskHlwE7Vii1zbJVgTUfpSaeHiF0n1ayGOKJ4FxJljhQTST1b0foDugjYBFTMyXjEyM06n31ToeWbiN4PMPA7rhwOanbz92I+b6zN3rBqViX9QFSNuNXaEB2bpZpKl/lZp8QtY8O79VH8+GAM=",
+                  "page_age": "57 days ago"
+                },
+                {
+                  "type": "web_search_result",
+                  "title": "What's the example.com domain? - PlotHost",
+                  "url": "https://www.plothost.com/kb/example-com-domain/",
+                  "encrypted_content": "EsQNCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDHyUc5j4ewhc2L94IxoMbfFsHZMB2HC84XqWIjBilQaDvfq64vd5bbdL6qehORkHzzldrmMiLaNNM2W0hM5QB82ifvTjx5QqkcBlQf8qxwxjWEklzho1cRQeske1hotAyDc0sWv+TVv5X9bvfU3a4Fo+7H4LobMr05nwzJAYMTwn6XIcRcMOQ+fISBaoWINHGGWLKyneWSiFTmWvX6Lg88Hrdb2udxFO/dG20YKct63f+Na9QPjsB52wRtujsjZHuhC2sXfKrnA9yT7tcUu0SXnuFnxhA1liU91Rs8D5sjfK5mqGdfQb3ANaJIwauETWeiW1kEUNajJfDYjF6ZiksRDtYs3NVaor+q78xdex4S4SDc0fkkyJL/nYne2544xKulCEBPXPw7ymTXkpALsltlPW/JnIIg0kW7nFAhuc+jRuazP7tz6iBHdLWcvpYeroZ/h7uwDhVrreXySo6uJP1IZ0Uv9OnIlP8zBQoY3cyu5EXHvIqACL3WYsRt/Cgo8Y4kP/gtM6jHdOF+krzIhUfF0Ado7uOnGtk/iNQyDgITqgpGbufISlyU3cN1VFTC32IM/N7zT/+DJOfspAL975Ta8PZDGLMT5TZsTxQ1AIvMTMoXzawoypdmqj1nFk21wuU3+HS63CRQFoJ6/GDXgHjwuT+/FAU5+K03Vwt4K0SxHg/liAfnwwg/UBRgn5NzgbKarkVaCozm0M5zV4YM7/RdlggvncH0UcJNMmFrOt6buFjOMMC0E6UT+5HyAerLd8j0fHQP3k6cZ1Q6vrhhXwbq6fv5uNU5uiajBc9jOhXd8TlZ0K3pCXqdZd9plB7lyLjmPGivtEX3BlYzNLroi05c7eoV2l7Lo8MoXqy8pJbmaKovVNso25aylIuhoBFRVbBx0kSR+ZpPGzlKADdGeRzcQ7AIF+8VZKJwim38XTe62eV/54izTyDHsxiamY3+Rrm6ex+pvebV0NNQf+UMGbcZhpa9gmbJ8yvJ4eMiUctyV3HlG4cxIEHTgGAIT8b4LND4doW5mYzBvbu1AHyqwrP8xgWPySE3FCglHaIEU1pwGSZfOFvvMrnpVUe6RLYjwlDTeY89RHYHieCBsoVi/D1Wyzuweq1XxgFIY0zgJQB/Zh0ucm1ckWglLVUirTRqvdcnzxFItxt154e81/GoXqXSDC+CrU6BwHNXUyIZzeg6zqiC+EZnxHX8nnmuUqWyEhym0wEF9GYWSkTHMc5YEllZfuDq+bnvlHwTRURtZgrn1zSiipA5dFVNFKcQTvvtCrIPVk+yEt03ucKoHqwDiV2im3hGItiQCBlo+dRIDRMNLWOavuWc+GCEGu7IykZiolX/zhqttW+ausNln7xmFcKtoqEtgPpAVI/QJjaPq1tPeuTY0BTn4CvzMuP9l0Hg3PMyp+N6wmTkqVKx5U/EDogwRlBqkQcKJ3iZi8ydIzvDhEv2/mrYqBbVrEJGI+nGIRO6Lzq6zvT3SxMxWvuanEcVd+DtRCe7F9MXW7u363aRAHwX7R2DTOuZoKHXxj43LyX9cSERA9zyckGM36imoFerIcxcI3++iUuV62zX196dDk+uK7j+9X63pWpedk9znqHCAA/Sk7v09IiS12QOQkDA/xlmADEf749N8Iz0ikU50picpCv/8IDw2R/szMvCex5LM7flLG60MfzDOUS8PCxBfFtLEaUAgDXbcmNYPymruIMy3SofI5MSeHnpo6BhPvyC83vmKa+AcWSs582P/wRUqAG3XYY7MMfxQoEH4liGf4aoI4GflGy3zKULw14DTy3zaFr6OQfhEXkD5CIYyKMaLodkZO5M6xuGOWYhpUXEosECEmslLxbHkf3Gw4w4HRoNfQvpu6iMK12DBwv+N+K4PS1VlmwF+2Fjvb1d4DXgk186WfloF0UbNgLtHf9/oxWWawkzQ2gfw8ziyDz0zthv945VET+k+aF/hWGbpnSCCxI779lVIqInCUSDPpVrZXY+nN5eAWk5rju8e+DygC25vmUachVWxyYYwMwwBRgbiwQQdoy8fBtRk28Omv/Hb7o8AEy60Ifzmidunr7G8T1/Mptd5fo9xihoieZhlpJaC0fTewv6iwjfbc8e+MQfDbfg13tOM9qpAzu74FJqKbaKaJy+FhlKNV+cAcKq8C8hhGpoL2yW2D39CGvWdGKDBIL0E21UGE9vSMoSpg0SB4C2Liv0QA7CvCdqhrDKNFamUGr6Ba8Mrmqj6zFxFC7x9dihmULps+wRgD",
+                  "page_age": "1854 days ago"
+                },
+                {
+                  "type": "web_search_result",
+                  "title": "Example.com",
+                  "url": "https://en.wikipedia.org/wiki/Example.com",
+                  "encrypted_content": "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",
+                  "page_age": null
+                },
+                {
+                  "type": "web_search_result",
+                  "title": "Typo traps: analyzing traffic to exmaple.com (or is it example.com?)",
+                  "url": "https://blog.cloudflare.com/typo-traps-analyzing-traffic-to-exmaple-com-or-is-it-example-com/",
+                  "encrypted_content": "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",
+                  "page_age": "130 days ago"
+                },
+                {
+                  "type": "web_search_result",
+                  "title": "Home page",
+                  "url": "https://en.wikipedia.org/wiki/Home_page",
+                  "encrypted_content": "EugNCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDG8uIuFm7Z0S/twMaBoMNnxUHn1O3lJptQ5LIjDmvC10g65bSWG7Yfi9fIT82yXituiyQKgOGY4/xzptjr17Kg1MTBcq84OgklAdD6Uq6wwmkaQBF6wVy8BXTdthuewc1B8yjlRsOygN0XE6x9DQKEqe6T5tlT1rxLNP6jE+447Aiz06gWW/oN7LbxuKNm8WLVGNScz1lPU1Jq+1KTYSJSyheavNWmylBdNlbz/JnAZEoAPA3TMMt7hnDaLCRdtbQ2dtrwN5HYiogDQlkhF2DlGtpi4NhpQ5xz09CEGFDSYsautaik5YHklgajNnmHKJKdkuxuqmBjLDATc+k7AtQIEN1oHmbbfxXYPWRhnldv3zNRn6+/zP8qRMhg9VzzbW0weseLalDB5XMUUbi/DwZjcJ4ZBg11KhxPt5LKsaHxAviC9bqNGcuAFJHG6u1sJ4miucncIml+vLg+QpAhLg4+2nQDFtdPZBm056IpACam/4fRWGryWWLBSW86SgV4dfjRza+sOeKFsY3Q8Rw4r2FfUUbUgInJtsnwcEUIqcH9H26WW+LZ0F35URM3CnsLUKe3p1f6kBxryuJFlanUiyw4SS9f3hg92WGorxPk0Nliojd9LeqoFTA3ZWxuopdmZQszYOcSgBou5haFWQgbGXkyrGMohKwzmbeBnGnckjOPeg2GyEJWIONMIPg+C15x3he2RlV+HHZJ79wFbG656L6BocE/FDHUEWWjMBoyXWYPHALXKJ0c564/CEIAnSXI7owAYjnuEgJ0E3AagaEvWagfzVLdpXNYTDmUH8+C0M+VCRH+mh7g3MJ9yHrmJ0xs9Qbwg+YD8URigNhCo+g1AhajBhlaJZLDM6PAoPbl+IlyeRE1qzgg+F0xgtr0HO+pgsYm33mr13mrBkXZ69ZVsp8jwHFIBKELVOx77emmbBgH1gSD6oRPnet0UafgWBKtfl/FMG2xVJufbFoT1Ck/4KKJ60i9lwWtjt6rkaFf3Iz8KrHZrhx0nzV5ymlFSg2UsrCut/Q7lBaxIy4hBKXb1Dw3n3cKg8sAfi1yT2TW+i2TCRK6lHemU+SqdQOfyczlcDOdb9SSxodmbv7DUrjSsoPMCphIHHC/u8WroakgWuS8CFvbNSoJ4/WNEZiA8Kh6Nsjb2kg//kzmi5Ey+NRZT6B1HsW5JlQYhQkgNmpV4CjL8TEVxNZt55GL/SdKrkhiIUTdjgDyESiTXQ2aC/81+iJp7CzIDZejnaEjUYXbu8GM3JZntG+sL2RYFgdNdFLtO2kshjf+JrW7viWrIXglmhDZ3ttJuSRUAqjEpMgZqa/hv4wmBnF0UcT8nBnCTNPmbxp42bks1sWkN/Im8DwLTuMAgXNoMvPX4vyxiEIXs4Q3prv6OpCkN4xW9Jc2gy20LvxobiOzOkakSEid/K8RDPAgrIGlrsF2YkhZidPzp9Ihigfvov045dVoLJrpIpmV5ZMns8+lGcdg1QyAF5O/2H7khjQok15KKJsrDzwZrieduk5IVeQ+8iizr0OMtmyzSS0iCAjvegC6JczEI/nPVSjPhDDSo2482xk9AZs3JLOEDYslXUCrmkh1+rA27eQT/NyuBYAmMss2udodmjsd5eIFPbu8A0HRhA9wJHBHGLWPh7GMWEv9+T7wJ8tgYrU7OZE2nPskXMGYsPL8dbMRUkPTyEBhAHdh/9l+FMCwmO/NiqkdGboUpgHRx9k8ma8+oN/ucfFgeAN+Kl7etyrPSzUNDvSdbvjR+9l2MIzmOyU64O7hRxhEalHnqBZj1ilWywdBtcoijB9cUef0AbyXaagajWnogjA1fHVWgACm3vvsmHLbHwFTqCo+QwudMYx8LFt0IOhezvQMQSFJmLmdry6MZwjBYNcJSZjIhdLofq1NNHFV/HiVxss4UNj+eMNdpczBHJlBBeXws2n/jgemPpbrPGYdzRyUp0J+Qim4RBEjTfQVWDsMc7Yua2F/od33mrr5Cx734fAioKlSAFa8K4KMlwwhQiiy43cI4dUXVs4d7fcpQi5xe+eHQAsa2HhUvVC/Og1NZmyFzBGyNbQC1opGcnPGzvQUUukrOi22WtkhjCjDV90DzasMQgOQbkwbSUYtxE1JMsS7jzw19YcvEaaZREru11PaC2mv/rdnfiQA39rKfGq+8oNAkJJjvtEDtZBZWLFjOcMKHZgCrF1a33xeLvArkBlDkYmtHV6l4eC9kWBdfjg7ioHOdq+KbwYtKDmlSmvxWJC9nCmfxFc7/YYfJpsQN12JCT6Dcm3i2aFumiAorYXCyrdDI94hgD",
+                  "page_age": null
+                }
+              ],
+              "caller": {
+                "type": "direct"
+              }
+            },
+            {
+              "type": "thinking",
+              "thinking": "I'm settling on a single short sentence with citations, and I'll word the IANA point in my own terms so it doesn't echo the source's phrasing.\n\nI'm working out how to word the reserved-domain point so it's a paraphrase with a citation, not a copy of the source's clauses. I'll cite the IANA page for the documentation-use purpose and keep it to one sentence.\n\n",
+              "signature": "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"
+            },
+            {
+              "type": "text",
+              "text": "According to IANA's help page, the example.com landing page explains that the domain exists to supply placeholder names for illustrative use in written materials, and it isn't meant for live services "
+            },
+            {
+              "citations": [
+                {
+                  "type": "web_search_result_location",
+                  "cited_text": "We provide a web service on the example domain hosts to provide basic information on the purpose of the domain. ",
+                  "url": "https://www.iana.org/help/example-domains",
+                  "title": "Example Domains",
+                  "encrypted_index": "Eo8BCioIFhgCIiQ2ZmQ0YjMyYi1iZWM5LTRhMDYtYmQ2Ny1jNDkwY2U4Y2U3YzYSDKot8vZ4/jTaru/zURoMMbV9UTkZNG3CWGaWIjB8C6WHzuSonbimQakMBrg3rACoV/q1ZtVXrlBC6j2zcXtuI9DyHhw/Kb3XTFILwoUqE7zlaqw4BzC33k04I9deeIxi23YYBA=="
+                }
+              ],
+              "type": "text",
+              "text": "IANA provides a web service on these hosts to give basic information about the domain's purpose."
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Say that once more in other words. Do not search."
+            }
+          ]
+        }
+      ],
+      "tools": [
+        {
+          "type": "web_search_20260318",
+          "name": "web_search",
+          "allowed_callers": ["direct"]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8"
+    },
+    "text": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-5-5\",\"id\":\"msg_011ChKRVXci8VUtVSNGC93uc\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":494,\"cache_read_input_tokens\":10360,\"cache_creation\":{\"ephemeral_5m_input_tokens\":494,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}     }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}         }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" page's\"}              }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" land\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ing text says the domain is there\"} }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" to ser\"}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ve as\"}      }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" a st\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"and-in name in documents and\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" t\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"utorials, not\"}             }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" as a working\"}      }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" website\"} }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\".\"}      }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0    }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":4,\"cache_creation_input_tokens\":494,\"cache_read_input_tokens\":10360,\"output_tokens\":39,\"output_tokens_details\":{\"thinking_tokens\":0}} }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"    }\n\n"
+  },
+  "expected": {
+    "answer": {
+      "message": {
+        "role": "assistant",
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "model": "claude-haiku-5-5",
+        "content": [
+          {
+            "type": "text",
+            "text": "The page's landing text says the domain is there to serve as a stand-in name in documents and tutorials, not as a working website."
+          }
+        ],
+        "id": "msg_011ChKRVXci8VUtVSNGC93uc"
+      },
+      "stopReason": "stop",
+      "toolCalls": [],
+      "usage": {
+        "totalInput": 10858,
+        "input": 4,
+        "output": 39,
+        "cacheRead": 10360,
+        "cacheWrite": 494,
+        "reasoning": 0,
+        "cost": {
+          "source": "estimated",
+          "total": 0.00018525000000000003,
+          "input": 4.0000000000000003e-7,
+          "output": 0.0000195,
+          "cacheRead": 0.00010360000000000001,
+          "cacheWrite": 0.00006175
+        }
+      }
+    }
+  }
+}

@@ -24,6 +24,9 @@ describe.each(providers.list().map((provider) => provider.id))(
       return { recorded, sent, answer };
     };
 
+    /** Whether the provider has a web search of its own. */
+    const searches = id !== 'fireworks';
+
     it('has every scenario recorded', () => {
       expect(fixturesOf(id).map((one) => one.scenario)).toEqual([
         'bad-key',
@@ -31,8 +34,47 @@ describe.each(providers.list().map((provider) => provider.id))(
         'tool-call',
         'tool-result',
         'unknown-model',
+        ...(searches ? ['web-search-next', 'web-search'] : []),
       ]);
     });
+
+    it.runIf(searches)(
+      'counts the searches its own web search made, and what they cost',
+      async () => {
+        const { recorded, sent, answer } = await run('web-search');
+        expect(sent).toEqual([recorded.request]);
+        expect(answer).toEqual((recorded.expected as { answer: ModelAnswer }).answer);
+        expect(answer.stopReason).toBe('stop');
+        expect(answer.toolCalls).toEqual([]);
+        expect(provider.read(answer.message).text).not.toBe('');
+        expect(answer.usage?.webSearches).toBe(1);
+        // A search is charged for apart from the tokens: the cost is more than theirs alone.
+        const { cost } = answer.usage ?? {};
+        const tokens =
+          (cost?.input ?? 0) +
+          (cost?.output ?? 0) +
+          (cost?.cacheRead ?? 0) +
+          (cost?.cacheWrite ?? 0);
+        expect((cost?.total ?? 0) - tokens).toBeCloseTo(0.01, 6);
+      },
+    );
+
+    it.runIf(searches)(
+      'sends an answer that searched back as it was, and the provider takes it',
+      async () => {
+        const { answer: searched } = await run('web-search');
+        const { recorded, sent, answer } = await run('web-search-next');
+        expect(sent).toEqual([recorded.request]);
+        // Every item the provider wrote for its search is in what it is sent next, whole.
+        const body = JSON.stringify(sent[0]?.body);
+        for (const part of searched.message.content as readonly object[]) {
+          expect(body).toContain(JSON.stringify(part));
+        }
+        expect(answer.stopReason).toBe('stop');
+        // It was told not to search again, and did not.
+        expect(answer.usage?.webSearches).toBeUndefined();
+      },
+    );
 
     it.each(['text', 'tool-call', 'tool-result'])(
       '%s: sends what was sent, and reads what was read',

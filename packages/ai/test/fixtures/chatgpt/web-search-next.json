@@ -1,0 +1,221 @@
+{
+  "provider": "chatgpt",
+  "scenario": "web-search-next",
+  "step": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "session": "a-recorded-conversation",
+    "instructions": "Search the web once before you answer. Answer in one short sentence.",
+    "tools": [],
+    "options": {
+      "webSearch": true
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What does the page at example.com say it is for?"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "provider": "chatgpt",
+        "api": "openai-responses",
+        "model": "gpt-6-luna",
+        "content": [
+          {
+            "id": "ws_041d06cb00cc2e88016b03e3845c0887d0ab9e0305a9000374",
+            "type": "web_search_call",
+            "status": "completed",
+            "action": {
+              "type": "search",
+              "queries": ["example.com"],
+              "query": "example.com"
+            }
+          },
+          {
+            "id": "msg_041d06cb00cc2e88016b03e386768487d0b35a06df526e8e61",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [
+                  {
+                    "type": "url_citation",
+                    "end_index": 172,
+                    "start_index": 98,
+                    "title": "IANA's email about why example.com changed · YAVCHN",
+                    "url": "https://yavchn.com/story/lobsters/qgd17n?utm_source=openai"
+                  }
+                ],
+                "logprobs": [],
+                "text": "It says the domain is for use in documentation examples, so people can use it without permission. ([yavchn.com](https://yavchn.com/story/lobsters/qgd17n?utm_source=openai))"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "id": "resp_041d06cb00cc2e88016b03e383b38c87d09032940c4cb49c52"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Say that once more in other words. Do not search."
+          }
+        ]
+      }
+    ]
+  },
+  "request": {
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "content-type": "application/json",
+      "authorization": "<redacted>",
+      "accept": "text/event-stream"
+    },
+    "body": {
+      "reasoning": {
+        "effort": "low",
+        "summary": "auto",
+        "context": "all_turns"
+      },
+      "store": false,
+      "include": ["reasoning.encrypted_content"],
+      "parallel_tool_calls": true,
+      "prompt_cache_key": "a-recorded-conversation",
+      "stream": true,
+      "model": "gpt-6-luna",
+      "input": [
+        {
+          "type": "message",
+          "role": "developer",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Search the web once before you answer. Answer in one short sentence."
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What does the page at example.com say it is for?"
+            }
+          ]
+        },
+        {
+          "id": "ws_041d06cb00cc2e88016b03e3845c0887d0ab9e0305a9000374",
+          "type": "web_search_call",
+          "status": "completed",
+          "action": {
+            "type": "search",
+            "queries": ["example.com"],
+            "query": "example.com"
+          }
+        },
+        {
+          "id": "msg_041d06cb00cc2e88016b03e386768487d0b35a06df526e8e61",
+          "type": "message",
+          "status": "completed",
+          "content": [
+            {
+              "type": "output_text",
+              "annotations": [
+                {
+                  "type": "url_citation",
+                  "end_index": 172,
+                  "start_index": 98,
+                  "title": "IANA's email about why example.com changed · YAVCHN",
+                  "url": "https://yavchn.com/story/lobsters/qgd17n?utm_source=openai"
+                }
+              ],
+              "logprobs": [],
+              "text": "It says the domain is for use in documentation examples, so people can use it without permission. ([yavchn.com](https://yavchn.com/story/lobsters/qgd17n?utm_source=openai))"
+            }
+          ],
+          "phase": "final_answer",
+          "role": "assistant"
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Say that once more in other words. Do not search."
+            }
+          ]
+        }
+      ],
+      "tools": [
+        {
+          "type": "web_search",
+          "external_web_access": true
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8"
+    },
+    "text": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_041d06cb00cc2e88016b03e3874f1c87d0aafbd779ab9543af\",\"object\":\"response\",\"created_at\":1795416967,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"image\":{\"context_compression\":\"disabled\"},\"incomplete_details\":null,\"input_transformations\":[],\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":\"a-recorded-conversation\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"low\",\"mode\":\"standard\",\"summary\":\"detailed\"},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"web_search\",\"return_token_budget\":\"default\",\"search_content_types\":[\"text\"],\"search_context_size\":\"medium\",\"user_location\":{\"type\":\"approximate\",\"city\":null,\"country\":\"US\",\"region\":null,\"timezone\":null}}],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_041d06cb00cc2e88016b03e3874f1c87d0aafbd779ab9543af\",\"object\":\"response\",\"created_at\":1795416967,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"image\":{\"context_compression\":\"disabled\"},\"incomplete_details\":null,\"input_transformations\":[],\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":\"a-recorded-conversation\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"low\",\"mode\":\"standard\",\"summary\":\"detailed\"},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"web_search\",\"return_token_budget\":\"default\",\"search_content_types\":[\"text\"],\"search_context_size\":\"medium\",\"user_location\":{\"type\":\"approximate\",\"city\":null,\"country\":\"US\",\"region\":null,\"timezone\":null}}],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"It\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"Os64EFantI1C44\",\"output_index\":0,\"sequence_number\":4}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"’s\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"0pz4QuQ59Uc57H\",\"output_index\":0,\"sequence_number\":5}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"N4sdiFrEF6b6Ds\",\"output_index\":0,\"sequence_number\":6}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sample\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"90aC6M9h9\",\"output_index\":0,\"sequence_number\":7}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" domain\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"isvJ7N8CI\",\"output_index\":0,\"sequence_number\":8}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" intended\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"n5RUwfE\",\"output_index\":0,\"sequence_number\":9}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" for\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"sQeGeo36zVR9\",\"output_index\":0,\"sequence_number\":10}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" illustrative\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"EfY\",\"output_index\":0,\"sequence_number\":11}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" examples\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"S9enRf3\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"CSPHpSDBlHWTX\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" documentation\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"SH\",\"output_index\":0,\"sequence_number\":14}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"obfuscation\":\"exsuUmPvAvrDpbH\",\"output_index\":0,\"sequence_number\":15}\n\nevent: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":16,\"text\":\"It’s a sample domain intended for illustrative examples in documentation.\"}\n\nevent: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It’s a sample domain intended for illustrative examples in documentation.\"},\"sequence_number\":17}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It’s a sample domain intended for illustrative examples in documentation.\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":18}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_041d06cb00cc2e88016b03e3874f1c87d0aafbd779ab9543af\",\"object\":\"response\",\"created_at\":1795416967,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1795416968,\"error\":null,\"frequency_penalty\":0.0,\"image\":{\"context_compression\":\"disabled\"},\"incomplete_details\":null,\"input_transformations\":[],\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[{\"id\":\"msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It’s a sample domain intended for illustrative examples in documentation.\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":\"a-recorded-conversation\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"low\",\"mode\":\"standard\",\"summary\":\"detailed\"},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"web_search\",\"return_token_budget\":\"default\",\"search_content_types\":[\"text\"],\"search_context_size\":\"medium\",\"user_location\":{\"type\":\"approximate\",\"city\":null,\"country\":\"US\",\"region\":null,\"timezone\":null}}],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":4573,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cache_write_tokens_details\":{\"ttl_12h_tokens\":0,\"ttl_30m_tokens\":0},\"cached_tokens\":4570},\"output_tokens\":16,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":4589},\"user\":null,\"metadata\":{}},\"sequence_number\":19}\n\n"
+  },
+  "expected": {
+    "answer": {
+      "message": {
+        "role": "assistant",
+        "provider": "chatgpt",
+        "api": "openai-responses",
+        "model": "gpt-6-luna",
+        "content": [
+          {
+            "id": "msg_041d06cb00cc2e88016b03e387da5887d08cde856aa0927e02",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "It’s a sample domain intended for illustrative examples in documentation."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "id": "resp_041d06cb00cc2e88016b03e3874f1c87d0aafbd779ab9543af"
+      },
+      "stopReason": "stop",
+      "toolCalls": [],
+      "usage": {
+        "totalInput": 4573,
+        "input": 3,
+        "output": 16,
+        "reasoning": 0,
+        "cacheRead": 4570,
+        "cacheWrite": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 3.0000000000000004e-7,
+          "output": 0.000008,
+          "cacheRead": 0.0000457,
+          "cacheWrite": 0,
+          "total": 0.000054
+        }
+      }
+    }
+  }
+}
