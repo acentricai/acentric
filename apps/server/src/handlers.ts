@@ -371,6 +371,17 @@ export const handlers: Handlers = {
   },
   'actors.archive': (asked, { engine }) => engine.archive(actorOf(asked).id),
   'actors.unarchive': (asked, { engine }) => engine.unarchive(actorOf(asked).id),
+  'actors.delete': async (asked, { engine, audit }) => {
+    const actor = actorOf(asked);
+    const gone = await engine.deleteActor(actor.id);
+    await audit.record({
+      by: refOf(asked),
+      action: 'actor.delete',
+      target: { type: 'actor', id: actor.id },
+      detail: { agent: actor.agent, actors: gone.length },
+    });
+    return undefined;
+  },
   'actors.interrupt': (asked, { engine }) => engine.interrupt(actorOf(asked).id),
   'actors.abort': (asked, { engine }) => engine.abort(actorOf(asked).id),
   'actors.retry': (asked, { engine }) => engine.retry(actorOf(asked).id),

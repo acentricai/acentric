@@ -381,6 +381,16 @@ export const routes = defineRoutes({
     status: 200,
     errors: ['not_found'],
   },
+  'actors.delete': {
+    method: 'DELETE',
+    path: '/v1/actors/{actor}',
+    summary:
+      'Deletes an archived actor and its subagents, with their conversations and the images and files only they had. What they cost stays in the usage.',
+    auth: onActor('actors:write'),
+    params: actorParam,
+    status: 204,
+    errors: ['not_found', 'conflict'],
+  },
   'actors.unarchive': {
     method: 'POST',
     path: '/v1/actors/{actor}/unarchive',

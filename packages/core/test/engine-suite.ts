@@ -118,6 +118,19 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         ]);
       });
 
+      it('deletes an actor once it is archived, with its conversation, and not before', async () => {
+        const one = w.engine([lookup, says('It was refunded twice.')]);
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Why two refunds?');
+        await one.it.settled(actor.id);
+        await expect(one.it.deleteActor(actor.id)).rejects.toMatchObject({ code: 'conflict' });
+        await one.it.archive(actor.id);
+        expect(await one.it.deleteActor(actor.id)).toEqual([actor.id]);
+        expect(await store.loadActor(actor.id)).toBeUndefined();
+        expect(await store.conversation(actor.id)).toEqual([]);
+        await expect(one.it.getActor(actor.id)).rejects.toMatchObject({ code: 'not_found' });
+      });
+
       it('goes on when its observer throws', async () => {
         const one = w.engine([lookup, says('It was refunded twice.')], {
           options: {
