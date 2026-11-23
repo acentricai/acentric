@@ -128,6 +128,25 @@ export function reaches(
   return target.actor !== undefined && scope.actor === target.actor;
 }
 
+/**
+ * How far a scope reaches an actor, given the actor and the actors above it: in full, or to
+ * read only, as one that an actor it reaches spawned, or one that spawned.
+ */
+export function reachOf(
+  scope: Scope,
+  lineage: readonly { readonly id: ActorId; readonly agent: AgentId }[],
+): 'full' | 'read' | 'none' {
+  if (scope.type === 'engine') return 'full';
+  const [self, ...above] = lineage;
+  if (self === undefined) return 'none';
+  if (scope.type === 'agent') {
+    if (self.agent === scope.agent) return 'full';
+    return above.some((one) => one.agent === scope.agent) ? 'read' : 'none';
+  }
+  if (self.id === scope.actor) return 'full';
+  return above.some((one) => one.id === scope.actor) ? 'read' : 'none';
+}
+
 /** Keys and every key they made, however far down: what is revoked with them. */
 export function descendantsOf(all: readonly StoredKey[], roots: readonly KeyId[]): KeyId[] {
   const going = new Set<KeyId>(roots);

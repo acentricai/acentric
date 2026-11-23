@@ -290,6 +290,9 @@ importers:
       '@acentric/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@earendil-works/pi-codemode':
+        specifier: 1.5.0
+        version: 1.5.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -458,6 +461,10 @@ packages:
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
+
+  '@earendil-works/pi-codemode@1.5.0':
+    resolution: {integrity: sha512-PLBJZ17AEWGzOlAAcFuOkw3PxkOti0JlFuZQyeF2GRTqbpuYo4k9t8YqUV2uOQVzrUnKdxahwaFUqc1eNS1WAg==}
+    engines: {node: '>=22.19.0'}
 
   '@emnapi/core@2.0.0-beta.2':
     resolution: {integrity: sha512-MzCVoWtcg4Pm2B3je5mMvYMvj3MmBKw+fU7vbsJc9/iT8ip6/eYIHo/Dsm/mr+wsHB6SEyJDuxB09Yy6r/8+4A==}
@@ -1236,6 +1243,9 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
+  quickjs-wasi@3.6.2:
+    resolution: {integrity: sha512-FCqGtGOrMgzUiIrMNMA2YnsOxCNwo31dzqXvclXUC6xeT35NJLKXQJsvbeCTjvoFAwZgEAPg8U6+KAPDGXn8Mg==}
+
   rolldown@1.2.19:
     resolution: {integrity: sha512-QIiV1J9d0pzN4jeeTH4sjPy0AZ6cAy2cG0ExeoE1+U8Rvj+hR3gYkokx0YbeUNGlZqiQJJ2utcETe0oKXwzsuA==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1531,6 +1541,10 @@ snapshots:
 
   '@cloudflare/workerd-windows-64@1.20261110.1':
     optional: true
+
+  '@earendil-works/pi-codemode@1.5.0':
+    dependencies:
+      quickjs-wasi: 3.6.2
 
   '@emnapi/core@2.0.0-beta.2':
     dependencies:
@@ -2038,6 +2052,8 @@ snapshots:
       source-map-js: 1.2.4
 
   prettier@3.10.1: {}
+
+  quickjs-wasi@3.6.2: {}
 
   rolldown@1.2.19:
     dependencies:

@@ -54,6 +54,7 @@ import type { MachineEvent, Rules } from './machine.ts';
 import { applyChange } from './state.ts';
 import type { ActorPatch, ActorRecord, Change, OwedCall, Turn } from './state.ts';
 import type { Store } from './store.ts';
+import { offered } from './view-image.ts';
 import type { OwnTool } from './view-image.ts';
 
 /** The time, in milliseconds. */
@@ -95,6 +96,8 @@ export type Host = {
   version(agent: AgentId, version: number): Promise<DeploymentRef | undefined>;
   /** The engine's own tools that answer at once, which an actor's model is offered. */
   ownTools(actor: Actor, definition: AgentDefinition): readonly OwnTool[];
+  /** Whether an actor is being stopped: no turn of its starts until it has been. */
+  stopping(actor: ActorId): boolean;
   /**
    * The instructions an actor's model is sent: the harness's own, for what the actor has, and
    * then its agent's. `own` is the engine's tools the actor is offered.
@@ -322,10 +325,12 @@ export class ActorDriver {
    * Has everything that waits in the mailbox start no turn: it joins the next one that
    * something new starts.
    */
-  async hush(): Promise<void> {
+  async hush(only?: readonly string[]): Promise<void> {
     if (this.mail.length === 0) return;
-    await this.#host.store.quietInputs(this.id);
-    this.mail = this.mail.map((input) => ({ ...input, quiet: true as const }));
+    await this.#host.store.quietInputs(this.id, only);
+    this.mail = this.mail.map((input) =>
+      only === undefined || only.includes(input.type) ? { ...input, quiet: true as const } : input,
+    );
   }
 
   /** Has the driver look at what is owed. `recovering` when a restart found the actor. */
@@ -407,12 +412,12 @@ export class ActorDriver {
   }
 
   /** Puts the actor away. A turn it is in is ended first. */
-  async archive(): Promise<Actor> {
+  async archive(why = 'the turn was aborted by a person, and it is being stopped'): Promise<Actor> {
     // Asked for before the interrupt, so that it is done before any mail starts another turn.
     const archived = this.#command('archive', () => this.#apply({ type: 'archive' }));
     archived.catch(() => {});
     if (this.record.turn.phase !== 'idle') {
-      await this.interrupt('the turn was aborted by a person, and it is being stopped');
+      await this.interrupt(why);
     }
     return archived;
   }
@@ -631,7 +636,8 @@ export class ActorDriver {
           await command.run();
           continue;
         }
-        if (actor.status !== 'idle' || !this.#hasMail()) return;
+        // No turn starts while the actor is being stopped: what came meanwhile starts one after.
+        if (actor.status !== 'idle' || this.#host.stopping(actor.id) || !this.#hasMail()) return;
         if (!(await this.#hold())) return;
         // A turn starts on the deployment the actor is to be on, and ends on it.
         const set = await this.#follow();
@@ -766,22 +772,30 @@ export class ActorDriver {
     const controller = new AbortController();
     this.#abort = controller;
     try {
-      await Promise.all(
-        turn.calls
-          .filter((call) => call.result === null)
-          .map(async (call) => {
-            const { signal } = controller;
-            const result = await untilAborted(this.#runTool(call, cutOff, signal), signal);
-            // Given up: the turn was ended, or the engine is going away. The call stays owed.
-            if (result === ABORTED || result === undefined || this.#interrupt) return;
-            await this.#apply(() => ({
-              type: 'tool_finished',
-              call: call.id,
-              result,
-              inputs: [...this.mail],
-            }));
-          }),
+      const run = async (call: OwedCall): Promise<void> => {
+        const { signal } = controller;
+        const result = await untilAborted(this.#runTool(call, cutOff, signal), signal);
+        // Given up: the turn was ended, or the engine is going away. The call stays owed.
+        if (result === ABORTED || result === undefined || this.#interrupt) return;
+        await this.#apply(() => ({
+          type: 'tool_finished',
+          call: call.id,
+          result,
+          inputs: [...this.mail],
+        }));
+      };
+      const owed = turn.calls.filter((call) => call.result === null);
+      // What makes something the other calls of the answer may be of is run before them.
+      const { actor } = this.record;
+      const definition = await this.#host.definition(actor.deployment.id);
+      const first = new Set(
+        this.#host
+          .ownTools(actor, definition)
+          .filter((one) => one.first === true)
+          .map((one) => one.tool.name),
       );
+      await Promise.all(owed.filter((call) => first.has(call.name)).map(run));
+      await Promise.all(owed.filter((call) => !first.has(call.name)).map(run));
     } finally {
       this.#abort = null;
     }
@@ -913,8 +927,8 @@ export class ActorDriver {
     const definition = await this.#host.definition(actor.deployment.id);
     // The engine's own tools, after the agent's.
     const own = [
-      ...this.#host.tasks.tools(actor),
-      ...this.#host.ownTools(actor, definition).map((one) => one.tool),
+      ...this.#host.tasks.tools(actor, (definition.subagents ?? []).length > 0),
+      ...this.#host.ownTools(actor, definition).map((one) => offered(one, actor, definition)),
     ];
     const instructions = this.#host.instructions(actor, definition, own);
     const fingerprint = this.#host.fingerprint(definition, own, instructions);

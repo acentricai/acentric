@@ -363,6 +363,7 @@ export class Tasks {
   readonly #closing = new AbortController();
   /** Puts a notice that was stored in front of its actor. Set by the engine. */
   #deliver: (notice: Input) => void = () => {};
+  #stopAgent: ((actor: ActorId, name: string) => Promise<Answer | undefined>) | undefined;
 
   constructor(options: TasksOptions) {
     this.#store = options.store;
@@ -378,6 +379,11 @@ export class Tasks {
       });
   }
 
+  /** How `stop` stops a subagent, by the name its actor gave it. Undefined when it has none of that name. */
+  onStopAgent(stop: (actor: ActorId, name: string) => Promise<Answer | undefined>): void {
+    this.#stopAgent = stop;
+  }
+
   /** How an actor is given a notice that was put in its mailbox. */
   onNotice(deliver: (notice: Input) => void): void {
     this.#deliver = deliver;
@@ -387,7 +393,7 @@ export class Tasks {
    * The tools an actor's model has for tasks: one to start each kind the actor can start, and
    * `stop`. None for an actor that can start none.
    */
-  tools(actor: Actor): EngineTool[] {
+  tools(actor: Actor, subagents = false): EngineTool[] {
     const kinds = this.#kinds.filter((kind) => kind.available?.(actor) ?? true);
     if (kinds.length === 0) return [];
     const waitAndTimeout = {
@@ -419,12 +425,20 @@ export class Tasks {
       {
         type: 'function',
         name: 'stop',
-        description:
-          'Stops a task that is running, by its ID, and answers with how it ended. You are not told of its ending again.',
+        description: `Stops a task that is running, by its ID, and answers with how it ended. You are not told of its ending again.${
+          subagents
+            ? ' With the name of one of your subagents, it stops the subagent: its turn is interrupted, its tasks are stopped and so are its own subagents. It is not gone: it is idle, and can be sent more.'
+            : ''
+        }`,
         parameters: {
           type: 'object',
           properties: {
-            task: { type: 'string', description: 'The ID of the task, such as "b3".' },
+            task: {
+              type: 'string',
+              description: subagents
+                ? 'The ID of the task, such as "b3", or the name of the subagent.'
+                : 'The ID of the task, such as "b3".',
+            },
           },
           required: ['task'],
         },
@@ -824,6 +838,9 @@ export class Tasks {
   async #stopForModel(actor: ActorId, id: string): Promise<Answer> {
     const task = await this.#store.loadTask(actor, id);
     if (task === undefined) {
+      // No task of that name: it may be one of its subagents.
+      const stopped = await this.#stopAgent?.(actor, id);
+      if (stopped !== undefined) return stopped;
       const running = await this.list(actor, { running: true });
       const which =
         running.length === 0
