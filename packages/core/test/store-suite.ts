@@ -1394,6 +1394,90 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       });
     });
 
+    describe('scripts', () => {
+      const start = { startedAt: NOW, seed: 4_000_000_000, catalog: { tools: [{ js: 'shout' }] } };
+      const call = (id: number, called = 'shout') => ({
+        id,
+        name: called,
+        args: '{"text":"hello"}',
+        retrySafe: id % 2 === 0,
+        startedAt: NOW + id,
+      });
+
+      it('are stored with what they are run with, once: one that is started again is given what it was first run with', async () => {
+        const actor = await create();
+        expect(await store.loadScript(actor.id, 's1')).toBeUndefined();
+        const first = await store.startScript(actor.id, 's1', start);
+        expect(first).toEqual({ ...start, kept: null });
+        const again = await store.startScript(actor.id, 's1', {
+          startedAt: NOW + 5000,
+          seed: 7,
+          catalog: { tools: [] },
+        });
+        expect(again).toEqual(first);
+        expect(await store.loadScript(actor.id, 's1')).toEqual(first);
+        // Another task's, and another actor's, are others.
+        expect((await store.startScript(actor.id, 's2', { ...start, seed: 7 })).seed).toBe(7);
+        const other = await create();
+        expect(await store.loadScript(other.id, 's1')).toBeUndefined();
+      });
+
+      it('keep each call from before it is made, in the order the script made them, and its result with its place', async () => {
+        const actor = await create();
+        await store.startScript(actor.id, 's1', start);
+        expect(await store.listScriptCalls(actor.id, 's1')).toEqual([]);
+        await store.addScriptCall(actor.id, 's1', call(2, 'sleep'));
+        await store.addScriptCall(actor.id, 's1', call(1));
+        // A call that is stored already is as it was.
+        await store.addScriptCall(actor.id, 's1', { ...call(1), name: 'other' });
+        expect(await store.listScriptCalls(actor.id, 's1')).toEqual([
+          { ...call(1), done: null },
+          { ...call(2, 'sleep'), done: null },
+        ]);
+
+        // The second to be made is the first to end.
+        const done = { seq: 1, at: NOW + 50, outcome: { ok: true, value: null } };
+        await store.finishScriptCall(actor.id, 's1', 2, done);
+        const failed = { seq: 2, at: NOW + 60, outcome: { ok: false, message: 'it exploded' } };
+        await store.finishScriptCall(actor.id, 's1', 1, failed);
+        expect(await store.listScriptCalls(actor.id, 's1')).toEqual([
+          { ...call(1), done: failed },
+          { ...call(2, 'sleep'), done },
+        ]);
+        expect(await store.listScriptCalls(actor.id, 's2')).toEqual([]);
+      });
+
+      it('keep what they came to, for a later script to read', async () => {
+        const actor = await create();
+        await store.startScript(actor.id, 's1', start);
+        const kept = { ended: 'returned', value: '{"rows":3}', logs: 'made 3' } as const;
+        await store.endScript(actor.id, 's1', kept);
+        expect(await store.loadScript(actor.id, 's1')).toEqual({ ...start, kept });
+        await store.startScript(actor.id, 's2', start);
+        await store.endScript(actor.id, 's2', { ended: 'stopped', value: null, logs: '' });
+        expect((await store.loadScript(actor.id, 's2'))?.kept).toEqual({
+          ended: 'stopped',
+          value: null,
+          logs: '',
+        });
+      });
+
+      it('go with the agent whose actors ran them', async () => {
+        const agent = await stored('orders');
+        const actor = await create({}, agent);
+        const other = await create();
+        for (const one of [actor, other]) {
+          await store.startScript(one.id, 's1', start);
+          await store.addScriptCall(one.id, 's1', call(1));
+        }
+        await store.deleteAgent(agent);
+        expect(await store.loadScript(actor.id, 's1')).toBeUndefined();
+        expect(await store.listScriptCalls(actor.id, 's1')).toEqual([]);
+        expect(await store.loadScript(other.id, 's1')).toBeDefined();
+        expect(await store.listScriptCalls(other.id, 's1')).toHaveLength(1);
+      });
+    });
+
     describe('blobs', () => {
       const blobOf = (fill: string, more: Partial<StoredBlob> = {}): StoredBlob => ({
         digest: fill.repeat(64),

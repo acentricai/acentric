@@ -29,6 +29,9 @@ import type {
   NewTask,
   StoredAccount,
   StoredBlob,
+  ScriptCall,
+  ScriptKept,
+  StoredScript,
   StoredTask,
   TaskEnding,
   StoredDeployment,
@@ -305,6 +308,40 @@ export class SqliteStore implements Store {
     notice: Input | null,
   ): Promise<{ readonly ended: boolean; readonly notified: boolean }> {
     return this.#write.ask('endTask' satisfies Operation, actor, id, end, notice);
+  }
+
+  // A script's journal is read where it is written, as its task is.
+  startScript(
+    actor: ActorId,
+    task: string,
+    script: Pick<StoredScript, 'startedAt' | 'seed' | 'catalog'>,
+  ): Promise<StoredScript> {
+    return this.#write.ask('startScript' satisfies Operation, actor, task, script);
+  }
+
+  loadScript(actor: ActorId, task: string): Promise<StoredScript | undefined> {
+    return this.#write.ask('loadScript' satisfies Operation, actor, task);
+  }
+
+  endScript(actor: ActorId, task: string, kept: ScriptKept): Promise<void> {
+    return this.#write.ask('endScript' satisfies Operation, actor, task, kept);
+  }
+
+  listScriptCalls(actor: ActorId, task: string): Promise<ScriptCall[]> {
+    return this.#write.ask('listScriptCalls' satisfies Operation, actor, task);
+  }
+
+  addScriptCall(actor: ActorId, task: string, call: Omit<ScriptCall, 'done'>): Promise<void> {
+    return this.#write.ask('addScriptCall' satisfies Operation, actor, task, call);
+  }
+
+  finishScriptCall(
+    actor: ActorId,
+    task: string,
+    id: number,
+    done: NonNullable<ScriptCall['done']>,
+  ): Promise<void> {
+    return this.#write.ask('finishScriptCall' satisfies Operation, actor, task, id, done);
   }
 
   // Machines and their commands are read where they are written: what a daemon's connection is

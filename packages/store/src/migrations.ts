@@ -276,6 +276,46 @@ const MIGRATIONS: readonly string[] = [
   -- Those under way: what a start watches again.
   CREATE INDEX tasks_running ON tasks (actor_id) WHERE status = 'running';
 
+  -- What the script of a task is run with, so that it runs the same way every time, and what
+  -- it came to, for a later script to read.
+  CREATE TABLE scripts (
+    actor_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    -- Where its clock starts.
+    started_at INTEGER NOT NULL,
+    -- What its random numbers are made from.
+    seed INTEGER NOT NULL,
+    -- JSON: what there was for it to call when it started.
+    catalog TEXT NOT NULL,
+    -- How it ended: returned, failed or stopped. NULL while it runs.
+    ended TEXT,
+    -- JSON: what it returned.
+    value TEXT,
+    -- Everything else it would be shown of it.
+    logs TEXT,
+    PRIMARY KEY (actor_id, task_id)
+  ) STRICT, WITHOUT ROWID;
+
+  -- A call a script made: stored before the call is made, and its result with the place it
+  -- has among the script's results.
+  CREATE TABLE script_calls (
+    actor_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    -- The script's own number for the call.
+    id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    -- JSON: what it was called with.
+    args TEXT NOT NULL,
+    retry_safe INTEGER NOT NULL,
+    started_at INTEGER NOT NULL,
+    -- NULL while the call is under way.
+    seq INTEGER,
+    at INTEGER,
+    -- JSON: what the script was told of it.
+    outcome TEXT,
+    PRIMARY KEY (actor_id, task_id, id)
+  ) STRICT, WITHOUT ROWID;
+
   -- A machine: a computer with the daemon on it, where commands run.
   -- An account at a provider of sandboxes.
   CREATE TABLE sandbox_providers (
