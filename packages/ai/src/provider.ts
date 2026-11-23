@@ -134,17 +134,35 @@ export type WebSearch =
   | { readonly allowedDomains: readonly string[] }
   | { readonly blockedDomains: readonly string[] };
 
+/** The most sites a search may be held to, or kept from: no provider takes more. */
+const WEB_SEARCH_DOMAINS = 100;
+
 /** Reads `webSearch` out of what an agent asks, for the providers that have a search. */
 export function readWebSearch(given: unknown, label: string): WebSearch | undefined {
   if (given === undefined) return undefined;
   if (given === true) return true;
-  const domains = (value: unknown): value is string[] =>
-    Array.isArray(value) && value.length > 0 && value.every((domain) => typeof domain === 'string');
+  const domains = (value: unknown, field: string): value is string[] => {
+    if (!Array.isArray(value) || value.length === 0) return false;
+    // A domain, or a domain and a path under it: no `https://`, and no port.
+    if (
+      value.length > WEB_SEARCH_DOMAINS ||
+      value.some((domain) => typeof domain !== 'string' || !/^[^\s/:]+(\/\S*)?$/.test(domain))
+    ) {
+      throw new TypeError(
+        `${label}: webSearch.${field} is a list of 1 to ${String(WEB_SEARCH_DOMAINS)} domains, such as example.com, with no https://`,
+      );
+    }
+    return true;
+  };
   if (typeof given === 'object' && given !== null) {
     const { allowedDomains, blockedDomains, ...rest } = given as { [key: string]: unknown };
     if (Object.keys(rest).length === 0) {
-      if (domains(allowedDomains) && blockedDomains === undefined) return { allowedDomains };
-      if (domains(blockedDomains) && allowedDomains === undefined) return { blockedDomains };
+      if (blockedDomains === undefined && domains(allowedDomains, 'allowedDomains')) {
+        return { allowedDomains };
+      }
+      if (allowedDomains === undefined && domains(blockedDomains, 'blockedDomains')) {
+        return { blockedDomains };
+      }
     }
   }
   throw new TypeError(

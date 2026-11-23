@@ -3,6 +3,9 @@
 //
 //   OPENAI_API_KEY=… FIREWORKS_API_KEY=… ANTHROPIC_API_KEY=… node packages/ai/test/record.ts
 //
+// With the names of providers after it, only those are recorded. With `--scenario=<name>`,
+// only the scenarios whose names start so: the others are left as they were recorded.
+//
 // A provider whose key is not given is left out. What is written holds no key: the headers
 // that sign a call are written as `<redacted>`, and a file is refused if a key is found in it.
 //
@@ -69,16 +72,30 @@ const TARGETS: {
   readonly env: string;
   readonly model: string;
   readonly type: Credential['type'];
+  /** Whether it has a web search of its own. */
+  readonly search?: boolean;
 }[] = [
-  { provider: 'openai', env: 'OPENAI_API_KEY', model: 'gpt-6-luna', type: 'api_key' },
-  { provider: 'chatgpt', env: 'OPENAI_API_KEY', model: 'gpt-6-luna', type: 'access_token' },
+  { provider: 'openai', env: 'OPENAI_API_KEY', model: 'gpt-6-luna', type: 'api_key', search: true },
+  {
+    provider: 'chatgpt',
+    env: 'OPENAI_API_KEY',
+    model: 'gpt-6-luna',
+    type: 'access_token',
+    search: true,
+  },
   {
     provider: 'fireworks',
     env: 'FIREWORKS_API_KEY',
     model: 'accounts/fireworks/models/glm-5p3-flash',
     type: 'api_key',
   },
-  { provider: 'anthropic', env: 'ANTHROPIC_API_KEY', model: 'claude-haiku-5-5', type: 'api_key' },
+  {
+    provider: 'anthropic',
+    env: 'ANTHROPIC_API_KEY',
+    model: 'claude-haiku-5-5',
+    type: 'api_key',
+    search: true,
+  },
 ];
 
 const credentialOf = (type: Credential['type'], secret: string): Credential =>
@@ -91,6 +108,7 @@ async function record(
   credential: Credential,
   secrets: readonly string[],
 ): Promise<ModelAnswer | undefined> {
+  if (!wanted(scenario)) return undefined;
   let request: Fixture['request'] | undefined;
   let response: Fixture['response'] | undefined;
   const recording: typeof fetch = async (input, init) => {
@@ -159,7 +177,14 @@ async function record(
   return answer;
 }
 
-const only = process.argv.slice(2);
+const given = process.argv.slice(2);
+const only = given.filter((one) => !one.startsWith('--'));
+const scenarios = given
+  .filter((one) => one.startsWith('--scenario='))
+  .map((one) => one.slice('--scenario='.length));
+/** Whether a scenario is to be recorded now. */
+const wanted = (scenario: string): boolean =>
+  scenarios.length === 0 || scenarios.some((start) => scenario.startsWith(start));
 const providers = builtInProviders();
 const secrets = TARGETS.flatMap((target) =>
   process.env[target.env] === undefined ? [] : [process.env[target.env] as string],
@@ -220,6 +245,44 @@ for (const target of TARGETS) {
       credential,
       secrets,
     );
+  }
+
+  // A provider with a web search of its own: a search, and then its answer sent back as it was.
+  if (target.search === true) {
+    const searching: ModelStep = {
+      ...base,
+      instructions: 'Search the web once before you answer. Answer in one short sentence.',
+      tools: [],
+      options: provider.parseOptions({ webSearch: true }),
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'What does the page at example.com say it is for?' }],
+        },
+      ],
+    };
+    const searched = await record(provider, 'web-search', searching, credential, secrets);
+    if (searched !== undefined) {
+      await record(
+        provider,
+        'web-search-next',
+        {
+          ...searching,
+          messages: [
+            ...searching.messages,
+            searched.message,
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Say that once more in other words. Do not search.' },
+              ],
+            },
+          ],
+        },
+        credential,
+        secrets,
+      );
+    }
   }
 
   await record(

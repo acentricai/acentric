@@ -179,6 +179,25 @@ describe('the provider’s own web search', () => {
     expect(() => openai.parseOptions({ webSearch: { allowedDomains: [] } })).toThrow(
       /webSearch is true/,
     );
+    // A domain is given without its scheme, and no more than a hundred of them.
+    for (const allowedDomains of [
+      ['https://example.com'],
+      ['example.com:8080'],
+      ['two words.com'],
+      Array.from({ length: 101 }, (_, index) => `site${String(index)}.example`),
+    ]) {
+      expect(() => openai.parseOptions({ webSearch: { allowedDomains } })).toThrow(
+        /webSearch\.allowedDomains is a list of 1 to 100 domains, such as example\.com, with no https:\/\//,
+      );
+    }
+    expect(() =>
+      openai.parseOptions({ webSearch: { blockedDomains: ['http://example.com'] } }),
+    ).toThrow(/webSearch\.blockedDomains is a list of 1 to 100 domains/);
+    expect(
+      openai.parseOptions({
+        webSearch: { allowedDomains: ['example.com', 'docs.example.com/guides'] },
+      }),
+    ).toBeDefined();
     expect(() =>
       openai.parseOptions({ webSearch: { allowedDomains: ['a.com'], blockedDomains: ['b.com'] } }),
     ).toThrow(/webSearch is true/);
