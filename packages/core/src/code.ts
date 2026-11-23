@@ -1,6 +1,6 @@
 // `code`: the kind of task that runs a script the model wrote. A script can do two things:
-// compute, and call the tools it was given, which are the agent's own tools set to code mode.
-// It has no files, no network and no imports.
+// compute, and call the tools it was given, which are the agent's own tools set to code mode
+// and the tools of its MCP servers. It has no files, no network and no imports.
 //
 // A script runs in a QuickJS virtual machine on a thread of its own, which a stop of the engine
 // loses. It is continued anyway. The machine runs a script the same way every time: its clock
@@ -46,6 +46,7 @@ import type {
 
 import type { CallResult } from './executor.ts';
 import { issuesText } from './executor.ts';
+import type { Mcp, McpCatalog, McpResult } from './mcp.ts';
 import type { ScriptCall, ScriptKept, Store } from './store.ts';
 import { TASK_IMAGES, imageMark, unmarked } from './tasks.ts';
 import type { TaskEnd, TaskKind } from './tasks.ts';
@@ -79,23 +80,37 @@ const OWN_CALLS: readonly string[] = [
 export type ScriptTool = {
   /** How a script names it: `tools.<js>`. */
   readonly js: string;
-  /** Its name as its agent gave it. */
+  /** Its full name: the agent's own for a tool of the agent's, `mcp__<server>__<tool>` for a server's. */
   readonly name: string;
   readonly description: string;
   /** Its declaration, as TypeScript. */
   readonly signature: string;
   readonly retrySafe: boolean;
+  /** For a server's tool: the server, and the server's own name for the tool. */
+  readonly server?: string;
+  readonly tool?: string;
 };
 
 /** What there is for a script to call, as it was when the script started. */
-type Catalog = { readonly tools: readonly ScriptTool[] };
+type Catalog = {
+  readonly tools: readonly ScriptTool[];
+  /** The servers that could not be asked what they offer when the script started. */
+  readonly down: McpCatalog['down'];
+};
+
+const safe = (text: string): string => text.replaceAll(/[^A-Za-z0-9_]/g, '_');
+
+const NO_SERVERS: McpCatalog = { tools: [], down: [] };
 
 /** The agent's own tools that are for its model's scripts. */
 const scriptToolsOf = (definition: AgentDefinition): AgentDefinition['tools'] =>
   definition.tools.filter((tool) => tool.codemode === true);
 
-/** Everything a script of an agent can call: the agent's code mode tools. */
-export function scriptTools(definition: AgentDefinition): ScriptTool[] {
+/** Everything a script of an agent can call: the agent's code mode tools, then its servers'. */
+export function scriptTools(
+  definition: AgentDefinition,
+  servers: McpCatalog = NO_SERVERS,
+): ScriptTool[] {
   const taken = new Set<string>();
   const unique = (wanted: string): string => {
     let js = wanted;
@@ -103,7 +118,7 @@ export function scriptTools(definition: AgentDefinition): ScriptTool[] {
     taken.add(js);
     return js;
   };
-  return scriptToolsOf(definition).map((tool): ScriptTool => {
+  const own = scriptToolsOf(definition).map((tool): ScriptTool => {
     const js = unique(toCodemodeIdentifier(tool.name));
     return {
       js,
@@ -116,6 +131,27 @@ export function scriptTools(definition: AgentDefinition): ScriptTool[] {
       retrySafe: tool.retrySafe,
     };
   });
+  const theirs = servers.tools.map((tool): ScriptTool => {
+    const js = unique(`mcp__${safe(tool.server)}__${safe(tool.name)}`);
+    return {
+      js,
+      name: js,
+      description: tool.description,
+      signature: renderToolSignature({
+        name: js,
+        ...(tool.inputSchema === undefined
+          ? {}
+          : { inputSchema: tool.inputSchema as CodemodeJsonSchema }),
+        ...(tool.outputSchema === undefined
+          ? {}
+          : { outputSchema: tool.outputSchema as CodemodeJsonSchema }),
+      }),
+      retrySafe: tool.retrySafe,
+      server: tool.server,
+      tool: tool.name,
+    };
+  });
+  return [...own, ...theirs];
 }
 
 /** What `searchTools` answers with for one tool. */
@@ -151,7 +187,7 @@ const SIGNATURE_WORDS: ReadonlySet<string> = new Set(
 );
 
 /** How much a word found in each part of a tool counts: its name says most of what it is. */
-export const SEARCH_WEIGHTS = { name: 3, parameters: 1.5, description: 1 } as const;
+export const SEARCH_WEIGHTS = { name: 3, server: 2, parameters: 1.5, description: 1 } as const;
 
 /** BM25's numbers: how fast a word found again stops adding, and how much a long part counts against it. */
 const BM25_K1 = 1.2;
@@ -198,7 +234,8 @@ function indexOf(tool: ScriptTool): Indexed {
   return {
     tool,
     parts: {
-      name: searchWords(tool.name),
+      name: searchWords(tool.tool ?? tool.name),
+      server: searchWords(tool.server ?? ''),
       parameters: searchWords(parameters, SIGNATURE_WORDS),
       description: searchWords(tool.description),
     },
@@ -216,29 +253,32 @@ function frequency(words: readonly string[], word: string): number {
 }
 
 /**
- * The tools that match a query best, ranked by BM25 over each tool's name, parameters and
- * description, a word in its name counting most. Small words are not looked for, a word's
+ * The tools that match a query best, ranked by BM25 over each tool's name, server, parameters
+ * and description, a word in its name counting most. Small words are not looked for, a word's
  * other forms are the same word, and a word few tools have counts for more than one most have.
  * A query that is a tool's name gives that tool first. With no words to look for, every tool
- * is a match.
+ * of the server asked for is a match.
  */
 export function searchTools(
   tools: readonly ScriptTool[],
   query: string,
-  options: { readonly limit?: number } = {},
+  options: { readonly limit?: number; readonly server?: string } = {},
 ): Found[] {
   const limit = Math.max(1, Math.min(50, Math.floor(options.limit ?? 8)));
+  const among = tools.filter(
+    (tool) => options.server === undefined || tool.server === options.server,
+  );
   const exact = query.trim().toLowerCase();
   const named = (tool: ScriptTool): boolean =>
     tool.js.toLowerCase() === exact || tool.name.toLowerCase() === exact;
   const words = [...new Set(searchWords(query))];
   if (words.length === 0) {
-    return tools
+    return among
       .toSorted((a, b) => Number(named(b)) - Number(named(a)) || a.js.localeCompare(b.js))
       .slice(0, limit)
       .map(foundOf);
   }
-  const index = tools.map(indexOf);
+  const index = among.map(indexOf);
   const parts = Object.keys(SEARCH_WEIGHTS) as Part[];
   const average = Object.fromEntries(
     parts.map((part) => [
@@ -310,6 +350,22 @@ export function valueOfTool(value: Json): unknown {
       ? { type: 'image', data: part.source.data, mimeType: part.source.mediaType }
       : part,
   );
+}
+
+/** What a server's answer is to the script that called it. */
+export function valueOfMcp(result: McpResult): CodemodeOutcome {
+  const texts = result.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '');
+  if (result.isError === true) {
+    return { ok: false, message: texts.join('\n') || 'The tool failed, and did not say why' };
+  }
+  if (result.structuredContent !== undefined) return { ok: true, value: result.structuredContent };
+  // Text alone is the text. Anything else is given as the server sent it.
+  if (texts.length === result.content.length) {
+    return { ok: true, value: valueOfText(texts.join('\n')) };
+  }
+  return { ok: true, value: result.content };
 }
 
 /**
@@ -461,32 +517,50 @@ export function syntaxProblem(script: string): string | undefined {
 type Input = { readonly script: string; readonly timeout: number };
 
 /**
- * Whether an agent has code mode at all: a tool of its own set to code mode. An agent with
- * none has nothing for a script to call, so its model is not offered `code`, and is told
- * nothing about scripts. This is the one rule for both: whatever else is said to a model about
- * code mode asks here first.
+ * Whether an agent has code mode at all: a tool of its own set to code mode, or an MCP server.
+ * An agent with neither has nothing for a script to call, so its model is not offered `code`,
+ * and is told nothing about scripts. This is the one rule for both: whatever else is said to a
+ * model about code mode asks here first.
  */
 export const hasCodeMode = (definition: AgentDefinition): boolean =>
-  scriptToolsOf(definition).length > 0;
+  scriptToolsOf(definition).length > 0 || (definition.mcps ?? []).length > 0;
 
 /** The `code` tool's description for an agent: what there is for a script to call. */
 export function describeCode(definition: AgentDefinition): string {
+  const own = scriptToolsOf(definition);
+  const servers = definition.mcps ?? [];
   // How a script works is in the model's instructions (see `scaffold.ts`). Here is what there is to call.
-  return [
+  const lines = [
     'Runs a script: JavaScript that calls your tools, as the body of an async function, and answers with what it returns.',
-    '',
-    'Your tools:',
-    '```ts',
-    renderDeclarations({
-      tools: scriptToolsOf(definition).map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.parameters as CodemodeJsonSchema,
-        execute: () => undefined,
-      })),
-    }),
-    '```',
-  ].join('\n');
+  ];
+  if (own.length > 0) {
+    lines.push(
+      '',
+      'Your tools:',
+      '```ts',
+      renderDeclarations({
+        tools: own.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.parameters as CodemodeJsonSchema,
+          execute: () => undefined,
+        })),
+      }),
+      '```',
+    );
+  }
+  if (servers.length > 0) {
+    lines.push(
+      '',
+      'MCP servers, whose tools are not listed here:',
+      ...servers.map(
+        (server) =>
+          `- ${server.name}${server.description === undefined ? '' : `: ${server.description}`}`,
+      ),
+      'A tool of a server is `tools.mcp__<server>__<tool>`. `searchTools(query, { limit, server })` gives the best matches inside a script, each with its `name`, `description` and `signature`.',
+    );
+  }
+  return lines.join('\n');
 }
 
 export type CodeOptions = {
@@ -502,6 +576,8 @@ export type CodeOptions = {
     argument: Json,
     signal: AbortSignal,
   ) => Promise<CallResult>;
+  /** The agent's MCP servers, as the engine reaches them. */
+  readonly mcp: Mcp;
   readonly clock?: () => number;
   readonly report?: (error: unknown) => void;
 };
@@ -515,7 +591,7 @@ const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 export function codeKind(options: CodeOptions): TaskKind {
-  const { store, actorOf, definitionOf } = options;
+  const { store, actorOf, definitionOf, mcp } = options;
   const clock = options.clock ?? Date.now;
   const report =
     options.report ??
@@ -572,11 +648,21 @@ export function codeKind(options: CodeOptions): TaskKind {
       const actor = await actorOf(task.actor);
       if (actor === undefined) return { status: 'lost', text: 'Its actor is gone' };
       // What it is run with: stored the first time, read every time after.
-      const script = await store.startScript(actor.id, task.id, {
-        startedAt: clock(),
-        seed: randomInt(0, 2 ** 32),
-        catalog: { tools: scriptTools(await definitionOf(actor)) } satisfies Catalog as Json,
-      });
+      let script = await store.loadScript(actor.id, task.id);
+      if (script === undefined) {
+        const definition = await definitionOf(actor);
+        // What its servers offer is asked for now, and is what it has for as long as it runs.
+        const servers = await mcp.catalog(actor, definition.mcps ?? []);
+        if (closing.aborted) return { status: 'lost', text: '' };
+        script = await store.startScript(actor.id, task.id, {
+          startedAt: clock(),
+          seed: randomInt(0, 2 ** 32),
+          catalog: {
+            tools: scriptTools(definition, servers),
+            down: servers.down,
+          } satisfies Catalog as unknown as Json,
+        });
+      }
       if (closing.aborted) return { status: 'lost', text: '' };
       const catalog = script.catalog as unknown as Catalog;
       const tools = new Map(catalog.tools.map((tool) => [tool.name, tool]));
@@ -755,14 +841,13 @@ export function codeKind(options: CodeOptions): TaskKind {
               if (typeof query !== 'string') {
                 return { ok: false, message: 'searchTools takes a query, as text' };
               }
-              const { limit } = (narrowed ?? {}) as { limit?: unknown };
+              const { limit, server } = (narrowed ?? {}) as { limit?: unknown; server?: unknown };
               return {
                 ok: true,
-                value: searchTools(
-                  catalog.tools,
-                  query,
-                  typeof limit === 'number' ? { limit } : {},
-                ),
+                value: searchTools(catalog.tools, query, {
+                  ...(typeof limit === 'number' ? { limit } : {}),
+                  ...(typeof server === 'string' ? { server } : {}),
+                }),
               };
             }
             if (call.name === 'describeTool') {
@@ -799,6 +884,24 @@ export function codeKind(options: CodeOptions): TaskKind {
           const tool = tools.get(call.name);
           if (tool === undefined) return { ok: false, message: `There is no tool ${call.name}` };
           const args = (call.args ?? {}) as Json;
+          if (tool.server !== undefined && tool.tool !== undefined) {
+            const servers = (await definitionOf(actor)).mcps ?? [];
+            const server = servers.find((one) => one.name === tool.server);
+            if (server === undefined) {
+              return {
+                ok: false,
+                message: `The agent no longer has the MCP server ${tool.server}`,
+              };
+            }
+            try {
+              return valueOfMcp(await mcp.call(actor, server, tool.tool, args, abort.signal));
+            } catch (error) {
+              return {
+                ok: false,
+                message: `The call of ${tool.js} did not go through: ${messageOf(error)}`,
+              };
+            }
+          }
           const make = () => options.call(actor, `tools.${tool.name}.execute`, args, abort.signal);
           let result = await make();
           // What ran the tool died with the call in it: it may or may not have run. One that is
@@ -936,6 +1039,18 @@ export function codeKind(options: CodeOptions): TaskKind {
             }]`,
           );
         }
+      }
+      if (!result.ok && result.error.kind === 'script') {
+        // It may have failed for a tool of a server that was away when it started.
+        const { message } = result.error;
+        notes.push(
+          ...catalog.down
+            .filter((one) => message.includes(`mcp__${safe(one.server)}__`))
+            .map(
+              (one) =>
+                `Note: the MCP server ${one.server} could not be reached when the script started, so its tools were not there (${one.reason}).`,
+            ),
+        );
       }
       // Kept before the task is said to have ended: once it has, a later script may ask for it.
       await store.endScript(actor.id, task.id, keptOf({ result, notes }));

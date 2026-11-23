@@ -34,9 +34,12 @@
   "dependencies": {
     "@acentric/ai": "workspace:*",
     "@acentric/protocol": "workspace:*",
-    "@earendil-works/pi-codemode": "1.5.0"
+    "@earendil-works/pi-codemode": "1.5.0",
+    "@modelcontextprotocol/client": "2.4.0"
   },
   "devDependencies": {
-    "@types/node": "catalog:"
+    "@modelcontextprotocol/server": "2.4.0",
+    "@types/node": "catalog:",
+    "zod": "catalog:"
   }
 }
