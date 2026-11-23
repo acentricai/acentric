@@ -14,11 +14,17 @@
 #
 # The image is built on Debian, not Alpine: agents' code runs in workerd, which has no build
 # for Alpine's C library.
+#
+# It is built for amd64 and arm64 alike. What is the same for both (the machine program for
+# every system, the TypeScript, the dashboard and the command) is built once, on the system
+# that builds, and only what the server runs with is installed for the system it is for:
+#
+#   docker buildx build --platform linux/amd64,linux/arm64 .
 
 # The machine program: what is installed on a computer actors' commands run on. One file for
 # each system a machine may be, all built here, on whatever this image is built on: zig links
 # for the others. The Linux ones are static, and run on any distribution.
-FROM rust:1.97-slim AS machine
+FROM --platform=$BUILDPLATFORM rust:1.97-slim AS machine
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends python3-pip \
     && rm -rf /var/lib/apt/lists/* \
@@ -65,7 +71,8 @@ ENV HOME=/home/user
 WORKDIR /home/user
 CMD ["/usr/local/lib/acentric/boot"]
 
-FROM node:26-slim AS build
+# The TypeScript, the dashboard and the command: the same files whatever the image is for.
+FROM --platform=$BUILDPLATFORM node:26-slim AS build
 WORKDIR /repo
 RUN npm install --global pnpm@12.15.0
 
@@ -89,10 +96,23 @@ COPY apps apps
 COPY scripts scripts
 RUN pnpm build && pnpm --filter @acentric/dashboard build
 
-# The server alone, with what it needs to run and nothing it was built with.
+# What was built, without what it was built with: the packages are installed again below, for
+# the system the image is for.
+RUN mkdir /built \
+    && for dir in packages/* apps/*; do \
+         mkdir -p "/built/$dir" && tar --exclude=node_modules -C "$dir" -cf - . | tar -xf - -C "/built/$dir"; \
+       done
+
+# The server alone, with what it needs to run and nothing it was built with. Installed for the
+# system the image is for: workerd and esbuild are a binary of that system's.
+FROM node:26-slim AS deploy
+WORKDIR /repo
+RUN npm install --global pnpm@12.15.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --from=build /built .
 RUN pnpm --filter @acentric/server deploy --prod --legacy /out
 
-FROM node:26-slim
+FROM node:26-slim AS server
 ENV NODE_ENV=production \
     ACENTRIC_HOST=0.0.0.0 \
     ACENTRIC_PORT=4000 \
@@ -104,7 +124,7 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=build /out .
+COPY --from=deploy /out .
 # The dashboard of this build, which the server serves beside the API.
 COPY --from=build /repo/apps/dashboard/dist dashboard/
 # The acentric command of this build, which the server hands out at /install-cli.sh.
