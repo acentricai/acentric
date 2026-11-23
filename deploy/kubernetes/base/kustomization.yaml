@@ -1,0 +1,23 @@
+# The Acentric server on Kubernetes: one server, on a volume of its own. How to use it is in
+# ../README.md. This is the server alone; ../gateway or ../ingress puts it behind HTTPS.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: acentric
+labels:
+  - pairs:
+      app.kubernetes.io/name: acentric
+      app.kubernetes.io/part-of: acentric
+    includeSelectors: true
+resources:
+  - namespace.yaml
+  - statefulset.yaml
+  - service.yaml
+images:
+  - name: ghcr.io/acentricai/acentric-server
+    newTag: 0.15.0
+configMapGenerator:
+  # What the server is run with that is not secret. ACENTRIC_PUBLIC_URL is where people, the
+  # acentric command and machines reach it.
+  - name: acentric-settings
+    literals:
+      - ACENTRIC_PUBLIC_URL=https://engine.example.com
