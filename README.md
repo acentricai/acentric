@@ -42,7 +42,8 @@ promises, how to check that an image is the one released, and what an upgrade ca
 - It keeps everything it has in `/data`: its database, and the images and files of
   conversations as files in `/data/blobs`. It backs itself up every day and before an upgrade,
   and `acentric-server backup` and `restore` take and put back one: see
-  [BACKUPS.md](BACKUPS.md). Do not copy `/data` while it runs.
+  [BACKUPS.md](BACKUPS.md). Do not copy `/data` while it runs. What it keeps, and for how
+  long: [DATA.md](DATA.md).
 - `ACENTRIC_SECRET_KEY` is what agents' secrets and the keys of model accounts are sealed
   with. Without it, the server keeps neither. It and the admin key are read from files too,
   by `ACENTRIC_SECRET_KEY_FILE` and `ACENTRIC_ADMIN_KEY_FILE`, as the recipes give them. How
