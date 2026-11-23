@@ -1,0 +1,16 @@
+# Caddy in front of the Acentric server. The address it serves is ACENTRIC_PUBLIC_URL: with a
+# name and https, Caddy gets a certificate for it from Let's Encrypt and renews it, which needs
+# ports 80 and 443 of this machine reachable from the internet. Other ports are for a machine
+# where those are taken, and then are in ACENTRIC_PUBLIC_URL too.
+{
+	http_port {$ACENTRIC_HTTP_PORT:80}
+	https_port {$ACENTRIC_HTTPS_PORT:443}
+}
+
+{$ACENTRIC_PUBLIC_URL} {
+	reverse_proxy server:4000 {
+		# An actor's events stream as they come: nothing is held back to be sent together.
+		# Daemons' WebSockets pass as they are, and stay open.
+		flush_interval -1
+	}
+}
