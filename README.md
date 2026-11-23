@@ -23,7 +23,8 @@ docker run -p 4000:4000 -v acentric-data:/data \
   ghcr.io/acentricai/acentric-server:0.15.0
 ```
 
-Run an exact version, and change it on purpose: [VERSIONS.md](VERSIONS.md) says what a version
+[deploy/](deploy/) has ways to run it, each tested: Docker Compose behind Caddy, Kubernetes, and
+systemd. Run an exact version, and change it on purpose: [VERSIONS.md](VERSIONS.md) says what a version
 promises, how to check that an image is the one released, and what an upgrade carries over.
 [CHANGELOG.md](CHANGELOG.md) says what changed in each. To build the image yourself instead,
 `docker build -t acentric-server .`.

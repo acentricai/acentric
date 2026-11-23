@@ -7,6 +7,8 @@ name: CI
 #   (Markdown and the licence).
 # - The daemon's checks, in Rust on Linux and macOS, run for a change to the daemon or its
 #   toolchain.
+# - The deploy recipes (deploy/), each brought up as people would and checked, run for a change
+#   to them or to the image's Dockerfile.
 # - A pull request tests on Node 24, the oldest Node the packages run on. main tests on Node
 #   26, which the image ships, too.
 #
@@ -39,6 +41,7 @@ jobs:
     outputs:
       code: ${{ steps.changes.outputs.code }}
       rust: ${{ steps.changes.outputs.rust }}
+      deploy: ${{ steps.changes.outputs.deploy }}
       tested: ${{ steps.tested.outputs.tested }}
       node: ${{ steps.tested.outputs.node }}
     steps:
@@ -62,9 +65,12 @@ jobs:
           code=$(grep -Evq "$prose" changed.txt && echo true || echo false)
           [ "$(cat changed.txt)" = everything ] && code=true
           has_rust=$(grep -Eq "$rust|^everything$" changed.txt && echo true || echo false)
+          deploy='^(deploy/|Dockerfile$|\.dockerignore$|\.github/workflows/ci\.yml$)'
+          has_deploy=$(grep -Eq "$deploy|^everything$" changed.txt && echo true || echo false)
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "rust=$has_rust" >> "$GITHUB_OUTPUT"
-          echo "code: $code, rust: $has_rust"
+          echo "deploy=$has_deploy" >> "$GITHUB_OUTPUT"
+          echo "code: $code, rust: $has_rust, deploy: $has_deploy"
       - id: tested
         env:
           GH_TOKEN: ${{ github.token }}
@@ -197,12 +203,54 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  recipes:
+    name: Recipe (${{ matrix.recipe }})
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        recipe: [compose, kubernetes, systemd]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: docker/setup-buildx-action@v4
+      # This commit's image, as the recipes would have it from GHCR, from the cache the image
+      # job keeps.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          load: true
+          tags: ghcr.io/acentricai/acentric-server:test
+          cache-from: type=gha
+      - name: Compose, behind Caddy
+        if: matrix.recipe == 'compose'
+        run: ACENTRIC_VERSION=test deploy/compose/test.sh
+      - uses: helm/kind-action@v1
+        if: matrix.recipe == 'kubernetes'
+        with:
+          cluster_name: acentric
+      - name: Kubernetes, on kind
+        if: matrix.recipe == 'kubernetes'
+        run: |
+          kind load docker-image ghcr.io/acentricai/acentric-server:test --name acentric
+          ACENTRIC_VERSION=test deploy/kubernetes/test.sh
+      - name: systemd, by Docker and by Podman
+        if: matrix.recipe == 'systemd'
+        run: sudo --preserve-env=PATH ACENTRIC_VERSION=test deploy/systemd/test.sh
+
   # What main's protection requires: one check that stands for every job above. A job that was
   # not run, because the change could not break it, passes; one that failed or was stopped fails
   # this.
   passed:
     name: CI passed
-    needs: [changes, lint, typescript, image, rust]
+    needs: [changes, lint, typescript, image, rust, recipes]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
