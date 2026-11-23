@@ -17,6 +17,7 @@ export type Person = {
   readonly email: string;
   password: string;
   role: Role;
+  displayName?: string | null;
 };
 
 /** A call as an area sees it: only once someone is signed in. */
