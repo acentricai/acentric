@@ -101,7 +101,16 @@ export const usageTotalsSchema = z
 export type UsageTotals = z.infer<typeof usageTotalsSchema>;
 
 /** What usage can be added up by. `day` is a day in UTC, as `2026-11-22`. */
-export const USAGE_GROUPS = ['agent', 'actor', 'account', 'provider', 'model', 'day'] as const;
+/** `root` is the actor at the top of a tree of subagents: what it and all under it used. */
+export const USAGE_GROUPS = [
+  'agent',
+  'actor',
+  'root',
+  'account',
+  'provider',
+  'model',
+  'day',
+] as const;
 export type UsageGroup = (typeof USAGE_GROUPS)[number];
 
 /** Which calls are added up, and by what. Each filter narrows them. */
@@ -112,6 +121,8 @@ export const usageQuerySchema = z.object({
   to: z.coerce.number().int().nonnegative().optional(),
   agent: agentIdSchema.optional(),
   actor: actorIdSchema.optional(),
+  /** An actor that was created from outside, and every actor under it. */
+  root: actorIdSchema.optional(),
   account: accountIdSchema.optional(),
   provider: providerIdSchema.optional(),
   model: modelIdSchema.optional(),

@@ -28,6 +28,7 @@ function at(turn: Turn, said = 0, lastTurn: TurnEnd | null = null): ActorRecord 
       reasoning: 'medium',
       configuration: null,
       machine: null,
+      parent: null,
       status: turn.phase === 'idle' ? 'idle' : 'working',
       lastTurn,
       pendingInputs: 0,

@@ -68,6 +68,7 @@ const actor = () => ({
   reasoning: 'medium',
   configuration: { region: 'eu' },
   machine: null,
+  parent: null,
   status: 'idle',
   lastTurn: { end: 'ok', at: NOW },
   pendingInputs: 0,

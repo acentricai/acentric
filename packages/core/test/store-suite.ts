@@ -57,6 +57,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       reasoning: 'medium',
       configuration: { region: 'eu' },
       machine: null,
+      parent: null,
       status: 'idle',
       lastTurn: null,
       pendingInputs: 0,

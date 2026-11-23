@@ -36,6 +36,7 @@ import type {
   MachinePatch,
   NewCommand,
   StoredCommand,
+  Stopping,
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
@@ -116,6 +117,9 @@ export class MemoryStore implements Store {
   /** The variables of actors' commands, sealed. */
   readonly #envs = new Map<ActorId, string>();
   readonly #machines = new Map<MachineId, StoredMachine>();
+  /** The call that spawned each subagent, and the actors that are being stopped, each by whom. */
+  readonly #spawnedBy = new Map<ActorId, string>();
+  readonly #stopping = new Map<ActorId, Stopping>();
   readonly #sandboxProviders = new Map<SandboxProviderId, StoredSandboxProvider>();
   /** By `actor/task`. */
   readonly #commands = new Map<string, StoredCommand>();
@@ -445,8 +449,13 @@ export class MemoryStore implements Store {
     actor: Actor,
     configurationGiven: Json | null = null,
     env: string | null = null,
+    spawnedBy: string | null = null,
   ): Promise<{ record: ActorRecord; created: boolean }> {
     const siblings = [...this.#actors.values()].filter((kept) => kept.actor.agent === actor.agent);
+    if (actor.parent !== null && (await this.findChild(actor.parent.id, actor.parent.name))) {
+      throw new NameTaken(actor.parent.name, 'subagent');
+    }
+    if (spawnedBy !== null) this.#spawnedBy.set(actor.id, spawnedBy);
     if (actor.externalId !== null) {
       const there = siblings.find((kept) => kept.actor.externalId === actor.externalId);
       if (there !== undefined) return { record: this.#record(there), created: false };
@@ -509,9 +518,20 @@ export class MemoryStore implements Store {
           (query.actor === undefined || actor.id === query.actor) &&
           (query.status === undefined || actor.status === query.status) &&
           (query.name === undefined || actor.name === query.name) &&
-          (query.externalId === undefined || actor.externalId === query.externalId),
+          (query.externalId === undefined || actor.externalId === query.externalId) &&
+          (query.parent === undefined || actor.parent?.id === query.parent),
       );
     return pageOf(all, (actor) => actor.id, query);
+  }
+
+  /** The actor at the top of an actor's tree of subagents: itself, for one created from outside. */
+  #rootOf(actor: ActorId): ActorId {
+    let top = actor;
+    for (;;) {
+      const parent = this.#actors.get(top)?.actor.parent;
+      if (parent === null || parent === undefined) return top;
+      top = parent.id;
+    }
   }
 
   async commit(id: ActorId, epoch: number, change: Change): Promise<void> {
@@ -531,7 +551,9 @@ export class MemoryStore implements Store {
       kept.configurationGiven = copy(change.set.configurationGiven);
     }
     if (change.set?.reasoningSent !== undefined) kept.reasoningSent = change.set.reasoningSent;
-    if (change.usage !== null) this.#usage.push(copy(change.usage));
+    if (change.usage !== null) {
+      this.#usage.push({ ...copy(change.usage), root: this.#rootOf(change.usage.actor) });
+    }
     if (change.sent !== null) {
       kept.sent = change.sent.fingerprint;
       kept.reasoningFrom = change.sent.reasoningFrom;
@@ -603,12 +625,16 @@ export class MemoryStore implements Store {
     return copy(part.limit === undefined ? inOrder : inOrder.slice(0, part.limit));
   }
 
-  async quietInputs(actor: ActorId): Promise<void> {
+  async quietInputs(actor: ActorId, only?: readonly string[]): Promise<void> {
     const inputs = this.#inputs.get(actor);
     if (inputs === undefined) return;
     this.#inputs.set(
       actor,
-      inputs.map((input) => (input.deliveredAt === null ? { ...input, quiet: true } : input)),
+      inputs.map((input) =>
+        input.deliveredAt === null && (only === undefined || only.includes(input.type))
+          ? { ...input, quiet: true }
+          : input,
+      ),
     );
   }
 
@@ -779,6 +805,31 @@ export class MemoryStore implements Store {
       });
     }
     return open;
+  }
+
+  async findChild(
+    parent: ActorId,
+    name: string,
+  ): Promise<{ actor: Actor; spawnedBy: string | null } | undefined> {
+    const found = (await this.listChildren(parent)).find((child) => child.parent?.name === name);
+    return found === undefined
+      ? undefined
+      : { actor: found, spawnedBy: this.#spawnedBy.get(found.id) ?? null };
+  }
+
+  async listChildren(parent: ActorId): Promise<Actor[]> {
+    return [...this.#actors.values()]
+      .filter((kept) => kept.actor.parent?.id === parent)
+      .map((kept) => this.#record(kept).actor);
+  }
+
+  async setStopping(actor: ActorId, stopping: Stopping | null): Promise<void> {
+    if (stopping === null) this.#stopping.delete(actor);
+    else if (this.#actors.has(actor)) this.#stopping.set(actor, copy(stopping));
+  }
+
+  async listStopping(): Promise<({ actor: ActorId } & Stopping)[]> {
+    return [...this.#stopping].map(([actor, stopping]) => ({ actor, ...stopping }));
   }
 
   async addSandboxProvider(provider: StoredSandboxProvider): Promise<void> {

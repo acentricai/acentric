@@ -62,6 +62,11 @@ export const actorSchema = z
     configuration: jsonSchema.nullable(),
     /** The machine it works on, and where there. Null for one that has none. */
     machine: actorMachineSchema.nullable(),
+    /**
+     * For a subagent: the actor that spawned it, and the name that actor gave it. Null for one
+     * that was created from outside.
+     */
+    parent: z.object({ id: actorIdSchema, name: z.string() }).nullable(),
     status: actorStatusSchema,
     /** Null until it has had a turn. */
     lastTurn: turnEndSchema.nullable(),
@@ -139,6 +144,8 @@ export const listActorsQuerySchema = pageQuerySchema.extend({
   status: actorStatusSchema.optional(),
   name: nameSchema.optional(),
   externalId: externalIdSchema.optional(),
+  /** The subagents of this actor. */
+  parent: actorIdSchema.optional(),
 });
 export type ListActorsQuery = z.infer<typeof listActorsQuerySchema>;
 

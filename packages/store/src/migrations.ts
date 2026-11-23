@@ -39,6 +39,8 @@ const MIGRATIONS: readonly string[] = [
     id INTEGER PRIMARY KEY,
     at INTEGER NOT NULL,
     actor_id TEXT NOT NULL,
+    -- The actor at the top of its tree of subagents: itself, for one created from outside.
+    root_actor_id TEXT NOT NULL,
     agent_id TEXT NOT NULL,
     version INTEGER NOT NULL,
     account_id TEXT,
@@ -62,6 +64,7 @@ const MIGRATIONS: readonly string[] = [
 
   CREATE INDEX usage_at ON usage (at);
   CREATE INDEX usage_actor ON usage (actor_id, at);
+  CREATE INDEX usage_root ON usage (root_actor_id, at);
   CREATE INDEX usage_agent ON usage (agent_id, at);
 
   -- A deployment of an agent. A row is never changed.
@@ -176,8 +179,18 @@ const MIGRATIONS: readonly string[] = [
     -- JSON: the machine it works on, where there, and the names of its variables. NULL for none.
     machine TEXT,
     -- JSON: the variables its commands are run with, sealed with a key the database never has.
-    machine_env TEXT
+    machine_env TEXT,
+    -- For a subagent: the actor that spawned it, the name that actor gave it, and the call of
+    -- its model that did. NULL for one that was created from outside.
+    parent_id TEXT,
+    parent_name TEXT,
+    spawned_by TEXT,
+    -- JSON: how it is being stopped, and by whom, while it is. What a process looks for when it
+    -- starts, to go on stopping it.
+    stopping TEXT
   ) STRICT;
+  -- An actor's subagents have each a name of their own.
+  CREATE UNIQUE INDEX actors_child ON actors (parent_id, parent_name) WHERE parent_id IS NOT NULL;
 
   -- An external ID, and a name, are one actor's among its agent's.
   CREATE UNIQUE INDEX actors_external_id ON actors (agent_id, external_id)
