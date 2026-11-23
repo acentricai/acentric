@@ -1,12 +1,14 @@
 # Deploying Acentric
 
-Ways to run the server, each tested in CI as it is here:
+Ways to run the server, each tested as it is here (in CI, but for the AWS one, which needs an
+account and is tested by hand; CI checks it is well formed):
 
-| Recipe                    | For                                                                                      |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| [compose](compose/)       | One machine with Docker, behind Caddy, which gets its HTTPS certificate. The quickest.   |
-| [kubernetes](kubernetes/) | A Kubernetes cluster: one server on a volume of its own, behind a Gateway or an Ingress. |
-| [systemd](systemd/)       | A machine whose services systemd runs: the image by Docker, or by Podman as a Quadlet.   |
+| Recipe                          | For                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| [compose](compose/)             | One machine with Docker, behind Caddy, which gets its HTTPS certificate. The quickest.   |
+| [kubernetes](kubernetes/)       | A Kubernetes cluster: one server on a volume of its own, behind a Gateway or an Ingress. |
+| [systemd](systemd/)             | A machine whose services systemd runs: the image by Docker, or by Podman as a Quadlet.   |
+| [terraform/aws](terraform/aws/) | One EC2 instance, its data on a volume of its own, snapshots, and backups in S3.         |
 
 [sandbox](sandbox/) is not a way to run the server: it is what sandboxes at Docker and Boat are made from.
 
@@ -34,6 +36,6 @@ Ways to run the server, each tested in CI as it is here:
 - **Stopping.** The server is given a minute to stop, so that a turn that is going on is
   written down.
 - **Backups.** The server backs itself up every day and before an upgrade, into a volume of
-  the backups' own: copy them off it too. [BACKUPS.md](../BACKUPS.md) says how, and each
+  the backups' own, and copies each to a bucket with `ACENTRIC_BACKUP_URL`: give it one. [BACKUPS.md](../BACKUPS.md) says how, and each
   recipe's README how a backup is taken and put back there.
 - **Upgrading.** An exact version, changed on purpose: see [VERSIONS.md](../VERSIONS.md).

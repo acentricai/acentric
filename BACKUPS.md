@@ -21,8 +21,34 @@ say what became of the last one, and each backup taken or failed is in the audit
 
 **Where they go is what they survive.** Beside the data, on its disk, they are there after a bad
 upgrade or something removed by mistake, and lost with the disk. The recipes in
-[deploy/](deploy/) give them a volume of their own. Copy them somewhere else as well: another
-machine, or a bucket.
+[deploy/](deploy/) give them a volume of their own. Copy them somewhere else as well: to a
+bucket, as below, or another machine.
+
+## A bucket
+
+With `ACENTRIC_BACKUP_URL`, such as `s3://my-bucket/acentric`, each backup is copied to that
+folder of a bucket once it is whole, and the bucket keeps as many of each kind as the server's
+folder does. It is S3, or a store that speaks S3's API (Cloudflare R2, Backblaze B2, MinIO,
+Google Cloud Storage's XML API…) at `AWS_ENDPOINT_URL_S3`.
+
+The server reaches it as AWS's own tools do: a key in `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY`, a profile, a web identity (EKS's IRSA and Pod Identity), a container's
+role (ECS), or an EC2 instance's role. `AWS_REGION` is the bucket's region; S3 says it
+otherwise. What it is given needs these, on that folder only: `s3:ListBucket` (with the
+folder as `s3:prefix`), `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`,
+`s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`.
+
+A backup that is in the server's folder and could not be copied is one that failed: the
+Backups page says so, with why, and so does the audit log. The page lists the bucket's
+backups too, and whether the bucket is reached. Versioning on the bucket, with older versions
+expiring after some days, keeps a backup a while after the server removed it, and from a
+server that was told to remove them.
+
+`check-backup` and `restore` take one in the bucket by its URL:
+
+```sh
+acentric-server restore s3://my-bucket/acentric/acentric-2026-11-23T03-00-00Z-scheduled-0.15.0.tar
+```
 
 ## The key
 
@@ -52,10 +78,11 @@ acentric-server restore [file]         # with the server stopped: puts one back
   refused, unless `--without-keys`, which puts back all else.
 
 How each is run, for each recipe, is in its README: [compose](deploy/compose/),
-[kubernetes](deploy/kubernetes/), [systemd](deploy/systemd/).
+[kubernetes](deploy/kubernetes/), [systemd](deploy/systemd/), [terraform/aws](deploy/terraform/aws/).
 
 ## Snapshots of the disk
 
 A snapshot of the whole volume at one moment, as a cloud's block volume snapshot is, is a backup
 too: SQLite reads it back as it does a server that stopped without warning. A copy of the files
-one at a time is not.
+one at a time is not. The [AWS recipe](deploy/terraform/aws/) takes one of its data volume
+every day.

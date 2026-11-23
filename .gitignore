@@ -9,6 +9,12 @@ coverage/
 # Rust's build output.
 target/
 
+# Terraform's providers, state and settings, made where it is run.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
 
 .env
 .env.*

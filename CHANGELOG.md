@@ -22,8 +22,12 @@ published to npm.
   link, API keys, sessions, and an audit log.
 - **Backups.** The server backs itself up every day and before an upgrade, keeping the newest
   of each kind, and `acentric-server backup`, `check-backup` and `restore` take, check and put
-  back one. Only one server runs on a folder of data at a time.
+  back one. Only one server runs on a folder of data at a time. With `ACENTRIC_BACKUP_URL`,
+  each is copied to a bucket at S3, or at a store that speaks its API, and restored from it.
 - **The dashboard**, served by the server: agents, actors and their conversations, machines
   and sandboxes, model accounts and usage, API keys, people, the audit log, and your account.
+- **Deploy recipes**: Docker Compose with Caddy, Kubernetes, systemd (Docker or Podman), and
+  Terraform for one EC2 instance on AWS, with its data on a volume of its own, snapshots of
+  it, and its backups in S3.
 - **The images**, `ghcr.io/acentricai/acentric-server` and `ghcr.io/acentricai/acentric-sandbox`,
   for linux/amd64 and linux/arm64, signed.
