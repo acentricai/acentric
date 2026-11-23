@@ -187,6 +187,15 @@ export class Metrics {
       SLOW,
     ),
   );
+  readonly retentionRemoved = this.#add(
+    new Counter(
+      'acentric_retention_removed_total',
+      'What was removed as it had its day: sessions and links that expired, and actors, audit events and usage past how long they are kept.',
+    ),
+  );
+  readonly retentionBytes = this.#add(
+    new Counter('acentric_retention_freed_bytes_total', 'Bytes given back to the disk after it.'),
+  );
   readonly backupFailures = this.#add(
     new Counter('acentric_backup_failures_total', 'Backups of the server that failed.'),
   );
