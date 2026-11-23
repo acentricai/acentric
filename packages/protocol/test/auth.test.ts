@@ -80,6 +80,7 @@ describe('principalSchema', () => {
       type: 'user',
       user: makeId('user', source),
       email: 'maya@example.com',
+      displayName: 'Maya',
       role: 'member',
       permissions: [...ROLE_PERMISSIONS.member],
       session: makeId('session', source),

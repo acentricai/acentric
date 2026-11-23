@@ -12195,6 +12195,19 @@
                 "format": "email",
                 "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
               },
+              "displayName": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "A few words for a person to read. Not unique."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "role": {
                 "type": "string",
                 "enum": [
@@ -12239,6 +12252,7 @@
               "type",
               "user",
               "email",
+              "displayName",
               "role",
               "permissions",
               "session"

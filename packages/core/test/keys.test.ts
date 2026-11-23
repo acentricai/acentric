@@ -279,6 +279,7 @@ describe('a person', () => {
     type: 'user',
     user: id('user'),
     email: 'ada@example.com',
+    displayName: null,
     role: 'member',
     permissions: ['keys:manage', 'actors:read'],
     session: id('session'),

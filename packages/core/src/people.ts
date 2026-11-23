@@ -233,6 +233,7 @@ export class People {
       type: 'user',
       user: user.id,
       email: user.email,
+      displayName: user.displayName,
       role: user.role,
       permissions: [...ROLE_PERMISSIONS[user.role]],
       session: id,

@@ -83,6 +83,7 @@ describe('an engine with no person yet', () => {
       type: 'user',
       user: signedIn.user.id,
       email: 'ada@example.com',
+      displayName: 'Ada',
       role: 'owner',
       permissions: [...ROLE_PERMISSIONS.owner],
       session: signedIn.session.id,

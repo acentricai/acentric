@@ -17,6 +17,7 @@ const as = (role: Role): Me => ({
   type: 'user',
   user: 'usr_1' as Me['user'],
   email: 'ada@example.test',
+  displayName: null,
   role,
   permissions: [...ROLE_PERMISSIONS[role]],
   session: 'ses_1' as Me['session'],

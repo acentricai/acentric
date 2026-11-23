@@ -10,6 +10,7 @@
 import { z } from 'zod';
 
 import { actorIdSchema, agentIdSchema, keyIdSchema, sessionIdSchema, userIdSchema } from './ids.ts';
+import { labelSchema } from './names.ts';
 import { timestampSchema } from './primitives.ts';
 
 /** Everything that can be allowed. Each route takes one. */
@@ -156,6 +157,8 @@ export const principalSchema = z
       type: z.literal('user'),
       user: userIdSchema,
       email: z.email(),
+      /** What they are called. Null for one who has not said. */
+      displayName: labelSchema.nullable(),
       role: roleSchema,
       permissions: z.array(permissionSchema),
       /** The session the request came with. */

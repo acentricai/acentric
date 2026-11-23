@@ -88,6 +88,7 @@ export function fakeServer() {
     type: 'user',
     user: person.id,
     email: person.email,
+    displayName: person.displayName ?? null,
     role: person.role,
     permissions: ROLE_PERMISSIONS[person.role],
     session: 'ses_1',
