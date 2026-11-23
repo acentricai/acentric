@@ -1,0 +1,371 @@
+/* The pages of signing in, as the Acentric dashboards have them: the form on the ground and the
+   artwork at the window's edge. Narrow screens show the form alone. */
+
+/* Request errors are toasts (components.css), at the foot of the form's column, not over the
+   art: centred under the form. Narrow screens are the form alone, so the whole width. */
+@media (min-width: 901px) {
+  .auth .ac-toaster {
+    right: 50%;
+  }
+}
+
+/* Sign-in pages. The form on ground and the artwork at the window’s edge.
+   Narrow screens show the form alone. */
+
+.auth {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--ground);
+}
+
+.auth__side {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-width: 0;
+  padding: 0 var(--gutter);
+}
+
+/* The site header's geometry: 18px from the top, the mark at the gutter. */
+.auth__header {
+  display: flex;
+  align-items: center;
+  height: 72px;
+  padding-top: 18px;
+}
+
+.auth__brand {
+  display: inline-flex;
+  border-radius: 6px;
+}
+
+.auth__brand:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 6px;
+}
+
+.auth__mark {
+  display: block;
+  height: 29px;
+  width: auto;
+}
+
+/* The mark is black; on a dark ground, chosen or followed from the system,
+   it shows white. */
+:root[data-theme='dark'] .auth__mark {
+  filter: invert(1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .auth__mark {
+    filter: invert(1);
+  }
+}
+
+.auth__main {
+  display: grid;
+  place-items: center;
+  padding-block: var(--space-7);
+}
+
+.auth__step {
+  display: grid;
+  gap: var(--space-5);
+  width: min(100%, 400px);
+}
+
+.auth__intro {
+  display: grid;
+  justify-items: start;
+}
+
+.auth__intro--center {
+  justify-items: center;
+  text-align: center;
+}
+
+.auth__intro--spaced {
+  padding-bottom: 32px; /* The subtitle's 10px margin and 22px line. */
+}
+
+.auth__title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 36px;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.auth__lede {
+  margin: 10px 0 0;
+  color: var(--ink-secondary);
+  font-size: 15px;
+  line-height: 22px;
+  text-wrap: pretty;
+}
+
+/* The sign-in pages use one larger control size: 48px. */
+.auth .auth__control {
+  min-height: var(--control-xl);
+  font-size: 15px;
+}
+
+.ac-input.auth__control {
+  padding: 0 16px;
+  font-size: 16px; /* 16px keeps iOS from zooming on focus. */
+}
+
+.auth__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.auth__form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.auth__submit {
+  width: 100%;
+}
+
+.auth__aside {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.auth__aside {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.auth__muted {
+  font-variant-numeric: tabular-nums;
+}
+
+.auth__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-control);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: text-decoration-color 200ms ease;
+}
+
+.auth__link:hover {
+  text-decoration-color: var(--ink);
+}
+
+.auth__link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.auth__done-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-5);
+  border-radius: 50%;
+  background: var(--ok-wash);
+  color: var(--ok);
+}
+
+.auth__done-mark .ac-icon {
+  width: 20px;
+  height: 20px;
+  vertical-align: 0;
+}
+
+.auth__done-mark--quiet {
+  background: var(--wash);
+  color: var(--ink-secondary);
+}
+
+/* Preserve the reference footer’s space without the agreement paragraph. */
+.auth__footer {
+  display: grid;
+  place-items: center;
+  min-height: 46px;
+  padding-bottom: 28px;
+  text-align: center;
+}
+
+/* ---------- Artwork ---------- */
+
+/* The scene fills the panel inside a margin, cropped to the panel's shape
+   around the door near its foot. The panel holds the viewport, so the
+   scene stays in view while a long step scrolls. */
+.auth__art {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  padding: var(--space-3);
+}
+
+.auth__art-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 75%;
+  border-radius: 20px;
+  animation: art-in 1200ms var(--ease-reveal) both;
+}
+
+/* Already on screen in this page load: the next step's frame does not replay the entrance. */
+.auth__art-img--settled {
+  animation: none;
+}
+
+/* The button doing the work stays solid; the others dim. */
+.auth .ac-btn[aria-busy='true'] {
+  opacity: 1;
+  cursor: progress;
+}
+
+/* ---------- Motion ---------- */
+
+.spinner {
+  animation: spin 800ms linear infinite;
+}
+
+/* Each step rises in as the site's mobile menu does: 20px, staggered 50ms. */
+.rise {
+  animation: rise 500ms var(--ease-reveal) both;
+}
+
+.auth__step > .rise:nth-child(2) {
+  animation-delay: 50ms;
+}
+.auth__step > .rise:nth-child(3) {
+  animation-delay: 100ms;
+}
+.auth__step > .rise:nth-child(4) {
+  animation-delay: 150ms;
+}
+.auth__step > .rise:nth-child(5) {
+  animation-delay: 200ms;
+}
+.auth__step > .rise:nth-child(n + 6) {
+  animation-delay: 250ms;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes art-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .auth__art-img {
+    animation: none;
+  }
+
+  .spinner {
+    animation-duration: 2s;
+  }
+}
+
+/* ---------- Narrow ---------- */
+
+@media (max-width: 900px) {
+  .auth {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Narrow screens are the form alone. */
+  .auth__art {
+    display: none;
+  }
+
+  .auth__side {
+    padding: 0 var(--gutter-narrow);
+  }
+
+  .auth__main {
+    padding-block: var(--space-5);
+  }
+}
+
+/* Phones are read at arm's length, so the words under each heading step up
+   a size. Headings keep their sizes. */
+@media (max-width: 640px) {
+  .auth__lede {
+    font-size: 17px;
+    line-height: 25px;
+  }
+
+  .auth .ac-field__label,
+  .auth__aside {
+    font-size: 15px;
+    line-height: 21px;
+  }
+
+  .auth .auth__control {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 420px) {
+  .auth__title {
+    font-size: 28px;
+    line-height: 32px;
+  }
+}
+
+.auth__loading {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  color: var(--ink-muted);
+}
+
+.auth__link:disabled {
+  color: var(--ink-muted);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+/* Who is signed in: an address, however long, kept whole and in its own direction. */
+.auth__who {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  unicode-bidi: isolate;
+}
