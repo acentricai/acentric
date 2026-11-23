@@ -1,0 +1,218 @@
+/* The account's settings and rows, from settings.css, with the settings
+   grid from agents.css and the avatar from team.css in the reference. */
+
+.settings {
+  display: grid;
+  gap: 0;
+}
+
+.settings--spaced {
+  margin-top: var(--space-6);
+}
+
+.settings__group {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: var(--space-6);
+  padding: var(--space-6) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.settings__group:first-child {
+  padding-top: var(--space-2);
+}
+
+.settings__value {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.account-head .page__title {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.account-head__avatar {
+  flex: none;
+}
+
+.account-head__avatar .avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--stone);
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.logins,
+.orgs-list {
+  display: grid;
+  width: 100%;
+  max-width: 640px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.login,
+.orgs-list__item {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 56px;
+  padding: 8px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.login:first-child,
+.orgs-list__item:first-child {
+  border-top: 0;
+}
+
+.method__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--wash);
+  color: var(--ink-secondary);
+}
+
+.method__text,
+.orgs-list__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.method__name,
+.orgs-list__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.login__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.method__name .tag {
+  flex: none;
+}
+
+.login {
+  animation: log-in 300ms var(--ease-out) both;
+}
+
+.orgs-list__item .org__avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+
+.orgs-list__link {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  transition: background-color 200ms ease;
+}
+
+.orgs-list__link:hover {
+  background: var(--wash);
+}
+
+.orgs-list__link > svg {
+  color: var(--ink-muted);
+  transition: transform 200ms var(--ease-out);
+}
+
+.orgs-list__link:hover > svg {
+  transform: translateX(2px);
+}
+
+.orgs-list__link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.account-page .section-empty {
+  padding: 0;
+  text-align: left;
+}
+
+.account-skeleton {
+  width: 100%;
+  max-width: 640px;
+}
+
+.account-skeleton .skeleton__line:nth-child(3n + 1) {
+  width: 92%;
+}
+.account-skeleton .skeleton__line:nth-child(3n + 2) {
+  width: 75%;
+}
+.account-skeleton .skeleton__line:nth-child(3n + 3) {
+  width: 58%;
+}
+
+@media (max-width: 760px) {
+  .settings__group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login {
+    animation: none;
+  }
+
+  .orgs-list__link,
+  .orgs-list__link > svg {
+    transition: none;
+  }
+}
+
+/* What the key the person signed in with is. */
+.key-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 24px;
+  margin: 0;
+}
+
+.key-facts dt {
+  color: var(--ink-muted);
+}
+
+.key-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
