@@ -92,6 +92,48 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         expect(one.failures).toEqual([]);
       });
 
+      it('tells its observer of the turn, each call of the model, and the tool call, in order', async () => {
+        const heard: string[] = [];
+        const one = w.engine([lookup, says('It was refunded twice.')], {
+          options: {
+            observer: {
+              turnStarted: ({ agent }) => heard.push(`started ${agent === '' ? '' : 'turn'}`),
+              modelCalled: (call) => heard.push(`model ${call.provider} ${call.failure ?? 'ok'}`),
+              toolFinished: ({ name: tool, kind, isError, durationMs }) =>
+                heard.push(`tool ${tool} ${kind} ${String(isError)} ${String(durationMs >= 0)}`),
+              turnEnded: ({ end, durationMs }) =>
+                heard.push(`ended ${end} ${String(durationMs !== undefined)}`),
+            },
+          },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Why two refunds?');
+        await one.it.settled(actor.id);
+        expect(heard).toEqual([
+          'started turn',
+          'model fake ok',
+          'tool lookup_order agent false true',
+          'model fake ok',
+          'ended ok true',
+        ]);
+      });
+
+      it('goes on when its observer throws', async () => {
+        const one = w.engine([lookup, says('It was refunded twice.')], {
+          options: {
+            observer: {
+              modelCalled: () => {
+                throw new Error('the observer failed');
+              },
+            },
+          },
+        });
+        const actor = await one.createActor();
+        await one.say(actor.id, 'Why two refunds?');
+        await one.it.settled(actor.id);
+        expect((await store.loadActor(actor.id))?.actor.lastTurn).toMatchObject({ end: 'ok' });
+      });
+
       it('calls the model with the definition and the conversation so far', async () => {
         const one = w.engine([lookup, says('It was refunded twice.')]);
         const actor = await one.createActor();

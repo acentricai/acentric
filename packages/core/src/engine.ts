@@ -58,6 +58,7 @@ import { MemoryBus } from './bus.ts';
 import type { EventBus } from './bus.ts';
 import { ActorDriver, contentOf, machineRuleUnmet, offeredTools } from './driver.ts';
 import type { ActorUpdate, Clock, Host, Timer } from './driver.ts';
+import type { EngineObserver } from './observer.ts';
 import {
   ActorArchived,
   ActorBusy,
@@ -186,6 +187,8 @@ export type EngineOptions = {
   readonly maxHotActors?: number;
   /** Told of what a driver could not go on from. `console.error` without it. */
   readonly report?: (error: unknown) => void;
+  /** Told of turns, calls of models and tool calls, as they happen: for logs and metrics. */
+  readonly observer?: EngineObserver;
 };
 
 const wait: Timer = (ms, signal) =>
@@ -554,6 +557,7 @@ export class Engine {
           : undefined,
       closing: () => this.#closing,
       report,
+      ...(options.observer === undefined ? {} : { observer: options.observer }),
       rested: (driver) => {
         this.#rested(driver);
       },
