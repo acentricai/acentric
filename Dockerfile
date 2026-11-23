@@ -8,7 +8,7 @@
 #
 # It keeps everything it has in /data: mount a volume there, or it is gone with the container.
 # ACENTRIC_ADMIN_KEY is the API key that may do everything, which other keys are made with.
-# Without it, a server that has no key yet makes one and prints it once. ACENTRIC_SECRET_KEY
+# Without it, a server that has no key yet makes one, in /data/first-admin-key. ACENTRIC_SECRET_KEY
 # is what agents' secrets are sealed with: without it the server keeps no secrets. Every
 # setting is in apps/server/src/settings.ts.
 #

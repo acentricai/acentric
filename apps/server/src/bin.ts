@@ -2,8 +2,8 @@
 // The server's program. It reads its settings from the environment (see `settings.ts`),
 // starts, and says where it listens. Told to stop, it finishes what it is in the middle of.
 
-import { createReadStream, existsSync, readFileSync } from 'node:fs';
-import { basename, dirname } from 'node:path';
+import { chmodSync, createReadStream, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import type { Readable } from 'node:stream';
 
 import { checkBackup, restore } from './backups/archive.ts';
@@ -11,7 +11,7 @@ import { readObject } from './backups/bucket.ts';
 import { backupTo } from './backups/command.ts';
 
 import { InvalidSettings, readSettings } from './settings.ts';
-import { resetLink, start } from './start.ts';
+import { FIRST_KEY_FILE, resetLink, start } from './start.ts';
 
 const { version } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -137,9 +137,13 @@ if (started.setupLink !== undefined) {
   console.log('This link makes the owner of this server. It works once, for a week.');
 }
 if (started.firstKey !== undefined) {
-  // Nothing could call the server otherwise. It is shown here once, and kept nowhere.
-  console.log(`key ${started.firstKey}`);
-  console.log('This key may do everything, and is not shown again. Keep it somewhere safe.');
+  // Nothing could call the server otherwise. Not in the log, which is kept, and read, by more
+  // than whoever runs the server: in a file of the data's, for that user alone.
+  const file = join(settings.data, FIRST_KEY_FILE);
+  writeFileSync(file, `${started.firstKey}\n`, { mode: 0o600 });
+  chmodSync(file, 0o600);
+  console.log(`key: the first key, which may do everything, is in ${file}`);
+  console.log('Copy it somewhere safe, and remove the file: it is not written again.');
 }
 
 let stopping = false;
