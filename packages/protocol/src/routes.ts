@@ -64,6 +64,7 @@ import {
   machineUpdateSchema,
   updateMachineRequestSchema,
 } from './resources/machines.ts';
+import { compactResponseSchema, compactionSchema } from './resources/compactions.ts';
 import {
   createSandboxProviderRequestSchema,
   createSandboxRequestSchema,
@@ -409,6 +410,27 @@ export const routes = defineRoutes({
     response: abortResponseSchema,
     status: 200,
     errors: ['not_found', 'actor_archived'],
+  },
+  'actors.compact': {
+    method: 'POST',
+    path: '/v1/actors/{actor}/compact',
+    summary:
+      "Compacts an actor's conversation now, whatever its size. Between turns only. Nothing is compacted when nothing is new.",
+    auth: onActor('actors:write'),
+    params: actorParam,
+    response: compactResponseSchema,
+    status: 200,
+    errors: ['not_found', 'actor_busy', 'actor_archived', 'provider_failed'],
+  },
+  'actors.compactions': {
+    method: 'GET',
+    path: '/v1/actors/{actor}/compactions',
+    summary: "Lists the compactions of an actor's conversation, newest first.",
+    auth: onActor('actors:read'),
+    params: actorParam,
+    response: z.object({ items: z.array(compactionSchema) }).meta({ id: 'CompactionList' }),
+    status: 200,
+    errors: ['not_found'],
   },
   'actors.retry': {
     method: 'POST',
