@@ -119,7 +119,13 @@ function describeTool(tool: unknown, index: number, names: Set<string>): ToolDec
       `The arguments of the tool ${name} are an object: its schema is not of one`,
     );
   }
-  return { name, description, parameters: schema, retrySafe: retrySafe === true };
+  return {
+    name,
+    description,
+    parameters: schema,
+    retrySafe: retrySafe === true,
+    ...(codemode === true ? { codemode: true } : {}),
+  };
 }
 
 /** An agent's own compaction numbers, checked: whole numbers of tokens, by model. */
@@ -260,11 +266,8 @@ function describe(agent: Dict): AgentDefinition {
 
   const tools: readonly unknown[] = Array.isArray(agent['tools']) ? agent['tools'] : [];
   const names = new Set<string>();
-  // A tool of the model's scripts is not one the model calls, and is not offered to it.
-  const offered = tools
-    .map((tool, index) => ({ tool, index }))
-    .filter(({ tool }) => !(isDict(tool) && tool['codemode'] === true))
-    .map(({ tool, index }) => describeTool(tool, index, names));
+  // A tool of the model's scripts is said to be one: the model is not offered it.
+  const described = tools.map((tool, index) => describeTool(tool, index, names));
 
   const inputs = isDict(agent['inputs']) ? agent['inputs'] : {};
   const declared = Object.entries(inputs).map(([type, input]) => {
@@ -318,7 +321,7 @@ function describe(agent: Dict): AgentDefinition {
     provider,
     instructions,
     configuration: configuration === undefined ? null : { schema: configurationSchema ?? null },
-    tools: offered,
+    tools: described,
     inputs: declared,
     ...(providerOptions === undefined ? {} : { providerOptions }),
     ...(subagents.length === 0 ? {} : { subagents }),

@@ -175,8 +175,16 @@ describe('what a bundle says it is', () => {
       'compaction-settings',
       'codemode',
     ]);
-    // A tool of the model's scripts is not one the model is offered.
-    expect(definition.tools).toEqual([]);
+    // A tool of the model's scripts is said to be one: the model is not offered it.
+    expect(definition.tools).toEqual([
+      {
+        name: 'in_scripts',
+        description: 'For the model’s scripts.',
+        parameters: expect.objectContaining({ type: 'object' }) as object,
+        retrySafe: false,
+        codemode: true,
+      },
+    ]);
   });
 
   it('refuses what is not an agent, and says what is wrong with it', () => {
@@ -233,6 +241,43 @@ describe('a call of a tool', () => {
       host({ ORDERS_API_KEY: 'k' }),
     );
     expect(outcome).toEqual({ ok: true, value: 'Order 4411, 10 lines, with k' });
+  });
+
+  it('runs a tool of the model’s scripts as it runs any other, and says in what the agent is that it is one', async () => {
+    const scripted = entryOf(
+      new Agent({
+        provider: 'openai',
+        instructions: '',
+        tools: [
+          {
+            name: 'shout',
+            description: 'Says a text loudly.',
+            parameters: z.object({ text: z.string() }),
+            codemode: true,
+            retrySafe: true,
+            execute: ({ text }) => `${text.toUpperCase()}!`,
+          },
+          {
+            name: 'whisper',
+            description: 'Says a text quietly.',
+            parameters: z.object({ text: z.string() }),
+            execute: ({ text }) => text.toLowerCase(),
+          },
+        ],
+      }),
+    );
+    expect(scripted.describe().tools).toMatchObject([
+      { name: 'shout', retrySafe: true, codemode: true },
+      { name: 'whisper', retrySafe: false },
+    ]);
+    expect(scripted.describe().tools[1]).not.toHaveProperty('codemode');
+    expect(await scripted.call('tools.shout.execute', { text: 'hello' }, context, host())).toEqual({
+      ok: true,
+      value: 'HELLO!',
+    });
+    expect(
+      await scripted.call('tools.shout.execute', { text: 5 } as never, context, host()),
+    ).toMatchObject({ ok: false, kind: 'invalid' });
   });
 
   it('does not run the tool on arguments its schema refuses, and says what is wrong with them', async () => {

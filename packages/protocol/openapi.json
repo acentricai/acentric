@@ -9415,6 +9415,9 @@
                 },
                 "retrySafe": {
                   "type": "boolean"
+                },
+                "codemode": {
+                  "type": "boolean"
                 }
               },
               "required": [
