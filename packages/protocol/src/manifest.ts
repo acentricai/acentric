@@ -5,9 +5,8 @@
 // it. The definition is the code's own account of the agent it defines. The engine gets it by
 // asking the code, never from the deploy, so it is true of the code that runs.
 //
-// The definition has what the first milestone runs: instructions, tools, inputs and a
-// configuration. What an agent declares for machines, MCP servers, subagents and schedules is
-// added with each of them.
+// The definition has instructions, tools, inputs, a configuration, and the agents its actors
+// can spawn. What an agent declares for MCP servers is added with them.
 
 import { z } from 'zod';
 
@@ -59,6 +58,19 @@ export const inputDeclarationSchema = z.object({
 });
 export type InputDeclaration = z.infer<typeof inputDeclarationSchema>;
 
+/** An agent whose actors an actor of this one can spawn, as the model is told of it. */
+export const subagentDeclarationSchema = z.object({
+  /** The agent it is one of, by its name. */
+  agent: z.string().min(1),
+  /** What it is for, for the model that decides whether to spawn one. */
+  description: z.string().min(1),
+  /** Whether the agent's code says what one is created with: it has a `create`. */
+  creates: z.boolean(),
+  /** The JSON Schema of what the model gives when it spawns one, for one that takes any. */
+  schema: jsonObjectSchema.optional(),
+});
+export type SubagentDeclaration = z.infer<typeof subagentDeclarationSchema>;
+
 /** An agent's definition, as far as it is data: what its code said when the engine asked. */
 export const agentDefinitionSchema = z
   .object({
@@ -74,6 +86,8 @@ export const agentDefinitionSchema = z
     inputs: z.array(inputDeclarationSchema),
     /** What the agent asks of its provider that only that provider has, for the provider to read. */
     providerOptions: providerFieldsSchema.optional(),
+    /** The agents its actors can spawn actors of. */
+    subagents: z.array(subagentDeclarationSchema).optional(),
     /** The secrets its code reads, by name, so that one that is not set can be told of. */
     secrets: z.array(secretNameSchema).optional(),
     /**

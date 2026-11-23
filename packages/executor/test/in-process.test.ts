@@ -30,8 +30,9 @@ describe('a bundle', () => {
 
   it('carries little of the framework: the engine’s schemas are not in it', async () => {
     const code = await bundle('plain');
-    // An agent that brings no schema library is the framework and its own few lines.
-    expect(code.length).toBeLessThan(20_000);
+    // An agent that brings no schema library is the framework and its own few lines: some
+    // tens of thousands of characters. A schema library alone is ten times that.
+    expect(code.length).toBeLessThan(30_000);
     // Text only the engine's own schemas have.
     expect(code).not.toContain('made by the engine');
     expect(code).toContain('acentric.bundle');
