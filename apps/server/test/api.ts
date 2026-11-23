@@ -104,6 +104,8 @@ export async function api(
     readonly machines?: boolean;
     /** The providers its sandboxes are made at, for an engine that keeps machines. */
     readonly sandboxes?: NonNullable<EngineOptions['sandboxes']>;
+    /** The folder of a dashboard's build, which the server then serves. */
+    readonly dashboard?: string;
   } = {},
 ) {
   const store = new MemoryStore();
@@ -162,6 +164,7 @@ export async function api(
     // Every answer is held to its route's schema.
     checkAnswers: true,
     report: (error) => failures.push(error),
+    ...(options.dashboard === undefined ? {} : { dashboard: options.dashboard }),
   });
   /** A client that calls with a key, or with none. */
   const as = (token?: string): Client =>
