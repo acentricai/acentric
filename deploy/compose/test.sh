@@ -23,17 +23,16 @@ project=acentric-recipe-test
 mkdir -p "$work"
 cp "$here/compose.yaml" "$here/Caddyfile" "$work/"
 
-# The settings of a test server, made once and kept with its volumes.
-if [ ! -f "$work/.env" ]; then
-  cat > "$work/.env" <<EOF
-ACENTRIC_PUBLIC_URL=$url
-ACENTRIC_HTTP_PORT=$http_port
-ACENTRIC_HTTPS_PORT=$https_port
-ACENTRIC_SECRET_KEY=$(openssl rand -hex 32)
-ACENTRIC_ADMIN_KEY=$(openssl rand -hex 24)
-EOF
+# The settings of a test server, from the recipe's example, as its README has them made.
+sed -e "s|^ACENTRIC_PUBLIC_URL=.*|ACENTRIC_PUBLIC_URL=$url|" "$here/.env.example" > "$work/.env"
+printf 'ACENTRIC_HTTP_PORT=%s\nACENTRIC_HTTPS_PORT=%s\n' "$http_port" "$https_port" >> "$work/.env"
+# Its keys, made once and kept with its volumes, which have what they sealed.
+if [ ! -d "$work/secrets" ]; then
+  install -d -m 700 "$work/secrets"
+  openssl rand -hex 32 > "$work/secrets/secret-key"
+  openssl rand -hex 24 > "$work/secrets/admin-key"
 fi
-key=$(sed -n 's/^ACENTRIC_ADMIN_KEY=//p' "$work/.env")
+key=$(cat "$work/secrets/admin-key")
 # The test's own names, as its volumes are kept from one run to the next.
 run=$(date +%s)
 compose() { ACENTRIC_VERSION=$version docker compose -p "$project" --project-directory "$work" "$@"; }
@@ -46,6 +45,15 @@ trap '[ -n "$daemon" ] && kill "$daemon" 2>/dev/null; docker stop "$s3" >/dev/nu
 
 step "Up, with the server healthy before Caddy starts"
 compose up --detach --wait --wait-timeout 180
+
+step "Its keys are files, not settings of its environment"
+if compose exec -T server env | grep -q '^ACENTRIC_SECRET_KEY=\|^ACENTRIC_ADMIN_KEY='; then
+  fail "a key is in the server's environment"
+fi
+if docker inspect "$(compose ps -q server)" | grep -q "$key"; then
+  fail "the admin key is in what docker inspect shows"
+fi
+echo "neither is in the environment, nor in what docker inspect shows"
 
 step "Caddy's own root certificate, which its certificate for localhost is signed by"
 for attempt in $(seq 1 30); do

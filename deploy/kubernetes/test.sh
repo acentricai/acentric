@@ -52,10 +52,14 @@ EOF
 step "The namespace, the secrets, and the server"
 kubectl create namespace acentric --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n acentric create secret generic acentric-secrets \
-  --from-literal=ACENTRIC_SECRET_KEY="$(openssl rand -hex 32)" \
-  --from-literal=ACENTRIC_ADMIN_KEY="$key"
+  --from-literal=secret-key="$(openssl rand -hex 32)" \
+  --from-literal=admin-key="$key"
 kubectl apply -k "$work/overlay"
 kubectl -n acentric rollout status statefulset/acentric --timeout 240s || fail "the server did not start"
+if kubectl -n acentric exec acentric-0 -- env | grep -q '^ACENTRIC_SECRET_KEY=\|^ACENTRIC_ADMIN_KEY='; then
+  fail "a key is in the server's environment"
+fi
+echo "its keys are files of the Secret, not its environment"
 
 forwarded() {
   kubectl -n acentric port-forward service/acentric "$port:80" > "$work/forward.log" 2>&1 &
@@ -144,15 +148,21 @@ kubectl -n acentric run acentric-restore --image="$image" --restart=Never --rm -
   "spec": {
     "enableServiceLinks": false,
     "securityContext": { "runAsNonRoot": true, "runAsUser": 1000, "fsGroup": 1000 },
-    "volumes": [{ "name": "data", "persistentVolumeClaim": { "claimName": "data-acentric-0" } }],
+    "volumes": [
+      { "name": "data", "persistentVolumeClaim": { "claimName": "data-acentric-0" } },
+      { "name": "secrets", "secret": { "secretName": "acentric-secrets", "defaultMode": 288 } }
+    ],
     "containers": [{
       "name": "acentric-restore",
       "image": "$image",
       "stdin": true,
       "stdinOnce": true,
       "command": ["acentric-server", "restore"],
-      "envFrom": [{ "secretRef": { "name": "acentric-secrets" } }],
-      "volumeMounts": [{ "name": "data", "mountPath": "/data" }]
+      "env": [{ "name": "ACENTRIC_SECRET_KEY_FILE", "value": "/run/secrets/acentric/secret-key" }],
+      "volumeMounts": [
+        { "name": "data", "mountPath": "/data" },
+        { "name": "secrets", "mountPath": "/run/secrets/acentric", "readOnly": true }
+      ]
     }]
   }
 }

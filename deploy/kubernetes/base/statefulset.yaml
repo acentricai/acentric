@@ -34,15 +34,21 @@ spec:
           envFrom:
             - configMapRef:
                 name: acentric-settings
-            # ACENTRIC_SECRET_KEY, and ACENTRIC_ADMIN_KEY when it is given: made as README.md
-            # says, and kept out of this folder.
-            - secretRef:
-                name: acentric-secrets
+          # The keys, as files of the Secret acentric-secrets, made as README.md says and kept
+          # out of this folder: not variables, which more of the cluster sees.
+          env:
+            - name: ACENTRIC_SECRET_KEY_FILE
+              value: /run/secrets/acentric/secret-key
+            - name: ACENTRIC_ADMIN_KEY_FILE
+              value: /run/secrets/acentric/admin-key
           volumeMounts:
             - name: data
               mountPath: /data
             - name: backups
               mountPath: /backups
+            - name: secrets
+              mountPath: /run/secrets/acentric
+              readOnly: true
           # /health/live answers while a new version backs up and changes the database, which
           # takes a while on a large one: the pod is not restarted in the middle of it. /health
           # answers once the server takes requests.
@@ -67,6 +73,12 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+      volumes:
+        - name: secrets
+          secret:
+            secretName: acentric-secrets
+            # Readable by the server's group, fsGroup's, and no one else's.
+            defaultMode: 0440
   volumeClaimTemplates:
     # A block volume, which one node mounts: never a network file system, which SQLite is not
     # safe on. The cluster's default storage class without a name.

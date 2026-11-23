@@ -14,7 +14,7 @@ The server on one EC2 instance in an account of yours, made with Terraform (or O
   copied to a bucket of their own (private, encrypted, versioned, TLS only) by the instance's
   role; and a snapshot of the whole volume every day, by Data Lifecycle Manager.
 - **The keys**: the secrets key and an admin API key, made once and kept in Parameter Store,
-  encrypted, off the instance.
+  encrypted, off the instance; on it, files the server reads, not settings of its environment.
 - **A network of its own**: a VPC with one public subnet, HTTP and HTTPS in, and no NAT
   gateway.
 
@@ -60,6 +60,7 @@ the bucket (`terraform output backup_url`, then its name):
 ```sh
 sudo systemctl stop acentric
 sudo docker run --rm --env-file /etc/acentric/acentric.env --volume acentric-data:/data \
+  --volume /etc/acentric/secrets/secret-key:/run/secrets/acentric/secret-key:ro \
   ghcr.io/acentricai/acentric-server:0.15.0 acentric-server restore s3://<bucket>/acentric/<name>.tar
 sudo systemctl start acentric
 ```

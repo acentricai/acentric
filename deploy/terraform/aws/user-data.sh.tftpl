@@ -34,18 +34,24 @@ printf '[Unit]\nRequiresMountsFor=/var/lib/acentric\n' > /etc/systemd/system/doc
 systemctl daemon-reload
 systemctl enable --now docker
 
-# The server's settings, readable by root alone. The keys are in Parameter Store.
+# The keys, from Parameter Store, as files the unit gives the server's container: in a folder
+# that is root's alone, readable by the server's user in the container.
 key() {
   aws ssm get-parameter --region "${region}" --name "$1" --with-decryption \
     --query Parameter.Value --output text
 }
-install -d -m 700 /etc/acentric
+install -d -m 700 /etc/acentric /etc/acentric/secrets
+key "${secret_key}" > /etc/acentric/secrets/secret-key
+key "${admin_key}" > /etc/acentric/secrets/admin-key
+chmod 644 /etc/acentric/secrets/secret-key /etc/acentric/secrets/admin-key
+
+# The server's settings, readable by root alone.
 umask 077
 cat > /etc/acentric/acentric.env <<ENV
 ACENTRIC_VERSION=${version}
 ACENTRIC_PUBLIC_URL=${public_url}
-ACENTRIC_SECRET_KEY=$(key "${secret_key}")
-ACENTRIC_ADMIN_KEY=$(key "${admin_key}")
+ACENTRIC_SECRET_KEY_FILE=/run/secrets/acentric/secret-key
+ACENTRIC_ADMIN_KEY_FILE=/run/secrets/acentric/admin-key
 ACENTRIC_BACKUP_DIR=/backups
 ACENTRIC_BACKUP_EVERY=${backup_every}
 ACENTRIC_BACKUP_KEEP=${backup_keep}
