@@ -412,6 +412,10 @@ export const handlers: Handlers = {
 
   // Machines
 
+  'actors.compact': ({ params }, { engine }) => engine.compact(params.actor),
+  'actors.compactions': async ({ params }, { engine }) => ({
+    items: await engine.compactions(params.actor),
+  }),
   'actors.subagents': async ({ params }, { engine }) => ({
     items: await engine.children(params.actor),
   }),

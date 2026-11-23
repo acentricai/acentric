@@ -63,6 +63,15 @@ const AGENTS: { [code: string]: InlineAgent } = {
   'orders@2': { definition: { ...definition, instructions: 'You are kind.' }, functions },
   'billing@1': { definition: { ...definition, instructions: 'You bill.' }, functions },
   'machines@1': { definition: { ...definition, features: ['machine'] }, functions },
+  // An agent that says how its conversations are compacted: the newest message alone is kept.
+  'orders@small': {
+    definition: {
+      ...definition,
+      features: ['compaction-settings'],
+      compactionSettings: { 'fake-1': { threshold: 100, reserve: 1 } },
+    },
+    functions,
+  },
   // An agent whose actors can spawn actors of `billing`.
   'lead@1': {
     definition: {
