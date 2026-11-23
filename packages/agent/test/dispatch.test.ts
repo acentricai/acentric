@@ -754,6 +754,97 @@ describe("an agent's schedule handler", () => {
   });
 });
 
+describe("an agent's MCP servers", () => {
+  const withServers = (mcps: unknown) =>
+    entryOf(new Agent({ provider: 'anthropic', instructions: '', mcps: mcps as never }));
+  const served = entryOf(
+    new Agent({
+      provider: 'anthropic',
+      instructions: '',
+      configuration: z.object({ region: z.string() }),
+      mcps: {
+        things: {
+          url: 'https://example.com/things',
+          description: 'A warehouse of things.',
+          headers: async ({ configuration, secrets }) => ({
+            Authorization: `Bearer ${await secrets.get('THINGS_KEY')}`,
+            'X-Region': configuration.region,
+          }),
+        },
+        fixed: { url: 'http://localhost:8080/mcp', headers: { 'X-Team': 'orders' } },
+        open: { url: 'https://example.com/open', description: '' },
+        wrong: { url: 'https://example.com/wrong', headers: (() => ({ n: 5 })) as never },
+      },
+    }),
+  );
+  const headers = (name: string) =>
+    served.call(
+      `mcps.${name}.headers`,
+      null,
+      { ...context, configuration: { region: 'eu' } },
+      host({ THINGS_KEY: 'k-1' }),
+    );
+
+  it('are part of what the agent says it is: each by its name, with where it is and what it is for', () => {
+    const { mcps, features } = served.describe();
+    expect(mcps).toEqual([
+      { name: 'things', url: 'https://example.com/things', description: 'A warehouse of things.' },
+      { name: 'fixed', url: 'http://localhost:8080/mcp' },
+      { name: 'open', url: 'https://example.com/open' },
+      { name: 'wrong', url: 'https://example.com/wrong' },
+    ]);
+    // What a server is sent is never part of it.
+    expect(JSON.stringify(mcps)).not.toMatch(/X-Team|Bearer/);
+    expect(features).toEqual(['mcps']);
+    expect(withServers({}).describe()).not.toHaveProperty('mcps');
+  });
+
+  it('are sent the headers the agent gives: fixed, made from the actor it is for, or none', async () => {
+    expect(await headers('things')).toEqual({
+      ok: true,
+      value: { Authorization: 'Bearer k-1', 'X-Region': 'eu' },
+    });
+    expect(await headers('fixed')).toEqual({ ok: true, value: { 'X-Team': 'orders' } });
+    expect(await headers('open')).toEqual({ ok: true, value: {} });
+    expect(await headers('wrong')).toMatchObject({
+      ok: false,
+      kind: 'error',
+      error: { message: 'headers of the MCP server wrong did not return an object of strings' },
+    });
+    expect(await headers('nothing')).toMatchObject({
+      ok: false,
+      error: { message: 'The agent has no MCP server nothing' },
+    });
+  });
+
+  it('have a name a script can say and a URL the engine can reach: an agent with others is not one', () => {
+    const refused: [unknown, string][] = [
+      [[], "The agent's mcps are not an object"],
+      [
+        { 'two words': { url: 'https://example.com' } },
+        'An MCP server is named "two words": a name is 1 to 64 letters, digits, _ or -',
+      ],
+      [{ docs: {} }, 'The MCP server docs has no url'],
+      [{ docs: { url: 'not a url' } }, 'The url of the MCP server docs is not a URL'],
+      [
+        { docs: { url: 'ftp://example.com/mcp' } },
+        'The url of the MCP server docs is not an http or https URL',
+      ],
+      [
+        { docs: { url: 'https://example.com', headers: { n: 5 } } },
+        'headers of the MCP server docs is an object of strings, or a function',
+      ],
+      [
+        { docs: { url: 'https://example.com', description: 5 } },
+        'description of the MCP server docs is a string',
+      ],
+    ];
+    for (const [mcps, why] of refused) {
+      expect(() => withServers(mcps).describe(), why).toThrow(new InvalidAgent(why));
+    }
+  });
+});
+
 describe("an agent's compaction numbers", () => {
   const withNumbers = (compactionSettings: unknown) =>
     entryOf(

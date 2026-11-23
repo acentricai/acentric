@@ -230,6 +230,52 @@ function machineProblem(value: unknown): string | undefined {
   return undefined;
 }
 
+type McpDeclaration = NonNullable<AgentDefinition['mcps']>[number];
+
+/** The agent's MCP servers, checked: a name a script can say, and a URL the engine can reach. */
+function describeMcps(mcps: unknown): McpDeclaration[] {
+  if (mcps === undefined) return [];
+  if (!isDict(mcps)) throw new InvalidAgent("The agent's mcps are not an object");
+  return Object.entries(mcps).map(([name, server]) => {
+    if (!TOOL_NAME.test(name)) {
+      const given = JSON.stringify(name);
+      throw new InvalidAgent(
+        `An MCP server is named ${given}: a name is 1 to 64 letters, digits, _ or -`,
+      );
+    }
+    if (!isDict(server) || typeof server['url'] !== 'string') {
+      throw new InvalidAgent(`The MCP server ${name} has no url`);
+    }
+    let protocol: string;
+    try {
+      ({ protocol } = new web.URL(server['url']));
+    } catch {
+      throw new InvalidAgent(`The url of the MCP server ${name} is not a URL`);
+    }
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      throw new InvalidAgent(`The url of the MCP server ${name} is not an http or https URL`);
+    }
+    const { headers, description } = server;
+    if (
+      headers !== undefined &&
+      !isFn(headers) &&
+      (!isDict(headers) || Object.values(headers).some((value) => typeof value !== 'string'))
+    ) {
+      throw new InvalidAgent(
+        `headers of the MCP server ${name} is an object of strings, or a function`,
+      );
+    }
+    if (description !== undefined && typeof description !== 'string') {
+      throw new InvalidAgent(`description of the MCP server ${name} is a string`);
+    }
+    return {
+      name,
+      url: server['url'],
+      ...(description === undefined || description === '' ? {} : { description }),
+    };
+  });
+}
+
 /** What the agent asks of its provider that only that provider has. */
 function providerOptionsOf(agent: Dict): JsonObject | undefined {
   const search = agent['webSearch'];
@@ -310,6 +356,7 @@ function describe(agent: Dict): AgentDefinition {
   const subagents = listed.map((subagent, index) => describeSubagent(subagent, index, ids));
 
   const compactionSettings = describeCompaction(agent['compactionSettings']);
+  const mcps = describeMcps(agent['mcps']);
 
   const schedule = agent['schedule'];
   if (schedule !== undefined && (!isDict(schedule) || !isFn(schedule['handler']))) {
@@ -324,6 +371,7 @@ function describe(agent: Dict): AgentDefinition {
     tools: described,
     inputs: declared,
     ...(providerOptions === undefined ? {} : { providerOptions }),
+    ...(mcps.length === 0 ? {} : { mcps }),
     ...(subagents.length === 0 ? {} : { subagents }),
     ...(compactionSettings === undefined ? {} : { compactionSettings }),
     ...(secrets.length === 0 ? {} : { secrets: [...new Set(secrets as string[])] }),
@@ -395,6 +443,7 @@ type NativeFromBase64 = {
 const web = globalThis as unknown as {
   readonly btoa: (binary: string) => string;
   readonly atob: (base64: string) => string;
+  readonly URL: new (url: string) => { readonly protocol: string };
   readonly TextEncoder: new () => { encode(text: string): Uint8Array };
   readonly TextDecoder: new (
     label: string,
@@ -604,6 +653,22 @@ async function call(
           : { configuration: json(configuration, `The configuration create of ${id} returned`) }),
       },
     };
+  }
+
+  if (part === 'mcps' && member === 'headers') {
+    const servers = isDict(agent['mcps']) ? agent['mcps'] : {};
+    const server = name !== undefined && Object.hasOwn(servers, name) ? servers[name] : undefined;
+    if (!isDict(server)) throw new Error(`The agent has no MCP server ${String(name)}`);
+    const { headers } = server;
+    const made = isFn(headers)
+      ? await (headers as (context: Dict) => unknown)(context)
+      : (headers ?? {});
+    if (!isDict(made) || Object.values(made).some((value) => typeof value !== 'string')) {
+      throw new Error(
+        `headers of the MCP server ${String(name)} did not return an object of strings`,
+      );
+    }
+    return { value: json(made, 'The headers') };
   }
 
   if (path === 'schedule.handler') {

@@ -117,6 +117,7 @@ export type CallOutcome =
  *   tools.<name>.execute      (args)     checks the arguments, then runs the tool
  *   inputs.<type>.handler     (payload)  checks the payload, then runs the handler
  *   schedule.handler          (fired)    what the notice of a schedule that fired says
+ *   mcps.<name>.headers       ()         the headers an MCP server is sent, fixed or made
  *   subagents.<agent>.create  (params)   checks the params, then says what one is created with
  */
 export type CallPath = string;
