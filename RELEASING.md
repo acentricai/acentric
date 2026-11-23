@@ -32,6 +32,17 @@ The release workflow (`.github/workflows/release.yml`) then:
 5. makes the GitHub release with the version's notes, the images' digests and how to verify
    them. Before 1.0 it is marked a pre-release.
 
+Once it is released, leave what the release opens as, for every later version to be tested
+against: from the tag, fill a server as people do and keep a backup of it, and merge that.
+
+```sh
+git checkout v0.15.0 && pnpm build
+node apps/server/test/releases/seed.ts   # apps/server/test/releases/0.15.0.tar.gz and .json
+```
+
+`releases.test.ts` opens each one with the version being tested, and checks that what was
+there still is, and that an agent the release deployed still runs with its sealed secret.
+
 If a step fails, nothing after it happens. Fix it on `main`, delete the tag and push it again
 on the fixed commit, or make the next patch version.
 
