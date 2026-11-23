@@ -3,7 +3,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { everyText } from '../src/engine/backups.tsx';
+import { everyText, inText } from '../src/engine/backups.tsx';
 import { open } from './render.tsx';
 import { fakeServer } from './server.ts';
 
@@ -71,5 +71,16 @@ describe('how often, in words', () => {
     expect(everyText(7 * 86_400_000)).toBe('every 7 days');
     expect(everyText(6 * 3_600_000)).toBe('every 6 hours');
     expect(everyText(30 * 60_000)).toBe('every 30 minutes');
+  });
+});
+
+describe('when the next is taken, in words', () => {
+  it('is ahead of now, in the largest unit that reads well', () => {
+    const now = 1_795_305_600_000;
+    expect(inText(now + 40_000, now)).toBe('in 40s');
+    expect(inText(now + 3 * 60_000, now)).toBe('in 3m');
+    expect(inText(now + 23 * 3_600_000, now)).toBe('in 23h');
+    expect(inText(now + 3 * 86_400_000, now)).toBe('in 3d');
+    expect(inText(now - 5000, now)).toBe('in 0s');
   });
 });
