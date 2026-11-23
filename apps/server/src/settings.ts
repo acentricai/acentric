@@ -54,10 +54,16 @@
 //                           not where people do. Without it, where people do, with
 //                           host.docker.internal in place of localhost
 //
+// ACENTRIC_SECRET_KEY, ACENTRIC_SECRET_KEYS_OLD and ACENTRIC_ADMIN_KEY are each given in a file
+// in place of the environment, by its path in <name>_FILE, as Docker's and Kubernetes' secrets
+// are: what is in it is the value, without the line's end. Not both. The environment of a
+// process is seen by more than its files are (`docker inspect`, /proc/<pid>/environ).
+//
 // What a provider's models are called with is not among them: that is a model account, added
 // through the API and kept sealed.
 
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { secretKeyOf } from '@acentric/core';
@@ -145,11 +151,32 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     }
     return number;
   };
-  const list = (name: string): string[] =>
-    (given(name) ?? '')
-      .split(',')
+  const list = (name: string, value = given(name)): string[] =>
+    (value ?? '')
+      .split(/[,\n]/)
       .map((part) => part.trim())
       .filter((part) => part !== '');
+  /** A secret setting: from the environment, or from the file its _FILE names. */
+  const secret = (name: string): string | undefined => {
+    const value = given(name);
+    const file = given(`${name}_FILE`);
+    if (file === undefined) return value;
+    if (value !== undefined) {
+      throw new InvalidSettings(`${name} and ${name}_FILE are both given: give one`);
+    }
+    let text: string;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch (error) {
+      const code = (error as { code?: unknown }).code;
+      throw new InvalidSettings(
+        `${name}_FILE is ${file}, which this server cannot read${typeof code === 'string' ? ` (${code})` : ''}`,
+      );
+    }
+    const read = text.trim();
+    if (read === '') throw new InvalidSettings(`${name}_FILE is ${file}, which is empty`);
+    return read;
+  };
 
   const publicUrl = given('ACENTRIC_PUBLIC_URL')?.replace(/\/+$/, '');
   if (publicUrl !== undefined && !/^https?:\/\/[^/]+/.test(publicUrl)) {
@@ -158,14 +185,14 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     );
   }
 
-  const adminKey = given('ACENTRIC_ADMIN_KEY');
+  const adminKey = secret('ACENTRIC_ADMIN_KEY');
   if (adminKey !== undefined && adminKey.length < 24) {
     throw new InvalidSettings('ACENTRIC_ADMIN_KEY is 24 characters or more');
   }
 
   let secretKeys: SecretKeys | undefined;
-  const sealing = given('ACENTRIC_SECRET_KEY');
-  const before = list('ACENTRIC_SECRET_KEYS_OLD');
+  const sealing = secret('ACENTRIC_SECRET_KEY');
+  const before = list('ACENTRIC_SECRET_KEYS_OLD', secret('ACENTRIC_SECRET_KEYS_OLD'));
   if (sealing === undefined && before.length > 0) {
     throw new InvalidSettings('ACENTRIC_SECRET_KEYS_OLD is given, and ACENTRIC_SECRET_KEY is not');
   }

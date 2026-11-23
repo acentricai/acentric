@@ -1,3 +1,7 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { readSettings } from '../src/index.ts';
@@ -111,6 +115,41 @@ describe('a server’s settings', () => {
     const two = readSettings({ ACENTRIC_SECRET_KEY: older, ACENTRIC_SECRET_KEYS_OLD: KEY });
     expect(two.secretKeys?.current).not.toBe(current);
     expect(Object.keys(two.secretKeys?.keys ?? {})).toContain(current);
+  });
+
+  it('take the secret ones from files, as Docker and Kubernetes give secrets', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'acentric-settings-'));
+    const file = (name: string, text: string) => {
+      writeFileSync(join(dir, name), text);
+      return join(dir, name);
+    };
+    const old = 'cd'.repeat(32);
+    const settings = readSettings({
+      ACENTRIC_SECRET_KEY_FILE: file('secret-key', `${KEY}\n`),
+      ACENTRIC_SECRET_KEYS_OLD_FILE: file('old-keys', `${old}\n`),
+      ACENTRIC_ADMIN_KEY_FILE: file('admin-key', 'an-admin-key-of-24-chars-or-more\r\n'),
+    });
+    expect(settings.adminKey).toBe('an-admin-key-of-24-chars-or-more');
+    expect(settings.secretKeys).toEqual(
+      readSettings({ ACENTRIC_SECRET_KEY: KEY, ACENTRIC_SECRET_KEYS_OLD: old }).secretKeys,
+    );
+    // Not both, and not a file that is not there, or is empty.
+    expect(() =>
+      readSettings({
+        ACENTRIC_ADMIN_KEY: 'x'.repeat(24),
+        ACENTRIC_ADMIN_KEY_FILE: join(dir, 'admin-key'),
+      }),
+    ).toThrow('ACENTRIC_ADMIN_KEY and ACENTRIC_ADMIN_KEY_FILE are both given: give one');
+    expect(() => readSettings({ ACENTRIC_SECRET_KEY_FILE: join(dir, 'none') })).toThrow(
+      `ACENTRIC_SECRET_KEY_FILE is ${join(dir, 'none')}, which this server cannot read (ENOENT)`,
+    );
+    expect(() => readSettings({ ACENTRIC_SECRET_KEY_FILE: file('empty', '\n') })).toThrow(
+      'which is empty',
+    );
+    // What is in it is checked as the setting is.
+    expect(() => readSettings({ ACENTRIC_SECRET_KEY_FILE: file('short', 'abc') })).toThrow(
+      'ACENTRIC_SECRET_KEY is 32 bytes',
+    );
   });
 
   it('say where the dashboard’s build is, from where the server is started', () => {
