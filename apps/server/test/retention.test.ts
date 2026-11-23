@@ -12,7 +12,11 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createClient } from '@acentric/client';
 import type { ActorId } from '@acentric/protocol';
 
+import { DatabaseSync } from 'node:sqlite';
+
 import { restore } from '../src/backups/archive.ts';
+import { DataInUse } from '../src/backups/lock.ts';
+import { compactData } from '../src/start.ts';
 import { readSettings, start } from '../src/index.ts';
 import { ADMIN_KEY, SECRET_KEY, providers } from './releases/seed.ts';
 import type { Facts } from './releases/seed.ts';
@@ -52,7 +56,13 @@ async function later(env: Record<string, string>) {
     log: () => {},
     clock: () => Date.now() + LATER,
   });
-  return { server, facts, admin: createClient({ baseUrl: server.server.url, token: ADMIN_KEY }) };
+  return {
+    server,
+    facts,
+    settings,
+    data,
+    admin: createClient({ baseUrl: server.server.url, token: ADMIN_KEY }),
+  };
 }
 
 describe('old data', () => {
@@ -124,5 +134,39 @@ describe('old data', () => {
     } finally {
       await server.close();
     }
+  }, 120_000);
+
+  it('is given back to the disk by compact, for a database made before that was so', async () => {
+    const { server, settings, data } = await later({ ACENTRIC_RETAIN_ARCHIVED: '7d' });
+    const autoVacuum = () => {
+      const db = new DatabaseSync(join(data, 'engine.sqlite'), { readOnly: true });
+      try {
+        return (db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum;
+      } finally {
+        db.close();
+      }
+    };
+    try {
+      // 0.15.0's database was made before: it keeps what is removed from it, unused.
+      expect(autoVacuum()).toBe(0);
+      await server.retention.run();
+      await expect(compactData(settings)).rejects.toThrow(DataInUse);
+    } finally {
+      await server.close();
+    }
+    const { before, after } = await compactData(settings);
+    // Nothing is left unused; what incremental vacuum keeps of its own is a page or so.
+    expect(after).toBeLessThan(before + 65_536);
+    expect(autoVacuum()).toBe(2);
+    const db = new DatabaseSync(join(data, 'engine.sqlite'), { readOnly: true });
+    try {
+      expect(db.prepare('PRAGMA freelist_count').get()).toEqual({ freelist_count: 0 });
+    } finally {
+      db.close();
+    }
+    // And a server starts on it.
+    await (
+      await start(settings, { version: 'this', providers: providers(), log: () => {} })
+    ).close();
   }, 120_000);
 });
