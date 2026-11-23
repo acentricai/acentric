@@ -18,6 +18,8 @@ target/
 
 .env
 .env.*
+# The examples of a recipe's settings, which are copied to .env.
+!.env.example
 *.log
 .DS_Store
 .claude/
