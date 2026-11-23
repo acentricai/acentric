@@ -17,10 +17,11 @@ import {
   IconSettings,
   IconStack2,
   IconTerminal2,
+  IconTrash,
   IconVariable,
 } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
-import { useParams } from '@tanstack/react-router';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import {
   useCallback,
   useEffect,
@@ -66,7 +67,7 @@ import {
   type Column,
 } from '../../ui.tsx';
 import { curl, engine, inputTypes, isApiError, queryClient } from '../api.ts';
-import { ActorLink, AgentLink } from '../links.tsx';
+import { ActorLink, AgentLink, agentPath } from '../links.tsx';
 import { bandEnding, type Band, type LogItem, type Row } from '../log/model.ts';
 import type { Standing } from '../log/stream.ts';
 import { useActorLog } from '../log/use-log.ts';
@@ -88,7 +89,7 @@ import { seqFromHash, seqHash } from '../url.ts';
 import { lastTurnWord, parseEnv } from './agent.tsx';
 import '../actor.css';
 
-type DialogKind = 'abort' | 'archive' | 'change' | 'env' | 'configuration' | null;
+type DialogKind = 'abort' | 'archive' | 'delete' | 'change' | 'env' | 'configuration' | null;
 
 type Permission = Parameters<typeof holds>[1];
 
@@ -136,8 +137,19 @@ export function ActorPage() {
     },
     onError: (error) => setNotice(errorText(error)),
   });
+  const navigate = useNavigate();
+  // Deleted, it is gone: its agent's page is where one goes from there.
+  const remove = useMutation({
+    mutationFn: () => engine.deleteActor(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['actors'] });
+      queryClient.removeQueries({ queryKey: keys.actor(id) });
+      void navigate({ to: info === undefined ? '/agents' : agentPath(info.agent) });
+    },
+  });
   const closeDialog = () => {
     act.reset();
+    remove.reset();
     setDialog(null);
   };
 
@@ -264,6 +276,18 @@ export function ActorPage() {
                       {archived ? 'Unarchive' : 'Archive'}
                     </MenuItem>
                   )}
+                  {may('actors:write') && archived && (
+                    <MenuItem
+                      icon={<IconTrash size={16} stroke={1.75} aria-hidden="true" />}
+                      danger
+                      onSelect={() => {
+                        close();
+                        setDialog('delete');
+                      }}
+                    >
+                      Delete
+                    </MenuItem>
+                  )}
                 </>
               )}
             </Menu>
@@ -299,6 +323,19 @@ export function ActorPage() {
           pending={act.isPending}
           error={act.isError ? errorText(act.error) : null}
           onConfirm={() => act.mutate('archive')}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog === 'delete' && (
+        <StopDialog
+          title="Delete"
+          sentence={`Delete ${info?.name ?? id}, its subagents and their conversations? It is not undone. What they cost stays in the usage.`}
+          action="Delete"
+          busy="Deleting…"
+          danger
+          pending={remove.isPending}
+          error={remove.isError ? errorText(remove.error) : null}
+          onConfirm={() => remove.mutate()}
           onClose={closeDialog}
         />
       )}

@@ -88,6 +88,7 @@ export const engine = {
   retry: (id: string) => api.call('actors.retry', { params: { actor: actorId(id) } }),
   archive: (id: string) => api.call('actors.archive', { params: { actor: actorId(id) } }),
   unarchive: (id: string) => api.call('actors.unarchive', { params: { actor: actorId(id) } }),
+  deleteActor: (id: string) => api.call('actors.delete', { params: { actor: actorId(id) } }),
   compact: (id: string) => api.call('actors.compact', { params: { actor: actorId(id) } }),
   compactions: (id: string) => api.call('actors.compactions', { params: { actor: actorId(id) } }),
   subagents: (id: string) => api.call('actors.subagents', { params: { actor: actorId(id) } }),

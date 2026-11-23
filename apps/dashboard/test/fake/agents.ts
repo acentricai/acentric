@@ -157,6 +157,13 @@ export function agentsArea(shared: Shared) {
         return json(200, found);
       }
     }
+    if (method === 'DELETE' && rest === '') {
+      if (one.status !== 'archived') {
+        return refused(409, 'conflict', `The actor ${one.id} is not archived`);
+      }
+      shared.actors.splice(shared.actors.indexOf(one), 1);
+      return new Response(null, { status: 204 });
+    }
     if (method === 'GET' && rest === '/compactions') {
       return json(200, { items: compactions.get(one.id) ?? [] });
     }

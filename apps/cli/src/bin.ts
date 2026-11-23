@@ -8,7 +8,7 @@ import { parseArgs } from 'node:util';
 import type { ParseArgsOptionsConfig } from 'node:util';
 
 import { addAccount, listAccounts, removeAccount } from './accounts.ts';
-import { actorLogs, createActor, listActors, sendToActor } from './actors.ts';
+import { actorLogs, createActor, deleteActor, listActors, sendToActor } from './actors.ts';
 import { add, deploy, init, login, logout, whoami } from './commands.ts';
 import { readCredentials } from './credentials.ts';
 import type { Io } from './engine.ts';
@@ -48,6 +48,8 @@ const USAGE = `acentric: sign in to an engine, start a project of agents, deploy
   acentric actors send <actor> --type <type> --payload <json> [--follow]
                                           send an actor a message, or another input
   acentric actors logs <actor> [--follow] an actor's conversation, and as it grows
+  acentric actors delete <actor> --yes    an actor and its subagents, with their conversations:
+                                          archived first, and not undone
 
   acentric machines                       the computers actors' commands run on
   acentric machines add <name> --agent <agent>... | --all-agents
@@ -317,6 +319,11 @@ async function main(argv: readonly string[], signal: AbortSignal): Promise<void>
           payload: text(values['payload']),
           follow: values['follow'] === true,
         });
+      }
+      if (sub === 'delete') {
+        const { values, positionals } = args({ yes: { type: 'boolean' } }, more);
+        const [actor] = exactly(positionals, ['an actor'], 'actors delete');
+        return deleteActor(io, { actor: actor ?? '', yes: values['yes'] === true });
       }
       if (sub === 'logs') {
         const { values, positionals } = args({ follow: { type: 'boolean', short: 'f' } }, more);
