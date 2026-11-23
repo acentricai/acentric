@@ -1,8 +1,10 @@
 // The Engine section: the engine's own pages. API keys, for a person who may make keys; the
-// people of the engine and their invites, for one who may manage people; and the audit log, for
-// one who may read it.
+// people of the engine and their invites, for one who may manage people; the server's backups,
+// for one who may manage them; and the audit log, for one who may read it.
 
 import {
+  IconDatabase,
+  IconDatabaseFilled,
   IconKey,
   IconKeyFilled,
   IconListDetails,
@@ -16,6 +18,7 @@ import { createElement } from 'react';
 import { may } from '../me.ts';
 import type { Section } from '../sections.ts';
 import { AuditPage } from './audit.tsx';
+import { BackupsPage } from './backups.tsx';
 import { KeysPage } from './keys.tsx';
 import { PeoplePage } from './people.tsx';
 import { auditSearch, type AuditSearch } from './url.ts';
@@ -37,6 +40,7 @@ function routes(parent: AnyRoute): AnyRoute[] {
   return [
     createRoute({ getParentRoute: () => parent, path: 'keys', component: KeysPage }),
     createRoute({ getParentRoute: () => parent, path: 'people', component: PeoplePage }),
+    createRoute({ getParentRoute: () => parent, path: 'backups', component: BackupsPage }),
     audit,
   ];
 }
@@ -60,6 +64,14 @@ export const engineSection: Section = {
       icon: IconUser,
       activeIcon: IconUserFilled,
       shown: (me) => may(me, 'users:manage'),
+    },
+    {
+      id: 'backups',
+      name: 'Backups',
+      path: '/backups',
+      icon: IconDatabase,
+      activeIcon: IconDatabaseFilled,
+      shown: (me) => may(me, 'backups:manage'),
     },
     {
       id: 'audit',

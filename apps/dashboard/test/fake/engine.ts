@@ -2,7 +2,17 @@
 // and the audit log, refusing what the server refuses.
 
 import { HOLDABLE, isAtLeast, ROLE_PERMISSIONS } from '@acentric/protocol';
-import type { AuditEvent, Invite, Key, Permission, Role, Scope, User } from '@acentric/protocol';
+import type {
+  AuditEvent,
+  Backup,
+  Backups,
+  Invite,
+  Key,
+  Permission,
+  Role,
+  Scope,
+  User,
+} from '@acentric/protocol';
 
 import { json, refused, type Area, type Call, type Person, type Shared } from './area.ts';
 
@@ -31,6 +41,19 @@ export function engineArea(shared: Shared) {
   /** When each person was disabled, by their ID. */
   const disabled = new Map<string, number>();
   const audit: AuditEvent[] = [];
+  /** The server's backups, as GET /v1/backups says them; null for a server with them off. */
+  const backups: { status: Backups | null; fail: string | null } = {
+    status: {
+      dir: '/data/backups',
+      sameDisk: true,
+      everyMs: 86_400_000,
+      keep: 3,
+      next: NOW + 3_600_000,
+      last: null,
+      items: [],
+    },
+    fail: null,
+  };
   let made = 0;
 
   const userOf = (person: Person): User => ({
@@ -48,6 +71,35 @@ export function engineArea(shared: Shared) {
   const outranked = (by: Person, role: Role) => isAtLeast(role, 'admin') && by.role !== 'owner';
 
   const answer = ({ method, path, body, query, person: by }: Call): Response | undefined => {
+    // Backups
+    if (path === '/v1/backups') {
+      const status = backups.status;
+      if (status === null) {
+        return refused(
+          503,
+          'unavailable',
+          'This server takes no backups of its own: ACENTRIC_BACKUP_EVERY is off',
+        );
+      }
+      if (method === 'GET') return json(200, status);
+      if (method === 'POST') {
+        if (backups.fail !== null) {
+          status.last = { ok: false, at: NOW, error: backups.fail };
+          return refused(500, 'internal', backups.fail);
+        }
+        made += 1;
+        const backup: Backup = {
+          name: `acentric-2026-11-23T12-00-0${String(made)}Z-manual-0.15.0.tar`,
+          kind: 'manual',
+          version: '0.15.0',
+          createdAt: NOW,
+          bytes: 5 * 1_048_576,
+        };
+        status.items.unshift(backup);
+        status.last = { ok: true, at: NOW, name: backup.name };
+        return json(201, backup);
+      }
+    }
     // API keys
     if (method === 'GET' && path === '/v1/keys')
       return json(200, { items: keys, nextCursor: null });
@@ -178,5 +230,6 @@ export function engineArea(shared: Shared) {
     return undefined;
   };
 
-  return { answer, keys, invites, audit, disabled } satisfies Area & Record<string, unknown>;
+  return { answer, keys, invites, audit, disabled, backups } satisfies Area &
+    Record<string, unknown>;
 }

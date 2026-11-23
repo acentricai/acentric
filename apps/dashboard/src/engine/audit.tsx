@@ -51,6 +51,8 @@ export const ACTIONS: readonly { readonly value: string; readonly label: string 
   { value: 'machine.token', label: 'Enrolment token made' },
   { value: 'machine.enrol', label: 'Machine enrolled' },
   { value: 'machine.upgrade', label: 'Machine’s daemon updated' },
+  { value: 'backup.made', label: 'Backup taken' },
+  { value: 'backup.failed', label: 'Backup failed' },
   { value: 'machine.delete', label: 'Machine removed' },
   { value: 'sandbox_provider.create', label: 'Sandbox account added' },
   { value: 'sandbox_provider.delete', label: 'Sandbox account removed' },
