@@ -211,6 +211,14 @@ export class Metrics {
       'When the server started, in seconds since 1970.',
       () => [{ value: started }],
     );
+    this.gauge(
+      'acentric_process_cpu_seconds_total',
+      'CPU the server has used since it started, its own and the system for it.',
+      () => {
+        const { user, system } = process.cpuUsage();
+        return [{ value: (user + system) / 1e6 }];
+      },
+    );
     this.gauge('acentric_process_resident_memory_bytes', "The server's resident memory.", () => [
       { value: process.memoryUsage.rss() },
     ]);

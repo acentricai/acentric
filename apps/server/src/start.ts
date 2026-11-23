@@ -182,6 +182,7 @@ export async function start(
       ...(settings.publicUrl === undefined ? {} : { publicUrl: settings.publicUrl }),
       ...more.sandboxes,
     },
+    maxConcurrentTurns: settings.maxTurns,
     // What an actor, a machine, a task or a sandbox could not go on from.
     report: (error) => logger.error('the engine failed at something', {}, error),
     observer: told.observer,
@@ -283,6 +284,7 @@ export async function start(
         working: told.working,
         streams: server.streams,
         connected: () => engine.machines?.connected ?? 0,
+        load: () => engine.load,
         executor,
         backups,
       });
@@ -383,6 +385,7 @@ function gaugesOf(
     readonly working: () => number;
     readonly streams: () => number;
     readonly connected: () => number;
+    readonly load: () => Engine['load'];
     readonly executor: IsolateExecutor;
     readonly backups: Backups | undefined;
   },
@@ -390,6 +393,25 @@ function gaugesOf(
   const one = (value: number) => [{ value }];
   metrics.gauge('acentric_actors_working', 'Actors of this server in a turn now.', () =>
     one(parts.working()),
+  );
+  metrics.gauge(
+    'acentric_turns_running',
+    'Turns going on now, and the most there are at once (max): the rest wait.',
+    () => {
+      const { turns, maxTurns } = parts.load();
+      return [{ value: turns }, { labels: { of: 'max' }, value: maxTurns }];
+    },
+  );
+  metrics.gauge('acentric_turns_waiting', 'Turns that wait for one going on to end.', () =>
+    one(parts.load().waiting),
+  );
+  metrics.gauge(
+    'acentric_actors_in_memory',
+    'Actors kept in memory between turns, and the most that are (max).',
+    () => {
+      const { hot, maxHot } = parts.load();
+      return [{ value: hot }, { labels: { of: 'max' }, value: maxHot }];
+    },
   );
   metrics.gauge('acentric_event_streams_open', "Actors' event streams open now.", () =>
     one(parts.streams()),
