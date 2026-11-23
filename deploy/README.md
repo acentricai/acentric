@@ -28,7 +28,9 @@ an older server does not have: for 0.15.0, take them from its tag (`git checkout
 - **Connections that stay open.** Machines' daemons keep a WebSocket to the server, and actors'
   events are a stream. What is in front passes WebSockets, sends the stream as it comes rather
   than in pieces, and does not close either after a minute of quiet. A deployment's code is up
-  to 40 MB, so it takes a request that size.
+  to 40 MB, so it takes a request that size. The stream sends a line every 25 seconds, and the
+  server keeps a quiet connection 65 seconds, for what in front closes them sooner (AWS' load
+  balancers, Cloudflare, nginx at 60 seconds).
 - **A certificate of your own authority.** Machines' daemons trust Mozilla's authorities, as
   browsers do, and on Linux the certificates the machine trusts (where an organisation's
   authority is installed, with `update-ca-certificates` or `update-ca-trust`). Elsewhere, or
@@ -40,7 +42,19 @@ an older server does not have: for 0.15.0, take them from its tag (`git checkout
   reads (`ACENTRIC_SECRET_KEY_FILE`, `ACENTRIC_ADMIN_KEY_FILE`), not settings of its
   environment, which more can see. To change it: [SECRETS.md](../SECRETS.md).
 - **Stopping.** The server is given a minute to stop, so that a turn that is going on is
-  written down.
+  written down. Told to stop, `/health` says so for three seconds before it takes no more, for
+  what is in front to send requests elsewhere.
+- **Health.** `/health` answers 200 when the server takes requests, and 503 with why when it
+  does not (its database does not answer, no process runs agents' code, it is upgrading or
+  stopping): what sends it requests asks this. `/health/live` answers 200 while the process is
+  there, upgrading too: what restarts it asks this.
+- **Logs and metrics.** The server's log is text, or JSON with `ACENTRIC_LOG_FORMAT=json`: a
+  line for each request and each turn, and for what failed, with no secret in any. With
+  `ACENTRIC_METRICS_PORT` (9464 in the recipes), Prometheus' metrics are at `/metrics` on that
+  port, never on the API's: requests, turns, calls of models (with tokens and cost), tool
+  calls, daemons connected, the database's size, and when the newest backup was taken. Alert
+  on that last one. Kubernetes' pod has them, with Prometheus' annotations; Compose's and
+  systemd's say how to turn them on.
 - **Backups.** The server backs itself up every day and before an upgrade, into a volume of
   the backups' own, and copies each to a bucket with `ACENTRIC_BACKUP_URL`: give it one. [BACKUPS.md](../BACKUPS.md) says how, and each
   recipe's README how a backup is taken and put back there.
