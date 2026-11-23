@@ -114,6 +114,12 @@ export class CodeUnavailable extends EngineError {
   }
 }
 
+/** A conversation that someone asked to have compacted could not be: its model failed at it. */
+export class CompactionFailed extends EngineError {
+  override readonly name = 'CompactionFailed';
+  readonly code = 'provider_failed';
+}
+
 /** The engine is shutting down, and takes nothing new. */
 export class Unavailable extends EngineError {
   override readonly name = 'Unavailable';

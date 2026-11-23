@@ -23,6 +23,8 @@ import type {
   AgentId,
   BundleManifest,
   CallIssue,
+  CompactResponse,
+  Compaction,
   ContentPart,
   ConversationEntry,
   Deployment,
@@ -55,6 +57,7 @@ import { ActorDriver, contentOf, machineRuleUnmet } from './driver.ts';
 import type { ActorUpdate, Clock, Host, Timer } from './driver.ts';
 import {
   ActorArchived,
+  ActorBusy,
   ActorNotFound,
   AgentNotFound,
   CodeUnavailable,
@@ -67,6 +70,7 @@ import {
   UnsupportedProtocol,
 } from './errors.ts';
 import { NO_MACHINE, contextOf, issuesText } from './executor.ts';
+import { compactionNumbers } from './compaction.ts';
 import { familyOf } from './families.ts';
 import type { CallContext, CallHost, CallResult, Executor } from './executor.ts';
 import { Semaphore } from './limits.ts';
@@ -85,6 +89,7 @@ import { instructionsOf } from './scaffold.ts';
 import { SecretsUnavailable } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import type { ActorsQuery, PageOf, Paged, Stopping, Store } from './store.ts';
+import type { StoredCompaction } from './state.ts';
 import type { UsageFilter } from './usage.ts';
 import { viewImage } from './view-image.ts';
 
@@ -214,6 +219,11 @@ function plainMessage(payload: Json): string {
   return (payload as { readonly text: string }).text;
 }
 
+/** A compaction as the API shows it: without what the model is sent in place of the older part. */
+function shown({ replacement: _left, ...compaction }: StoredCompaction): Compaction {
+  return compaction;
+}
+
 /** What stopping an actor stopped, as the model that asked for it is told. */
 function whatStopped(stopped: AbortResponse): string {
   const parts = [
@@ -332,6 +342,7 @@ export class Engine {
       ...(options.features ?? []),
       'schedule',
       'subagents',
+      'compaction-settings',
       ...(this.machines === undefined ? [] : ['machine']),
     ];
     // Every actor's model can send its later self a note.
@@ -443,6 +454,40 @@ export class Engine {
       },
       ownTools: (actor, definition) => ownTools.filter((one) => one.available(actor, definition)),
       stopping: (actor) => this.#stopping.has(actor),
+      compaction: (actor, definition) => {
+        const provider = this.#providers.has(definition.provider)
+          ? this.#providers.get(definition.provider)
+          : undefined;
+        const model = provider?.models.find((info) => info.id === actor.modelId);
+        // A size from which every token costs more, where the model's calls are paid by the token.
+        const dearerAbove =
+          provider?.plan === true ? undefined : model?.pricing?.tiers?.[0]?.aboveInputTokens;
+        return {
+          ...compactionNumbers(definition.compactionSettings?.[actor.modelId], {
+            ...(model?.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
+            ...(dearerAbove === undefined ? {} : { dearerAbove }),
+          }),
+          compacts: provider?.compacts,
+          reader: {
+            read: (message) =>
+              provider === undefined ? { text: '', toolCalls: [] } : provider.read(message),
+            compacted: (message) => provider?.compacted?.(message),
+          },
+        };
+      },
+      stillGoingOn: async (actor) => {
+        const tasks = await this.tasks.describe(actor);
+        const agents = (await this.#store.listChildren(actor)).map(
+          (child) => `- ${child.parent?.name ?? child.id} · ${child.status}`,
+        );
+        if (tasks.length === 0 && agents.length === 0) return '<compacted/>';
+        return [
+          '<compacted>',
+          ...(tasks.length === 0 ? [] : ['Tasks running:', ...tasks.map((line) => `- ${line}`)]),
+          ...(agents.length === 0 ? [] : ['Subagents:', ...agents]),
+          '</compacted>',
+        ].join('\n');
+      },
       instructions: (actor, definition, own) => {
         const { machine } = actor;
         const facts = machine === null ? undefined : this.machines?.facts(machine.id);
@@ -1140,6 +1185,29 @@ export class Engine {
       // A parent that is archived, or gone, is told nothing.
       if (!(error instanceof ActorArchived) && !(error instanceof ActorNotFound)) throw error;
     }
+  }
+
+  /**
+   * Compacts an actor's conversation now, whatever its size, for a person who asks. Between
+   * turns only. `compacted` is null when there was nothing to compact.
+   */
+  async compact(id: ActorId): Promise<CompactResponse> {
+    if (this.#closing) throw new Unavailable();
+    const driver = await this.#driver(id);
+    const { actor, turn } = driver.record;
+    if (actor.status === 'archived') throw new ActorArchived(id);
+    if (turn.phase !== 'idle' || this.#stopping.has(id)) throw new ActorBusy(id);
+    const made = await driver.compact();
+    return {
+      actor: (await this.#driver(id)).record.actor,
+      compacted: made === null ? null : shown(made),
+    };
+  }
+
+  /** The compactions of an actor's conversation, newest first. */
+  async compactions(id: ActorId): Promise<Compaction[]> {
+    await this.getActor(id);
+    return (await this.#store.listCompactions(id)).map(shown);
   }
 
   /** Has an actor whose last turn failed try it again, with nothing new. */

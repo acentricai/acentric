@@ -11,7 +11,7 @@
 // process that thinks the actor its own.
 
 import { ModelFailure } from '@acentric/ai';
-import type { ModelStep } from '@acentric/ai';
+import type { ModelAnswer, ModelStep } from '@acentric/ai';
 import { contentPartSchema } from '@acentric/protocol';
 import type {
   Actor,
@@ -32,6 +32,15 @@ import type {
 
 import type { Access } from './accounts.ts';
 import { UnknownBlob } from './blobs.ts';
+import {
+  MAX_COMPACTION_TRIES,
+  NoSummary,
+  planAll,
+  planOlder,
+  planSummary,
+  tokensOf,
+} from './compaction.ts';
+import type { Entry, Plan, Reader } from './compaction.ts';
 import { asSent } from './sent.ts';
 import { NOTICE } from './tasks.ts';
 import type { EngineTool, Tasks } from './tasks.ts';
@@ -42,6 +51,7 @@ import {
   ActorBusy,
   AgentNotFound,
   CodeUnavailable,
+  CompactionFailed,
   Conflict,
   InvalidConfiguration,
   Unavailable,
@@ -52,7 +62,7 @@ import type { Semaphore } from './limits.ts';
 import { OutOfTurn, decide } from './machine.ts';
 import type { MachineEvent, Rules } from './machine.ts';
 import { applyChange } from './state.ts';
-import type { ActorPatch, ActorRecord, Change, OwedCall, Turn } from './state.ts';
+import type { ActorPatch, ActorRecord, Change, OwedCall, StoredCompaction, Turn } from './state.ts';
 import type { Store } from './store.ts';
 import { offered } from './view-image.ts';
 import type { OwnTool } from './view-image.ts';
@@ -114,6 +124,22 @@ export type Host = {
   ): string;
   /** Whether the reasoning of the actor's model is tied to what came before it. */
   bindsReasoning(actor: Actor, definition: AgentDefinition): boolean;
+  /**
+   * How an actor's conversation is compacted: by its provider, when the provider has a way,
+   * and at what size, keeping how much of its end. `reader` reads its provider's answers.
+   */
+  compaction(
+    actor: Actor,
+    definition: AgentDefinition,
+  ): {
+    readonly compacts: 'older' | 'all' | undefined;
+    readonly reader: Reader;
+    readonly threshold: number;
+    readonly reserve: number;
+    readonly window: number;
+  };
+  /** The one line that follows a compaction: the actor's tasks that run, and its subagents. */
+  stillGoingOn(actor: ActorId): Promise<string>;
   /** An answer of the definition's provider, without its reasoning. */
   withoutReasoning(definition: AgentDefinition, message: AssistantMessage): AssistantMessage;
   /**
@@ -251,9 +277,26 @@ export class ActorDriver {
    * The conversation, but for what was left out of it. Read from the store the first time it
    * is needed.
    */
-  #conversation: { readonly seq: number; readonly message: Message }[] | null = null;
-  /** The conversation as the model is sent it: without its reasoning from before `from`. */
-  #view: { readonly from: number; readonly messages: Message[] } | null = null;
+  #conversation:
+    | {
+        readonly seq: number;
+        readonly message: Message;
+        /** For an answer of the model: what its call took in and gave out, in tokens. */
+        readonly tokens?: number;
+      }[]
+    | null = null;
+  /**
+   * The newest compaction: what the model is sent in place of the older part. Null for a
+   * conversation that was never compacted. Read from the store with the conversation.
+   */
+  #compaction: StoredCompaction | null = null;
+  /**
+   * The conversation as the model is sent it: what the newest compaction left, then the
+   * messages from where it is kept, without their reasoning from before `from`.
+   */
+  #view: { readonly from: number; readonly entries: Entry[] } | null = null;
+  /** The call that is owed was refused as too large, and the conversation was compacted for it. */
+  #justCompacted = false;
   #running: Promise<void> | null = null;
   /** Something came while the driver was running: it looks once more before it stops. */
   #woken = false;
@@ -720,6 +763,7 @@ export class ActorDriver {
         return { call: { account, provider, durationMs: clock() - at } };
       };
       try {
+        if (!(await this.#compactWhenDue(controller.signal))) return;
         const { step, access, sent, provider } = await this.#step();
         // The model is sent the bytes of what the conversation only names.
         const messages = await this.#host.blobs.withBytes(step.messages);
@@ -729,15 +773,51 @@ export class ActorDriver {
           controller.signal,
         );
         if (answer === ABORTED) return;
+        this.#justCompacted = false;
         event = { type: 'answered', answer, sent, ...call() };
       } catch (error) {
         if (controller.signal.aborted) return;
+        // Too large for the model: the conversation is compacted, and the call made again.
+        let tooLarge: string | undefined;
+        if (error instanceof ModelFailure && error.kind === 'context_overflow') {
+          if (this.#justCompacted) tooLarge = 'It had just been compacted.';
+          else {
+            try {
+              const made = await this.#compactNow('overflow', controller.signal);
+              if (controller.signal.aborted) return;
+              if (made !== undefined) {
+                // The call that was refused is written down, as any call that failed is.
+                if (called !== undefined) {
+                  const { actor } = this.record;
+                  await this.#host.store.recordUsage({
+                    at: called.at,
+                    actor: actor.id,
+                    agent: actor.agent,
+                    version: actor.deployment.version,
+                    account: called.account,
+                    provider: called.provider,
+                    model: actor.modelId,
+                    usage: null,
+                    failure: error.kind,
+                    durationMs: clock() - called.at,
+                  });
+                }
+                this.#justCompacted = true;
+                return;
+              }
+              tooLarge = 'There was nothing in it to compact.';
+            } catch (failed) {
+              if (controller.signal.aborted || this.#host.closing()) return;
+              tooLarge = `Compacting it failed: ${failed instanceof Error ? failed.message : String(failed)}`;
+            }
+          }
+        }
         event =
           error instanceof ModelFailure
             ? {
                 type: 'model_failed',
-                reason: error.message,
-                retryable: error.retryable,
+                reason: tooLarge === undefined ? error.message : `${error.message} ${tooLarge}`,
+                retryable: tooLarge === undefined && error.retryable,
                 kind: error.kind,
                 ...call(),
                 ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
@@ -922,6 +1002,9 @@ export class ActorDriver {
     readonly access: Access;
     readonly sent: NonNullable<Change['sent']>;
     readonly provider: string;
+    readonly definition: AgentDefinition;
+    /** The conversation as the step sends it, each message with its place in it. */
+    readonly entries: Entry[];
   }> {
     const { actor, nextSeq } = this.record;
     const definition = await this.#host.definition(actor.deployment.id);
@@ -936,21 +1019,25 @@ export class ActorDriver {
     const from =
       changed && this.#host.bindsReasoning(actor, definition) ? nextSeq : this.record.reasoningFrom;
 
-    if (this.#conversation === null) {
-      const entries = await this.#host.store.conversation(actor.id);
-      this.#conversation = entries
-        .filter((entry) => entry.leftOut !== true)
-        .map(({ seq, message }) => ({ seq, message }));
-      this.#view = null;
-    }
+    await this.#read();
+    const compaction = this.#compaction;
     if (this.#view?.from !== from) {
+      const kept = (this.#conversation ?? []).filter(
+        ({ seq }) => compaction === null || seq >= compaction.keepFromSeq,
+      );
       this.#view = {
         from,
-        messages: this.#conversation.map(({ seq, message }) =>
-          seq < from && message.role === 'assistant'
-            ? this.#host.withoutReasoning(definition, message)
-            : asSent(message),
-        ),
+        entries: [
+          // What a compaction left is sent as it was written.
+          ...(compaction?.replacement ?? []).map((message): Entry => ({ message })),
+          ...kept.map(({ seq, message }): Entry => ({
+            seq,
+            message:
+              seq < from && message.role === 'assistant'
+                ? this.#host.withoutReasoning(definition, message)
+                : asSent(message),
+          })),
+        ],
       };
     }
     const step: ModelStep = {
@@ -967,7 +1054,7 @@ export class ActorDriver {
         })),
         ...own,
       ],
-      messages: [...this.#view.messages],
+      messages: this.#view.entries.map((entry) => entry.message),
       // The same at every call of this actor's: a provider finds what it has read of the
       // conversation by it.
       session: actor.id,
@@ -978,7 +1065,216 @@ export class ActorDriver {
       access: await this.#host.access(actor, definition),
       sent: { fingerprint, reasoningFrom: from },
       provider: definition.provider,
+      definition,
+      entries: [...this.#view.entries],
     };
+  }
+
+  /** Reads the conversation, and its newest compaction, from the store, the first time they are needed. */
+  async #read(): Promise<void> {
+    if (this.#conversation !== null) return;
+    const { store } = this.#host;
+    const entries = await store.conversation(this.id);
+    this.#compaction = (await store.latestCompaction(this.id)) ?? null;
+    this.#conversation = entries
+      .filter((entry) => entry.leftOut !== true)
+      .map(({ seq, message, completion }) => ({
+        seq,
+        message,
+        ...(completion?.usage === undefined ? {} : { tokens: tokensOf(completion.usage) }),
+      }));
+    this.#view = null;
+  }
+
+  /**
+   * How large the conversation is, in tokens: what the last call of the model took in and
+   * gave out, as its provider counted it. 0 when the model has not answered since the last
+   * compaction, so that there is nothing new to measure.
+   */
+  #size(): number {
+    const since = this.#compaction?.atSeq ?? 0;
+    const last = (this.#conversation ?? []).findLast(
+      (entry) => entry.message.role === 'assistant' && entry.seq >= since,
+    );
+    return last?.tokens ?? 0;
+  }
+
+  /**
+   * Compacts the conversation when it has grown past its size. False when the turn is not to
+   * go on: it was ended meanwhile, or the compaction failed, which fails the turn.
+   */
+  async #compactWhenDue(signal: AbortSignal): Promise<boolean> {
+    const { actor } = this.record;
+    const definition = await this.#host.definition(actor.deployment.id);
+    await this.#read();
+    if (this.#size() < this.#host.compaction(actor, definition).threshold) return true;
+    try {
+      await this.#compactNow('threshold', signal);
+    } catch (error) {
+      if (signal.aborted || this.#host.closing()) return false;
+      const why = error instanceof Error ? error.message : String(error);
+      await this.#apply({
+        type: 'compaction_failed',
+        reason: `The conversation could not be compacted: ${why}`,
+      });
+      return false;
+    }
+    return !signal.aborted;
+  }
+
+  /** One call of the model for a compaction, tried again as any call of the model is. Rejects when it fails for good. */
+  async #ask(
+    step: ModelStep,
+    access: Access,
+    provider: string,
+    signal: AbortSignal,
+  ): Promise<ModelAnswer> {
+    const { clock, timer, rules, store } = this.#host;
+    const { actor } = this.record;
+    const messages = await this.#host.blobs.withBytes(step.messages);
+    for (let attempt = 1; ; attempt += 1) {
+      const at = clock();
+      const used = (usage: ModelAnswer['usage'], failure: string | null) =>
+        store.recordUsage({
+          at,
+          actor: actor.id,
+          kind: 'compaction',
+          agent: actor.agent,
+          version: actor.deployment.version,
+          account: access.account,
+          provider,
+          model: step.model,
+          usage: usage ?? null,
+          failure,
+          durationMs: clock() - at,
+        });
+      try {
+        const answer = await untilAborted(access.runner.run({ ...step, messages }, signal), signal);
+        if (answer === ABORTED) throw new Error('The compaction was given up');
+        await used(answer.usage, null);
+        return answer;
+      } catch (error) {
+        if (signal.aborted) throw error;
+        const failure = error instanceof ModelFailure ? error : undefined;
+        await used(undefined, failure?.kind ?? 'other');
+        const { retry } = rules;
+        if (failure?.retryable !== true || attempt >= retry.maxAttempts) throw error;
+        const backoff = Math.min(
+          retry.initialDelayMs * retry.factor ** (attempt - 1),
+          retry.maxDelayMs,
+        );
+        await timer(failure.retryAfterMs ?? backoff, signal);
+        if (signal.aborted) throw error;
+      }
+    }
+  }
+
+  /**
+   * Compacts the conversation: by the actor's provider where the provider has a compaction of
+   * its own, by a summary its model writes where it has none or the provider's came back with
+   * nothing. Resolves with what was done, or undefined when there was nothing to compact.
+   * Nothing is stored unless all of it is: a compaction that fails leaves the conversation as
+   * it was.
+   */
+  async #compactNow(
+    reason: StoredCompaction['reason'],
+    signal: AbortSignal,
+  ): Promise<StoredCompaction | undefined> {
+    const { actor } = this.record;
+    const { step, access, provider, definition, entries } = await this.#step();
+    const how = this.#host.compaction(actor, definition);
+    const { nextSeq } = this.record;
+    // Nothing was said since the last one, but the line it left: there is nothing new to compact.
+    if (this.#compaction?.atSeq === nextSeq - 1) return undefined;
+    const tokensBefore = this.#size();
+    const written = (maxChars?: number): Plan | undefined =>
+      planSummary(entries, how.reserve, nextSeq, how.reader, maxChars);
+    let plan: Plan | undefined =
+      how.compacts === 'older'
+        ? planOlder(entries, how.reserve, nextSeq, how.reader)
+        : how.compacts === 'all'
+          ? planAll(entries, how.reserve, nextSeq, how.reader)
+          : written();
+    // A provider's own compaction that can cut nowhere is still one a summary may make.
+    plan ??= written();
+    if (plan === undefined) return undefined;
+
+    let made: ReturnType<Plan['finish']> | undefined;
+    // What the summarizer is shown is halved each time it is refused as too long.
+    let maxChars = (how.window - how.reserve) * 3;
+    for (let tries = 1; made === undefined; tries += 1) {
+      const asked: ModelStep =
+        plan.ask.by === 'provider'
+          ? // The actor's own call, with its instructions and its tools, that asks to compact.
+            { ...step, messages: plan.messages, compact: true }
+          : {
+              model: step.model,
+              reasoning: step.reasoning,
+              instructions: plan.ask.instructions,
+              tools: [],
+              messages: plan.messages,
+            };
+      try {
+        made = plan.finish(await this.#ask(asked, access, provider, signal));
+      } catch (error) {
+        if (signal.aborted || this.#host.closing()) throw error;
+        const tooLong = error instanceof ModelFailure && error.kind === 'context_overflow';
+        if (!(error instanceof NoSummary) && !tooLong) throw error;
+        if (tries > MAX_COMPACTION_TRIES) throw error;
+        // The provider's own came back with nothing, or the conversation is too long to be
+        // read whole: a summary is written, of as much of its end as fits.
+        const less = plan.kind === 'summary' || tooLong;
+        if (less) maxChars = Math.floor(maxChars / 2);
+        const next = written(less ? maxChars : undefined);
+        if (next === undefined) throw error;
+        plan = next;
+      }
+    }
+    if (signal.aborted) throw new Error('The compaction was given up');
+    // What is still going on is said again: the model no longer has where each was started.
+    const line = await this.#host.stillGoingOn(actor.id);
+    await this.#apply({
+      type: 'compacted',
+      compaction: {
+        kind: plan.kind,
+        keepFromSeq: made.keepFromSeq,
+        replacement: made.replacement,
+        tokensBefore,
+        reason,
+      },
+      line: { role: 'system', content: [{ type: 'text', text: line }] },
+      // After a summary its provider did not write, a provider refuses the reasoning of the
+      // turns that were there before it: those are sent without.
+      ...(plan.kind === 'summary' && this.#host.bindsReasoning(actor, definition)
+        ? { withoutReasoning: true }
+        : {}),
+    });
+    return this.#compaction ?? undefined;
+  }
+
+  /**
+   * Compacts the conversation now, whatever its size, for a person who asks. Between turns
+   * only. Resolves with what was done, or null when there was nothing to compact.
+   */
+  async compact(): Promise<StoredCompaction | null> {
+    let made: StoredCompaction | undefined;
+    await this.#command(
+      'compact',
+      async () => {
+        const controller = new AbortController();
+        this.#abort = controller;
+        try {
+          made = await this.#compactNow('asked', controller.signal);
+        } catch (error) {
+          const why = error instanceof Error ? error.message : String(error);
+          throw new CompactionFailed(`The conversation could not be compacted: ${why}`);
+        } finally {
+          this.#abort = null;
+        }
+      },
+      true,
+    );
+    return made ?? null;
   }
 
   /**
@@ -1006,11 +1302,20 @@ export class ActorDriver {
     this.record = this.#withEnv(applyChange(before, change, this.mail.length));
     if (this.#conversation !== null) {
       if (change.leaveOutFrom === null) {
-        for (const { seq, message, leftOut } of change.append) {
+        for (const { seq, message, leftOut, completion } of change.append) {
           if (leftOut === true) continue;
-          this.#conversation.push({ seq, message });
+          this.#conversation.push({
+            seq,
+            message,
+            ...(completion?.usage === undefined ? {} : { tokens: tokensOf(completion.usage) }),
+          });
           // What is new is from after the place reasoning is sent from: it is sent whole.
-          this.#view?.messages.push(asSent(message));
+          this.#view?.entries.push({ seq, message: asSent(message) });
+        }
+        if (change.compaction !== undefined) {
+          // The model is sent another conversation from here on: it is put together again.
+          this.#compaction = change.compaction;
+          this.#view = null;
         }
       } else {
         // Messages already held are left out now: it is read again when it is next needed.
