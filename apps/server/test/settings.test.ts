@@ -117,6 +117,26 @@ describe('a server’s settings', () => {
     expect(Object.keys(two.secretKeys?.keys ?? {})).toContain(current);
   });
 
+  it('keep everything for ever, unless they say how long', () => {
+    expect(readSettings({}).retention).toEqual({
+      archivedMs: undefined,
+      auditMs: undefined,
+      usageMs: undefined,
+    });
+    expect(
+      readSettings({
+        ACENTRIC_RETAIN_ARCHIVED: '90d',
+        ACENTRIC_RETAIN_AUDIT: '365d',
+        ACENTRIC_RETAIN_USAGE: '12h',
+      }).retention,
+    ).toEqual({ archivedMs: 90 * 86_400_000, auditMs: 365 * 86_400_000, usageMs: 12 * 3_600_000 });
+    for (const value of ['90', '30m', '0d', 'forever']) {
+      expect(() => readSettings({ ACENTRIC_RETAIN_AUDIT: value })).toThrow(
+        `ACENTRIC_RETAIN_AUDIT is how long it is kept, such as 90d or 12h, from 1h to 36500d, and is ${value}`,
+      );
+    }
+  });
+
   it('say how the server logs, and where its metrics are, when they are', () => {
     expect(readSettings({})).toMatchObject({
       log: { format: 'text', level: 'info' },

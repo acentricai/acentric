@@ -25,6 +25,7 @@ import { createLogger } from './log.ts';
 import type { Logger } from './log.ts';
 import { Metrics, serveMetrics } from './metrics.ts';
 import { observing } from './observe.ts';
+import { Retention } from './retention.ts';
 import { startServer } from './serve.ts';
 import { reseal, sealedKeys } from './sealed.ts';
 import { holdPort } from './upgrading.ts';
@@ -57,6 +58,8 @@ export type Started = {
   readonly recovered: number;
   /** Where the metrics are, when the server serves them. */
   readonly metricsUrl: string | undefined;
+  /** What removes what has had its day, every hour: run now, for tests. */
+  readonly retention: Retention;
   /**
    * Says, at /health, that the server takes no more requests, ahead of `close`: for what is in
    * front to send them elsewhere first.
@@ -90,6 +93,8 @@ export async function start(
     readonly sandboxes?: Partial<NonNullable<EngineOptions['sandboxes']>>;
     /** The schema this version's database is: the store's, but for tests of an upgrade. */
     readonly schema?: number;
+    /** What the audit log, and removing old data, tell the time by. For tests. */
+    readonly clock?: () => number;
   },
 ): Promise<Started> {
   const write = more.log;
@@ -147,6 +152,7 @@ export async function start(
   const programs = machinePrograms(settings.downloads);
   const audit = new Audit({
     store,
+    ...(more.clock === undefined ? {} : { clock: more.clock }),
     report: (error) => logger.error('the audit log could not be written to', {}, error),
   });
   // A model is called with a model account, and with nothing else: no key is read from the
@@ -207,6 +213,16 @@ export async function start(
           ...bucketOf(settings),
         });
 
+  const retention = new Retention({
+    engine,
+    store,
+    audit,
+    logger,
+    metrics,
+    settings: settings.retention,
+    ...(more.clock === undefined ? {} : { clock: more.clock }),
+  });
+
   let draining = false;
   let metricsServer: Awaited<ReturnType<typeof serveMetrics>> | undefined;
   try {
@@ -258,6 +274,7 @@ export async function start(
           }),
     });
     await backups?.start();
+    retention.start();
     if (metrics !== undefined && settings.metricsPort !== undefined) {
       gaugesOf(metrics, {
         data: settings.data,
@@ -273,6 +290,7 @@ export async function start(
       server,
       firstKey,
       metricsUrl: metricsServer?.url,
+      retention,
       drain() {
         draining = true;
       },
@@ -284,6 +302,7 @@ export async function start(
       async close(options) {
         // No backup is started from now on, and one being taken is finished first.
         draining = true;
+        await retention.close();
         await backups?.close();
         await server.close(options);
         await metricsServer?.close();
@@ -295,6 +314,7 @@ export async function start(
     };
   } catch (error) {
     await release();
+    await retention.close();
     await metricsServer?.close();
     metrics?.close();
     await backups?.close();

@@ -34,6 +34,13 @@
 //                           does. Reached with AWS's own credentials: the environment's, a
 //                           profile's, or the role of the instance, container or pod. Without
 //                           it, they are in the folder only
+//   ACENTRIC_RETAIN_ARCHIVED  how long an archived actor is kept, such as 90d: then it is
+//                           deleted, with its subagents and their conversations. Without it,
+//                           for ever
+//   ACENTRIC_RETAIN_AUDIT   how long the audit log keeps what was done, such as 365d. Without
+//                           it, for ever
+//   ACENTRIC_RETAIN_USAGE   how long what each call of a model used and cost is kept, such as
+//                           400d: the usage of earlier is not there to read. Without it, for ever
 //   ACENTRIC_LOG_FORMAT     how the server writes its log: `text` (without it), a line for a
 //                           person to read, or `json`, an object to a line, for what collects it
 //   ACENTRIC_LOG_LEVEL      the least it writes: debug, info (without it), warn or error
@@ -109,7 +116,28 @@ export type Settings = {
   readonly log: { readonly format: Format; readonly level: Level };
   /** The port metrics are served at. Undefined when none are. */
   readonly metricsPort: number | undefined;
+  /** How long what the server keeps is kept, by what it is. Undefined for each kept for ever. */
+  readonly retention: RetentionSettings;
 };
+
+export type RetentionSettings = {
+  readonly archivedMs: number | undefined;
+  readonly auditMs: number | undefined;
+  readonly usageMs: number | undefined;
+};
+
+/** How long something is kept: such as 12h, 90d or 365d, from an hour to a hundred years. */
+function keptFor(name: string, value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const match = /^(\d+)(h|d)$/.exec(value);
+  const ms = match === null ? NaN : Number(match[1]) * (match[2] === 'h' ? 3_600_000 : 86_400_000);
+  if (!(ms >= 3_600_000 && ms <= 36_500 * 86_400_000)) {
+    throw new InvalidSettings(
+      `${name} is how long it is kept, such as 90d or 12h, from 1h to 36500d, and is ${value}`,
+    );
+  }
+  return ms;
+}
 
 export type BackupSettings = {
   /** The folder they go in. */
@@ -342,6 +370,11 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     },
     backups,
     log: { format: format as Format, level: level as Level },
+    retention: {
+      archivedMs: keptFor('ACENTRIC_RETAIN_ARCHIVED', given('ACENTRIC_RETAIN_ARCHIVED')),
+      auditMs: keptFor('ACENTRIC_RETAIN_AUDIT', given('ACENTRIC_RETAIN_AUDIT')),
+      usageMs: keptFor('ACENTRIC_RETAIN_USAGE', given('ACENTRIC_RETAIN_USAGE')),
+    },
     metricsPort,
     docker:
       dockerHost === undefined || dockerImage === undefined
