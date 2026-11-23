@@ -7,11 +7,16 @@ listens on `127.0.0.1:4000` only, for a proxy on the same machine to end HTTPS i
 ## Running it
 
 ```sh
-sudo install -d -m 700 /etc/acentric
-sudo install -m 600 acentric.env.example /etc/acentric/acentric.env
-# Fill it in: the address, and a secrets key from `openssl rand -hex 32`, a copy of which is
-# kept somewhere other than this machine.
+sudo install -d -m 700 /etc/acentric /etc/acentric/secrets
+sudo install -m 600 acentric.env.example /etc/acentric/acentric.env   # then put the address in it
+openssl rand -hex 32 | sudo tee /etc/acentric/secrets/secret-key > /dev/null   # keep a copy elsewhere
+openssl rand -hex 24 | sudo tee /etc/acentric/secrets/admin-key > /dev/null    # the API key that may do everything
+sudo chmod 644 /etc/acentric/secrets/*
 ```
+
+The keys are files the server reads in its container, not settings of its environment, which
+`docker inspect` shows. `/etc/acentric/secrets` is root's alone; its files are readable, as the
+server's user in the container reads them.
 
 By Docker:
 
@@ -56,6 +61,7 @@ To put one back, with the service stopped:
 ```sh
 sudo systemctl stop acentric
 sudo docker run --rm -i --env-file /etc/acentric/acentric.env --volume acentric-data:/data \
+  --volume /etc/acentric/secrets/secret-key:/run/secrets/acentric/secret-key:ro \
   ghcr.io/acentricai/acentric-server:0.15.0 acentric-server restore < acentric-2026-11-23.tar
 sudo systemctl start acentric
 ```

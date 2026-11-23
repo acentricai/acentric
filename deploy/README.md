@@ -10,6 +10,10 @@ account and is tested by hand; CI checks it is well formed):
 | [systemd](systemd/)             | A machine whose services systemd runs: the image by Docker, or by Podman as a Quadlet.   |
 | [terraform/aws](terraform/aws/) | One EC2 instance, its data on a volume of its own, snapshots, and backups in S3.         |
 
+**Use the recipe of the version you run.** These are the next release's, which may need what
+an older server does not have: for 0.15.0, take them from its tag (`git checkout v0.15.0`, or
+`?ref=v0.15.0`).
+
 [sandbox](sandbox/) is not a way to run the server: it is what sandboxes at Docker and Boat are made from.
 
 ## What every one of them is careful of
@@ -32,7 +36,9 @@ account and is tested by hand; CI checks it is well formed):
   the daemon runs.
 - **The secrets key.** `ACENTRIC_SECRET_KEY` seals agents' secrets and the keys of model
   accounts. Make it once, and keep a copy somewhere other than the server: without it, what it
-  sealed cannot be opened again.
+  sealed cannot be opened again. Each recipe gives it, and the admin key, as files the server
+  reads (`ACENTRIC_SECRET_KEY_FILE`, `ACENTRIC_ADMIN_KEY_FILE`), not settings of its
+  environment, which more can see. To change it: [SECRETS.md](../SECRETS.md).
 - **Stopping.** The server is given a minute to stop, so that a turn that is going on is
   written down.
 - **Backups.** The server backs itself up every day and before an upgrade, into a volume of

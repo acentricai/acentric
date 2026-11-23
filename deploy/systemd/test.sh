@@ -33,10 +33,13 @@ trap cleanup EXIT
 mkdir -p /etc/acentric
 sed -e "s|^ACENTRIC_VERSION=.*|ACENTRIC_VERSION=$version|" \
   -e "s|^ACENTRIC_PUBLIC_URL=.*|ACENTRIC_PUBLIC_URL=$url|" \
-  -e "s|^ACENTRIC_SECRET_KEY=.*|ACENTRIC_SECRET_KEY=$(openssl rand -hex 32)|" \
-  -e "s|^ACENTRIC_ADMIN_KEY=.*|ACENTRIC_ADMIN_KEY=$key|" \
   "$here/acentric.env.example" > /etc/acentric/acentric.env
 chmod 600 /etc/acentric/acentric.env
+# The keys, as the README has them made.
+install -d -m 700 /etc/acentric/secrets
+openssl rand -hex 32 > /etc/acentric/secrets/secret-key
+printf '%s\n' "$key" > /etc/acentric/secrets/admin-key
+chmod 644 /etc/acentric/secrets/*
 
 up() {
   for attempt in $(seq 1 90); do
@@ -85,6 +88,7 @@ docker exec acentric acentric-server backup > "$backup"
 get -H 'content-type: application/json' -d '{"name":"after-backup"}' "$url/v1/machines" > /dev/null
 systemctl stop acentric
 docker run --rm -i --env-file /etc/acentric/acentric.env --volume acentric-data:/data \
+  --volume /etc/acentric/secrets/secret-key:/run/secrets/acentric/secret-key:ro \
   "$image" acentric-server restore < "$backup"
 systemctl start acentric
 up

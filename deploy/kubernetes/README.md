@@ -26,11 +26,12 @@ The server as a StatefulSet of one, on a volume of its own, with
 ```sh
 kubectl create namespace acentric
 kubectl -n acentric create secret generic acentric-secrets \
-  --from-literal=ACENTRIC_SECRET_KEY="$(openssl rand -hex 32)" \
-  --from-literal=ACENTRIC_ADMIN_KEY="$(openssl rand -hex 24)"
+  --from-literal=secret-key="$(openssl rand -hex 32)" \
+  --from-literal=admin-key="$(openssl rand -hex 24)"
 ```
 
-Keep a copy of the secrets key somewhere other than the cluster. In a folder of your own, a
+The server reads them as files of that Secret, mounted for its group alone, not as variables
+of its environment. Keep a copy of the secrets key somewhere other than the cluster. In a folder of your own, a
 `kustomization.yaml` that takes one of these and sets the version and the address:
 
 ```yaml
@@ -64,8 +65,8 @@ kubectl -n acentric exec acentric-0 -- acentric-server backup > "acentric-$(date
 To have each copied to a bucket as well, off the cluster, add `ACENTRIC_BACKUP_URL` (such as
 `s3://my-bucket/acentric`) and `AWS_REGION` to the settings in a `configMapGenerator` patch. The
 server reaches the bucket with the pod's identity on EKS (IRSA or Pod Identity, with a
-ServiceAccount of your own), or with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` added to the
-`acentric-secrets` Secret; at another store, `AWS_ENDPOINT_URL_S3` too. What the key may do is
+ServiceAccount of your own), or with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from a
+Secret of your own, given to the container by `envFrom` in a patch; at another store, `AWS_ENDPOINT_URL_S3` too. What the key may do is
 in [BACKUPS.md](../../BACKUPS.md#a-bucket). One there is put back as below, with its
 `s3://` URL after `restore` and no stdin.
 
@@ -80,12 +81,18 @@ kubectl -n acentric run acentric-restore --rm -i --restart=Never \
     "spec": {
       "enableServiceLinks": false,
       "securityContext": { "runAsNonRoot": true, "runAsUser": 1000, "fsGroup": 1000 },
-      "volumes": [{ "name": "data", "persistentVolumeClaim": { "claimName": "data-acentric-0" } }],
+      "volumes": [
+        { "name": "data", "persistentVolumeClaim": { "claimName": "data-acentric-0" } },
+        { "name": "secrets", "secret": { "secretName": "acentric-secrets", "defaultMode": 288 } }
+      ],
       "containers": [{
         "name": "acentric-restore", "image": "ghcr.io/acentricai/acentric-server:0.15.0",
         "stdin": true, "stdinOnce": true, "command": ["acentric-server", "restore"],
-        "envFrom": [{ "secretRef": { "name": "acentric-secrets" } }],
-        "volumeMounts": [{ "name": "data", "mountPath": "/data" }]
+        "env": [{ "name": "ACENTRIC_SECRET_KEY_FILE", "value": "/run/secrets/acentric/secret-key" }],
+        "volumeMounts": [
+          { "name": "data", "mountPath": "/data" },
+          { "name": "secrets", "mountPath": "/run/secrets/acentric", "readOnly": true }
+        ]
       }]
     }
   }' < acentric-2026-11-23.tar

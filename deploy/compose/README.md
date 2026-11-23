@@ -13,14 +13,16 @@ certificate for the server's name from Let's Encrypt and renews it.
 ## Running it
 
 ```sh
-cp .env.example .env
-openssl rand -hex 32    # ACENTRIC_SECRET_KEY: keep a copy somewhere other than this machine
-openssl rand -hex 24    # ACENTRIC_ADMIN_KEY
-# Put them, and the name, in .env.
+cp .env.example .env    # then put the name in it
+install -d -m 700 secrets
+openssl rand -hex 32 > secrets/secret-key    # keep a copy somewhere other than this machine
+openssl rand -hex 24 > secrets/admin-key     # the API key that may do everything
 docker compose up -d
 ```
 
-Then open `ACENTRIC_PUBLIC_URL`. `docker compose logs server` has the setup link that makes the
+The keys are files the server reads, not settings in its environment, which `docker inspect`
+shows. `secrets/` is for this machine's user alone; its files are readable, as the server's
+user in the container reads them. Then open `ACENTRIC_PUBLIC_URL`. `docker compose logs server` has the setup link that makes the
 first person, the owner.
 
 ## What it is

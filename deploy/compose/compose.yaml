@@ -2,6 +2,8 @@
 # certificate. How to use it is in README.md beside this file.
 #
 #   cp .env.example .env    # then fill it in
+#   install -d -m 700 secrets
+#   openssl rand -hex 32 > secrets/secret-key && openssl rand -hex 24 > secrets/admin-key
 #   docker compose up -d
 
 name: acentric
@@ -12,8 +14,9 @@ services:
     restart: unless-stopped
     environment:
       ACENTRIC_PUBLIC_URL: ${ACENTRIC_PUBLIC_URL:?set ACENTRIC_PUBLIC_URL in .env}
-      ACENTRIC_SECRET_KEY: ${ACENTRIC_SECRET_KEY:?set ACENTRIC_SECRET_KEY in .env}
-      ACENTRIC_ADMIN_KEY: ${ACENTRIC_ADMIN_KEY:-}
+      # The keys, from files, not the environment, which `docker inspect` shows.
+      ACENTRIC_SECRET_KEY_FILE: /run/secrets/secret-key
+      ACENTRIC_ADMIN_KEY_FILE: /run/secrets/admin-key
       # Its own backups, every day and before an upgrade, in a volume of theirs, and copied to
       # a bucket off this machine when ACENTRIC_BACKUP_URL is given: see README.md.
       ACENTRIC_BACKUP_DIR: /backups
@@ -26,6 +29,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-}
       AWS_ENDPOINT_URL_S3: ${AWS_ENDPOINT_URL_S3:-}
+    secrets: [secret-key, admin-key]
     volumes:
       # Everything the server keeps: its database, and conversations' images and files beside
       # it. One volume, on this machine's disk: never a network file system.
@@ -56,6 +60,17 @@ services:
       # Its certificates: kept, so that it does not ask for new ones each time it starts.
       - caddy-data:/data
       - caddy-config:/config
+
+# Files of the folder secrets/, made once (README.md). The folder is for this machine's user
+# alone (700); its files are readable (644), for the server's user in the container.
+secrets:
+  # What agents' secrets and the keys of model accounts are sealed with. Keep a copy somewhere
+  # other than this machine: without it, what was sealed with it does not open again.
+  secret-key:
+    file: ./secrets/secret-key
+  # An API key that may do everything, which other keys are made with.
+  admin-key:
+    file: ./secrets/admin-key
 
 volumes:
   data:

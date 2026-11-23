@@ -2,6 +2,7 @@
 # makes acentric.service of it. How to use it is in README.md beside this file:
 #
 #   sudo install -m 600 acentric.env.example /etc/acentric/acentric.env   # then fill it in
+#   # and the keys, as files of /etc/acentric/secrets: see README.md
 #   sudo install -m 644 acentric.container /etc/containers/systemd/
 #   sudo systemctl daemon-reload && sudo systemctl start acentric
 #
@@ -23,6 +24,9 @@ PublishPort=127.0.0.1:4000:4000
 Volume=acentric-data:/data
 # Its own backups, every day and before an upgrade.
 Volume=acentric-backups:/backups
+# The keys, as files: each relabelled for containers where SELinux is (z).
+Volume=/etc/acentric/secrets/secret-key:/run/secrets/acentric/secret-key:ro,z
+Volume=/etc/acentric/secrets/admin-key:/run/secrets/acentric/admin-key:ro,z
 # A turn that is going on is written down before the server stops.
 StopTimeout=60
 
