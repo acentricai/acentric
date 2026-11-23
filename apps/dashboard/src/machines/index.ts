@@ -13,6 +13,8 @@ import { createElement } from 'react';
 import { may, type Me } from '../me.ts';
 import type { Section } from '../sections.ts';
 import { MachinesPage } from './machines.tsx';
+import { machinesSearch, typesOf } from '../url.ts';
+import type { MachinesSearch } from '../url.ts';
 import { ProviderPage, ProvidersPage } from './sandboxes.tsx';
 
 const manages = (me: Me) => may(me, 'machines:manage');
@@ -21,7 +23,26 @@ function routes(parent: AnyRoute): AnyRoute[] {
   const machines = createRoute({
     getParentRoute: () => parent,
     path: 'machines',
-    component: MachinesPage,
+    validateSearch: machinesSearch,
+    component: function Machines() {
+      const { type } = machines.useSearch() as MachinesSearch;
+      const navigate = machines.useNavigate();
+      return createElement(MachinesPage, {
+        types: typesOf(type),
+        // From the address as it is when the choice is made, not as this page was drawn.
+        onToggleType: (toggled: string) =>
+          void navigate({
+            search: (before: MachinesSearch) => {
+              const now = typesOf(before.type);
+              const next = now.includes(toggled)
+                ? now.filter((each) => each !== toggled)
+                : [...now, toggled];
+              return { type: next.length === 0 ? undefined : next.join(',') };
+            },
+          }),
+        onClearTypes: () => void navigate({ search: { type: undefined } }),
+      });
+    },
   });
   const sandboxes = createRoute({
     getParentRoute: () => parent,

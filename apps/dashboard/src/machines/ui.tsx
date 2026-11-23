@@ -8,6 +8,7 @@ import {
   IconCheck,
   IconCopy,
   IconDots,
+  IconPlus,
   IconRefresh,
   IconX,
 } from '@tabler/icons-react';
@@ -25,7 +26,7 @@ import { createPortal } from 'react-dom';
 import { Link } from '@tanstack/react-router';
 
 import { isApiError } from './api.ts';
-import { displayText, CopyNotice } from './text.tsx';
+import { displayText, CopyNotice, safeText } from './text.tsx';
 import { fullTime, relative, NOTHING } from './format.ts';
 import { usePopover } from '../popover.ts';
 
@@ -394,7 +395,7 @@ export function PageHeader({
 /** The arrow keys, Home and End move through a menu's items. */
 function moveInMenu(event: ReactKeyboardEvent, list: HTMLElement | null) {
   const items = [
-    ...(list?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? []),
+    ...(list?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([disabled])') ?? []),
   ];
   if (items.length === 0) return;
   const at = items.indexOf(document.activeElement as HTMLElement);
@@ -536,6 +537,103 @@ export function MenuItem({
  * `Cancel` close it, and focus goes back to what opened it. `footer` holds
  * its buttons, at its foot on the right.
  */
+export type Choice = { readonly value: string; readonly label: string };
+
+/**
+ * A filter of several choices, as a chip: dashed with `+` and the filter's name while nothing is
+ * chosen; once something is, the name, what is chosen (its name, or how many), and a button at
+ * its start that clears it. It opens a list with a checkbox for each choice, which stays open
+ * while choices are made. A choice made is told as the one choice that changed, so that two made
+ * before the page is drawn again are both kept.
+ */
+export function FilterChip({
+  name,
+  choices,
+  chosen,
+  onToggle,
+  onClear,
+}: {
+  name: string;
+  choices: readonly Choice[];
+  chosen: readonly string[];
+  onToggle: (value: string) => void;
+  onClear: () => void;
+}) {
+  const popover = usePopover();
+  const id = useId();
+  const ticked = choices.filter((choice) => chosen.includes(choice.value));
+  const value =
+    ticked.length === 0
+      ? undefined
+      : ticked.length === 1
+        ? (ticked[0]?.label ?? '')
+        : `${String(ticked.length)} selected`;
+  return (
+    <div
+      className="filter-chip"
+      ref={popover.container}
+      onKeyDown={(event) => {
+        if (!popover.open || event.key !== 'Escape') return;
+        event.stopPropagation();
+        event.preventDefault();
+        popover.close();
+      }}
+    >
+      <span className="filter-chip__pill" data-set={value !== undefined || undefined}>
+        {value !== undefined && (
+          <button
+            type="button"
+            className="filter-chip__clear"
+            aria-label={`Clear ${name}`}
+            onClick={() => {
+              popover.close();
+              onClear();
+            }}
+          >
+            <IconX size={12} stroke={2} aria-hidden="true" />
+          </button>
+        )}
+        <button
+          ref={popover.trigger}
+          type="button"
+          className="filter-chip__button"
+          aria-expanded={popover.open}
+          aria-controls={popover.open ? id : undefined}
+          aria-label={
+            ticked.length === 0
+              ? name
+              : `${name}: ${safeText(ticked.map((choice) => choice.label).join(', '))}`
+          }
+          onClick={() => popover.setOpen((open) => !open)}
+        >
+          {value === undefined && <IconPlus size={13} stroke={1.75} aria-hidden="true" />}
+          {name}
+          {value !== undefined && (
+            <>
+              <span className="filter-chip__rule" aria-hidden="true" />
+              <span className="filter-chip__value">{displayText(value)}</span>
+            </>
+          )}
+        </button>
+      </span>
+      {popover.open && (
+        <div id={id} role="group" aria-label={name} className="pop filter-chip__pop">
+          {choices.map((choice) => {
+            const on = chosen.includes(choice.value);
+            return (
+              <label key={choice.value} className="filter-chip__option" data-on={on || undefined}>
+                <input type="checkbox" checked={on} onChange={() => onToggle(choice.value)} />
+                <span>{displayText(choice.label)}</span>
+              </label>
+            );
+          })}
+          {choices.length === 0 && <p className="filter-chip__none">Nothing to choose from.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Dialog({
   title,
   onClose,

@@ -1,5 +1,6 @@
 // `/machines`: the engine's machines, with which agents may work on each, a new enrolment token,
-// and remove in each row, and how to add one.
+// and remove in each row, and how to add one. A filter under the heading shows those of the
+// types chosen: personal machines, which no provider made, and each sandbox account's.
 
 import { IconKey, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import type { Machine, MachineAgents, MachineToken } from '@acentric/protocol';
 import { queryClient } from '../api.ts';
 import { AgentsField, agentsText, useAgentNames } from './agents.tsx';
 import { engine, shellQuote } from './api.ts';
+import { PERSONAL } from '../url.ts';
 import { fullTime } from './format.ts';
 import { keys, useMachines, useProviders } from './queries.ts';
 import { sandboxDeletion } from './sandboxes.tsx';
@@ -25,10 +27,12 @@ import {
   LoadError,
   Menu,
   MenuItem,
+  FilterChip,
   PageHeader,
   Status,
   Table,
 } from './ui.tsx';
+import type { Choice } from './ui.tsx';
 
 import './machine-pane.css';
 
@@ -60,19 +64,54 @@ const system = (m: Machine) =>
 /** What the row menu opened: a dialog for one machine. */
 type Action = { kind: 'agents' | 'token' | 'remove'; machine: Machine };
 
-export function MachinesPage() {
+/** Whether a machine is of one of the types chosen: none chosen is every machine. */
+export function ofTypes(machine: Machine, types: readonly string[]): boolean {
+  return types.length === 0 || types.includes(machine.provider ?? PERSONAL);
+}
+
+export function MachinesPage({
+  types = [],
+  onToggleType = () => {},
+  onClearTypes = () => {},
+}: {
+  /** The types the filter has chosen: `personal`, and the IDs of sandbox accounts. */
+  types?: readonly string[];
+  /** Ticks a type of the filter, or unticks it. */
+  onToggleType?: (type: string) => void;
+  onClearTypes?: () => void;
+}) {
   const machines = useMachines();
   const names = useAgentNames();
+  const providers = useProviders();
+  const choices: Choice[] = [
+    { value: PERSONAL, label: 'Personal' },
+    ...(providers.data?.items ?? []).map((provider) => ({
+      value: provider.id,
+      label: provider.name,
+    })),
+  ];
+  // A type that is no longer there filters nothing out.
+  const chosen = types.filter((type) => choices.some((choice) => choice.value === type));
+  const shown = machines.data?.items.filter((machine) => ofTypes(machine, chosen));
   const [adding, setAdding] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
   return (
     <div className="list-page machines-page">
-      <PageHeader title="Machines" spaced>
+      <PageHeader title="Machines">
         <Button variant="primary" onClick={() => setAdding(true)}>
           <IconPlus size={15} />
           Add a machine
         </Button>
       </PageHeader>
+      <div className="filter-bar rise">
+        <FilterChip
+          name="Type"
+          choices={choices}
+          chosen={chosen}
+          onToggle={onToggleType}
+          onClear={onClearTypes}
+        />
+      </div>
       {(machines.isError || machines.failureReason !== null) && (
         <LoadError
           things="machines"
@@ -84,7 +123,7 @@ export function MachinesPage() {
       <Table
         label="Machines"
         loading={machines.isPending}
-        rows={machines.data?.items}
+        rows={shown}
         rowKey={(m) => m.id}
         columns={[
           {
@@ -163,8 +202,10 @@ export function MachinesPage() {
           },
         ]}
       />
-      {machines.data?.items.length === 0 && (
+      {machines.data?.items.length === 0 ? (
         <p className="table-empty">No machines. Add one to give actors a place to run commands.</p>
+      ) : (
+        shown?.length === 0 && <p className="table-empty">No machines of the types chosen.</p>
       )}
       {adding && <AddDialog onClose={() => setAdding(false)} />}
       {action?.kind === 'agents' && (

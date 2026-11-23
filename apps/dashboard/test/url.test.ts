@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { framed } from '../src/frame-guard.ts';
-import { safeRedirect, signInSearch, tokenSearch } from '../src/url.ts';
+import { machinesSearch, safeRedirect, signInSearch, tokenSearch, typesOf } from '../src/url.ts';
 
 describe('where a person is sent after signing in', () => {
   it('is a path of this site', () => {
@@ -39,6 +39,16 @@ describe('where a person is sent after signing in', () => {
     expect(safeRedirect('/settings')).toBe('/settings');
     expect(signInSearch({ redirect: '//evil.example' })).toEqual({ redirect: undefined });
     expect(signInSearch({ redirect: '/agents' })).toEqual({ redirect: '/agents' });
+  });
+});
+
+describe('the Machines page’s filter in the address', () => {
+  it('is personal and the IDs of sandbox accounts, once each, and nothing else', () => {
+    expect(machinesSearch({ type: 'personal,prv_1,personal' })).toEqual({ type: 'personal,prv_1' });
+    expect(machinesSearch({ type: 'everything,//evil,prv_' })).toEqual({ type: undefined });
+    expect(machinesSearch({})).toEqual({ type: undefined });
+    expect(typesOf('prv_2,personal')).toEqual(['prv_2', 'personal']);
+    expect(typesOf(undefined)).toEqual([]);
   });
 });
 

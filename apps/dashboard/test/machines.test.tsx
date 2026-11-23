@@ -168,6 +168,106 @@ describe('the Machines page', () => {
   });
 });
 
+describe('the Machines page’s filter', () => {
+  const withTypes = () => {
+    const server = signedIn();
+    server.providers.push(
+      {
+        id: 'prv_1' as never,
+        kind: 'boat',
+        name: 'work',
+        account: null,
+        sandboxes: 1,
+        createdAt: 0,
+      },
+      {
+        id: 'prv_2' as never,
+        kind: 'docker',
+        name: 'local',
+        account: null,
+        sandboxes: 1,
+        createdAt: 0,
+      },
+    );
+    server.machines.push(
+      machineOf('laptop'),
+      machineOf('work-1', { provider: 'prv_1' as never }),
+      machineOf('local-1', { provider: 'prv_2' as never }),
+    );
+    return server;
+  };
+  const shown = () =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[0]?.textContent);
+  const filter = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /^Type/ }));
+    return screen.findByRole('group', { name: 'Type' });
+  };
+
+  it('offers personal machines and each sandbox account, and shows only what is ticked', async () => {
+    const page = open('/machines', withTypes());
+    await screen.findByText('work-1');
+    expect(shown()).toEqual(['laptop', 'work-1', 'local-1']);
+    // Nothing chosen: the chip is its name, and nothing clears it.
+    expect(screen.getByRole('button', { name: 'Type' }).textContent).toBe('Type');
+    expect(screen.queryByRole('button', { name: 'Clear Type' })).toBeNull();
+    const types = await filter();
+    expect(
+      within(types)
+        .getAllByRole('checkbox')
+        .map((box) => [box.closest('label')?.textContent, (box as HTMLInputElement).checked]),
+    ).toEqual([
+      ['Personal', false],
+      ['work', false],
+      ['local', false],
+    ]);
+    fireEvent.click(within(types).getByLabelText('Personal'));
+    await waitFor(() => expect(shown()).toEqual(['laptop']));
+    expect(page.where()).toBe('/machines?type=personal');
+    expect(screen.getByRole('button', { name: 'Type: Personal' }).textContent).toBe('TypePersonal');
+    // The list stays open while more is ticked.
+    fireEvent.click(within(types).getByLabelText('local'));
+    await waitFor(() => expect(shown()).toEqual(['laptop', 'local-1']));
+    expect(page.where()).toBe('/machines?type=personal%2Cprv_2');
+    // Two or more are said by how many; all of them are said to assistive technology.
+    expect(screen.getByRole('button', { name: 'Type: Personal, local' }).textContent).toBe(
+      'Type2 selected',
+    );
+    // Unticking all of them is no filter.
+    fireEvent.click(within(types).getByLabelText('Personal'));
+    fireEvent.click(within(types).getByLabelText('local'));
+    await waitFor(() => expect(shown()).toEqual(['laptop', 'work-1', 'local-1']));
+    expect(page.where()).toBe('/machines');
+    expect(screen.queryByRole('button', { name: 'Clear Type' })).toBeNull();
+  });
+
+  it('is cleared at once by the button at its start', async () => {
+    const page = open('/machines?type=personal,prv_1', withTypes());
+    await screen.findByText('work-1');
+    expect(shown()).toEqual(['laptop', 'work-1']);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Type' }));
+    await waitFor(() => expect(shown()).toEqual(['laptop', 'work-1', 'local-1']));
+    expect(page.where()).toBe('/machines');
+    expect(screen.queryByRole('button', { name: 'Clear Type' })).toBeNull();
+  });
+
+  it('is read from the address, and leaves out what is none of its types', async () => {
+    open('/machines?type=prv_1,prv_gone,nonsense', withTypes());
+    await screen.findByText('work-1');
+    expect(shown()).toEqual(['work-1']);
+    expect(screen.getByRole('button', { name: 'Type: work' })).toBeTruthy();
+  });
+
+  it('says so when no machine is of the types ticked', async () => {
+    const server = withTypes();
+    server.machines.splice(0, 1);
+    open('/machines?type=personal', server);
+    expect(await screen.findByText('No machines of the types chosen.')).toBeTruthy();
+  });
+});
+
 describe('the commands that enrol a machine', () => {
   it('quote what they are given, whatever it is', () => {
     const token = {
