@@ -2,7 +2,11 @@
 // The server's program. It reads its settings from the environment (see `settings.ts`),
 // starts, and says where it listens. Told to stop, it finishes what it is in the middle of.
 
-import { readFileSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync } from 'node:fs';
+import { basename, dirname } from 'node:path';
+
+import { checkBackup, restore } from './backups/archive.ts';
+import { backupTo } from './backups/command.ts';
 
 import { InvalidSettings, readSettings } from './settings.ts';
 import { resetLink, start } from './start.ts';
@@ -40,6 +44,64 @@ if (process.argv[2] === 'reset-link') {
     process.exit(0);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
+// `acentric-server backup [file]`, `check-backup [file]` and `restore [file] [--without-keys]`:
+// a backup of the data, taken beside a server that runs on it; one checked; one put back, with
+// no server running. Without a file, or with -, a backup goes to stdout and is read from stdin,
+// so that it passes through `docker exec` and `kubectl exec`.
+const command = process.argv[2];
+if (command === 'backup' || command === 'check-backup' || command === 'restore') {
+  const said = (line: string) => process.stderr.write(`${line}\n`);
+  const file = process.argv.slice(3).find((arg) => !arg.startsWith('--'));
+  const named = file !== undefined && file !== '-';
+  const keys = Object.keys(settings.secretKeys?.keys ?? {});
+  try {
+    if (command === 'backup') {
+      const manifest = await backupTo(settings, version, named ? file : undefined);
+      said(
+        `backed up ${String(manifest.blobs.count)} images and files and the database, ${String(Math.ceil((manifest.database.bytes + manifest.blobs.bytes) / 1_048_576))} MB, of schema ${String(manifest.schema)}${named ? ` to ${file}` : ''}`,
+      );
+      if (manifest.keys.length > 0) {
+        said(
+          `what is sealed in it opens with the key ${manifest.keys.join(', ')}, which is not in it`,
+        );
+      }
+    } else {
+      if (named && !existsSync(file)) throw new Error(`There is no backup at ${file}`);
+      const input = named ? createReadStream(file) : process.stdin;
+      // What goes wrong reading it is said where it is read, not thrown from nowhere.
+      input.on('error', () => {});
+      if (command === 'check-backup') {
+        const { manifest, missing } = await checkBackup(input, keys, settings.data);
+        said(
+          `a whole ${manifest.kind} backup${manifest.kind === 'before-upgrade' ? `, before upgrading to ${manifest.engine}` : ` of ${manifest.engine}`}, taken ${new Date(manifest.createdAt).toISOString()}, with ${String(manifest.blobs.count)} images and files`,
+        );
+        if (missing.length > 0) {
+          said(`it needs the key ${missing.join(', ')}, which this server was not given`);
+          process.exit(3);
+        }
+      } else {
+        const inside =
+          settings.backups !== undefined && dirname(settings.backups.dir) === settings.data;
+        const { manifest, before } = await restore({
+          data: settings.data,
+          input,
+          keys,
+          withoutKeys: process.argv.includes('--without-keys'),
+          keep: inside && settings.backups !== undefined ? [basename(settings.backups.dir)] : [],
+        });
+        said(
+          `restored the backup of ${manifest.engine}, taken ${new Date(manifest.createdAt).toISOString()}, to ${settings.data}`,
+        );
+        if (before !== undefined) said(`what was there before is in ${before}`);
+      }
+    }
+    process.exit(0);
+  } catch (error) {
+    said(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }

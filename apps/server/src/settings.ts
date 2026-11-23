@@ -20,6 +20,13 @@
 //   ACENTRIC_AGENT_NETWORK_ALLOW  with `public`: private addresses and ranges agents' code
 //                           may reach as well, separated by commas, such as 10.0.0.0/8
 //   ACENTRIC_CODE_PROCESSES how many processes agents' code runs in. 2 without it
+//   ACENTRIC_BACKUP_DIR     the folder the server's own backups go in: <ACENTRIC_DATA>/backups
+//                           without it, which is on the same disk as what it backs up. Another
+//                           disk's is what survives losing that one
+//   ACENTRIC_BACKUP_EVERY   how often the server backs itself up, such as 24h (without it), 6h,
+//                           30m or 7d; and before a new version changes its database. `off`, for
+//                           neither
+//   ACENTRIC_BACKUP_KEEP    how many of its backups of each kind it keeps: 3 without it
 //   ACENTRIC_DASHBOARD      the folder of the dashboard's build (apps/dashboard/dist), which the
 //                           server then serves at every path that is not the API's. Without
 //                           it, it serves none, and the links it makes have no page behind them
@@ -72,7 +79,31 @@ export type Settings = {
   readonly boat: BoatOptions;
   /** The Docker sandboxes are made at, as containers. Undefined when none are. */
   readonly docker: DockerOptions | undefined;
+  /** The server's own backups. Undefined when they are off. */
+  readonly backups: BackupSettings | undefined;
 };
+
+export type BackupSettings = {
+  /** The folder they go in. */
+  readonly dir: string;
+  /** How often one is taken. */
+  readonly everyMs: number;
+  /** How many of each kind are kept. */
+  readonly keep: number;
+};
+
+/** A time such as 30m, 24h or 7d, in milliseconds: from ten minutes to a year. */
+function durationOf(name: string, value: string): number {
+  const match = /^(\d+)(m|h|d)$/.exec(value);
+  const unit = { m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
+  const ms = match === null ? NaN : Number(match[1]) * unit[match[2] as keyof typeof unit];
+  if (!(ms >= 600_000 && ms <= 365 * 86_400_000)) {
+    throw new InvalidSettings(
+      `${name} is a time such as 30m, 24h or 7d, from 10m to a year, or off, and is ${value}`,
+    );
+  }
+  return ms;
+}
 
 /** The settings are wrong. The message says which, and how. */
 export class InvalidSettings extends Error {
@@ -196,10 +227,21 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     }
   }
 
+  const data = resolve(given('ACENTRIC_DATA') ?? './data');
+  const every = given('ACENTRIC_BACKUP_EVERY') ?? '24h';
+  const backups: BackupSettings | undefined =
+    every === 'off'
+      ? undefined
+      : {
+          dir: resolve(given('ACENTRIC_BACKUP_DIR') ?? `${data}/backups`),
+          everyMs: durationOf('ACENTRIC_BACKUP_EVERY', every),
+          keep: wholeNumber('ACENTRIC_BACKUP_KEEP', 3, 1, 1000),
+        };
+
   return {
     port: wholeNumber('ACENTRIC_PORT', 4000, 0, 65_535),
     host: given('ACENTRIC_HOST') ?? '127.0.0.1',
-    data: resolve(given('ACENTRIC_DATA') ?? './data'),
+    data,
     publicUrl,
     adminKey,
     secretKeys,
@@ -211,6 +253,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
       ...(boatTemplate === undefined ? {} : { template: boatTemplate }),
       ...(boatUrl === undefined ? {} : { url: boatUrl }),
     },
+    backups,
     docker:
       dockerHost === undefined || dockerImage === undefined
         ? undefined
