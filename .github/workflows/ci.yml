@@ -74,10 +74,19 @@ jobs:
           tested=false
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             tree=$(git rev-parse "$GITHUB_SHA^{tree}")
-            for head in $(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[].head.sha'); do
+            # GitHub can take a moment to say which pull request a commit just merged came from.
+            heads=''
+            for attempt in 1 2 3 4 5 6; do
+              heads=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[].head.sha')
+              [ -n "$heads" ] && break
+              sleep 10
+            done
+            for head in $heads; do
               [ "$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$head" --jq .tree.sha)" = "$tree" ] || continue
-              passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head&event=pull_request&status=success" \
-                --jq '[.workflow_runs[] | select(.name == "CI")] | length')
+              # Every run of that commit, picked here: the API's own `status` filter leaves out
+              # some runs that passed.
+              passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head" \
+                --jq '[.workflow_runs[] | select(.name == "CI" and .event == "pull_request" and .conclusion == "success")] | length')
               if [ "$passed" -gt 0 ]; then tested=true; echo "Passed as $head."; fi
             done
           fi
