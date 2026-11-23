@@ -179,3 +179,40 @@ describe('the store on SQLite', () => {
     await expect(store.unfinished()).rejects.toThrow(/closed/);
   });
 });
+
+describe('a SQLite store that removes what it had', () => {
+  it('was made to give the space back to the disk, and does when it is asked', async () => {
+    const path = database();
+    const store = await SqliteStore.open(path);
+    try {
+      const actor = actorOf();
+      for (let n = 0; n < 2000; n += 1) {
+        await store.recordUsage({
+          at: NOW + n,
+          actor: actor.id,
+          agent: actor.agent,
+          version: 1,
+          account: null,
+          provider: 'fake',
+          model: `fake-${'x'.repeat(400)}-${String(n)}`,
+          usage: null,
+          failure: null,
+          durationMs: 1,
+        });
+      }
+      expect(await store.pruneUsage(NOW + 2000, 5000)).toBe(2000);
+      expect(await store.freePages()).toBeGreaterThan(100_000);
+      // And has nothing more to give back.
+      expect(await store.freePages()).toBe(0);
+    } finally {
+      await store.close();
+    }
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      // 2: incremental.
+      expect(db.prepare('PRAGMA auto_vacuum').get()).toEqual({ auto_vacuum: 2 });
+    } finally {
+      db.close();
+    }
+  });
+});
