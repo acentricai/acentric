@@ -3,9 +3,13 @@
 // Installed as the page's `fetch`.
 
 import { ROLE_PERMISSIONS } from '@acentric/protocol';
-import type { Actor, Machine, Role, Sandbox, SandboxProviderAccount } from '@acentric/protocol';
 
-type Person = { readonly id: string; readonly email: string; password: string; role: Role };
+import { accountArea } from './fake/account.ts';
+import { agentsArea } from './fake/agents.ts';
+import { json, refused, type Person } from './fake/area.ts';
+import { engineArea } from './fake/engine.ts';
+import { llmArea } from './fake/llm.ts';
+import type { Actor, Machine, Role, Sandbox, SandboxProviderAccount } from '@acentric/protocol';
 
 const NOW = 1_795_305_600_000;
 
@@ -57,15 +61,6 @@ export function actorOf(id: string, agent: string, more: Partial<Actor> = {}): A
 
 export type FakeServer = ReturnType<typeof fakeServer>;
 
-const json = (status: number, body: unknown) =>
-  new Response(status === 204 ? null : JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-
-const refused = (status: number, code: string, message: string, more: object = {}) =>
-  json(status, { error: { code, message, ...more } });
-
 export function fakeServer() {
   const people = new Map<string, Person>();
   const links = new Map<string, { kind: 'setup' | 'invite' | 'reset'; email?: string }>();
@@ -80,6 +75,14 @@ export function fakeServer() {
   const sandboxes: Sandbox[] = [];
   const actors: Actor[] = [];
   let made = 0;
+  const shared = { people, agents, actors };
+  const areaOf = {
+    agents: agentsArea(shared),
+    llm: llmArea(shared),
+    engine: engineArea(shared),
+    account: accountArea(shared),
+  };
+  const areas = Object.values(areaOf);
 
   const principal = (person: Person) => ({
     type: 'user',
@@ -185,7 +188,12 @@ export function fakeServer() {
     body: Record<string, unknown>,
     query: URLSearchParams,
   ): Response => {
-    if (signedIn === undefined) return refused(401, 'unauthenticated', 'The request has no key');
+    const person = signedIn === undefined ? undefined : people.get(signedIn);
+    if (person === undefined) return refused(401, 'unauthenticated', 'The request has no key');
+    for (const area of areas) {
+      const answered = area.answer({ method, path, body, query, person });
+      if (answered !== undefined) return answered;
+    }
     if (method === 'GET' && path === '/v1/actors') {
       const items = actors.filter(
         (actor) =>
@@ -347,6 +355,8 @@ export function fakeServer() {
     agents,
     actors,
     providers,
+    /** Each area's own state, as its file in fake/ keeps it. */
+    areas: areaOf,
     sandboxes,
     link(token: string, kind: 'setup' | 'invite' | 'reset', email?: string) {
       links.set(token, { kind, ...(email === undefined ? {} : { email }) });
