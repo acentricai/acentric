@@ -458,6 +458,13 @@ export class Machines {
     }
   }
 
+  /** How many machines' daemons are connected to this engine now. */
+  get connected(): number {
+    let count = 0;
+    for (const session of this.#sessions.values()) if (session.online) count += 1;
+    return count;
+  }
+
   /** Since when a machine's daemon has been connected, on this engine's clock. Undefined when it is not. */
   onlineSince(id: MachineId): number | undefined {
     const session = this.#sessions.get(id);
