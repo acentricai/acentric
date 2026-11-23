@@ -11,7 +11,7 @@ import { readObject } from './backups/bucket.ts';
 import { backupTo } from './backups/command.ts';
 
 import { InvalidSettings, readSettings } from './settings.ts';
-import { FIRST_KEY_FILE, resetLink, start } from './start.ts';
+import { FIRST_KEY_FILE, keysSaid, resealData, resetLink, start } from './start.ts';
 
 const { version } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -43,6 +43,23 @@ if (process.argv[2] === 'reset-link') {
     const made = await resetLink(settings, email);
     console.log(made.link);
     console.log(`It works once, until ${new Date(made.expiresAt).toISOString()}.`);
+    process.exit(0);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
+// `acentric-server reseal`: every sealed value sealed again with ACENTRIC_SECRET_KEY, with no
+// server running on the data. After it, the keys in ACENTRIC_SECRET_KEYS_OLD seal nothing, and
+// may go: how a key is changed.
+if (process.argv[2] === 'reseal') {
+  try {
+    const sealed = resealData(settings);
+    console.error(
+      `sealed ${String(sealed)} values again with the key ${String(settings.secretKeys?.current)}`,
+    );
+    for (const line of keysSaid(settings)) console.error(line);
     process.exit(0);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

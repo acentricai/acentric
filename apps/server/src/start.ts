@@ -22,6 +22,7 @@ import { Backups } from './backups/schedule.ts';
 
 import { machinePrograms } from './downloads.ts';
 import { startServer } from './serve.ts';
+import { reseal, sealedKeys } from './sealed.ts';
 import { holdPort } from './upgrading.ts';
 import type { Holding } from './upgrading.ts';
 import type { Server } from './serve.ts';
@@ -100,6 +101,7 @@ export async function start(
     lock.release();
     throw error;
   }
+  for (const line of keysSaid(settings)) console.log(line);
   const secrets = new Secrets({
     store,
     ...(settings.secretKeys === undefined ? {} : { keys: settings.secretKeys }),
@@ -269,6 +271,70 @@ export async function backUpBeforeUpgrade(
 function bucketOf(settings: Settings): { bucket?: Bucket } {
   const place = settings.backups?.bucket;
   return place === undefined ? {} : { bucket: new Bucket(place) };
+}
+
+/**
+ * What is sealed with which key, where that is news: values sealed with a key the server was not
+ * given, which do not open; with an old key, which `reseal` seals again; and old keys that seal
+ * nothing now, which may go.
+ */
+export function keysSaid(settings: Settings): string[] {
+  const db = new DatabaseSync(join(settings.data, DATABASE), { readOnly: true });
+  let counts: Map<string, number>;
+  try {
+    counts = sealedKeys(db);
+  } finally {
+    db.close();
+  }
+  const given = settings.secretKeys;
+  const lines: string[] = [];
+  for (const [id, count] of counts) {
+    if (given?.keys[id] === undefined) {
+      lines.push(
+        `${String(count)} sealed values are sealed with the key ${id}, which this server was not given: they do not open. Give it in ACENTRIC_SECRET_KEYS_OLD.`,
+      );
+    } else if (id !== given.current) {
+      lines.push(
+        `${String(count)} sealed values are sealed with the old key ${id}: \`acentric-server reseal\`, with the server stopped, seals them with the current one, and then ${id} may be taken out of ACENTRIC_SECRET_KEYS_OLD.`,
+      );
+    }
+  }
+  for (const id of Object.keys(given?.keys ?? {})) {
+    if (id !== given?.current && !counts.has(id)) {
+      lines.push(`ACENTRIC_SECRET_KEYS_OLD has ${id}, which nothing is sealed with: it may be taken out.`);
+    }
+  }
+  return lines;
+}
+
+/**
+ * Seals every sealed value of the data again with the current key, with no server running on
+ * it, and says how many it sealed. A database of another version is refused: the server of
+ * this one starts on it first.
+ */
+export function resealData(settings: Settings): number {
+  if (settings.secretKeys === undefined) {
+    throw new Error('ACENTRIC_SECRET_KEY is what values are sealed with again, and is not given');
+  }
+  const lock = lockData(settings.data);
+  try {
+    const path = join(settings.data, DATABASE);
+    const schema = schemaOf(path);
+    if (schema === undefined) throw new Error(`There is no database in ${settings.data}`);
+    if (schema !== SCHEMA_VERSION) {
+      throw new Error(
+        `The database is at version ${String(schema)}, and this server's is ${String(SCHEMA_VERSION)}: start the server of this version on it first`,
+      );
+    }
+    const db = new DatabaseSync(path);
+    try {
+      return reseal(db, settings.secretKeys);
+    } finally {
+      db.close();
+    }
+  } finally {
+    lock.release();
+  }
 }
 
 /**

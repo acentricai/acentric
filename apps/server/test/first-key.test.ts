@@ -19,7 +19,7 @@ describe('the first key', () => {
     if (!existsSync(BIN)) throw new Error(`${BIN} is not built: run \`pnpm build\``);
     const data = mkdtempSync(join(tmpdir(), 'acentric-first-key-'));
     folders.push(data);
-    const env = {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
       ACENTRIC_PORT: '0',
       ACENTRIC_DATA: data,
