@@ -3,7 +3,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { everyText, inText } from '../src/engine/backups.tsx';
+import { everyText, inText, whereText } from '../src/engine/backups.tsx';
 import { open } from './render.tsx';
 import { fakeServer } from './server.ts';
 
@@ -51,6 +51,32 @@ describe('the Backups page', () => {
     expect((await screen.findAllByText(/has 3 MB free/)).length).toBeGreaterThan(0);
   });
 
+  it('says the bucket they are copied to, and where each is, and not that they are lost with the disk', async () => {
+    const server = signedIn();
+    const status = server.areas.engine.backups.status;
+    if (status === null) throw new Error('backups are on');
+    status.bucket = { url: 's3://acme-backups/acentric', error: null };
+    open('/backups', server);
+    expect(await screen.findByText('s3://acme-backups/acentric')).toBeTruthy();
+    expect(screen.queryByText('The backups are on the disk of what they back up')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Back up now/ }));
+    const table = within(screen.getByRole('table', { name: 'Backups' }));
+    expect(await table.findByText('Server and bucket')).toBeTruthy();
+  });
+
+  it('says the bucket is not reached, and why', async () => {
+    const server = signedIn();
+    const status = server.areas.engine.backups.status;
+    if (status === null) throw new Error('backups are on');
+    status.bucket = {
+      url: 's3://acme-backups/acentric',
+      error: 'Listing s3://acme-backups/acentric failed: AccessDenied: Access Denied',
+    };
+    open('/backups', server);
+    expect(await screen.findByText('The bucket backups are copied to is not reached')).toBeTruthy();
+    expect(screen.getByText(/AccessDenied: Access Denied/)).toBeTruthy();
+  });
+
   it('says a server with them off takes none, and offers no button', async () => {
     const server = signedIn();
     server.areas.engine.backups.status = null;
@@ -62,6 +88,21 @@ describe('the Backups page', () => {
   it('is not there for one who may not manage backups', async () => {
     open('/backups', signedIn('member'));
     expect(await screen.findByText('Nothing here, or you may not see it.')).toBeTruthy();
+  });
+});
+
+describe('where a backup is, in words', () => {
+  it('is the server, the bucket, or both', () => {
+    const backup = {
+      name: 'b.tar',
+      kind: 'manual',
+      version: '0.15.0',
+      createdAt: 0,
+      bytes: 1,
+    } as const;
+    expect(whereText({ ...backup, onServer: true, inBucket: true })).toBe('Server and bucket');
+    expect(whereText({ ...backup, onServer: true, inBucket: false })).toBe('Server');
+    expect(whereText({ ...backup, onServer: false, inBucket: true })).toBe('Bucket');
   });
 });
 

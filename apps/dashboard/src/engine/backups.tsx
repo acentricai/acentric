@@ -1,6 +1,7 @@
 // `/backups`: the server's own backups. What became of the last, where they go and whether that
-// is the disk of what they back up, how often one is taken and how many are kept, and those there
-// are. One is taken when asked. A backup is not had here: it has every conversation and sealed
+// is the disk of what they back up, the bucket they are copied to and whether it is reached, how
+// often one is taken and how many are kept, and those there are, on the server and in the
+// bucket. One is taken when asked. A backup is not had here: it has every conversation and sealed
 // secret in it, and is had from the server's folder, by whoever runs the server.
 
 import { IconDatabaseExport } from '@tabler/icons-react';
@@ -50,6 +51,12 @@ export function inText(at: number, now: number): string {
 function Next({ at }: { at: number }) {
   const now = useNow();
   return <span title={fullTime(at)}>{inText(at, now)}</span>;
+}
+
+/** Where a backup is, in words. */
+export function whereText(backup: Backup): string {
+  if (backup.onServer && backup.inBucket) return 'Server and bucket';
+  return backup.onServer ? 'Server' : 'Bucket';
 }
 
 /** What a backup is, in words. */
@@ -127,17 +134,31 @@ export function BackupsPage() {
                 <Ago at={data.last.at} />: {data.last.error}
               </Notice>
             )}
-            {data.sameDisk && (
+            {data.bucket?.error != null && (
+              <Notice tone="danger" title="The bucket backups are copied to is not reached">
+                {data.bucket.error}
+              </Notice>
+            )}
+            {data.sameDisk && data.bucket === null && (
               <Notice tone="warn" title="The backups are on the disk of what they back up">
-                They are lost with it. Set ACENTRIC_BACKUP_DIR to a folder of another disk, or copy
-                them somewhere else.
+                They are lost with it. Set ACENTRIC_BACKUP_URL to a bucket they are copied to as
+                well, or ACENTRIC_BACKUP_DIR to a folder of another disk.
               </Notice>
             )}
           </div>
           <p className="note rise">
             {`One is taken ${everyText(data.everyMs)}, and before a new version changes the database. The newest ${String(data.keep)} of each kind are kept, in `}
             <code>{data.dir}</code>
-            {' on the server.'}
+            {' on the server'}
+            {data.bucket === null ? (
+              '.'
+            ) : (
+              <>
+                {', and in '}
+                <code>{data.bucket.url}</code>
+                {', where each is copied.'}
+              </>
+            )}
           </p>
           <Table
             label="Backups"
@@ -150,6 +171,9 @@ export function BackupsPage() {
                 cell: (backup) => <span className="ac-table__name mono">{backup.name}</span>,
               },
               { name: 'Kind', cell: (backup) => kindText(backup) },
+              ...(data.bucket === null
+                ? []
+                : [{ name: 'Where', cell: (backup: Backup) => whereText(backup) }]),
               { name: 'Size', cell: (backup) => size(backup.bytes) },
               { name: 'Taken', cell: (backup) => <Ago at={backup.createdAt} /> },
             ]}
@@ -159,7 +183,8 @@ export function BackupsPage() {
             A backup does not have the key secrets are sealed with in it. Keep ACENTRIC_SECRET_KEY
             somewhere other than the server: without it, the agents’ secrets and the model accounts’
             keys in a backup do not open. A backup is put back on the server, with the server
-            stopped, by <code>acentric-server restore</code>.
+            stopped, by <code>acentric-server restore</code>, from its file or from its URL in the
+            bucket.
           </p>
         </>
       )}
