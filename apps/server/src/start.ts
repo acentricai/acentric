@@ -3,7 +3,7 @@
 // nothing.
 
 import { existsSync, statSync } from 'node:fs';
-import { mkdir, readdir, stat } from 'node:fs/promises';
+import { mkdir, readdir, stat, statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -136,6 +136,8 @@ export async function start(
     throw error;
   }
   for (const line of keysSaid(settings)) logger.warn(line);
+  const unused = spaceSaid(settings);
+  if (unused !== undefined) logger.info(unused);
   const metrics = settings.metricsPort === undefined ? undefined : new Metrics(more.version);
   const told = observing(logger, metrics);
   const secrets = new Secrets({
@@ -504,6 +506,74 @@ export function keysSaid(settings: Settings): string[] {
     }
   }
   return lines;
+}
+
+/** What a database file has in it: its size, what of it is unused, and whether it gives that back. */
+function spaceOf(path: string): { bytes: number; unused: number; givesBack: boolean } {
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    const read = (pragma: string) =>
+      Object.values(db.prepare(`PRAGMA ${pragma}`).get() as Record<string, number>)[0] ?? 0;
+    const page = read('page_size');
+    return {
+      bytes: read('page_count') * page,
+      unused: read('freelist_count') * page,
+      givesBack: read('auto_vacuum') === 2,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Said as the server starts, of a database made before it gave back what is removed, with a
+ * good part of it unused: that `compact` gives it back. Undefined otherwise.
+ */
+export function spaceSaid(settings: Settings): string | undefined {
+  const path = join(settings.data, DATABASE);
+  if (!existsSync(path)) return undefined;
+  const { bytes, unused, givesBack } = spaceOf(path);
+  if (givesBack || unused < 64 * 1_048_576 || unused < bytes / 5) return undefined;
+  return `the database has ${String(Math.round(unused / 1_048_576))} MB it does not use, of ${String(Math.round(bytes / 1_048_576))} MB: \`acentric-server compact\`, with the server stopped, gives it back to the disk, and has the database give back what is removed from then on`;
+}
+
+/**
+ * Vacuums the database with no server running on it: what it does not use is given back to the
+ * disk, and from then on what is removed is given back as it goes. It writes a copy as large as
+ * the database as it does, and is refused without room for that. Gives the bytes before and
+ * after.
+ */
+export async function compactData(
+  settings: Settings,
+): Promise<{ readonly before: number; readonly after: number }> {
+  const lock = lockData(settings.data);
+  try {
+    const path = join(settings.data, DATABASE);
+    const schema = schemaOf(path);
+    if (schema === undefined) throw new Error(`There is no database in ${settings.data}`);
+    if (schema !== SCHEMA_VERSION) {
+      throw new Error(
+        `The database is at version ${String(schema)}, and this server's is ${String(SCHEMA_VERSION)}: start the server of this version on it first`,
+      );
+    }
+    const before = spaceOf(path);
+    const free = await statfs(settings.data);
+    if (free.bavail * free.bsize < before.bytes * 1.1) {
+      throw new Error(
+        `${settings.data} has ${String(Math.floor((free.bavail * free.bsize) / 1_048_576))} MB free, and compacting needs about ${String(Math.ceil((before.bytes * 1.1) / 1_048_576))} MB`,
+      );
+    }
+    const db = new DatabaseSync(path);
+    try {
+      db.exec('PRAGMA auto_vacuum = INCREMENTAL');
+      db.exec('VACUUM');
+    } finally {
+      db.close();
+    }
+    return { before: before.bytes, after: spaceOf(path).bytes };
+  } finally {
+    lock.release();
+  }
 }
 
 /**

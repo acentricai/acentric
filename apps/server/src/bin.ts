@@ -12,7 +12,15 @@ import { backupTo } from './backups/command.ts';
 
 import { InvalidSettings, readSettings } from './settings.ts';
 import { createLogger } from './log.ts';
-import { DRAIN_MS, FIRST_KEY_FILE, keysSaid, resealData, resetLink, start } from './start.ts';
+import {
+  DRAIN_MS,
+  FIRST_KEY_FILE,
+  compactData,
+  keysSaid,
+  resealData,
+  resetLink,
+  start,
+} from './start.ts';
 
 const { version } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -61,6 +69,20 @@ if (process.argv[2] === 'reseal') {
       `sealed ${String(sealed)} values again with the key ${String(settings.secretKeys?.current)}`,
     );
     for (const line of keysSaid(settings)) console.error(line);
+    process.exit(0);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
+// `acentric-server compact`: the database vacuumed, with no server running on it: what it does
+// not use is given back to the disk, and from then on what is removed is, as it goes.
+if (process.argv[2] === 'compact') {
+  try {
+    const { before, after } = await compactData(settings);
+    const mb = (bytes: number) => `${String(Math.round(bytes / 1_048_576))} MB`;
+    console.error(`compacted the database from ${mb(before)} to ${mb(after)}`);
     process.exit(0);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
