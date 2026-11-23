@@ -55,6 +55,27 @@ export interface Provider {
    */
   parseOptions(given: unknown): ProviderFields;
   runner(settings: RunnerSettings): ModelRunner;
+  /**
+   * How the provider compacts a conversation itself, when asked with a step that says
+   * `compact`. A provider without it has none, and a summary is written by its model instead.
+   *
+   *   older  It is sent the older part of a conversation, and answers with one block that
+   *          stands for that part. The recent turns follow the block as they were, with the
+   *          model's reasoning.
+   *   all    It is sent the whole conversation, and answers with one item that stands for
+   *          all of it, the model's reasoning included.
+   */
+  readonly compacts?: 'older' | 'all';
+  /**
+   * An answer to a step that said `compact`, with only what stands for the conversation in
+   * it, exactly as it came. Undefined when the answer has no such thing, or more than one.
+   */
+  compacted?(message: AssistantMessage): AssistantMessage | undefined;
+  /**
+   * Its calls are a plan's, not paid by the token: no size of a conversation costs more a
+   * token than another.
+   */
+  readonly plan?: true;
   /** Reads an answer this provider wrote. */
   read(message: AssistantMessage): AnswerView;
   /** An answer this provider wrote, without what it gives of its reasoning. */

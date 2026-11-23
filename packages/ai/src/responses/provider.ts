@@ -1,6 +1,6 @@
 // A provider on the Responses format, made from its profile.
 
-import type { ProviderFields } from '@acentric/protocol';
+import type { AssistantMessage, ProviderFields } from '@acentric/protocol';
 
 import { checkCredential, post } from '../http.ts';
 import { withoutTypes } from '../provider.ts';
@@ -54,6 +54,17 @@ export function responsesProvider(
     defaultModel: more.defaultModel,
     bindsReasoning: more.bindsReasoning,
     withoutReasoning: (message) => withoutTypes(message, ['reasoning']),
+    ...(profile.plan === true ? { plan: true as const } : {}),
+    ...(profile.compacts === true
+      ? {
+          // It compacts all it is sent: one opaque item, which carries what the model knew.
+          compacts: 'all' as const,
+          compacted(message: AssistantMessage): AssistantMessage | undefined {
+            const items = message.content.filter((item) => item['type'] === 'compaction');
+            return items.length === 1 ? { ...message, content: items } : undefined;
+          },
+        }
+      : {}),
     ...(modelsUrl === undefined
       ? {}
       : {

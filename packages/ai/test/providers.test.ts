@@ -850,3 +850,53 @@ describe('the providers an engine has', () => {
     }
   });
 });
+
+describe('a step that asks for a compaction', () => {
+  it('is a request for a summary at Anthropic, under the beta it has, and the block it left is sent under it', async () => {
+    const asked = await sentBy('anthropic', step({ compact: true }));
+    expect(asked.body).toMatchObject({ compaction: { type: 'summarize' } });
+    expect(asked.headers['anthropic-beta']).toBe('compact-2026-09-04');
+    const plain = await sentBy('anthropic', step());
+    expect(plain.body).not.toHaveProperty('compaction');
+    expect(plain.headers['anthropic-beta']).toBeUndefined();
+
+    // A conversation that starts with what a compaction left names the beta, whatever it asks.
+    const block = { type: 'compaction', content: 'They asked about orders.', signature: 's' };
+    const left = {
+      role: 'assistant' as const,
+      provider: 'anthropic',
+      api: 'anthropic-messages',
+      model: 'claude-opus-5-5',
+      content: [block],
+    };
+    const after = await sentBy(
+      'anthropic',
+      step({
+        messages: [left, { role: 'user', content: [{ type: 'text', text: 'And order 7?' }] }],
+      }),
+    );
+    expect(after.headers['anthropic-beta']).toBe('compact-2026-09-04');
+    expect((after.body['messages'] as { content: unknown }[])[0]?.content).toEqual([block]);
+    expect(providers.get('anthropic').compacted?.(left as never)?.content).toEqual([block]);
+    // Not one, when it holds two, or none.
+    expect(
+      providers.get('anthropic').compacted?.({ ...left, content: [block, block] } as never),
+    ).toBeUndefined();
+  });
+
+  it('is an item that ends the input at OpenAI and on a ChatGPT plan, and nothing at a provider that has none', async () => {
+    for (const id of ['openai', 'chatgpt']) {
+      const asked = await sentBy(id, step({ compact: true }));
+      expect((asked.body['input'] as unknown[]).at(-1)).toEqual({ type: 'compaction_trigger' });
+      expect(JSON.stringify((await sentBy(id, step())).body)).not.toContain('compaction_trigger');
+      expect(providers.get(id).compacts).toBe('all');
+    }
+    expect(providers.get('anthropic').compacts).toBe('older');
+    // Fireworks has none: its model writes a summary, asked as it is asked anything.
+    expect(providers.get('fireworks').compacts).toBeUndefined();
+    expect(providers.get('fireworks').compacted).toBeUndefined();
+    expect(JSON.stringify((await sentBy('fireworks', step({ compact: true }))).body)).not.toContain(
+      'compaction',
+    );
+  });
+});

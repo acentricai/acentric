@@ -17,7 +17,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { FunctionTool } from '@acentric/protocol';
+import type { FunctionTool, Message } from '@acentric/protocol';
 
 import { ModelFailure, builtInProviders } from '../src/index.ts';
 import type { Credential, ModelAnswer, ModelStep, Provider } from '../src/index.ts';
@@ -277,6 +277,85 @@ for (const target of TARGETS) {
                 { type: 'text', text: 'Say that once more in other words. Do not search.' },
               ],
             },
+          ],
+        },
+        credential,
+        secrets,
+      );
+    }
+  }
+
+  // A provider that compacts a conversation itself: the compaction, and then the conversation
+  // that goes on from it. The turns before it are made here and not kept: they are only what
+  // there is to compact.
+  if (provider.compacts !== undefined && wanted('compaction')) {
+    const live = provider.runner({ credential });
+    const signal = new AbortController().signal;
+    const said = (text: string): Message => ({ role: 'user', content: [{ type: 'text', text }] });
+    // Thought about harder than the rest, so that the turns that are kept have reasoning in them.
+    const thinking = { ...asking, reasoning: 'high' } as const;
+    /** One exchange: a question, the call it leads to, the tool's result and the answer. */
+    const exchange = async (
+      before: readonly Message[],
+      order: number,
+      more = '',
+    ): Promise<Message[]> => {
+      const asked = said(`What happened to order ${String(order)}? Look it up.${more}`);
+      const first = await live.run({ ...thinking, messages: [...before, asked] }, signal);
+      const [made] = first.toolCalls;
+      if (made === undefined) throw new Error(`${provider.id}: no call was made for the order`);
+      const result: Message = {
+        role: 'tool_result',
+        toolCallId: made.id,
+        toolName: made.name,
+        content: [{ type: 'text', text: `Order ${String(order)} was refunded twice.` }],
+        ...(made.resultOptions === undefined ? {} : { providerOptions: made.resultOptions }),
+      };
+      const second = await live.run(
+        { ...thinking, messages: [...before, asked, first.message, result] },
+        signal,
+      );
+      return [asked, first.message, result, second.message];
+    };
+    const older = await exchange([], 4411);
+    // Something to think about, so that the answers that are kept have reasoning in them.
+    const recent = await exchange(
+      older,
+      4412,
+      ' Before you do, work out in your head which is larger, 17 * 23 + 19 * 31 or 29 * 29 + 11 * 13, and say which with your answer.',
+    );
+    const reasoned = recent.filter(
+      (message) =>
+        message.role === 'assistant' &&
+        message.content.some((part) => /thinking|reasoning/.test(String(part['type']))),
+    ).length;
+    console.log(`  compaction: ${String(reasoned)} of the kept answers have reasoning in them`);
+    // `older`: the older part is compacted, and the recent turns follow as they were.
+    // `all`: all of it is, and what the user said is kept before what stands for it.
+    const compacted = await record(
+      provider,
+      'compaction',
+      {
+        ...thinking,
+        messages: provider.compacts === 'older' ? older : [...older, ...recent],
+        compact: true,
+      },
+      credential,
+      secrets,
+    );
+    const left = compacted === undefined ? undefined : provider.compacted?.(compacted.message);
+    if (left === undefined) {
+      console.log('  compaction: the answer holds nothing that stands for the conversation');
+    } else {
+      const users = [...older, ...recent].filter((message) => message.role === 'user');
+      await record(
+        provider,
+        'compaction-next',
+        {
+          ...thinking,
+          messages: [
+            ...(provider.compacts === 'older' ? [left, ...recent] : [...users, left]),
+            said('Say in one sentence what happened to both orders. Look nothing up.'),
           ],
         },
         credential,

@@ -11,6 +11,13 @@ import type { ModelStep } from '../runner.ts';
 export type ResponsesProfile = {
   readonly id: string;
   readonly label: string;
+  /**
+   * Whether it compacts a conversation itself: asked with an item that ends the input, it
+   * answers with one item that stands for all of it. One that does not has none.
+   */
+  readonly compacts?: boolean;
+  /** Its calls are a plan's, not paid by the token. */
+  readonly plan?: true;
   /** Where a response is asked for. */
   readonly url: string;
   readonly models: readonly ModelInfo[];
