@@ -6,7 +6,7 @@ name: CI
 # - The TypeScript tests and the server's image run for a change to anything but prose
 #   (Markdown and the licence).
 # - The daemon's checks, in Rust on Linux and macOS, run for a change to the daemon or its
-#   toolchain. macOS minutes cost ten times Linux ones.
+#   toolchain.
 # - A pull request tests on Node 24, the oldest Node the packages run on. main tests on Node
 #   26, which the image ships, too.
 #
