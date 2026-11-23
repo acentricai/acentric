@@ -1,0 +1,87 @@
+// How money, tokens and days are written on these pages.
+
+import type { UsageTotals } from '@acentric/protocol';
+
+/** The names of the providers the engine has. A provider is an ID: one not here is named by it. */
+export const PROVIDER_NAMES: { readonly [provider: string]: string } = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  chatgpt: 'ChatGPT',
+  fireworks: 'Fireworks',
+};
+
+/** The providers an account is added to with an API key. A ChatGPT account is signed in, not given a key. */
+export const KEY_PROVIDERS = ['anthropic', 'openai', 'fireworks'] as const;
+
+/** A provider's name: its own, or its ID. */
+export const providerName = (provider: string): string => PROVIDER_NAMES[provider] ?? provider;
+
+/** The share of the input tokens that were read from a prompt cache, from 0 to 1; undefined with no input. */
+export function cacheShare(
+  totals: Pick<UsageTotals, 'cacheRead' | 'totalInput'>,
+): number | undefined {
+  return totals.totalInput === 0 ? undefined : totals.cacheRead / totals.totalInput;
+}
+
+/** A share as a percent: `62%`, `<1%` for a little, `—` for none to speak of. */
+export function percent(share: number | undefined): string {
+  if (share === undefined) return '—';
+  if (share > 0 && share < 0.005) return '<1%';
+  return `${String(Math.round(share * 100))}%`;
+}
+
+/** Dollars: `$1,234.56`, `$0.42`, and to four places under a cent, `$0.0042`; `$0.00` for none. */
+export function dollars(value: number): string {
+  if (value === 0) return '$0.00';
+  if (Math.abs(value) < 0.01) return `$${value.toFixed(4)}`;
+  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** A count, compact past ten thousand: `1,284`, `12.9K`, `4.2M`. */
+export function compact(value: number): string {
+  if (Math.abs(value) < 10_000) return value.toLocaleString('en-US');
+  if (Math.abs(value) < 1_000_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  if (Math.abs(value) < 1_000_000_000) {
+    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  }
+  return `${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A day as the ledger names it, `2026-11-20`, written `Nov 20`. */
+export function dayLabel(day: string): string {
+  const [, month, date] = day.split('-');
+  return `${MONTHS[Number(month) - 1] ?? month} ${Number(date)}`;
+}
+
+/** The days from `from` to `to` (UTC), each as the ledger names it. At most 400. */
+export function daysBetween(from: number, to: number): string[] {
+  const out: string[] = [];
+  const at = new Date(from);
+  at.setUTCHours(0, 0, 0, 0);
+  for (; at.getTime() <= to && out.length < 400; at.setUTCDate(at.getUTCDate() + 1)) {
+    out.push(at.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/** UTC midnight `days - 1` days before today: the start of a range of `days` days ending today. */
+export function rangeStart(days: number, now = Date.now()): number {
+  const at = new Date(now);
+  at.setUTCHours(0, 0, 0, 0);
+  at.setUTCDate(at.getUTCDate() - (days - 1));
+  return at.getTime();
+}
+
+/** Axis ticks from 0 to at least `max`, in three or four round steps. */
+export function ticks(max: number): number[] {
+  if (max <= 0) return [0];
+  const rough = max / 3;
+  const power = 10 ** Math.floor(Math.log10(rough));
+  const step =
+    [1, 2, 2.5, 5, 10].map((each) => each * power).find((each) => each >= rough) ?? rough;
+  const out: number[] = [0];
+  while ((out.at(-1) ?? 0) < max) out.push(Number(((out.at(-1) ?? 0) + step).toPrecision(12)));
+  return out;
+}
