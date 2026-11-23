@@ -1,5 +1,6 @@
 # Releases the server's images. Pushing a tag such as v0.15.0, the version every package has,
-# builds them for amd64 and arm64, pushes them to GHCR with what is in them and how they were
+# upgrades the last release's server to it on data that one filled, and back, then builds them
+# for amd64 and arm64, pushes them to GHCR with what is in them and how they were
 # built, signs them, starts the server of each system from what was pushed, and makes the
 # GitHub release with that version's notes from CHANGELOG.md. How to make one is in
 # RELEASING.md.
@@ -68,9 +69,34 @@ jobs:
             --jq '[.workflow_runs[] | select(.name == "CI")] | length')
           [ "$passed" -gt 0 ] || { echo "CI has not passed on main for $GITHUB_SHA."; exit 1; }
 
+  # Before anything is pushed: the last release's server, on data it filled, upgraded to this
+  # one's image, and back (scripts/upgrade-test.sh).
+  upgrade:
+    name: Upgrade from the last release
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          load: true
+          tags: ghcr.io/acentricai/acentric-server:test
+          cache-from: type=gha
+      - run: NEW=ghcr.io/acentricai/acentric-server:test scripts/upgrade-test.sh
+
   images:
     name: Images
-    needs: check
+    needs: [check, upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
