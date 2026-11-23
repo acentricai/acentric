@@ -44,7 +44,7 @@ images:
     newTag: 0.15.0
 configMapGenerator:
   - name: acentric-settings
-    behavior: replace
+    behavior: merge
     literals:
       - ACENTRIC_PUBLIC_URL=https://engine.example.com
 ```

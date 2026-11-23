@@ -12,6 +12,13 @@ spec:
   updateStrategy:
     type: RollingUpdate
   template:
+    metadata:
+      # Its metrics, for a Prometheus that finds pods by these: on a port of their own, which
+      # no Service has, so they are not reached from outside the cluster.
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '9464'
+        prometheus.io/path: /metrics
     spec:
       # No variables of the namespace's Services: Kubernetes would name the Service's own
       # ACENTRIC_PORT, which is the port the server is told to listen on.
@@ -31,12 +38,16 @@ spec:
           ports:
             - name: http
               containerPort: 4000
+            - name: metrics
+              containerPort: 9464
           envFrom:
             - configMapRef:
                 name: acentric-settings
           # The keys, as files of the Secret acentric-secrets, made as README.md says and kept
           # out of this folder: not variables, which more of the cluster sees.
           env:
+            - name: ACENTRIC_METRICS_PORT
+              value: '9464'
             - name: ACENTRIC_SECRET_KEY_FILE
               value: /run/secrets/acentric/secret-key
             - name: ACENTRIC_ADMIN_KEY_FILE
