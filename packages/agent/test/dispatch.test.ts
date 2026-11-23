@@ -709,6 +709,63 @@ describe("an agent's schedule handler", () => {
   });
 });
 
+describe("an agent's compaction numbers", () => {
+  const withNumbers = (compactionSettings: unknown) =>
+    entryOf(
+      new Agent({
+        provider: 'anthropic',
+        instructions: '',
+        compactionSettings: compactionSettings as never,
+      }),
+    );
+
+  it('are part of what the agent says it is, by model, and nothing of it when it has none', () => {
+    const { compactionSettings, features } = withNumbers({
+      'claude-opus-5-5': { threshold: 800_000, reserve: 0 },
+      'claude-haiku-5-5': { reserve: 10_000 },
+      'claude-sonnet-5-5': {},
+    }).describe();
+    expect(compactionSettings).toEqual({
+      'claude-opus-5-5': { threshold: 800_000, reserve: 0 },
+      'claude-haiku-5-5': { reserve: 10_000 },
+      'claude-sonnet-5-5': {},
+    });
+    expect(features).toEqual(['compaction-settings']);
+    const plain = entryOf(new Agent({ provider: 'anthropic', instructions: '' })).describe();
+    expect(plain).not.toHaveProperty('compactionSettings');
+    expect(plain.features).toBeUndefined();
+  });
+
+  it('are whole numbers of tokens, 0 or more, and nothing else: an agent with others is not one', () => {
+    const refused: [unknown, string][] = [
+      [[], 'compactionSettings is an object of numbers by model ID'],
+      [
+        { 'claude-opus-5-5': 800_000 },
+        'compactionSettings.claude-opus-5-5 is an object with threshold and reserve',
+      ],
+      [
+        { 'claude-opus-5-5': { threshold: 1, keep: 2 } },
+        'compactionSettings.claude-opus-5-5 has keep: it has threshold and reserve',
+      ],
+      [
+        { 'claude-opus-5-5': { threshold: 0.8 } },
+        'compactionSettings.claude-opus-5-5.threshold is a whole number of tokens, 0 or more',
+      ],
+      [
+        { 'claude-opus-5-5': { reserve: -1 } },
+        'compactionSettings.claude-opus-5-5.reserve is a whole number of tokens, 0 or more',
+      ],
+      [
+        { 'claude-opus-5-5': { reserve: '20000' } },
+        'compactionSettings.claude-opus-5-5.reserve is a whole number of tokens, 0 or more',
+      ],
+    ];
+    for (const [numbers, why] of refused) {
+      expect(() => withNumbers(numbers).describe(), why).toThrow(new InvalidAgent(why));
+    }
+  });
+});
+
 describe("an agent's subagents", () => {
   const lead = entryOf(
     new Agent({

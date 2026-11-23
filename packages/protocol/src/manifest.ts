@@ -86,6 +86,19 @@ export const agentDefinitionSchema = z
     inputs: z.array(inputDeclarationSchema),
     /** What the agent asks of its provider that only that provider has, for the provider to read. */
     providerOptions: providerFieldsSchema.optional(),
+    /**
+     * Its own numbers for when a conversation is compacted, by model: how large it may grow,
+     * and how much of its end is kept as it is, in tokens. The engine has numbers for the rest.
+     */
+    compactionSettings: z
+      .record(
+        z.string().min(1),
+        z.strictObject({
+          threshold: z.number().int().nonnegative().optional(),
+          reserve: z.number().int().nonnegative().optional(),
+        }),
+      )
+      .optional(),
     /** The agents its actors can spawn actors of. */
     subagents: z.array(subagentDeclarationSchema).optional(),
     /** The secrets its code reads, by name, so that one that is not set can be told of. */
