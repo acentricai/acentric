@@ -23,13 +23,16 @@ The release workflow (`.github/workflows/release.yml`) then:
 
 1. checks that the tag is the version of every package and of the machine program, that the
    version has notes, and that the commit is on `main` with CI passed;
-2. builds both images for linux/amd64 and linux/arm64, with an SBOM and provenance, and pushes
+2. upgrades the last release's server to this version, on data it filled with its own command
+   and machine program, and goes back again (`scripts/upgrade-test.sh`, which CI runs on main
+   too);
+3. builds both images for linux/amd64 and linux/arm64, with an SBOM and provenance, and pushes
    them as `<version>`, `<major>.<minor>` and, for a version that is not a pre-release,
    `latest`;
-3. signs each with cosign, by the workflow's identity at GitHub;
-4. pulls the server's image for each system, checks its signature, starts it, and checks that
+4. signs each with cosign, by the workflow's identity at GitHub;
+5. pulls the server's image for each system, checks its signature, starts it, and checks that
    it says its version and hands out the command and the machine program for every system;
-5. makes the GitHub release with the version's notes, the images' digests and how to verify
+6. makes the GitHub release with the version's notes, the images' digests and how to verify
    them. Before 1.0 it is marked a pre-release.
 
 Once it is released, leave what the release opens as, for every later version to be tested

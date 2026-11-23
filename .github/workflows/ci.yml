@@ -11,6 +11,9 @@ name: CI
 #   to them or to the image's Dockerfile.
 # - A pull request tests on Node 24, the oldest Node the packages run on. main tests on Node
 #   26, which the image ships, too.
+# - An upgrade from the last release (scripts/upgrade-test.sh) runs on main, for a change to
+#   anything but prose: the last release's image on data it filled, then this commit's image
+#   on it, then back. A release does it again before anything is pushed.
 #
 # A commit pushed to main that has the very files of a pull request whose checks passed, as a
 # rebase merge of an up-to-date pull request has, is not tested again: main then runs only what
@@ -266,12 +269,38 @@ jobs:
       - run: terraform validate
       - run: sh -n test.sh
 
+  upgrade:
+    name: Upgrade from the last release
+    needs: changes
+    # On main only, whether or not the pull request was tested: a pull request does not run it.
+    if: github.event_name == 'push' && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tags, for the last release.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          load: true
+          tags: ghcr.io/acentricai/acentric-server:test
+          cache-from: type=gha
+      - run: NEW=ghcr.io/acentricai/acentric-server:test scripts/upgrade-test.sh
+
   # What main's protection requires: one check that stands for every job above. A job that was
   # not run, because the change could not break it, passes; one that failed or was stopped fails
   # this.
   passed:
     name: CI passed
-    needs: [changes, lint, typescript, image, rust, recipes, terraform]
+    needs: [changes, lint, typescript, image, rust, recipes, terraform, upgrade]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
