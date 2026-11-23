@@ -21,6 +21,17 @@ What changed in each version, for the people who run a server. What a version pr
 - **Changing the secrets key.** `acentric-server reseal` seals everything again with the
   current key, and the server says, as it starts, what is still sealed with an old one
   ([SECRETS.md](SECRETS.md)).
+- **Logs.** A line for each request (route, status, how long, whose), each turn that ended,
+  and each call of a model that failed; what failed, with its context and stack. As text, or
+  as JSON with `ACENTRIC_LOG_FORMAT=json`; `ACENTRIC_LOG_LEVEL` for more or less.
+- **Metrics.** With `ACENTRIC_METRICS_PORT`, Prometheus' metrics at `/metrics` on a port of
+  their own: requests, turns, calls of models with their tokens and cost, tool calls, actors
+  working, daemons connected, the database's size, blobs, and the newest backup.
+- **`/health` means it.** It answers 503 with why when the database does not answer, no
+  process runs agents' code, or the server is stopping (for three seconds before it takes no
+  more). Quiet connections are kept 65 seconds, past what is in front keeps them.
+- **Fixed:** the Kubernetes recipe's settings, replaced in its README's example, dropped
+  `ACENTRIC_BACKUP_DIR`, so backups were on the data's volume: they are merged now.
 - **Fixed:** a backup now names the key of actors' variables among the keys it needs; the
   Compose recipe's `.env.example` was missing from the repository; the AWS recipe's data
   volume was not formatted (its label was too long for XFS).
