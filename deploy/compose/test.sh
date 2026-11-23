@@ -40,7 +40,9 @@ compose() { ACENTRIC_VERSION=$version docker compose -p "$project" --project-dir
 step() { printf '\n== %s\n' "$*"; }
 fail() { printf 'FAILED: %s\n' "$*" >&2; compose logs --tail 40 >&2 || true; exit 1; }
 daemon=''
-trap '[ -n "$daemon" ] && kill "$daemon" 2>/dev/null; compose down >/dev/null 2>&1 || true' EXIT
+# A store that speaks S3's API, for the bucket backups are copied to: started near the end.
+s3="$project-s3"
+trap '[ -n "$daemon" ] && kill "$daemon" 2>/dev/null; docker stop "$s3" >/dev/null 2>&1; compose down >/dev/null 2>&1 || true' EXIT
 
 step "Up, with the server healthy before Caddy starts"
 compose up --detach --wait --wait-timeout 180
@@ -161,5 +163,29 @@ echo "$machines" | grep -q "\"trusted-$run\"" || fail "what was backed up is not
 if echo "$machines" | grep -q "\"after-backup-$run\""; then fail "what came after the backup is still there"; fi
 compose exec -T server sh -c 'ls -d /data/before-restore-*' || fail "what was there before is not kept"
 echo "put back: what was backed up is there, what came after is not, and what was is kept aside"
+
+step "Backups copied to a bucket, at a store that speaks S3's API, and one put back from it"
+docker run --detach --rm --name "$s3" --network "${project}_default" --tmpfs /data \
+  versity/versitygw:v1.10.0 --access test-access-key --secret test-secret-key posix /data > /dev/null
+sleep 2
+docker exec "$s3" mkdir /data/acentric-test
+export ACENTRIC_BACKUP_URL=s3://acentric-test/acentric AWS_ENDPOINT_URL_S3="http://$s3:7070" \
+  AWS_ACCESS_KEY_ID=test-access-key AWS_SECRET_ACCESS_KEY=test-secret-key AWS_REGION=us-east-1
+compose up --detach --wait --wait-timeout 180
+copied=$(get -H "authorization: Bearer $key" -X POST "$url/v1/backups" | field .name)
+docker exec "$s3" ls /data/acentric-test/acentric | grep -qx "$copied" || fail "$copied is not in the bucket"
+status=$(get -H "authorization: Bearer $key" "$url/v1/backups")
+[ "$(echo "$status" | field .bucket.error)" = null ] || fail "the bucket is not reached: $status"
+echo "$status" | field ".items.find((b) => b.name === '$copied').inBucket" | grep -qx true \
+  || fail "$copied is not said to be in the bucket"
+echo "$copied is in s3://acentric-test/acentric"
+machine_of "after-copy-$run" > /dev/null
+compose stop server
+compose run --rm --no-deps -T server acentric-server restore "s3://acentric-test/acentric/$copied"
+compose up --detach --wait --wait-timeout 180
+machines=$(get -H "authorization: Bearer $key" "$url/v1/machines")
+echo "$machines" | grep -q "\"trusted-$run\"" || fail "what was copied is not there"
+if echo "$machines" | grep -q "\"after-copy-$run\""; then fail "what came after the copy is still there"; fi
+echo "put back from the bucket"
 
 step "Passed"
