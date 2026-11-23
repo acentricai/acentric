@@ -26,10 +26,11 @@ const tabs = (role: Role) =>
   visibleSections(as(role)).flatMap((section) => section.tabs.map((tab) => tab.id));
 
 describe('the sidebar', () => {
-  it('has the sections a person’s role may use: machines and accounts for an admin or an owner', () => {
-    expect(tabs('owner')).toEqual(['agents', 'machines', 'sandboxes', 'accounts', 'usage']);
-    expect(tabs('admin')).toEqual(['agents', 'machines', 'sandboxes', 'accounts', 'usage']);
-    expect(tabs('member')).toEqual(['agents', 'usage']);
+  it('has the sections a person’s role may use: machines, accounts and people for an admin or an owner', () => {
+    const all = ['agents', 'machines', 'sandboxes', 'accounts', 'usage', 'keys', 'people', 'audit'];
+    expect(tabs('owner')).toEqual(all);
+    expect(tabs('admin')).toEqual(all);
+    expect(tabs('member')).toEqual(['agents', 'usage', 'keys']);
     expect(tabs('viewer')).toEqual(['agents', 'usage']);
     expect(visibleSections(undefined)).toEqual([]);
     expect(firstTab(as('viewer'))?.path).toBe('/agents');
@@ -52,7 +53,17 @@ describe('the sidebar', () => {
       within(sidebar)
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual(['/', '/agents', '/machines', '/sandboxes', '/llm-providers', '/usage']);
+    ).toEqual([
+      '/',
+      '/agents',
+      '/machines',
+      '/sandboxes',
+      '/llm-providers',
+      '/usage',
+      '/keys',
+      '/people',
+      '/audit',
+    ]);
     expect(within(sidebar).getByText('ada@example.test')).toBeTruthy();
     expect(document.title).toBe('Agents | Acentric');
   });
