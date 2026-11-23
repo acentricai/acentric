@@ -30,10 +30,30 @@ first person, the owner.
 - `caddy`, on ports 80 and 443, which starts once the server says it is up. Its certificates are
   in the volume `acentric_caddy-data`.
 
+## Backups
+
+The server backs itself up every day, and before an upgrade, into the volume `acentric_backups`
+([BACKUPS.md](../../BACKUPS.md)). Copy them off this machine as well, for instance from a cron
+job:
+
+```sh
+docker compose exec -T server acentric-server backup > "acentric-$(date -u +%F).tar"
+```
+
+To put one back, with the server stopped:
+
+```sh
+docker compose stop server
+docker compose run --rm --no-deps -T server acentric-server restore < acentric-2026-11-23.tar
+docker compose up -d
+```
+
+What was there is kept in `/data/before-restore-<time>`.
+
 ## Upgrading
 
-Back up `acentric_data` with the server stopped, set the new `ACENTRIC_VERSION` in `.env`, and
-`docker compose up -d`. [VERSIONS.md](../../VERSIONS.md) says what a version promises.
+Set the new `ACENTRIC_VERSION` in `.env`, and `docker compose up -d`: the new version backs the
+database up before it changes it. [VERSIONS.md](../../VERSIONS.md) says what a version promises.
 
 ## Other ports
 

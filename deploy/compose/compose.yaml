@@ -14,10 +14,16 @@ services:
       ACENTRIC_PUBLIC_URL: ${ACENTRIC_PUBLIC_URL:?set ACENTRIC_PUBLIC_URL in .env}
       ACENTRIC_SECRET_KEY: ${ACENTRIC_SECRET_KEY:?set ACENTRIC_SECRET_KEY in .env}
       ACENTRIC_ADMIN_KEY: ${ACENTRIC_ADMIN_KEY:-}
+      # Its own backups, every day and before an upgrade, in a volume of theirs. Copy them off
+      # this machine too: see README.md.
+      ACENTRIC_BACKUP_DIR: /backups
+      ACENTRIC_BACKUP_EVERY: ${ACENTRIC_BACKUP_EVERY:-24h}
+      ACENTRIC_BACKUP_KEEP: ${ACENTRIC_BACKUP_KEEP:-3}
     volumes:
       # Everything the server keeps: its database, and conversations' images and files beside
       # it. One volume, on this machine's disk: never a network file system.
       - data:/data
+      - backups:/backups
     # A turn that is going on is written down before the server stops.
     stop_grace_period: 60s
     # Only Caddy reaches it: it is on no port of this machine.
@@ -46,5 +52,6 @@ services:
 
 volumes:
   data:
+  backups:
   caddy-data:
   caddy-config:

@@ -131,4 +131,39 @@ forwarded
 online || { cat "$work/daemon.log" >&2; fail "the machine did not come back online"; }
 echo "the agent, the actor and the machine are as they were"
 
+step "A backup taken beside the running server, and put back by a pod of its own with it stopped"
+kubectl -n acentric exec acentric-0 -- acentric-server backup > "$work/backup.tar"
+get -H 'content-type: application/json' -d '{"name":"after-backup"}' "$url/v1/machines" > /dev/null
+kill "$forward" 2>/dev/null || true
+kubectl -n acentric scale statefulset/acentric --replicas=0
+kubectl -n acentric wait --for=delete pod/acentric-0 --timeout=120s
+image=$(kubectl -n acentric get statefulset/acentric -o jsonpath='{.spec.template.spec.containers[0].image}')
+kubectl -n acentric run acentric-restore --image="$image" --restart=Never --rm -i --quiet \
+  --overrides="$(cat <<JSON
+{
+  "spec": {
+    "enableServiceLinks": false,
+    "securityContext": { "runAsNonRoot": true, "runAsUser": 1000, "fsGroup": 1000 },
+    "volumes": [{ "name": "data", "persistentVolumeClaim": { "claimName": "data-acentric-0" } }],
+    "containers": [{
+      "name": "acentric-restore",
+      "image": "$image",
+      "stdin": true,
+      "stdinOnce": true,
+      "command": ["acentric-server", "restore"],
+      "envFrom": [{ "secretRef": { "name": "acentric-secrets" } }],
+      "volumeMounts": [{ "name": "data", "mountPath": "/data" }]
+    }]
+  }
+}
+JSON
+)" < "$work/backup.tar"
+kubectl -n acentric scale statefulset/acentric --replicas=1
+kubectl -n acentric rollout status statefulset/acentric --timeout 240s || fail "it did not start on what was put back"
+forwarded
+machines=$(get "$url/v1/machines")
+echo "$machines" | grep -q '"test-box"' || fail "what was backed up is not there"
+if echo "$machines" | grep -q '"after-backup"'; then fail "what came after the backup is still there"; fi
+echo "put back: what was backed up is there, and what came after is not"
+
 step "Passed"

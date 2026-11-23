@@ -33,5 +33,7 @@ Ways to run the server, each tested in CI as it is here:
   sealed cannot be opened again.
 - **Stopping.** The server is given a minute to stop, so that a turn that is going on is
   written down.
-- **Upgrading.** An exact version, changed on purpose, with `/data` backed up first: see
-  [VERSIONS.md](../VERSIONS.md).
+- **Backups.** The server backs itself up every day and before an upgrade, into a volume of
+  the backups' own: copy them off it too. [BACKUPS.md](../BACKUPS.md) says how, and each
+  recipe's README how a backup is taken and put back there.
+- **Upgrading.** An exact version, changed on purpose: see [VERSIONS.md](../VERSIONS.md).

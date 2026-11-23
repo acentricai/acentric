@@ -39,7 +39,9 @@ promises, how to check that an image is the one released, and what an upgrade ca
   locked out runs `acentric-server reset-link <email>` on the server itself.
 - Set `ACENTRIC_PUBLIC_URL` to where people reach the server, so that its links start there.
 - It keeps everything it has in `/data`: its database, and the images and files of
-  conversations as files in `/data/blobs`. Back both up together.
+  conversations as files in `/data/blobs`. It backs itself up every day and before an upgrade,
+  and `acentric-server backup` and `restore` take and put back one: see
+  [BACKUPS.md](BACKUPS.md). Do not copy `/data` while it runs.
 - `ACENTRIC_SECRET_KEY` is what agents' secrets and the keys of model accounts are sealed
   with. Without it, the server keeps neither.
 - The server makes machines itself, as sandboxes, at the providers it was set up with. For

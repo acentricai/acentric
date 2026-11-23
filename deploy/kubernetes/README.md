@@ -52,6 +52,38 @@ With the Gateway's name and namespace, and the name people use, set in a patch o
 HTTPRoute (or the Ingress's host, class and certificate): `kubectl apply -k .`. The setup link
 is in `kubectl -n acentric logs acentric-0`.
 
+## Backups
+
+The server backs itself up every day, and before an upgrade, onto its volume `backups`
+([BACKUPS.md](../../BACKUPS.md)). A backup to keep outside the cluster:
+
+```sh
+kubectl -n acentric exec acentric-0 -- acentric-server backup > "acentric-$(date -u +%F).tar"
+```
+
+To put one back: stop the server, and run the restore in a pod of its own on the server's volume,
+with the backup on its stdin.
+
+```sh
+kubectl -n acentric scale statefulset/acentric --replicas=0
+kubectl -n acentric wait --for=delete pod/acentric-0
+kubectl -n acentric run acentric-restore --rm -i --restart=Never \
+  --image=ghcr.io/acentricai/acentric-server:0.15.0 --overrides='{
+    "spec": {
+      "enableServiceLinks": false,
+      "securityContext": { "runAsNonRoot": true, "runAsUser": 1000, "fsGroup": 1000 },
+      "volumes": [{ "name": "data", "persistentVolumeClaim": { "claimName": "data-acentric-0" } }],
+      "containers": [{
+        "name": "acentric-restore", "image": "ghcr.io/acentricai/acentric-server:0.15.0",
+        "stdin": true, "stdinOnce": true, "command": ["acentric-server", "restore"],
+        "envFrom": [{ "secretRef": { "name": "acentric-secrets" } }],
+        "volumeMounts": [{ "name": "data", "mountPath": "/data" }]
+      }]
+    }
+  }' < acentric-2026-11-23.tar
+kubectl -n acentric scale statefulset/acentric --replicas=1
+```
+
 ## What is in front
 
 Whatever ends HTTPS must:
@@ -69,4 +101,5 @@ for all four: another controller has its own for each.
 `test.sh` puts the base on a cluster and checks, through a port-forward, its version and
 dashboard, that the command it hands out deploys an agent, an actor's events, and that a
 machine's daemon enrols and stays connected. Then it deletes the pod, and checks that what the
-server kept is there and the daemon connects again. CI runs it on kind.
+server kept is there and the daemon connects again; and takes a backup, and puts it back as
+above. CI runs it on kind.

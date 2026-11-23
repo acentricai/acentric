@@ -20,6 +20,9 @@ published to npm.
   out to it and is updated from it. Sandboxes are made at Docker (for testing) and Boat.
 - **People.** Sign-in with email and password, roles, invites and password-reset links by
   link, API keys, sessions, and an audit log.
+- **Backups.** The server backs itself up every day and before an upgrade, keeping the newest
+  of each kind, and `acentric-server backup`, `check-backup` and `restore` take, check and put
+  back one. Only one server runs on a folder of data at a time.
 - **The dashboard**, served by the server: agents, actors and their conversations, machines
   and sandboxes, model accounts and usage, API keys, people, the audit log, and your account.
 - **The images**, `ghcr.io/acentricai/acentric-server` and `ghcr.io/acentricai/acentric-sandbox`,

@@ -47,8 +47,9 @@ provenance), which `docker buildx imagetools inspect` shows.
 ## What an upgrade carries over
 
 - **The database** moves forward when the new version first starts, and cannot be moved back:
-  an older server refuses a database a newer one has opened. Back `/data` up before an
-  upgrade, so that you can go back to the version you had.
+  an older server refuses a database a newer one has opened. So the new version backs it up
+  first, before it changes it, into the backups' folder ([BACKUPS.md](BACKUPS.md)), and does not
+  start if that fails.
 - **Agents that were deployed** keep running. An engine runs the bundle protocol of its own
   version and of the version before it (`SUPPORTED_BUNDLE_PROTOCOLS`). When the protocol
   changes, the release notes say so, and agents are deployed again with the new command
@@ -62,5 +63,6 @@ provenance), which `docker buildx imagetools inspect` shows.
 
 ## Going back
 
-Restore the backup of `/data` you took before the upgrade, and run the version you had. Going
-back without the backup is not possible once the newer version has opened the database.
+Stop the server, put back the backup taken before the upgrade (`acentric-server restore`, see
+[BACKUPS.md](BACKUPS.md)) with the version you had, and run that version. Going back without
+that backup is not possible once the newer version has opened the database.
