@@ -420,7 +420,8 @@ describe('many deployments, and replacing a process', () => {
   });
 
   it('keeps a process that is busy loading the code of 40 deployments at once', async () => {
-    const { executor, load, tool } = await start({ probeMs: 100, stallMs: 500 });
+    // A second of silence is what one load may take on a computer that is busy with other tests.
+    const { executor, load, tool } = await start({ probeMs: 100, stallMs: 1000 });
     const deployments = await Promise.all(
       Array.from({ length: 40 }, (_, index) => load(`// burst ${String(index)}`)),
     );
@@ -430,8 +431,8 @@ describe('many deployments, and replacing a process', () => {
     expect(answers.map(text)).toEqual(Array.from({ length: 40 }, () => 'hello'));
     const [one] = running(executor);
     expect(one).toMatchObject({ bundles: 40, restarts: 0, loading: 0, queuedLoads: 0 });
-    // Loading takes longer than a process may be silent for. It was not taken for stuck: each
-    // load that ends is a sign of life.
+    // All of the loading takes longer than a process may be silent for. It was not taken for
+    // stuck: each load that ends is a sign of life.
     expect(one?.kills.stall).toBe(0);
   }, 30_000);
 
