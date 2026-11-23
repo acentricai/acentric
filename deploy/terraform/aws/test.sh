@@ -27,8 +27,23 @@ out() { tf output -raw "$1"; }
 step() { printf '\n== %s\n' "$*"; }
 fail() { printf 'FAILED: %s\n' "$*" >&2; exit 1; }
 vars="-var region=$region -var name=$name -var acentric_version=$version -var bucket_force_destroy=true -var instance_type=t4g.small"
-# Whatever happens, what it made is removed.
-trap 'step "Removing what it made"; tf destroy -auto-approve -input=false $vars > "$work/destroy.log" 2>&1 && echo removed || { tail -30 "$work/destroy.log" >&2; echo "NOT ALL REMOVED: see $work" >&2; }' EXIT
+# Whatever happens, what it made is removed: and the snapshot the data volume leaves when it
+# is, which the recipe keeps for a server that is removed, and a test does not need.
+cleanup() {
+  step "Removing what it made"
+  # shellcheck disable=SC2086
+  if tf destroy -auto-approve -input=false $vars > "$work/destroy.log" 2>&1; then
+    for snapshot in $(aws ec2 describe-snapshots --region "$region" --owner-ids self \
+      --filters "Name=tag:acentric:name,Values=$name" --query 'Snapshots[].SnapshotId' --output text); do
+      aws ec2 delete-snapshot --region "$region" --snapshot-id "$snapshot"
+    done
+    echo removed
+  else
+    tail -30 "$work/destroy.log" >&2
+    echo "NOT ALL REMOVED: see $work" >&2
+  fi
+}
+trap cleanup EXIT
 
 field() { node -e "let s='';process.stdin.on('data',(d)=>s+=d).on('end',()=>console.log(JSON.parse(s)$1))"; }
 
