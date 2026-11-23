@@ -77,17 +77,12 @@ Two more scripts make real calls and are run by hand: `packages/ai/test/cache-ch
 whether a provider keeps what it has read, and `packages/core/test/live.ts` runs one turn
 through the whole engine for each provider.
 
-## Changesets
+## Versions and releases
 
-A pull request that changes what a published package does needs a changeset: a short file that
-says which packages changed and how, in words for the people who use them.
-
-```sh
-pnpm changeset
-```
-
-Every published package has the same version, and they are released together. While
-`.changeset/pre.json` is there, releases are alpha versions.
+Every package and program in the repository has one version, released together as the
+server's images. Nothing is published to npm: what people run comes from their engine. How a
+release is made is in [RELEASING.md](RELEASING.md), and what a version promises in
+[VERSIONS.md](VERSIONS.md).
 
 ## Style
 

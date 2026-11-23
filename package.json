@@ -18,14 +18,12 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "boundaries": "node scripts/check-boundaries.ts",
-    "check": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm test",
+    "versions": "node scripts/check-version.ts",
+    "check": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm versions && pnpm test",
     "check:rust": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
-    "clean": "tsc -b --clean",
-    "changeset": "changeset",
-    "copy-license": "node scripts/copy-license.ts"
+    "clean": "tsc -b --clean"
   },
   "devDependencies": {
-    "@changesets/cli": "^3.0.3",
     "@types/node": "catalog:",
     "oxlint": "^1.94.0",
     "prettier": "^3.10.1",

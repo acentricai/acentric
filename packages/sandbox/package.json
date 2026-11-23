@@ -1,6 +1,7 @@
 {
   "name": "@acentric/sandbox",
-  "version": "0.15.0-alpha.0",
+  "version": "0.15.0",
+  "private": true,
   "description": "Makes machines at sandbox providers: the interface a provider implements, and the providers.",
   "license": "Apache-2.0",
   "repository": {
@@ -22,10 +23,6 @@
   ],
   "engines": {
     "node": ">=24"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "dependencies": {
     "@acentric/core": "workspace:*",

@@ -1,6 +1,7 @@
 {
   "name": "@acentric/server",
-  "version": "0.15.0-alpha.0",
+  "version": "0.15.0",
+  "private": true,
   "description": "The Acentric server: the API, sign-in, and the engine that runs actors.",
   "license": "Apache-2.0",
   "repository": {
@@ -24,10 +25,6 @@
   ],
   "engines": {
     "node": ">=24"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "dependencies": {
     "@acentric/ai": "workspace:*",
