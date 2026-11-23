@@ -81,6 +81,10 @@ export class Streams {
 
         void (async () => {
           try {
+            // Where it stands is read before the messages are: a message is stored no later
+            // than what it does to where the actor stands, so every message that led there is
+            // among those read after, and is sent before it.
+            const now = await engine.getActor(actor.id);
             if (after !== undefined) {
               for (;;) {
                 const entries = await engine.conversation(actor.id, {
@@ -91,7 +95,6 @@ export class Streams {
                 if (entries.length < CATCH_UP) break;
               }
             }
-            const now = await engine.getActor(actor.id);
             send({
               type: 'status',
               status: now.status,
