@@ -1,0 +1,33 @@
+# The Acentric server as a systemd service, run from its image by Podman, as a Quadlet: systemd
+# makes acentric.service of it. How to use it is in README.md beside this file:
+#
+#   sudo install -m 600 acentric.env.example /etc/acentric/acentric.env   # then fill it in
+#   sudo install -m 644 acentric.container /etc/containers/systemd/
+#   sudo systemctl daemon-reload && sudo systemctl start acentric
+#
+# It listens on 127.0.0.1:4000 only: a proxy on this machine ends HTTPS in front of it.
+
+[Unit]
+Description=Acentric server
+Documentation=https://github.com/acentricai/acentric/tree/main/deploy/systemd
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+# The version, as VERSIONS.md says: an exact one, changed on purpose.
+Image=ghcr.io/acentricai/acentric-server:0.15.0
+ContainerName=acentric
+EnvironmentFile=/etc/acentric/acentric.env
+PublishPort=127.0.0.1:4000:4000
+# What the server keeps: its database, and conversations' images and files beside it.
+Volume=acentric-data:/data
+# A turn that is going on is written down before the server stops.
+StopTimeout=60
+
+[Service]
+TimeoutStopSec=90
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
