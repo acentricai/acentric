@@ -9,6 +9,7 @@ import type { Accounts, Audit, Engine, Keys, People, Secrets } from '@acentric/c
 import { WebSocketServer } from 'ws';
 
 import { createApp } from './app.ts';
+import type { AppOptions } from './app.ts';
 import type { Downloads } from './downloads.ts';
 import { Streams } from './events.ts';
 import type { Backups } from './backups/schedule.ts';
@@ -30,12 +31,16 @@ export type ServerOptions = {
   readonly report?: (error: unknown, requestId: string) => void;
   readonly checkAnswers?: boolean;
   readonly downloads?: Downloads;
+  readonly answered?: NonNullable<AppOptions['answered']>;
+  readonly ready?: NonNullable<AppOptions['ready']>;
 };
 
 export type Server = {
   /** Where it listens, such as `http://127.0.0.1:4000`. */
   readonly url: string;
   readonly port: number;
+  /** How many actors' event streams are open now. */
+  readonly streams: () => number;
   /**
    * Stops the server. It takes no new request, ends the streams that follow actors, and has
    * the engine finish what it is in the middle of, for `graceMs` at most.
@@ -54,6 +59,11 @@ export async function startServer(options: ServerOptions): Promise<Server> {
     listening.once('error', reject);
   });
   const { port } = server.address() as AddressInfo;
+  // A connection that is quiet is kept for longer than what is in front keeps one (60 seconds
+  // at AWS' load balancers, nginx's and others): a request is never sent on one this side has
+  // just closed, which they answer with a 502. Headers are waited for a moment longer still.
+  (server as HttpServer).keepAliveTimeout = 65_000;
+  (server as HttpServer).headersTimeout = 66_000;
   // The machines' daemons connect here, each to stay.
   const daemons = new WebSocketServer({ noServer: true, maxPayload: 32 << 20 });
   if (options.engine.machines !== undefined) {
@@ -64,6 +74,7 @@ export async function startServer(options: ServerOptions): Promise<Server> {
   return {
     url: `http://${host.includes(':') ? `[${host}]` : host}:${String(port)}`,
     port,
+    streams: () => streams.size,
     close(more = {}) {
       closing ??= (async () => {
         const closed = new Promise<void>((resolve) => {

@@ -11,7 +11,8 @@ import { readObject } from './backups/bucket.ts';
 import { backupTo } from './backups/command.ts';
 
 import { InvalidSettings, readSettings } from './settings.ts';
-import { FIRST_KEY_FILE, keysSaid, resealData, resetLink, start } from './start.ts';
+import { createLogger } from './log.ts';
+import { DRAIN_MS, FIRST_KEY_FILE, keysSaid, resealData, resetLink, start } from './start.ts';
 
 const { version } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -131,27 +132,31 @@ if (command === 'backup' || command === 'check-backup' || command === 'restore')
   }
 }
 
+// The server's log, as its settings say: text or JSON, from the level they give.
+const logger = createLogger(settings.log);
+
 let started;
 try {
-  started = await start(settings, { version });
+  started = await start(settings, { version, logger });
 } catch (error) {
   // Said in a line: what was wrong is the message, not where in the code it was found.
-  console.error(
+  logger.error(
     `The server was not started: ${error instanceof Error ? error.message : String(error)}`,
   );
   process.exit(1);
 }
-console.log(`acentric-server ${version} listening on ${started.server.url}`);
+logger.info(`acentric-server ${version} listening on ${started.server.url}`);
+if (started.metricsUrl !== undefined) logger.info(`metrics at ${started.metricsUrl}`);
 if (started.recovered > 0) {
-  console.log(`picked up ${String(started.recovered)} actors with something owed`);
+  logger.info(`picked up ${String(started.recovered)} actors with something owed`);
 }
 if (settings.secretKeys === undefined) {
-  console.log('ACENTRIC_SECRET_KEY is not set: agents can be given no secrets');
+  logger.warn('ACENTRIC_SECRET_KEY is not set: agents can be given no secrets');
 }
 if (started.setupLink !== undefined) {
   // Nobody can sign in yet. Whoever opens this makes themselves the owner.
-  console.log(`setup ${started.setupLink}`);
-  console.log('This link makes the owner of this server. It works once, for a week.');
+  logger.info(`setup ${started.setupLink}`);
+  logger.info('This link makes the owner of this server. It works once, for a week.');
 }
 if (started.firstKey !== undefined) {
   // Nothing could call the server otherwise. Not in the log, which is kept, and read, by more
@@ -159,8 +164,8 @@ if (started.firstKey !== undefined) {
   const file = join(settings.data, FIRST_KEY_FILE);
   writeFileSync(file, `${started.firstKey}\n`, { mode: 0o600 });
   chmodSync(file, 0o600);
-  console.log(`key: the first key, which may do everything, is in ${file}`);
-  console.log('Copy it somewhere safe, and remove the file: it is not written again.');
+  logger.info(`key: the first key, which may do everything, is in ${file}`);
+  logger.info('Copy it somewhere safe, and remove the file: it is not written again.');
 }
 
 let stopping = false;
@@ -168,13 +173,18 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     if (stopping) process.exit(1);
     stopping = true;
-    console.log('stopping');
-    void started.close().then(
-      () => process.exit(0),
-      (error: unknown) => {
-        console.error(error);
-        process.exit(1);
-      },
-    );
+    // /health says it is stopping first, and it goes on answering a moment, so that what is in
+    // front sends what comes next elsewhere before it takes no more.
+    logger.info('stopping');
+    started.drain();
+    setTimeout(() => {
+      void started.close().then(
+        () => process.exit(0),
+        (error: unknown) => {
+          logger.error('the server did not stop as it should', {}, error);
+          process.exit(1);
+        },
+      );
+    }, DRAIN_MS);
   });
 }

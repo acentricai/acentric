@@ -117,6 +117,29 @@ describe('a server’s settings', () => {
     expect(Object.keys(two.secretKeys?.keys ?? {})).toContain(current);
   });
 
+  it('say how the server logs, and where its metrics are, when they are', () => {
+    expect(readSettings({})).toMatchObject({
+      log: { format: 'text', level: 'info' },
+      metricsPort: undefined,
+    });
+    expect(
+      readSettings({
+        ACENTRIC_LOG_FORMAT: 'json',
+        ACENTRIC_LOG_LEVEL: 'debug',
+        ACENTRIC_METRICS_PORT: '9464',
+      }),
+    ).toMatchObject({ log: { format: 'json', level: 'debug' }, metricsPort: 9464 });
+    expect(() => readSettings({ ACENTRIC_LOG_FORMAT: 'xml' })).toThrow(
+      'ACENTRIC_LOG_FORMAT is text or json, and is xml',
+    );
+    expect(() => readSettings({ ACENTRIC_LOG_LEVEL: 'loud' })).toThrow(
+      'ACENTRIC_LOG_LEVEL is debug, info, warn, error, and is loud',
+    );
+    expect(() => readSettings({ ACENTRIC_PORT: '4000', ACENTRIC_METRICS_PORT: '4000' })).toThrow(
+      'ACENTRIC_METRICS_PORT is a port of its own',
+    );
+  });
+
   it('take the secret ones from files, as Docker and Kubernetes give secrets', () => {
     const dir = mkdtempSync(join(tmpdir(), 'acentric-settings-'));
     const file = (name: string, text: string) => {

@@ -118,6 +118,9 @@ export class Backups {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #next: number | null = null;
   #last: LastBackup | null = null;
+  /** When the newest backup in the folder was taken, of any kind. */
+  #newest: number | undefined;
+  #failures = 0;
   #closed = false;
 
   constructor(options: {
@@ -160,6 +163,14 @@ export class Backups {
   }
   get last(): LastBackup | null {
     return this.#last;
+  }
+  /** When the newest backup there is was taken, as the folder says. Undefined for none. */
+  get newestAt(): number | undefined {
+    return this.#newest;
+  }
+  /** How many backups failed since the server started. */
+  get failures(): number {
+    return this.#failures;
   }
   /** Where in a bucket each is copied to as well. Undefined when there is none. */
   get bucketUrl(): string | undefined {
@@ -205,7 +216,9 @@ export class Backups {
    * says, or a minute from now when there is none or it is due already.
    */
   async start(): Promise<void> {
-    const newest = (await listBackups(this.#dir)).find((file) => file.kind === 'scheduled');
+    const there = await listBackups(this.#dir);
+    this.#newest = there[0]?.createdAt;
+    const newest = there.find((file) => file.kind === 'scheduled');
     const now = this.#clock();
     const due = newest === undefined ? now : newest.createdAt + this.#everyMs;
     this.#schedule(Math.max(due, now + 60_000));
@@ -267,6 +280,7 @@ export class Backups {
         }
       }
       this.#last = { ok: true, at: this.#clock(), name: file.name };
+      this.#newest = file.createdAt;
       await this.#audit?.record({
         by,
         action: 'backup.made',
@@ -286,6 +300,7 @@ export class Backups {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.#last = { ok: false, at: this.#clock(), error: message };
+      this.#failures += 1;
       await this.#audit?.record({
         by,
         action: 'backup.failed',
