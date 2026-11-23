@@ -1,0 +1,142 @@
+/* API keys, from the reference's team.css. Shared row and dialog motion
+   lives in components.css; the secret box comes from sessions.css. */
+
+.keys-page.team {
+  --page-gap: var(--space-6);
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+.keys-page > .rise {
+  min-width: 0;
+}
+
+.key-mask {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.locked {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  max-width: 460px;
+  padding: var(--space-6);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--ink-muted);
+}
+
+.locked__title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.keys-table {
+  min-width: 860px;
+}
+
+.keys-table tbody tr {
+  transition: background-color 200ms ease;
+}
+
+.keys-table tbody tr:hover {
+  background: var(--wash);
+}
+
+.keys-table td {
+  overflow-wrap: anywhere;
+}
+
+.keys-table .key-mask {
+  white-space: nowrap;
+}
+
+.keys-page .state-error + .ac-table-wrap {
+  margin-top: var(--space-5);
+}
+
+.secret-once {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.secret-once__value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+/* The reference skeleton's widths, without inline style attributes. */
+.keys-skeleton .skeleton__line:nth-child(4n + 1) {
+  width: 92%;
+}
+.keys-skeleton .skeleton__line:nth-child(4n + 2) {
+  width: 75%;
+}
+.keys-skeleton .skeleton__line:nth-child(4n + 3) {
+  width: 58%;
+}
+.keys-skeleton .skeleton__line:nth-child(4n + 4) {
+  width: 81%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keys-table tbody tr {
+    transition: none;
+  }
+}
+
+/* A new key's scopes: everything, or some of each product's. */
+.scopes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.scopes__product {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.scopes__legend {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.scopes code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.keys-table .chips {
+  flex-wrap: nowrap;
+}
+
+/* Members: the same table, with a role to choose on each row for owners. */
+.members-table {
+  min-width: 560px;
+}
+
+.members-table .ac-table__name + .tag {
+  margin-left: 8px;
+}
