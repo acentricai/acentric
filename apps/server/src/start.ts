@@ -17,6 +17,7 @@ import { FileBlobStore, SCHEMA_VERSION, SqliteStore } from '@acentric/store';
 
 import { DATABASE } from './backups/archive.ts';
 import { lockData } from './backups/lock.ts';
+import { Bucket } from './backups/bucket.ts';
 import { Backups } from './backups/schedule.ts';
 
 import { machinePrograms } from './downloads.ts';
@@ -125,11 +126,14 @@ export async function start(
       ? undefined
       : new Backups({
           data: settings.data,
-          ...settings.backups,
+          dir: settings.backups.dir,
+          everyMs: settings.backups.everyMs,
+          keep: settings.backups.keep,
           version: more.version,
           // Blobs are kept as ever while one is taken, and none is removed.
           withoutRemovals: (work) => engine.blobs.withoutRemovals(work),
           audit,
+          ...bucketOf(settings),
         });
 
   try {
@@ -215,11 +219,14 @@ export async function backUpBeforeUpgrade(
   console.log(`this version changes the database: backing it up first, to ${settings.backups.dir}`);
   const before = new Backups({
     data: settings.data,
-    ...settings.backups,
+    dir: settings.backups.dir,
+    everyMs: settings.backups.everyMs,
+    keep: settings.backups.keep,
     // Named for the version it was taken before upgrading to.
     version,
     // No server is running on it: nothing is removed meanwhile.
     withoutRemovals: (work) => work(),
+    ...bucketOf(settings),
   });
   try {
     await before.take('before-upgrade');
@@ -229,7 +236,15 @@ export async function backUpBeforeUpgrade(
       `the backup before this version changes the database failed, so it was not changed: ${error instanceof Error ? error.message : String(error)}. Make room in ${settings.backups.dir}, or set ACENTRIC_BACKUP_EVERY=off to start without one.`,
       { cause: error },
     );
+  } finally {
+    await before.close();
   }
+}
+
+/** The bucket backups are copied to as well, as the options of Backups. */
+function bucketOf(settings: Settings): { bucket?: Bucket } {
+  const place = settings.backups?.bucket;
+  return place === undefined ? {} : { bucket: new Bucket(place) };
 }
 
 /** A link a person opens, to a page of the dashboard: it ends in what is used once. */

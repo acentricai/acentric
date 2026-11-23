@@ -4,8 +4,10 @@
 
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
+import type { Readable } from 'node:stream';
 
 import { checkBackup, restore } from './backups/archive.ts';
+import { readObject } from './backups/bucket.ts';
 import { backupTo } from './backups/command.ts';
 
 import { InvalidSettings, readSettings } from './settings.ts';
@@ -51,7 +53,8 @@ if (process.argv[2] === 'reset-link') {
 // `acentric-server backup [file]`, `check-backup [file]` and `restore [file] [--without-keys]`:
 // a backup of the data, taken beside a server that runs on it; one checked; one put back, with
 // no server running. Without a file, or with -, a backup goes to stdout and is read from stdin,
-// so that it passes through `docker exec` and `kubectl exec`.
+// so that it passes through `docker exec` and `kubectl exec`. A backup in a bucket is checked
+// and put back from its URL, s3://bucket/folder/name.tar, reached as the server reaches it.
 const command = process.argv[2];
 if (command === 'backup' || command === 'check-backup' || command === 'restore') {
   const said = (line: string) => process.stderr.write(`${line}\n`);
@@ -70,8 +73,13 @@ if (command === 'backup' || command === 'check-backup' || command === 'restore')
         );
       }
     } else {
-      if (named && !existsSync(file)) throw new Error(`There is no backup at ${file}`);
-      const input = named ? createReadStream(file) : process.stdin;
+      const inBucket = named && file.startsWith('s3://');
+      if (named && !inBucket && !existsSync(file)) throw new Error(`There is no backup at ${file}`);
+      const input: Readable = !named
+        ? process.stdin
+        : inBucket
+          ? (await readObject(file, process.env)).input
+          : createReadStream(file);
       // What goes wrong reading it is said where it is read, not thrown from nowhere.
       input.on('error', () => {});
       if (command === 'check-backup') {

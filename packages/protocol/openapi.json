@@ -9923,6 +9923,12 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "onServer": {
+            "type": "boolean"
+          },
+          "inBucket": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -9930,7 +9936,9 @@
           "kind",
           "version",
           "createdAt",
-          "bytes"
+          "bytes",
+          "onServer",
+          "inBucket"
         ]
       },
       "Backups": {
@@ -9941,6 +9949,31 @@
           },
           "sameDisk": {
             "type": "boolean"
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "url",
+                  "error"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "everyMs": {
             "type": "integer",
@@ -10041,6 +10074,7 @@
         "required": [
           "dir",
           "sameDisk",
+          "bucket",
           "everyMs",
           "keep",
           "next",
