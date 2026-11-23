@@ -23,6 +23,11 @@ Ways to run the server, each tested in CI as it is here:
   events are a stream. What is in front passes WebSockets, sends the stream as it comes rather
   than in pieces, and does not close either after a minute of quiet. A deployment's code is up
   to 40 MB, so it takes a request that size.
+- **A certificate of your own authority.** Machines' daemons trust Mozilla's authorities, as
+  browsers do, and on Linux the certificates the machine trusts (where an organisation's
+  authority is installed, with `update-ca-certificates` or `update-ca-trust`). Elsewhere, or
+  for an authority installed nowhere, set `SSL_CERT_FILE` to a file of its certificates where
+  the daemon runs.
 - **The secrets key.** `ACENTRIC_SECRET_KEY` seals agents' secrets and the keys of model
   accounts. Make it once, and keep a copy somewhere other than the server: without it, what it
   sealed cannot be opened again.

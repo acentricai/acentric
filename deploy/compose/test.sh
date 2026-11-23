@@ -35,7 +35,8 @@ key=$(sed -n 's/^ACENTRIC_ADMIN_KEY=//p' "$work/.env")
 compose() { ACENTRIC_VERSION=$version docker compose -p "$project" --project-directory "$work" "$@"; }
 step() { printf '\n== %s\n' "$*"; }
 fail() { printf 'FAILED: %s\n' "$*" >&2; compose logs --tail 40 >&2 || true; exit 1; }
-trap 'compose down >/dev/null 2>&1 || true' EXIT
+daemon=''
+trap '[ -n "$daemon" ] && kill "$daemon" 2>/dev/null; compose down >/dev/null 2>&1 || true' EXIT
 
 step "Up, with the server healthy before Caddy starts"
 compose up --detach --wait --wait-timeout 180
@@ -100,5 +101,42 @@ curl --silent --no-buffer --max-time 5 --cacert "$work/root.crt" -H "authorizati
   "$url/v1/actors/$actor/events" > "$work/events.txt" || true
 head -c 300 "$work/events.txt"; echo
 grep -q '^event:' "$work/events.txt" || fail "no event came through"
+
+step "A machine's daemon enrols and connects through Caddy, trusting Caddy's authority"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) system=linux-x64 ;;
+  Linux-aarch64 | Linux-arm64) system=linux-arm64 ;;
+  Darwin-x86_64) system=darwin-x64 ;;
+  Darwin-arm64) system=darwin-arm64 ;;
+  *) fail "no machine program for $(uname -s) $(uname -m)" ;;
+esac
+get -o "$work/acentric-machine" "$url/machine/$system"
+chmod +x "$work/acentric-machine"
+machine_of() {
+  get -H "authorization: Bearer $key" -H 'content-type: application/json' \
+    -d "{\"name\":\"$1\",\"agents\":\"*\"}" "$url/v1/machines"
+}
+field() { node -e "let s='';process.stdin.on('data',(d)=>s+=d).on('end',()=>console.log(JSON.parse(s)$1))"; }
+# Without it, Caddy's authority is one the daemon does not know: it does not enrol.
+made=$(machine_of untrusted)
+if MACHINE_DIR="$work/untrusted" "$work/acentric-machine" enrol --server "$url" \
+  --id "$(echo "$made" | field .machine.id)" --token "$(echo "$made" | field .token)" 2> "$work/untrusted.txt"; then
+  fail "a daemon enrolled with an engine whose certificate it has no authority for"
+fi
+echo "without it: $(head -c 160 "$work/untrusted.txt")"
+# With it named by SSL_CERT_FILE, as for an organisation's own authority, it enrols and stays.
+made=$(machine_of trusted)
+machine=$(echo "$made" | field .machine.id)
+export SSL_CERT_FILE="$work/root.crt" MACHINE_DIR="$work/machine" MACHINE_SHELL=none
+rm -rf "$work/machine"
+"$work/acentric-machine" enrol --server "$url" --id "$machine" --token "$(echo "$made" | field .token)"
+"$work/acentric-machine" connect > "$work/daemon.log" 2>&1 &
+daemon=$!
+for attempt in $(seq 1 60); do
+  [ "$(get -H "authorization: Bearer $key" "$url/v1/machines/$machine" | field .online)" = true ] && break
+  [ "$attempt" = 60 ] && { cat "$work/daemon.log" >&2; fail "the machine did not come online"; }
+  sleep 1
+done
+echo "machine $machine is online, through Caddy"
 
 step "Passed"
