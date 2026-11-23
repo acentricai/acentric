@@ -1,47 +1,258 @@
+# Releases the server's images. Pushing a tag such as v0.15.0, the version every package has,
+# builds them for amd64 and arm64, pushes them to GHCR with what is in them and how they were
+# built, signs them, starts the server of each system from what was pushed, and makes the
+# GitHub release with that version's notes from CHANGELOG.md. How to make one is in
+# RELEASING.md.
+#
+# A pull request that changes how they are built builds both for both systems and starts the
+# arm64 server, which no other check builds, and pushes nothing.
+
 name: Release
 
-# Started by hand. Without `publish` it only shows what would go to npm, and publishes nothing.
-#
-# Versions are set before this runs, by `pnpm changeset version` in a pull request. While
-# .changeset/pre.json is there, they are alpha versions and are published under the `alpha` tag.
 on:
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish to npm. Without it, the run only shows what would be published.
-        type: boolean
-        default: false
+  push:
+    tags: ['v*.*.*']
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - .github/workflows/release.yml
+      - deploy/sandbox/**
+      - scripts/check-version.ts
+      - CHANGELOG.md
 
 permissions:
   contents: read
-  # For npm's provenance: a statement of which commit and run a package was built by.
-  id-token: write
 
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  SERVER: ghcr.io/acentricai/acentric-server
+  SANDBOX: ghcr.io/acentricai/acentric-sandbox
+  PLATFORMS: linux/amd64,linux/arm64
+
 jobs:
-  npm:
-    if: github.repository == 'acentricai/acentric'
+  check:
+    name: What is released
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      # Each package is packed with the licence in it.
-      - run: pnpm copy-license
-      - name: Show what would be published
-        if: ${{ !inputs.publish }}
-        run: pnpm -r publish --dry-run --no-git-checks --tag alpha
-      - name: Publish
-        if: ${{ inputs.publish }}
-        run: pnpm changeset publish
+      - name: The tag is the version of every package and of the machine program
+        id: version
+        run: echo "version=$(node scripts/check-version.ts '${{ github.ref_name }}')" >> "$GITHUB_OUTPUT"
+      - name: The version has its notes in CHANGELOG.md
+        run: grep -qx "## ${{ steps.version.outputs.version }}" CHANGELOG.md
+      - name: The tag is a commit of main whose checks passed
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "The tag is not on main."; exit 1; }
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&branch=main&event=push&status=success" \
+            --jq '[.workflow_runs[] | select(.name == "CI")] | length')
+          [ "$passed" -gt 0 ] || { echo "CI has not passed on main for $GITHUB_SHA."; exit 1; }
+
+  images:
+    name: Images
+    needs: check
+    # A pull request has no tag to check: it builds, and pushes nothing.
+    if: always() && (needs.check.result == 'success' || github.event_name == 'pull_request')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      server: ${{ steps.server.outputs.digest }}
+      sandbox: ${{ steps.sandbox.outputs.digest }}
+    env:
+      PUSH: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v7
+      # arm64 is built on this amd64 runner: only installing the server's packages and the
+      # last steps run emulated, as the rest is built once for both.
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        if: env.PUSH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: server-meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.SERVER }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=Acentric server
+            org.opencontainers.image.description=The Acentric engine: its API, dashboard, and the command and machine program it hands out.
+      - id: sandbox-meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.SANDBOX }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=Acentric sandbox
+            org.opencontainers.image.description=What an Acentric server makes machines from at Docker.
+      - id: server
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: server
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.server-meta.outputs.tags }}
+          labels: ${{ steps.server-meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - id: sandbox
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: sandbox
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.sandbox-meta.outputs.tags }}
+          labels: ${{ steps.sandbox-meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+      # Signed by this workflow's identity at GitHub, with no key kept anywhere: a signature
+      # says the image was built by this file, at this tag, in this repository.
+      - uses: sigstore/cosign-installer@v4
+        if: env.PUSH == 'true'
+      - name: Sign
+        if: env.PUSH == 'true'
+        run: |
+          cosign sign --yes "$SERVER@${{ steps.server.outputs.digest }}"
+          cosign sign --yes "$SANDBOX@${{ steps.sandbox.outputs.digest }}"
+
+  start:
+    name: The server starts (${{ matrix.platform }})
+    needs: [check, images]
+    if: always() && needs.images.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # A pull request builds amd64 in CI's own image job: here it starts arm64.
+        platform: ${{ github.event_name == 'push' && fromJSON('["linux/amd64","linux/arm64"]') || fromJSON('["linux/arm64"]') }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: sigstore/cosign-installer@v4
+        if: github.event_name == 'push'
+      - name: The images are signed by this workflow, at this tag
+        if: github.event_name == 'push'
+        run: |
+          for image in "$SERVER@${{ needs.images.outputs.server }}" "$SANDBOX@${{ needs.images.outputs.sandbox }}"; do
+            cosign verify "$image" \
+              --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+          done
+      - name: The image of what was pushed
+        if: github.event_name == 'push'
+        run: |
+          docker pull --platform "${{ matrix.platform }}" "$SERVER@${{ needs.images.outputs.server }}"
+          docker tag "$SERVER@${{ needs.images.outputs.server }}" server
+      - name: The image of this pull request
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: server
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: server
+          cache-from: type=gha
+      - name: The server starts, hands out its programs, and says its version
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          docker run --detach --name server --platform "${{ matrix.platform }}" \
+            --publish 127.0.0.1:4000:4000 server
+          for attempt in $(seq 1 60); do
+            if health=$(curl -fsS http://127.0.0.1:4000/health); then break; fi
+            if [ "$attempt" = 60 ]; then docker logs server; exit 1; fi
+            sleep 2
+          done
+          echo "$health"
+          if [ -n "$VERSION" ]; then
+            echo "$health" | grep -q "\"version\":\"$VERSION\"" || { echo "It says another version."; exit 1; }
+          fi
+          curl -fsS -o /dev/null http://127.0.0.1:4000/install-cli.sh
+          curl -fsS -o /dev/null http://127.0.0.1:4000/acentric.mjs
+          for system in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            curl -fsS -o /dev/null "http://127.0.0.1:4000/machine/$system"
+          done
+          curl -fsS http://127.0.0.1:4000/setup | grep -q '<div id="root">'
+
+  release:
+    name: GitHub release
+    needs: [check, images, start]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: The release, with its notes and images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+          SERVER_DIGEST: ${{ needs.images.outputs.server }}
+          SANDBOX_DIGEST: ${{ needs.images.outputs.sandbox }}
+        run: |
+          # This version's notes: from its heading to the next.
+          awk -v heading="## $VERSION" '$0 == heading { keep = 1; next } /^## / { keep = 0 } keep' \
+            CHANGELOG.md > notes.md
+          cat >> notes.md <<EOF
+
+          ## Images
+
+          | | |
+          | --- | --- |
+          | Server | \`$SERVER:$VERSION\` (\`$SERVER_DIGEST\`) |
+          | Sandbox | \`$SANDBOX:$VERSION\` (\`$SANDBOX_DIGEST\`) |
+
+          Each is for linux/amd64 and linux/arm64, and signed by this repository's release workflow at this tag:
+
+          \`\`\`sh
+          cosign verify $SERVER:$VERSION \\
+            --certificate-identity https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/v$VERSION \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          \`\`\`
+          EOF
+          # Before 1.0 every release is a pre-release: see VERSIONS.md.
+          prerelease=$([ "${VERSION%%.*}" = 0 ] && echo --prerelease || true)
+          gh release create "v$VERSION" --title "Acentric $VERSION" --notes-file notes.md --verify-tag $prerelease
