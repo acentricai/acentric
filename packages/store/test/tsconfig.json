@@ -16,6 +16,7 @@
     "../../core/test/tasks-suite.ts",
     "../../core/test/machines-suite.ts",
     "../../core/test/bash-suite.ts",
+    "../../core/test/code-suite.ts",
     "../../core/test/compaction-suite.ts",
     "../../core/test/fake-daemon.ts",
     "../../core/test/fake-provider.ts",

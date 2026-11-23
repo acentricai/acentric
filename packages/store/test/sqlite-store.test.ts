@@ -7,6 +7,7 @@ import { makeId } from '@acentric/protocol';
 import type { Actor } from '@acentric/protocol';
 
 import { bashSuite } from '../../core/test/bash-suite.ts';
+import { codeSuite } from '../../core/test/code-suite.ts';
 import { compactionSuite } from '../../core/test/compaction-suite.ts';
 import { engineSuite } from '../../core/test/engine-suite.ts';
 import { machinesSuite } from '../../core/test/machines-suite.ts';
@@ -36,6 +37,7 @@ sandboxesSuite('on SQLite', () => SqliteStore.open(database()));
 scheduleSuite('on SQLite', () => SqliteStore.open(database()));
 subagentsSuite('on SQLite', () => SqliteStore.open(database()));
 compactionSuite('on SQLite', () => SqliteStore.open(database()));
+codeSuite('on SQLite', () => SqliteStore.open(database()));
 
 const NOW = 1_795_305_600_000;
 let made = 0;

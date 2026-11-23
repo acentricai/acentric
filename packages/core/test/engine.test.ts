@@ -1,5 +1,6 @@
 import { MemoryStore } from '../src/memory-store.ts';
 import { bashSuite } from './bash-suite.ts';
+import { codeSuite } from './code-suite.ts';
 import { compactionSuite } from './compaction-suite.ts';
 import { engineSuite } from './engine-suite.ts';
 import { machinesSuite } from './machines-suite.ts';
@@ -16,3 +17,4 @@ sandboxesSuite('in memory', async () => new MemoryStore());
 scheduleSuite('in memory', async () => new MemoryStore());
 subagentsSuite('in memory', async () => new MemoryStore());
 compactionSuite('in memory', async () => new MemoryStore());
+codeSuite('in memory', async () => new MemoryStore());
