@@ -1,0 +1,89 @@
+#!/bin/bash
+# What the instance runs once, when it first starts: the data volume mounted (and formatted, the
+# first time there is nothing on it), Docker with its folder there, the settings from Parameter
+# Store, and the server and Caddy as systemd services. What it does is in
+# /var/log/acentric-setup.log.
+set -euo pipefail
+exec > >(tee -a /var/log/acentric-setup.log) 2>&1
+
+# The data volume is attached once the instance runs: found by its ID, as NVMe names it.
+device=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$(echo "${volume_id}" | tr -d -)
+for attempt in $(seq 1 300); do
+  [ -e "$device" ] && break
+  sleep 2
+done
+[ -e "$device" ] || { echo "the data volume ${volume_id} was not attached"; exit 1; }
+blkid "$device" > /dev/null 2>&1 || mkfs.xfs -L acentric-data "$device"
+mkdir -p /var/lib/acentric
+uuid=$(blkid -s UUID -o value "$device")
+grep -q "$uuid" /etc/fstab || echo "UUID=$uuid /var/lib/acentric xfs defaults,nofail 0 2" >> /etc/fstab
+systemctl daemon-reload
+mountpoint -q /var/lib/acentric || mount /var/lib/acentric
+
+# Docker, its folder on the data volume: the server's volumes, acentric-data and
+# acentric-backups, are in it, and so on the next instance too.
+dnf install -y docker
+mkdir -p /etc/docker /var/lib/acentric/docker /etc/systemd/system/docker.service.d
+cat > /etc/docker/daemon.json <<'JSON'
+{
+  "data-root": "/var/lib/acentric/docker",
+  "log-opts": { "max-size": "20m", "max-file": "5" }
+}
+JSON
+printf '[Unit]\nRequiresMountsFor=/var/lib/acentric\n' > /etc/systemd/system/docker.service.d/data.conf
+systemctl daemon-reload
+systemctl enable --now docker
+
+# The server's settings, readable by root alone. The keys are in Parameter Store.
+key() {
+  aws ssm get-parameter --region "${region}" --name "$1" --with-decryption \
+    --query Parameter.Value --output text
+}
+install -d -m 700 /etc/acentric
+umask 077
+cat > /etc/acentric/acentric.env <<ENV
+ACENTRIC_VERSION=${version}
+ACENTRIC_PUBLIC_URL=${public_url}
+ACENTRIC_SECRET_KEY=$(key "${secret_key}")
+ACENTRIC_ADMIN_KEY=$(key "${admin_key}")
+ACENTRIC_BACKUP_DIR=/backups
+ACENTRIC_BACKUP_EVERY=${backup_every}
+ACENTRIC_BACKUP_KEEP=${backup_keep}
+ACENTRIC_BACKUP_URL=${backup_url}
+AWS_REGION=${region}
+ENV
+umask 022
+
+# The server, as deploy/systemd/acentric.service runs it.
+cat > /etc/systemd/system/acentric.service <<'UNIT'
+${service}
+UNIT
+
+# Caddy in front, on the instance's own network: it gets and renews the certificate for
+# ${domain}, and passes what comes to the server on 127.0.0.1:4000.
+cat > /etc/acentric/Caddyfile <<'CADDY'
+${caddyfile}
+CADDY
+cat > /etc/systemd/system/acentric-caddy.service <<'UNIT'
+[Unit]
+Description=Caddy, in front of the Acentric server
+Requires=docker.service
+After=docker.service acentric.service
+
+[Service]
+ExecStartPre=-/usr/bin/docker stop acentric-caddy
+ExecStart=/usr/bin/docker run --rm --name acentric-caddy --network host \
+  --volume /etc/acentric/Caddyfile:/etc/caddy/Caddyfile:ro \
+  --volume acentric-caddy-data:/data --volume acentric-caddy-config:/config \
+  caddy:${caddy_version}
+ExecStop=/usr/bin/docker stop acentric-caddy
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now acentric acentric-caddy
+echo "started acentric ${version} at ${public_url}"

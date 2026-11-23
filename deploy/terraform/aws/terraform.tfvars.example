@@ -1,0 +1,17 @@
+# What the server is made with. Copy to terraform.tfvars, which is kept out of git.
+
+region = "eu-west-1"
+
+# The name people reach it at, pointed at the output ip. Without it, <ip>.sslip.io.
+domain = "engine.example.com"
+
+# A Route 53 hosted zone with that name in it: the record is made there too.
+# route53_zone_id = "Z0123456789ABCDEFGHIJ"
+
+# The version of the server: an exact one, changed on purpose. See VERSIONS.md.
+acentric_version = "0.15.0"
+
+# instance_type  = "t4g.medium"
+# data_volume_gb = 40
+# backup_keep    = 7
+# snapshot_days  = 7
