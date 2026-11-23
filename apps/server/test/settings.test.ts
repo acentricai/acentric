@@ -21,6 +21,25 @@ describe('a server’s settings', () => {
       boat: {},
     });
     expect(settings.data.endsWith('/data')).toBe(true);
+    // It backs itself up every day, into a folder beside its data, keeping three of each kind.
+    expect(settings.backups).toEqual({
+      dir: `${settings.data}/backups`,
+      everyMs: 86_400_000,
+      keep: 3,
+    });
+  });
+
+  it('say where the server’s backups go and how often, or that there are none', () => {
+    expect(
+      readSettings({
+        ACENTRIC_BACKUP_DIR: '/backups',
+        ACENTRIC_BACKUP_EVERY: '6h',
+        ACENTRIC_BACKUP_KEEP: '10',
+      }).backups,
+    ).toEqual({ dir: '/backups', everyMs: 21_600_000, keep: 10 });
+    expect(readSettings({ ACENTRIC_BACKUP_EVERY: '30m' }).backups?.everyMs).toBe(1_800_000);
+    expect(readSettings({ ACENTRIC_BACKUP_EVERY: '7d' }).backups?.everyMs).toBe(604_800_000);
+    expect(readSettings({ ACENTRIC_BACKUP_EVERY: 'off' }).backups).toBeUndefined();
   });
 
   it('are read from its environment', () => {
@@ -107,6 +126,14 @@ describe('a server’s settings', () => {
     const wrong: [{ [name: string]: string }, RegExp][] = [
       [{ ACENTRIC_PORT: 'eighty' }, /ACENTRIC_PORT is a whole number/],
       [{ ACENTRIC_PORT: '70000' }, /ACENTRIC_PORT/],
+      // What Kubernetes gives a pod for the Service acentric: said for what it is.
+      [
+        { ACENTRIC_PORT: 'tcp://10.43.0.9:80' },
+        /Service named acentric.*enableServiceLinks: false/,
+      ],
+      [{ ACENTRIC_BACKUP_EVERY: '5m' }, /ACENTRIC_BACKUP_EVERY is a time such as 30m/],
+      [{ ACENTRIC_BACKUP_EVERY: 'daily' }, /ACENTRIC_BACKUP_EVERY/],
+      [{ ACENTRIC_BACKUP_KEEP: '0' }, /ACENTRIC_BACKUP_KEEP is a whole number/],
       [{ ACENTRIC_ADMIN_KEY: 'short' }, /ACENTRIC_ADMIN_KEY is 24 characters or more/],
       [{ ACENTRIC_PUBLIC_URL: 'engine.example.com' }, /ACENTRIC_PUBLIC_URL is where/],
       [{ ACENTRIC_SECRET_KEY: 'not a key' }, /ACENTRIC_SECRET_KEY is 32 bytes/],

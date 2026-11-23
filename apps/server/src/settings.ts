@@ -124,8 +124,12 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     if (value === undefined) return otherwise;
     const number = Number(value);
     if (!Number.isInteger(number) || number < least || number > most) {
+      // What Kubernetes gives a pod for a Service named acentric in its namespace.
+      const service = value.startsWith('tcp://')
+        ? ': Kubernetes sets it for a Service named acentric. Set enableServiceLinks: false in the pod'
+        : '';
       throw new InvalidSettings(
-        `${name} is a whole number from ${String(least)} to ${String(most)}, and is ${value}`,
+        `${name} is a whole number from ${String(least)} to ${String(most)}, and is ${value}${service}`,
       );
     }
     return number;
