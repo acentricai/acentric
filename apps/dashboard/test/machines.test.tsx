@@ -172,6 +172,31 @@ describe('the Machines page', () => {
   });
 });
 
+describe('updating a machine’s daemon', () => {
+  it('is offered for an online one that is out of date, and says so after', async () => {
+    const server = signedIn();
+    server.machines.push(
+      machineOf('old-box', { enrolled: true, online: true, version: '0.15.0', current: false }),
+      machineOf('new-box', { enrolled: true, online: true, version: '0.16.0', current: true }),
+      machineOf('away-box', { enrolled: true, online: false, version: '0.15.0', current: false }),
+    );
+    open('/machines', server);
+    await screen.findByText('old-box');
+    expect(within(rowOf('old-box')).getByText('out of date')).toBeTruthy();
+    expect(within(rowOf('new-box')).queryByText('out of date')).toBeNull();
+    for (const name of ['new-box', 'away-box']) {
+      const actions = await menu(name);
+      expect(within(actions).queryByRole('menuitem', { name: 'Update daemon' })).toBeNull();
+      fireEvent.keyDown(actions, { key: 'Escape' });
+    }
+    fireEvent.click(within(await menu('old-box')).getByRole('menuitem', { name: 'Update daemon' }));
+    press('Update', dialog());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(within(rowOf('old-box')).queryByText('out of date')).toBeNull());
+    expect(within(rowOf('old-box')).getByText('0.16.0')).toBeTruthy();
+  });
+});
+
 describe('the Machines page’s filter', () => {
   const withTypes = () => {
     const server = signedIn();

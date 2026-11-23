@@ -3,7 +3,7 @@
 // chosen, personal machines, which no provider made, and each sandbox account's; and those the
 // actors of the agents chosen, or the actors chosen, work on.
 
-import { IconKey, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconKey, IconPencil, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
@@ -23,8 +23,10 @@ import {
   Ago,
   Button,
   Command,
+  Confirm,
   CopyButton,
   Dialog,
+  errorText,
   Field,
   FormError,
   LoadError,
@@ -65,7 +67,7 @@ const system = (m: Machine) =>
   m.os === null ? null : `${SYSTEMS[m.os] ?? m.os}${m.arch === null ? '' : ` · ${m.arch}`}`;
 
 /** What the row menu opened: a dialog for one machine. */
-type Action = { kind: 'agents' | 'token' | 'remove'; machine: Machine };
+type Action = { kind: 'agents' | 'token' | 'update' | 'remove'; machine: Machine };
 
 /** Whether a machine is of one of the types chosen: none chosen is every machine. */
 export function ofTypes(machine: Machine, types: readonly string[]): boolean {
@@ -176,7 +178,10 @@ export function MachinesPage({
               m.version === null ? (
                 <span className="ac-table__muted">—</span>
               ) : (
-                <code>{displayText(m.version)}</code>
+                <span className="machine-daemon">
+                  <code>{displayText(m.version)}</code>
+                  {m.current === false && <span className="note">out of date</span>}
+                </span>
               ),
           },
           { name: 'Added', cell: (m) => <Ago at={m.createdAt} /> },
@@ -197,6 +202,17 @@ export function MachinesPage({
                     >
                       Change agents
                     </MenuItem>
+                    {m.online && m.current === false && (
+                      <MenuItem
+                        icon={<IconRefresh size={16} stroke={1.75} aria-hidden="true" />}
+                        onSelect={() => {
+                          close();
+                          setAction({ kind: 'update', machine: m });
+                        }}
+                      >
+                        Update daemon
+                      </MenuItem>
+                    )}
                     {m.provider === null && (
                       <MenuItem
                         icon={<IconKey size={16} stroke={1.75} aria-hidden="true" />}
@@ -240,6 +256,13 @@ export function MachinesPage({
       )}
       {action?.kind === 'token' && (
         <TokenDialog
+          key={action.machine.id}
+          machine={action.machine}
+          onClose={() => setAction(null)}
+        />
+      )}
+      {action?.kind === 'update' && (
+        <UpdateDialog
           key={action.machine.id}
           machine={action.machine}
           onClose={() => setAction(null)}
@@ -462,6 +485,27 @@ function TokenDialog({ machine, onClose }: { machine: Machine; onClose: () => vo
 }
 
 /** `DELETE /v1/machines/:machine`, after its exact name is typed. */
+function UpdateDialog({ machine, onClose }: { machine: Machine; onClose: () => void }) {
+  const update = useMutation({
+    mutationFn: () => engine.upgradeMachine(machine.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.machines });
+      onClose();
+    },
+  });
+  return (
+    <Confirm
+      title={`Update ${machine.name}`}
+      sentence="Its daemon takes this engine’s build of the machine program and starts again as it. The machine is back online once it has."
+      action="Update"
+      pending={update.isPending}
+      error={update.error === null ? null : errorText(update.error)}
+      onConfirm={() => update.mutate()}
+      onClose={onClose}
+    />
+  );
+}
+
 function RemoveDialog({ machine, onClose }: { machine: Machine; onClose: () => void }) {
   const [confirmation, setConfirmation] = useState('');
   // A sandbox is said to be deleted at its provider, by the provider's name where it is known.
