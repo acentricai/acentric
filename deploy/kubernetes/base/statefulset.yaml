@@ -43,15 +43,18 @@ spec:
               mountPath: /data
             - name: backups
               mountPath: /backups
+          # /health/live answers while a new version backs up and changes the database, which
+          # takes a while on a large one: the pod is not restarted in the middle of it. /health
+          # answers once the server takes requests.
           startupProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /health/live, port: http }
             periodSeconds: 2
             failureThreshold: 60
           readinessProbe:
             httpGet: { path: /health, port: http }
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /health/live, port: http }
             periodSeconds: 20
             failureThreshold: 3
           resources:

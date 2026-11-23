@@ -22,6 +22,8 @@ import { Backups } from './backups/schedule.ts';
 
 import { machinePrograms } from './downloads.ts';
 import { startServer } from './serve.ts';
+import { holdPort } from './upgrading.ts';
+import type { Holding } from './upgrading.ts';
 import type { Server } from './serve.ts';
 import type { Settings } from './settings.ts';
 
@@ -57,18 +59,41 @@ export async function start(
     readonly machines?: NonNullable<EngineOptions['machines']>;
     /** The providers sandboxes are made at, and the times they are kept by. For tests. */
     readonly sandboxes?: Partial<NonNullable<EngineOptions['sandboxes']>>;
+    /** The schema this version's database is: the store's, but for tests of an upgrade. */
+    readonly schema?: number;
   },
 ): Promise<Started> {
   await mkdir(settings.data, { recursive: true });
   // One server on a folder of data: a second, or a restore, is refused while this one runs.
   const lock = lockData(settings.data);
+  // A database this version changes: its port says the server is upgrading meanwhile, until
+  // the server itself takes it.
+  let holding: Holding | undefined;
+  const release = async () => {
+    await holding?.close();
+    holding = undefined;
+  };
   try {
-    await backUpBeforeUpgrade(settings, more.version);
+    const schema = schemaOf(join(settings.data, DATABASE));
+    const current = more.schema ?? SCHEMA_VERSION;
+    if (settings.port !== 0 && schema !== undefined && schema < current) {
+      console.log(`upgrading the database to ${more.version}: the server answers once it has`);
+      holding = await holdPort({ host: settings.host, port: settings.port, version: more.version });
+    }
+    await backUpBeforeUpgrade(settings, more.version, current);
   } catch (error) {
+    await release();
     lock.release();
     throw error;
   }
-  const store = await SqliteStore.open(join(settings.data, DATABASE));
+  let store: SqliteStore;
+  try {
+    store = await SqliteStore.open(join(settings.data, DATABASE));
+  } catch (error) {
+    await release();
+    lock.release();
+    throw error;
+  }
   const secrets = new Secrets({
     store,
     ...(settings.secretKeys === undefined ? {} : { keys: settings.secretKeys }),
@@ -142,6 +167,7 @@ export async function start(
     // Before anything is kept: what a process that died left in the blob store is removed.
     await engine.blobs.sweep();
     const recovered = await engine.recover();
+    await release();
     const server = await startServer({
       engine,
       keys,
@@ -184,6 +210,7 @@ export async function start(
       },
     };
   } catch (error) {
+    await release();
     await backups?.close();
     await engine.close({ graceMs: 0 });
     await executor.close();
@@ -204,18 +231,9 @@ export async function backUpBeforeUpgrade(
   /** The schema this version's database is: the store's, but for tests. */
   current: number = SCHEMA_VERSION,
 ): Promise<boolean> {
-  const path = join(settings.data, DATABASE);
-  if (settings.backups === undefined || !existsSync(path)) return false;
-  // Not read-only: a database a server stopped in the middle of leaves files to be read back.
-  const db = new DatabaseSync(path);
-  let schema: number;
-  try {
-    db.exec('PRAGMA query_only = ON');
-    schema = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
-  } finally {
-    db.close();
-  }
-  if (schema === 0 || schema >= current) return false;
+  if (settings.backups === undefined) return false;
+  const schema = schemaOf(join(settings.data, DATABASE));
+  if (schema === undefined || schema >= current) return false;
   console.log(`this version changes the database: backing it up first, to ${settings.backups.dir}`);
   const before = new Backups({
     data: settings.data,
@@ -245,6 +263,25 @@ export async function backUpBeforeUpgrade(
 function bucketOf(settings: Settings): { bucket?: Bucket } {
   const place = settings.backups?.bucket;
   return place === undefined ? {} : { bucket: new Bucket(place) };
+}
+
+/**
+ * The schema of the database at `path`: undefined when there is none yet, or it has nothing in
+ * it, as one that was never opened.
+ */
+function schemaOf(path: string): number | undefined {
+  if (!existsSync(path)) return undefined;
+  // Not read-only: a database a server stopped in the middle of leaves files to be read back.
+  const db = new DatabaseSync(path);
+  try {
+    db.exec('PRAGMA query_only = ON');
+    const { user_version: schema } = db.prepare('PRAGMA user_version').get() as {
+      user_version: number;
+    };
+    return schema === 0 ? undefined : schema;
+  } finally {
+    db.close();
+  }
 }
 
 /** A link a person opens, to a page of the dashboard: it ends in what is used once. */
