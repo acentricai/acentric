@@ -82,10 +82,7 @@ pub fn update(server: &str, expected: &str) -> Result<bool, Refused> {
     let program = std::env::current_exe()
         .and_then(|path| path.canonicalize())
         .map_err(|error| failed(error.to_string()))?;
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .http_status_as_error(false)
-        .build()
-        .into();
+    let agent = crate::tls::agent().map_err(failed)?;
     let mut answer = agent
         .get(format!("{server}{}", download_path()))
         .call()

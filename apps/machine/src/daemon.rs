@@ -162,8 +162,7 @@ fn open(server: &str, machine: &str, poll: Duration) -> Result<WebSocket<Stream>
     tcp.set_write_timeout(Some(WRITE)).map_err(failed)?;
 
     let stream = if secure {
-        let mut roots = rustls::RootCertStore::empty();
-        roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        let roots = crate::tls::root_store()?;
         let config = rustls::ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),
         ))

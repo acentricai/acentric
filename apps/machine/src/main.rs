@@ -22,6 +22,7 @@ mod files;
 mod identity;
 mod protocol;
 mod sys;
+mod tls;
 mod update;
 
 use std::path::PathBuf;
