@@ -225,6 +225,30 @@ export async function sendToActor(
   });
 }
 
+/**
+ * Deletes an actor, and its subagents, with their conversations: archived first, when it is
+ * not. There is no undoing it, so it is not done without `--yes`.
+ */
+export async function deleteActor(
+  io: Io,
+  given: { readonly actor: string; readonly yes: boolean },
+): Promise<void> {
+  await withEngine(signedIn(io), async (client) => {
+    const actor = await actorOf(client, given.actor);
+    if (!given.yes) {
+      throw new Fail(
+        `deleting ${actor.id} deletes it, its subagents and their conversations, and is not undone`,
+        `run it again with --yes`,
+      );
+    }
+    if (actor.status !== 'archived') {
+      await client.call('actors.archive', { params: { actor: actor.id } });
+    }
+    await client.call('actors.delete', { params: { actor: actor.id } });
+    io.out(`deleted ${actor.id}${actor.name === null ? '' : ` (${actor.name})`}`);
+  });
+}
+
 export async function actorLogs(
   io: Io,
   given: { readonly actor: string; readonly follow: boolean },

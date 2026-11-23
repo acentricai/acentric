@@ -282,7 +282,7 @@ describe('an actor’s page', () => {
   it('interrupts one that is working, and archives it after asking', async () => {
     const { server } = withAgents();
     const actor = idOf('act', 1);
-    open(`/actors/${actor}`, server);
+    const { where } = open(`/actors/${actor}`, server);
     fireEvent.click(await screen.findByRole('button', { name: 'Interrupt' }));
     expect(
       await screen.findByText('Its turn was ended. Its tasks and subagents go on.'),
@@ -298,6 +298,20 @@ describe('an actor’s page', () => {
     ).toBe(true);
     // An archived actor is sent nothing.
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Send' })).toBeNull());
+
+    // Archived, it may be deleted, after it is asked: then its agent's page is shown.
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    expect(within(dialog()).getByText(/It is not undone/)).toBeTruthy();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Delete' }));
+    await waitFor(() =>
+      expect(
+        server.calls.some(
+          (call) => call.method === 'DELETE' && call.path === `/v1/actors/${actor}`,
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(where()).toMatch(/^\/agents/));
   });
 
   it('shows its tasks, with what one was started with, and what waits in its mailbox', async () => {
