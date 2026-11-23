@@ -74,6 +74,8 @@ import type { Rules } from './machine.ts';
 import { InvalidMachine, Machines, OWN } from './machines.ts';
 import type { MachineTimes, MachinesOptions } from './machines.ts';
 import type { SandboxProvider } from './sandbox.ts';
+import { scheduleKind } from './schedule.ts';
+import type { Fired } from './schedule.ts';
 import { Sandboxes } from './sandboxes.ts';
 import type { SandboxTimes } from './sandboxes.ts';
 import { instructionsOf } from './scaffold.ts';
@@ -301,8 +303,14 @@ export class Engine {
     // An engine that keeps machines has what an agent that works on one uses.
     this.#features = [
       ...(options.features ?? []),
+      'schedule',
       ...(this.machines === undefined ? [] : ['machine']),
     ];
+    // Every actor's model can send its later self a note.
+    const schedule = scheduleKind({
+      clock: this.#clock,
+      handle: (actor, fired) => this.#scheduleNotice(actor, fired),
+    });
     const bash =
       this.machines === undefined
         ? []
@@ -334,7 +342,7 @@ export class Engine {
       inputId: (now) => this.#ids.make('input', now),
       keep: (actor, content) => this.blobs.keep(actor, content),
       report,
-      kinds: [...bash, ...(options.kinds ?? [])],
+      kinds: [...bash, schedule, ...(options.kinds ?? [])],
       ...(options.taskTimes === undefined ? {} : { times: options.taskTimes }),
     });
     // A notice is in the mailbox already: its actor is told, and starts a turn for it.
@@ -1134,6 +1142,33 @@ export class Engine {
       signal,
       host,
     );
+  }
+
+  /**
+   * What the notice of a fired schedule says, by the handler of the version the actor is on:
+   * undefined when that version has none. Throws when the handler fails or is cut off.
+   */
+  async #scheduleNotice(id: ActorId, fired: Fired): Promise<string | undefined> {
+    const actor = await this.getActor(id);
+    const definition = await this.#definition(actor.deployment.id);
+    if (definition.features?.includes('schedule') !== true) return undefined;
+    const result = await this.#timed(
+      actor.deployment.id,
+      'schedule.handler',
+      fired,
+      contextOf(actor),
+      new AbortController().signal,
+    );
+    if (result.ok) {
+      if (typeof result.value === 'string') return result.value;
+      throw new Error('The schedule handler failed: it returned what is not text');
+    }
+    if (result.kind === 'lost') {
+      throw new Error(`The schedule handler was cut off: ${result.reason}`);
+    }
+    const said =
+      result.kind === 'error' ? result.error.message : 'it was given what it does not take';
+    throw new Error(`The schedule handler failed: ${said}`);
   }
 
   /** A call that is given up, and fails, when it takes longer than code that is no tool may. */

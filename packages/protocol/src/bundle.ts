@@ -116,6 +116,7 @@ export type CallOutcome =
  *   configuration.validate    (value)    what the schema returns for it
  *   tools.<name>.execute      (args)     checks the arguments, then runs the tool
  *   inputs.<type>.handler     (payload)  checks the payload, then runs the handler
+ *   schedule.handler          (fired)    what the notice of a schedule that fired says
  */
 export type CallPath = string;
 

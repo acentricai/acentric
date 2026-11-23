@@ -24,6 +24,7 @@ export * from './tasks.ts';
 export * from './machines.ts';
 export * from './sandbox.ts';
 export * from './sandboxes.ts';
+export * from './schedule.ts';
 export * from './bash.ts';
 export * from './view-image.ts';
 export * from './scaffold.ts';
