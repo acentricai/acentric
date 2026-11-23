@@ -6,11 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ModelStep } from '@acentric/ai';
 import { calls, says } from '@acentric/ai/testing';
 import type { Scripted } from '@acentric/ai/testing';
-import type { ActorId, ConversationEntry, Json } from '@acentric/protocol';
+import type { ActorId, AgentDefinition, ConversationEntry, Json } from '@acentric/protocol';
 
 import type { Store } from '../src/store.ts';
 import type { TaskTimes } from '../src/tasks.ts';
 import { Invalid, Lost } from '../src/testing.ts';
+import type { AgentFunction } from '../src/testing.ts';
+import { QUIET_URL, THINGS_URL, mcpServers } from './mcp-server.ts';
+import type { TestServers } from './mcp-server.ts';
 import { MANIFEST, eventually, over, world } from './world.ts';
 import type { World } from './world.ts';
 
@@ -59,7 +62,7 @@ export function codeSuite(name: string, open: () => Promise<Store>): void {
      * An engine with the agent `scripted`: one tool the model calls itself, and the rest for
      * its scripts. Its model does what `script` says, in order, and says a word after that.
      */
-    const setup = async (of?: ActorId, on: World = w) => {
+    const setup = async (of?: ActorId, on: World = w, servers?: TestServers) => {
       const steps: ModelStep[] = [];
       const script: Scripted[] = [];
       const runner = {
@@ -74,111 +77,138 @@ export function codeSuite(name: string, open: () => Promise<Store>): void {
           `${what}:${String((args as { text?: string; id?: string }).text ?? (args as { id?: string }).id ?? '')}`,
         );
       };
+      const scripted: {
+        definition: Partial<AgentDefinition>;
+        functions: { [path: string]: AgentFunction };
+      } = {
+        definition: {
+          instructions: 'You run scripts.',
+          features: ['codemode'],
+          tools: [
+            {
+              name: 'direct',
+              description: 'A tool the model calls itself.',
+              parameters: parameters({}),
+              retrySafe: true,
+            },
+            {
+              name: 'lookup_order',
+              description: 'Looks an order up by its ID. Answers JSON.',
+              parameters: parameters({ id: { type: 'string' } }, ['id']),
+              retrySafe: true,
+              codemode: true,
+            },
+            {
+              name: 'shout',
+              description: 'Says a text loudly.',
+              parameters: parameters({ text: { type: 'string' } }, ['text']),
+              retrySafe: true,
+              codemode: true,
+            },
+            {
+              name: 'explode',
+              description: 'Fails.',
+              parameters: parameters({}),
+              retrySafe: true,
+              codemode: true,
+            },
+            {
+              name: 'snapshot',
+              description: 'Takes a picture of the shelf.',
+              parameters: parameters({}),
+              retrySafe: true,
+              codemode: true,
+            },
+            {
+              name: 'add_note',
+              description: 'Writes a note down. With `ms`, it takes that long.',
+              parameters: parameters({ text: { type: 'string' }, ms: { type: 'number' } }, [
+                'text',
+              ]),
+              retrySafe: false,
+              codemode: true,
+            },
+            {
+              name: 'count-stock',
+              description: 'How many of an item are left in stock. With `ms`, it takes that long.',
+              parameters: parameters({ text: { type: 'string' }, ms: { type: 'number' } }, [
+                'text',
+              ]),
+              retrySafe: true,
+              codemode: true,
+            },
+            {
+              name: 'vanish',
+              description: 'Is lost with the call in it.',
+              parameters: parameters({}),
+              retrySafe: false,
+              codemode: true,
+            },
+          ],
+        },
+        functions: {
+          'tools.direct.execute': () => 'direct',
+          'tools.lookup_order.execute': (args) => {
+            const { id } = args as { id?: unknown };
+            if (typeof id !== 'string') {
+              throw new Invalid({ message: 'Expected a string', path: ['id'] });
+            }
+            noted('lookup_order', args);
+            return JSON.stringify({ id, lines: 3, total: 30 });
+          },
+          'tools.shout.execute': (args) => `${(args as { text: string }).text.toUpperCase()}!`,
+          'tools.explode.execute': () => {
+            throw new Error('it exploded');
+          },
+          'tools.snapshot.execute': () => [
+            { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: PIXELS } },
+          ],
+          'tools.add_note.execute': async (args) => {
+            noted('add_note', args);
+            const { text, ms } = args as { text: string; ms?: number };
+            if (ms !== undefined) await pause(ms);
+            return `noted: ${text}`;
+          },
+          'tools.count-stock.execute': async (args) => {
+            noted('count-stock', args);
+            const { text, ms } = args as { text: string; ms?: number };
+            if (ms !== undefined) await pause(ms);
+            return JSON.stringify({ item: text, left: text.length });
+          },
+          'tools.vanish.execute': () => {
+            throw new Lost('its process died');
+          },
+        },
+      };
       const one = on.engine(runner, {
         versions: {
-          'scripted@1': {
+          'scripted@1': scripted,
+          // The same agent with two MCP servers, one of which wants a key.
+          'served@1': {
             definition: {
-              instructions: 'You run scripts.',
-              features: ['codemode'],
-              tools: [
+              ...scripted.definition,
+              features: ['codemode', 'mcps'],
+              mcps: [
                 {
-                  name: 'direct',
-                  description: 'A tool the model calls itself.',
-                  parameters: parameters({}),
-                  retrySafe: true,
+                  name: 'things',
+                  url: THINGS_URL,
+                  description: 'A warehouse of things: stock and notes.',
                 },
-                {
-                  name: 'lookup_order',
-                  description: 'Looks an order up by its ID. Answers JSON.',
-                  parameters: parameters({ id: { type: 'string' } }, ['id']),
-                  retrySafe: true,
-                  codemode: true,
-                },
-                {
-                  name: 'shout',
-                  description: 'Says a text loudly.',
-                  parameters: parameters({ text: { type: 'string' } }, ['text']),
-                  retrySafe: true,
-                  codemode: true,
-                },
-                {
-                  name: 'explode',
-                  description: 'Fails.',
-                  parameters: parameters({}),
-                  retrySafe: true,
-                  codemode: true,
-                },
-                {
-                  name: 'snapshot',
-                  description: 'Takes a picture of the shelf.',
-                  parameters: parameters({}),
-                  retrySafe: true,
-                  codemode: true,
-                },
-                {
-                  name: 'add_note',
-                  description: 'Writes a note down. With `ms`, it takes that long.',
-                  parameters: parameters({ text: { type: 'string' }, ms: { type: 'number' } }, [
-                    'text',
-                  ]),
-                  retrySafe: false,
-                  codemode: true,
-                },
-                {
-                  name: 'count-stock',
-                  description:
-                    'How many of an item are left in stock. With `ms`, it takes that long.',
-                  parameters: parameters({ text: { type: 'string' }, ms: { type: 'number' } }, [
-                    'text',
-                  ]),
-                  retrySafe: true,
-                  codemode: true,
-                },
-                {
-                  name: 'vanish',
-                  description: 'Is lost with the call in it.',
-                  parameters: parameters({}),
-                  retrySafe: false,
-                  codemode: true,
-                },
+                { name: 'quiet', url: QUIET_URL },
               ],
             },
             functions: {
-              'tools.direct.execute': () => 'direct',
-              'tools.lookup_order.execute': (args) => {
-                const { id } = args as { id?: unknown };
-                if (typeof id !== 'string') {
-                  throw new Invalid({ message: 'Expected a string', path: ['id'] });
-                }
-                noted('lookup_order', args);
-                return JSON.stringify({ id, lines: 3, total: 30 });
-              },
-              'tools.shout.execute': (args) => `${(args as { text: string }).text.toUpperCase()}!`,
-              'tools.explode.execute': () => {
-                throw new Error('it exploded');
-              },
-              'tools.snapshot.execute': () => [
-                { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: PIXELS } },
-              ],
-              'tools.add_note.execute': async (args) => {
-                noted('add_note', args);
-                const { text, ms } = args as { text: string; ms?: number };
-                if (ms !== undefined) await pause(ms);
-                return `noted: ${text}`;
-              },
-              'tools.count-stock.execute': async (args) => {
-                noted('count-stock', args);
-                const { text, ms } = args as { text: string; ms?: number };
-                if (ms !== undefined) await pause(ms);
-                return JSON.stringify({ item: text, left: text.length });
-              },
-              'tools.vanish.execute': () => {
-                throw new Lost('its process died');
-              },
+              ...scripted.functions,
+              'mcps.things.headers': () => ({ Authorization: 'Bearer key-123' }),
+              'mcps.quiet.headers': () => ({}),
             },
           },
         },
-        options: { clock: Date.now, taskTimes: TIMES },
+        options: {
+          clock: Date.now,
+          taskTimes: TIMES,
+          ...(servers === undefined ? {} : { mcp: { fetch: servers.fetch } }),
+        },
       });
       engines.push(one);
       let actor = of;
@@ -186,7 +216,7 @@ export function codeSuite(name: string, open: () => Promise<Store>): void {
         const { agent } = await one.it.deploy({
           agent: 'scripted',
           manifest: MANIFEST,
-          code: 'scripted@1',
+          code: servers === undefined ? 'scripted@1' : 'served@1',
         });
         actor = (await one.it.createActor({ agent: agent.id })).actor.id;
       }
@@ -917,6 +947,216 @@ return rows;`;
         expect((await second.lines()).findLast((line) => line.startsWith('result'))).toBe(
           `result: ${JSON.stringify([both, both], null, 2)}`,
         );
+      });
+    });
+
+    describe('the MCP servers of an agent', () => {
+      const served = (servers = mcpServers(), of?: ActorId) =>
+        setup(of, w, servers).then((given) => ({ ...given, servers }));
+
+      it('are a line each in what the model is told of `code`, and nothing is asked of them to say so', async () => {
+        const { one, steps, actor, settled, servers } = await served();
+        await one.say(actor, 'hello');
+        await settled();
+        const told = steps[0]?.tools.find((tool) => tool.name === 'code')?.description ?? '';
+        expect(told).toContain('lookup_order(args:');
+        // A server is a line, and none of its tools are told.
+        expect(told).toContain(
+          'MCP servers, whose tools are not listed here:\n- things: A warehouse of things: stock and notes.\n- quiet\n',
+        );
+        expect(told).toContain('A tool of a server is `tools.mcp__<server>__<tool>`.');
+        expect(told).not.toMatch(/slow_note|whisper|mcp__things__stock/);
+        expect(servers.methods).toEqual([]);
+      });
+
+      it('have their tools called by a script, with the headers the agent makes', async () => {
+        const { code, steps, servers } = await served();
+        expect(
+          await code(
+            `const stock = await tools.mcp__things__stock({ item: "bolt" });
+             const note = await tools.mcp__things__add_note({ text: stock.left + " bolts" });
+             const word = await tools.mcp__quiet__whisper({ word: "HELLO" });
+             const photo = await tools.mcp__things__photo({});
+             return { stock, note, word, photo: photo.map((part) => part.type) };`,
+          ),
+        ).toBe(
+          `result: ${JSON.stringify(
+            {
+              stock: { item: 'bolt', left: 4 },
+              note: 'noted: 4 bolts',
+              word: 'hello',
+              photo: ['text', 'image'],
+            },
+            null,
+            2,
+          )}`,
+        );
+        expect(servers.calls).toEqual(['stock:bolt', 'add_note:4 bolts', 'whisper:HELLO']);
+        // The key reached `things` in a header, and never the model.
+        const sent = servers.authorization.filter((value) => value !== null);
+        expect(sent.length).toBeGreaterThan(0);
+        expect(sent.every((value) => value === 'Bearer key-123')).toBe(true);
+        expect(JSON.stringify(steps)).not.toContain('key-123');
+      });
+
+      it('show a script an image a server gave, as the script places it', async () => {
+        const { code } = await served();
+        expect(
+          await code(
+            `const [said, picture] = await tools.mcp__things__photo({});
+             image(picture);
+             return said.text;`,
+          ),
+        ).toBe('result: [image]\none pixel');
+      });
+
+      it('tell a script when a call of theirs fails, beside the agent’s own', async () => {
+        const { code } = await served();
+        expect(
+          await code(
+            `const tried = [];
+             for (const call of [
+               () => tools.mcp__things__broken({}),
+               () => tools.mcp__things__stock({}),
+               () => tools.explode({}),
+             ]) {
+               try { await call(); tried.push("worked"); } catch (error) { tried.push(error.message); }
+             }
+             return tried;`,
+          ),
+        ).toMatch(
+          /^result: \[\n {2}"the shelf gave way",\n {2}".*item.*",\n {2}"it exploded"\n\]$/,
+        );
+      });
+
+      it('are where a script finds the tools it was not told of', async () => {
+        const { code, servers } = await served();
+        const result = await code(
+          `const found = await searchTools("how many left in stock");
+           const quiet = await searchTools("", { server: "quiet" });
+           const one = await searchTools("note", { limit: 1 });
+           return {
+             found: found.map((tool) => tool.name),
+             first: found.find((tool) => tool.name === "mcp__things__stock"),
+             quiet: quiet.map((tool) => tool.name),
+             one: one.length,
+             described: await describeTool("mcp__things__add_note"),
+             all: ALL_TOOLS.map((tool) => tool.name),
+           };`,
+        );
+        const value = JSON.parse(result.slice('result: '.length)) as {
+          found: string[];
+          first: { name: string; description: string; signature: string };
+          quiet: string[];
+          one: number;
+          described: { name: string; signature: string };
+          all: string[];
+        };
+        expect(value.found.slice(0, 3).toSorted()).toEqual([
+          'count_stock',
+          'mcp__things__slow_stock',
+          'mcp__things__stock',
+        ]);
+        // A match says enough to make the call.
+        expect(value.first).toEqual({
+          name: 'mcp__things__stock',
+          description: 'How many of an item are left in stock.',
+          signature: expect.stringMatching(
+            /^mcp__things__stock\(args: \{[\s\S]*item: string;[\s\S]*\}\): Promise<unknown>;$/,
+          ) as string,
+        });
+        expect(value.quiet).toEqual(['mcp__quiet__whisper']);
+        expect(value.one).toBe(1);
+        expect(value.described.name).toBe('mcp__things__add_note');
+        expect(value.described.signature).toContain('text: string;');
+        expect(value.all).toEqual([
+          'lookup_order',
+          'shout',
+          'explode',
+          'snapshot',
+          'add_note',
+          'count_stock',
+          'vanish',
+          'mcp__things__stock',
+          'mcp__things__add_note',
+          'mcp__things__slow_note',
+          'mcp__things__slow_stock',
+          'mcp__things__broken',
+          'mcp__things__photo',
+          'mcp__quiet__whisper',
+        ]);
+        // Searching asked nothing more of the servers than what they offer.
+        expect(servers.methods.filter((method) => method === 'tools/call')).toEqual([]);
+      });
+
+      it('are asked what they offer once for an actor, and not again for its next script', async () => {
+        const { code, servers } = await served();
+        await code('return 1');
+        const asked = servers.methods.filter((method) => method === 'tools/list').length;
+        expect(asked).toBe(2);
+        await code('return 2');
+        expect(servers.methods.filter((method) => method === 'tools/list')).toHaveLength(asked);
+      });
+
+      it('leave a script the rest when one of them cannot be reached, and it is told which', async () => {
+        const servers = mcpServers();
+        servers.down = true;
+        const { code } = await served(servers);
+        expect(
+          await code('return [await tools.mcp__quiet__whisper({ word: "Hi" }), ALL_TOOLS.length];'),
+        ).toBe('result: [\n  "hi",\n  8\n]');
+        const failed = await code('return await tools.mcp__things__stock({ item: "bolt" });');
+        expect(failed).toMatch(
+          /^result \(error\): TypeError: tools\.mcp__things__stock does not exist/,
+        );
+        expect(failed).toMatch(
+          /\[failed\]\nNote: the MCP server things could not be reached when the script started, so its tools were not there \(.*\)\.$/,
+        );
+        // It is asked again the next time, and is back.
+        servers.down = false;
+        expect(await code('return (await tools.mcp__things__stock({ item: "bolt" })).left;')).toBe(
+          'result: 4',
+        );
+      });
+
+      it('have a call that a stop of the engine cut off made again when the server says it only reads, and not otherwise', async () => {
+        const first = await served();
+        await first.start(
+          `const left = (await tools.mcp__things__slow_stock({ item: "bolt", ms: 800 })).left;
+           try {
+             return [left, await tools.mcp__things__slow_note({ text: "one", ms: 1500 })];
+           } catch (error) {
+             return [left, "told: " + error.message];
+           }`,
+          { wait: 20 },
+        );
+        await eventually(() => first.servers.calls.length === 1);
+        await first.one.it.close({ graceMs: 1000 });
+
+        const second = await served(first.servers, first.actor);
+        await second.one.it.recover();
+        await eventually(() => first.servers.calls.length === 3);
+        await second.one.it.close({ graceMs: 1000 });
+        expect(first.servers.calls).toEqual([
+          'slow_stock:bolt',
+          'slow_stock:bolt',
+          'slow_note:one',
+        ]);
+
+        const third = await served(first.servers, first.actor);
+        await third.one.it.recover();
+        await third.settled();
+        expect((await third.lines())[2]).toBe(
+          `result: ${JSON.stringify(
+            [
+              4,
+              'told: The call of mcp__things__slow_note was cut off when the engine stopped. It may or may not have run.',
+            ],
+            null,
+            2,
+          )}`,
+        );
+        expect(first.servers.calls).toHaveLength(3);
       });
     });
   });
