@@ -48,6 +48,9 @@ import type {
   NewTask,
   StoredAccount,
   StoredBlob,
+  ScriptCall,
+  ScriptKept,
+  StoredScript,
   StoredTask,
   TaskEnding,
   StoredDeployment,
@@ -120,6 +123,8 @@ export class MemoryStore implements Store {
   /** The call that spawned each subagent, and the actors that are being stopped, each by whom. */
   readonly #spawnedBy = new Map<ActorId, string>();
   readonly #stopping = new Map<ActorId, Stopping>();
+  /** Each script, by its actor and its task, with the calls it made. */
+  readonly #scripts = new Map<string, { script: StoredScript; calls: ScriptCall[] }>();
   /** Each actor's compactions, newest first. */
   readonly #compactions = new Map<ActorId, StoredCompaction[]>();
   readonly #sandboxProviders = new Map<SandboxProviderId, StoredSandboxProvider>();
@@ -201,6 +206,9 @@ export class MemoryStore implements Store {
       this.#entries.delete(actor);
       this.#blobRefs.delete(actor);
       this.#tasks.delete(actor);
+      for (const key of this.#scripts.keys()) {
+        if (key.startsWith(`${actor}/`)) this.#scripts.delete(key);
+      }
       this.#compactions.delete(actor);
       this.#envs.delete(actor);
     }
@@ -682,6 +690,52 @@ export class MemoryStore implements Store {
     };
     this.#tasks.set(task.actor, [...tasks, stored]);
     return copy(stored);
+  }
+
+  async startScript(
+    actor: ActorId,
+    task: string,
+    script: Pick<StoredScript, 'startedAt' | 'seed' | 'catalog'>,
+  ): Promise<StoredScript> {
+    const key = `${actor}/${task}`;
+    let kept = this.#scripts.get(key);
+    if (kept === undefined) {
+      kept = { script: { ...copy(script), kept: null }, calls: [] };
+      this.#scripts.set(key, kept);
+    }
+    return copy(kept.script);
+  }
+
+  async loadScript(actor: ActorId, task: string): Promise<StoredScript | undefined> {
+    return copy(this.#scripts.get(`${actor}/${task}`)?.script);
+  }
+
+  async endScript(actor: ActorId, task: string, kept: ScriptKept): Promise<void> {
+    const stored = this.#scripts.get(`${actor}/${task}`);
+    if (stored !== undefined) stored.script = { ...stored.script, kept: copy(kept) };
+  }
+
+  async listScriptCalls(actor: ActorId, task: string): Promise<ScriptCall[]> {
+    return copy(this.#scripts.get(`${actor}/${task}`)?.calls ?? []);
+  }
+
+  async addScriptCall(actor: ActorId, task: string, call: Omit<ScriptCall, 'done'>): Promise<void> {
+    const stored = this.#scripts.get(`${actor}/${task}`);
+    if (stored === undefined || stored.calls.some((one) => one.id === call.id)) return;
+    stored.calls = [...stored.calls, { ...copy(call), done: null }].toSorted((a, b) => a.id - b.id);
+  }
+
+  async finishScriptCall(
+    actor: ActorId,
+    task: string,
+    id: number,
+    done: NonNullable<ScriptCall['done']>,
+  ): Promise<void> {
+    const stored = this.#scripts.get(`${actor}/${task}`);
+    if (stored === undefined) return;
+    stored.calls = stored.calls.map((call) =>
+      call.id === id ? { ...call, done: copy(done) } : call,
+    );
   }
 
   async loadTask(actor: ActorId, id: string): Promise<StoredTask | undefined> {

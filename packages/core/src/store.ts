@@ -83,6 +83,44 @@ export type StoredTask = {
   readonly endedAt: number | null;
 };
 
+/**
+ * A script of an actor's model, as a store keeps it: what it is run with, so that it runs the
+ * same way every time it is run, and what it came to (see `code.ts`).
+ */
+export type StoredScript = {
+  /** Where its clock starts. */
+  readonly startedAt: number;
+  /** What its random numbers are made from. */
+  readonly seed: number;
+  /** What there was for it to call when it started. */
+  readonly catalog: Json;
+  /** What it came to, once it has ended: what it returned, as JSON text, and all else it printed. */
+  readonly kept: ScriptKept | null;
+};
+
+export type ScriptKept = {
+  readonly ended: 'returned' | 'failed' | 'stopped';
+  readonly value: string | null;
+  readonly logs: string;
+};
+
+/** A call a script made, as a store keeps it: stored before the call is made. */
+export type ScriptCall = {
+  /** The script's own number for it: 1, 2, and on, in the order it made its calls. */
+  readonly id: number;
+  readonly name: string;
+  /** What it was called with: JSON, as text. */
+  readonly args: string;
+  /** Whether it is safe to make again when the engine stopped with it under way. */
+  readonly retrySafe: boolean;
+  readonly startedAt: number;
+  /**
+   * Its result, once it has one: its place among the script's results, when it arrived, and
+   * what it was. Null while the call is under way.
+   */
+  readonly done: { readonly seq: number; readonly at: number; readonly outcome: Json } | null;
+};
+
 /** A task to store: everything but its ID, which the store gives it. */
 export type NewTask = Pick<
   StoredTask,
@@ -630,6 +668,32 @@ export interface Store {
     end: TaskEnding,
     notice: Input | null,
   ): Promise<{ readonly ended: boolean; readonly notified: boolean }>;
+
+  // Scripts: what a script of a model is run with, and every call it made (see `code.ts`)
+
+  /**
+   * Stores what a task's script is run with, once, and gives what is stored: a script that is
+   * run again is run with what it was first run with.
+   */
+  startScript(
+    actor: ActorId,
+    task: string,
+    script: Pick<StoredScript, 'startedAt' | 'seed' | 'catalog'>,
+  ): Promise<StoredScript>;
+  loadScript(actor: ActorId, task: string): Promise<StoredScript | undefined>;
+  /** Keeps what a script came to, for a later script to read. */
+  endScript(actor: ActorId, task: string, kept: ScriptKept): Promise<void>;
+  /** The calls a script made, in the order it made them. */
+  listScriptCalls(actor: ActorId, task: string): Promise<ScriptCall[]>;
+  /** Stores a call before it is made. */
+  addScriptCall(actor: ActorId, task: string, call: Omit<ScriptCall, 'done'>): Promise<void>;
+  /** Stores a call's result, with its place among its script's results. */
+  finishScriptCall(
+    actor: ActorId,
+    task: string,
+    id: number,
+    done: NonNullable<ScriptCall['done']>,
+  ): Promise<void>;
 
   // Machines: the computers commands run on (see `machines.ts`)
 

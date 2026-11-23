@@ -25,6 +25,9 @@ import type {
   NewTask,
   StoredAccount,
   StoredBlob,
+  ScriptCall,
+  ScriptKept,
+  StoredScript,
   StoredTask,
   TaskEnding,
   StoredDeployment,
@@ -410,6 +413,38 @@ type TaskRow = {
   ended_at: number | null;
 };
 
+type ScriptRow = {
+  started_at: number;
+  seed: number;
+  catalog: string;
+  ended: string | null;
+  value: string | null;
+  logs: string | null;
+};
+
+type ScriptCallRow = {
+  id: number;
+  name: string;
+  args: string;
+  retry_safe: number;
+  started_at: number;
+  seq: number | null;
+  at: number | null;
+  outcome: string | null;
+};
+
+function scriptOf(row: ScriptRow): StoredScript {
+  return {
+    startedAt: row.started_at,
+    seed: row.seed,
+    catalog: JSON.parse(row.catalog) as Json,
+    kept:
+      row.ended === null
+        ? null
+        : { ended: row.ended as ScriptKept['ended'], value: row.value, logs: row.logs ?? '' },
+  };
+}
+
 function taskOf(row: TaskRow): StoredTask {
   return {
     actor: row.actor_id,
@@ -504,6 +539,10 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'detachTask',
   'detachTasks',
   'endTask',
+  'startScript',
+  'endScript',
+  'addScriptCall',
+  'finishScriptCall',
   'addKey',
   'removeKeys',
   'touchKey',
@@ -603,6 +642,8 @@ export function operations(db: DatabaseSync) {
 
   const task = (actor: ActorId, id: string): TaskRow | undefined =>
     get<TaskRow>('SELECT * FROM tasks WHERE actor_id = ? AND id = ?', actor, id);
+  const scriptRow = (actor: ActorId, taskId: string): ScriptRow | undefined =>
+    get<ScriptRow>('SELECT * FROM scripts WHERE actor_id = ? AND task_id = ?', actor, taskId);
 
   /** Puts an input in the mailbox. 0 when its actor has one of its external ID already. */
   const putInput = (input: Input): number =>
@@ -727,6 +768,11 @@ export function operations(db: DatabaseSync) {
         id,
       );
       run('DELETE FROM tasks WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
+      run('DELETE FROM scripts WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
+      run(
+        'DELETE FROM script_calls WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
+        id,
+      );
       run(
         'DELETE FROM compactions WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
         id,
@@ -1505,6 +1551,94 @@ export function operations(db: DatabaseSync) {
         given.startedAt,
       );
       return taskOf(task(given.actor, id) as TaskRow);
+    },
+
+    startScript(
+      actor: ActorId,
+      taskId: string,
+      script: Pick<StoredScript, 'startedAt' | 'seed' | 'catalog'>,
+    ): StoredScript {
+      run(
+        `INSERT INTO scripts (actor_id, task_id, started_at, seed, catalog) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (actor_id, task_id) DO NOTHING`,
+        actor,
+        taskId,
+        script.startedAt,
+        script.seed,
+        JSON.stringify(script.catalog),
+      );
+      return scriptOf(scriptRow(actor, taskId) as ScriptRow);
+    },
+
+    loadScript(actor: ActorId, taskId: string): StoredScript | undefined {
+      const row = scriptRow(actor, taskId);
+      return row === undefined ? undefined : scriptOf(row);
+    },
+
+    endScript(actor: ActorId, taskId: string, kept: ScriptKept): void {
+      run(
+        'UPDATE scripts SET ended = ?, value = ?, logs = ? WHERE actor_id = ? AND task_id = ?',
+        kept.ended,
+        kept.value,
+        kept.logs,
+        actor,
+        taskId,
+      );
+    },
+
+    listScriptCalls(actor: ActorId, taskId: string): ScriptCall[] {
+      return all<ScriptCallRow>(
+        'SELECT * FROM script_calls WHERE actor_id = ? AND task_id = ? ORDER BY id',
+        actor,
+        taskId,
+      ).map((row) => ({
+        id: row.id,
+        name: row.name,
+        args: row.args,
+        retrySafe: row.retry_safe === 1,
+        startedAt: row.started_at,
+        done:
+          row.seq === null
+            ? null
+            : {
+                seq: row.seq,
+                at: row.at ?? row.started_at,
+                outcome: JSON.parse(row.outcome ?? 'null') as Json,
+              },
+      }));
+    },
+
+    addScriptCall(actor: ActorId, taskId: string, call: Omit<ScriptCall, 'done'>): void {
+      run(
+        `INSERT INTO script_calls (actor_id, task_id, id, name, args, retry_safe, started_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (actor_id, task_id, id) DO NOTHING`,
+        actor,
+        taskId,
+        call.id,
+        call.name,
+        call.args,
+        call.retrySafe ? 1 : 0,
+        call.startedAt,
+      );
+    },
+
+    finishScriptCall(
+      actor: ActorId,
+      taskId: string,
+      id: number,
+      done: NonNullable<ScriptCall['done']>,
+    ): void {
+      run(
+        `UPDATE script_calls SET seq = ?, at = ?, outcome = ?
+         WHERE actor_id = ? AND task_id = ? AND id = ?`,
+        done.seq,
+        done.at,
+        JSON.stringify(done.outcome),
+        actor,
+        taskId,
+        id,
+      );
     },
 
     loadTask(actor: ActorId, id: string): StoredTask | undefined {
