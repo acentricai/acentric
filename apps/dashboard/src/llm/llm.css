@@ -1,0 +1,317 @@
+/* LLM providers and their usage: drawn with the design's tokens alone. The one series is
+   --series-0; grid and axes are a hairline step off the surface; text wears text tokens. */
+
+.llm-page .page__title {
+  margin: 0;
+}
+
+.llm-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* One row of filters, above everything they scope. */
+.usage-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+/* The numbers of the range. */
+.usage-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.usage-tile {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+}
+
+.usage-tile__label {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.usage-tile__value {
+  color: var(--ink);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-tile__note {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.usage-panel {
+  margin-bottom: var(--space-6);
+}
+
+.usage-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.usage-panel__foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+/* Spend by day: columns from one baseline, at most 24px wide, rounded at the data end. */
+.usage-chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  height: 220px;
+  padding-bottom: 22px;
+}
+
+.usage-chart--loading {
+  display: block;
+  border-radius: var(--radius-md);
+  background: var(--wash);
+}
+
+.usage-chart__axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  transform: translateY(-6px);
+}
+
+.usage-chart__plot {
+  position: relative;
+  min-width: 0;
+}
+
+.usage-chart__grid span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.usage-chart__columns {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* The whole height of a day is its hover target, bigger than its bar. */
+.usage-chart__slot {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+  min-width: 0;
+  padding: 0 1px;
+  outline: none;
+}
+
+.usage-chart__slot[data-active] {
+  background: var(--hover);
+}
+
+.usage-chart__slot:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+
+.usage-chart__bar {
+  width: min(24px, 70%);
+  border-radius: 4px 4px 0 0;
+  background: var(--series-0);
+}
+
+.usage-chart__label {
+  position: absolute;
+  top: calc(100% + 6px);
+  color: var(--ink-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.usage-chart__slot:first-child .usage-chart__label {
+  left: 0;
+}
+
+.usage-chart__slot:last-child .usage-chart__label {
+  right: 0;
+}
+
+.usage-tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  min-width: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  box-shadow: var(--shadow-pop);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.usage-tooltip strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A group's share of the whole: one hue on a lighter track of the same gray. */
+.usage-share {
+  display: block;
+  width: 96px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--stone);
+}
+
+.usage-share--wide {
+  width: 160px;
+}
+
+.usage-share__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--series-0);
+}
+
+.usage-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+  .usage-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .usage-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Signing in with ChatGPT: the button where a key would be, then the two steps and the wait. */
+.chatgpt-sign-in {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.chatgpt-sign-in__button {
+  justify-self: start;
+}
+
+.chatgpt-steps {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.chatgpt-steps > li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px var(--space-3);
+  counter-increment: step;
+}
+
+.chatgpt-steps > li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--wash);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chatgpt-steps > li > * {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.chatgpt-steps > li > .secret-once {
+  justify-self: stretch;
+}
+
+.chatgpt-steps__text {
+  color: var(--ink);
+  line-height: 22px;
+}
+
+.chatgpt-code {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.chatgpt-wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.chatgpt-wait__spinner {
+  flex: none;
+  animation: chatgpt-spin 800ms linear infinite;
+}
+
+@keyframes chatgpt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatgpt-wait__spinner {
+    animation-duration: 2s;
+  }
+}
+
+/* Signing in with Claude: the code Claude's page showed, pasted back, beside the button that gives it. */
+.claude-code-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+}
