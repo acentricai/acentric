@@ -62,6 +62,7 @@ To put one back, with the service stopped:
 sudo systemctl stop acentric
 sudo docker run --rm -i --env-file /etc/acentric/acentric.env --volume acentric-data:/data \
   --volume /etc/acentric/secrets/secret-key:/run/secrets/acentric/secret-key:ro \
+  --volume /etc/acentric/secrets/admin-key:/run/secrets/acentric/admin-key:ro \
   ghcr.io/acentricai/acentric-server:0.15.0 acentric-server restore < acentric-2026-11-23.tar
 sudo systemctl start acentric
 ```

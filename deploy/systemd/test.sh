@@ -89,6 +89,7 @@ get -H 'content-type: application/json' -d '{"name":"after-backup"}' "$url/v1/ma
 systemctl stop acentric
 docker run --rm -i --env-file /etc/acentric/acentric.env --volume acentric-data:/data \
   --volume /etc/acentric/secrets/secret-key:/run/secrets/acentric/secret-key:ro \
+  --volume /etc/acentric/secrets/admin-key:/run/secrets/acentric/admin-key:ro \
   "$image" acentric-server restore < "$backup"
 systemctl start acentric
 up
