@@ -6,6 +6,8 @@ import '@fontsource/geist-sans/600.css';
 import './styles/tokens.css';
 import './styles/components.css';
 import './styles/base.css';
+import './styles/app.css';
+import './styles/states.css';
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';

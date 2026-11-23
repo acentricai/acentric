@@ -1,0 +1,886 @@
+/* The signed-in app: sidebar, top bar, page. Sidebar measurements and motion
+   follow the serverless-agents sidebar (measured from Kobra's): 32px rows,
+   2px gaps, 8px insets, one interruptible hover highlight, and an active line
+   that settles on a critically damped curve. */
+
+/* The document, for pages inside the shell and outside it (from the
+   reference's auth.css, where it lives there). */
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.shell {
+  --side-w: 240px;
+  --rail-w: 56px;
+  --bar-h: 56px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Critically damped settling, fitted to the reference's captured frames.
+     A transition retargets from where it is if the tab changes midway. */
+  --settle: linear(
+    0,
+    0.0285,
+    0.0963,
+    0.184,
+    0.279,
+    0.3732,
+    0.4621,
+    0.5431,
+    0.6152,
+    0.6783,
+    0.7326,
+    0.7789,
+    0.8181,
+    0.8509,
+    0.8782,
+    0.9008,
+    0.9195,
+    0.9348,
+    0.9473,
+    0.9575,
+    0.9658,
+    0.9725,
+    0.978,
+    0.9823,
+    0.9859,
+    0.9887,
+    0.991,
+    0.9928,
+    0.9943,
+    0.9955,
+    0.9964,
+    0.9971,
+    0.9977,
+    0.9982,
+    0.9986,
+    0.9989,
+    1
+  );
+  display: grid;
+  grid-template-columns: var(--side-w) minmax(0, 1fr);
+  min-height: 100dvh;
+  transition: grid-template-columns 300ms var(--ease-reveal);
+}
+
+.shell[data-collapsed] {
+  --side-w: var(--rail-w);
+}
+
+/* ---------- Sidebar ---------- */
+
+.side {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-width: 0;
+  border-right: 1px solid var(--hairline);
+  background: var(--panel);
+}
+
+.side__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: var(--bar-h);
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* The mark sits where the rail centres it, so collapsing never moves it. */
+.side__brand {
+  display: inline-flex;
+  flex: none;
+  border-radius: 6px;
+}
+
+.side__brand:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.side__mark {
+  display: block;
+  width: 24px;
+  height: auto;
+}
+
+:root[data-theme='dark'] .side__mark {
+  filter: invert(1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .side__mark {
+    filter: invert(1);
+  }
+}
+
+.side__slash {
+  flex: none;
+  margin: 0 2px 0 6px;
+  color: var(--line-field-focus);
+  font-size: 18px;
+  font-weight: 300;
+  transition: opacity 200ms ease;
+}
+
+.side[data-collapsed] .side__slash,
+.side[data-collapsed] .org {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 150ms ease,
+    visibility 0s linear 150ms;
+}
+
+/* ---------- Organization switcher ---------- */
+
+.org {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  transition: opacity 200ms ease 100ms;
+}
+
+.org__button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 6px 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: 500 14px/20px var(--font-sans);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.org__button:hover,
+.org__button[aria-expanded='true'] {
+  background: var(--hover);
+}
+
+/* The engine's name, where an org switcher would be: not a control. */
+.org__button--static,
+.org__button--static:hover {
+  background: transparent;
+  cursor: default;
+}
+
+.org__button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.org__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org__chevron {
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.org__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--stone);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.org__avatar--add {
+  border: 1px dashed var(--line-field-focus);
+  background: transparent;
+  color: var(--ink-muted);
+}
+
+.org__pop {
+  top: calc(100% + 6px);
+  left: -40px;
+}
+
+/* ---------- Navigation ---------- */
+
+.nav {
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.nav__group {
+  padding: 8px;
+}
+
+.nav__separator {
+  height: 1px;
+  background: var(--hairline);
+}
+
+.nav__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px 0 11px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  font: 400 12px/16px var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    height 300ms var(--ease-reveal),
+    opacity 200ms ease,
+    color 150ms ease;
+}
+
+.nav__label:hover {
+  color: var(--ink-secondary);
+}
+
+.nav__label:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.nav__fold {
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    transform 300ms var(--ease-reveal);
+}
+
+.nav__label:hover .nav__fold,
+.nav__label:focus-visible .nav__fold,
+.nav__label[aria-expanded='false'] .nav__fold {
+  opacity: 1;
+}
+
+.nav__label[aria-expanded='false'] .nav__fold {
+  transform: rotate(-90deg);
+}
+
+/* Folding: the rows' track closes to nothing and the rows slide under it. */
+.nav__fold-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 300ms var(--ease-reveal);
+}
+
+.nav__section[data-folded] .nav__fold-body {
+  grid-template-rows: 0fr;
+}
+
+.nav__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+
+.nav__list li {
+  position: relative;
+}
+
+.nav__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 8px 0 11px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  font-size: 14px;
+  line-height: 20px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 200ms var(--ease-reveal);
+}
+
+/* One hit area across the 2px gaps, so the highlight never flickers off. */
+.nav__link::after {
+  position: absolute;
+  inset: -1px 0;
+  content: '';
+}
+
+.nav__link:hover,
+.nav__link[aria-current='page'] {
+  color: var(--ink);
+}
+
+.nav__link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.nav__icon {
+  position: relative;
+  display: flex;
+  flex: none;
+  color: var(--ink-muted);
+  transition:
+    transform 150ms var(--ease-out),
+    color 200ms var(--ease-reveal);
+}
+
+.nav__link:hover .nav__icon,
+.nav__link[aria-current='page'] .nav__icon {
+  color: var(--ink);
+}
+
+.nav__link:active .nav__icon {
+  transform: scale(0.9);
+}
+
+.nav__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 200ms ease 80ms;
+}
+
+.nav__highlight {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  left: 8px;
+  z-index: -1;
+  height: var(--hl-h);
+  border-radius: var(--radius-sm);
+  background: var(--hover);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(var(--hl-y));
+  transition:
+    transform 150ms var(--ease-out),
+    opacity 150ms var(--ease-out);
+}
+
+.nav__highlight[data-visible] {
+  opacity: 1;
+}
+
+.nav__active-line {
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 2px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  pointer-events: none;
+  transform: translateY(calc(var(--active-y) + (var(--active-h) - 18px) / 2));
+  transition: transform 360ms var(--settle);
+}
+
+.nav__active-line[data-instant],
+.nav[data-keyboard] .nav__highlight,
+.nav[data-keyboard] .nav__active-line {
+  transition: none;
+}
+
+/* The rail's tooltip: one element that slides between rows, like the highlight. */
+.nav__tooltip {
+  position: fixed;
+  z-index: 50;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--solid);
+  color: var(--on-solid);
+  font: 500 13px/18px var(--font-sans);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-4px, -50%);
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out),
+    top 150ms var(--ease-out);
+}
+
+.nav__tooltip[data-visible] {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* ---------- Collapsed to the rail ---------- */
+
+.side[data-collapsed] .nav__label {
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.side[data-collapsed] .nav__text,
+.side[data-collapsed] .me__email,
+.side[data-collapsed] .me__chevron {
+  opacity: 0;
+  transition-delay: 0s;
+}
+
+/* ---------- Account ---------- */
+
+.side__footer {
+  position: relative;
+  flex: none;
+  padding: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  padding: 0 8px 0 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: 400 13px/18px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.me:hover,
+.me[aria-expanded='true'] {
+  background: var(--hover);
+}
+
+.me:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.me__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--stone);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.me__email {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 200ms ease 80ms;
+}
+
+.me__chevron {
+  flex: none;
+  color: var(--ink-muted);
+  transition: opacity 200ms ease 80ms;
+}
+
+.me__pop {
+  bottom: calc(100% + 6px);
+  left: 8px;
+}
+
+/* ---------- Popovers ---------- */
+
+.pop {
+  position: absolute;
+  z-index: 30;
+  display: grid;
+  width: 260px;
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  box-shadow: var(--shadow-pop);
+  animation: pop 160ms var(--ease-out) both;
+}
+
+.pop__heading {
+  padding: 6px 8px 4px;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.pop__heading--email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pop__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: 400 14px/20px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pop__item > svg {
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.pop__item:hover,
+.pop__item:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.pop__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pop__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 0 4px 0 8px;
+  font-size: 14px;
+}
+
+.pop__rule {
+  height: 1px;
+  margin: 4px -6px;
+  background: var(--hairline);
+}
+
+/* Light and dark as icons, in the segmented style. */
+.theme-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--hover);
+}
+
+.theme-toggle__option {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.theme-toggle__option:hover {
+  color: var(--ink);
+}
+
+.theme-toggle__option[aria-checked='true'] {
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.theme-toggle__option:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.me__pop {
+  animation-name: pop-up;
+}
+
+@keyframes pop-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Top bar and page ---------- */
+
+.shell__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--bar-h);
+  padding: 0 24px 0 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--ground);
+}
+
+.topbar__toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.topbar__toggle:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.topbar__toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.topbar__toggle:active svg {
+  transform: scale(0.9);
+}
+
+.topbar__menu {
+  display: none;
+}
+
+.topbar__rule {
+  width: 1px;
+  height: 16px;
+  background: var(--hairline);
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.crumbs__item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crumbs__item--current {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.crumbs__sep {
+  color: var(--line-field-focus);
+}
+
+/* Go to: the field style of the reference's search, quiet and compact, at the
+   bar's right. */
+.goto {
+  flex: none;
+  margin-left: auto;
+  height: var(--control-sm);
+  padding: 0 4px 0 10px;
+  gap: 6px;
+}
+
+.goto input {
+  width: 160px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.goto__key {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  color: var(--ink-muted);
+  font: 400 11px/1 var(--font-mono);
+  transition: opacity 150ms ease;
+}
+
+.goto:focus-within .goto__key {
+  opacity: 0;
+}
+
+.page {
+  width: min(100%, calc(var(--content-max) + 2 * 40px));
+  padding: 40px;
+}
+
+.page:focus {
+  outline: none;
+}
+
+.page__title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 32px;
+  letter-spacing: -0.03em;
+  animation: rise 400ms var(--ease-reveal) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell,
+  .shell *,
+  .shell *::after,
+  .nav__tooltip {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ---------- Phone: the sidebar is a drawer ---------- */
+
+.shell__scrim {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .shell,
+  .shell[data-collapsed] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: min(280px, 85vw);
+    transform: translateX(-100%);
+    transition: transform 300ms var(--ease-reveal);
+  }
+
+  .shell[data-drawer] .side {
+    transform: none;
+    box-shadow: var(--shadow-pop);
+  }
+
+  .shell__scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    display: block;
+    background: var(--scrim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 300ms var(--ease-reveal);
+  }
+
+  .shell[data-drawer] .shell__scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .topbar {
+    padding: 0 16px 0 10px;
+  }
+
+  .topbar__menu {
+    display: block;
+  }
+
+  .topbar__side {
+    display: none;
+  }
+
+  .goto input {
+    width: 96px;
+  }
+
+  .page {
+    padding: 28px var(--gutter-narrow);
+  }
+}
