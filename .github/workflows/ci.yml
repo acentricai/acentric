@@ -187,3 +187,20 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+
+  # What main's protection requires: one check that stands for every job above. A job that was
+  # not run, because the change could not break it, passes; one that failed or was stopped fails
+  # this.
+  passed:
+    name: CI passed
+    needs: [changes, lint, typescript, image, rust]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every job that ran passed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -Eq '"(failure|cancelled)"'; then exit 1; fi
