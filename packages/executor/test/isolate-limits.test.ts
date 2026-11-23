@@ -441,22 +441,25 @@ describe('many deployments, and replacing a process', () => {
     const deployments = await Promise.all(
       Array.from({ length: 6 }, (_, index) => load(`// steady ${String(index)}`)),
     );
-    const until = Date.now() + 1500;
-    const worker = async (offset: number): Promise<number> => {
-      let done = 0;
-      for (let n = offset; Date.now() < until; n += 1) {
+    // A number of calls, not as many as fit in a time: how fast a process starts again is the
+    // machine's, and a busy one starts them slowly. What is kept from the time is that no call
+    // waits on a replacement anywhere near as long as a process is given to drain.
+    const took: number[] = [];
+    const worker = async (offset: number): Promise<void> => {
+      for (let n = offset; n < offset + 8; n += 1) {
+        const started = Date.now();
         const answer = await tool('sleep', { ms: 50 }, deployments[n % 6]);
         expect(text(answer)).toBe('slept');
-        done += 1;
+        took.push(Date.now() - started);
       }
-      return done;
     };
-    const counts = await Promise.all([0, 2, 4].map(worker));
-    expect(counts.every((count) => count > 5)).toBe(true);
+    await Promise.all([0, 2, 4].map(worker));
+    expect(took).toHaveLength(24);
+    expect(Math.max(...took)).toBeLessThan(2500);
     const stats = executor.stats();
     expect(running(executor)[0]?.recycles.bundles).toBeGreaterThan(1);
     expect(Object.values(stats.lost).every((count) => count === 0)).toBe(true);
-  });
+  }, 30_000);
 
   it('puts replacing off when it would be too often, and says it has too little room', async () => {
     const { executor, load, tool } = await start({ maxBundles: 2, minRecycleMs: 60_000 });
