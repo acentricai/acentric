@@ -240,6 +240,15 @@ export function fakeServer() {
       machines.push(added);
       return json(201, { machine: added, token: `token-${name}`, expiresAt: NOW + 3_600_000 });
     }
+    const upgrade = /^\/v1\/machines\/([^/]+)\/upgrade$/.exec(path);
+    if (method === 'POST' && upgrade !== null) {
+      const found = machine(upgrade[1] ?? '');
+      if (found === undefined) return refused(404, 'not_found', 'There is no such machine');
+      if (!found.online) return refused(409, 'conflict', `The machine ${found.id} is not online`);
+      const updated = found.current !== true;
+      Object.assign(found, { current: true, version: '0.16.0' });
+      return json(200, { machine: found, updated });
+    }
     const one = /^\/v1\/machines\/([^/]+)(\/token)?$/.exec(path);
     if (one !== null) {
       const found = machine(one[1] ?? '');

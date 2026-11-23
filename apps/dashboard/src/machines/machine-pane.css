@@ -14,7 +14,8 @@
   animation: rise 400ms var(--ease-reveal) both;
 }
 
-.machine-status {
+.machine-status,
+.machine-daemon {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;

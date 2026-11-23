@@ -29,6 +29,9 @@ export const engine = {
     api.call('machines.update', { params: { machine: machine as never }, body: { agents } }),
   machineToken: (machine: string) =>
     api.call('machines.token', { params: { machine: machine as never } }),
+  /** Has the machine's daemon take this engine's build of the machine program. */
+  upgradeMachine: (machine: string) =>
+    api.call('machines.upgrade', { params: { machine: machine as never } }),
   removeMachine: (machine: string) =>
     api.call('machines.delete', { params: { machine: machine as never } }),
   /** The agents there are: as many as one page holds, which is more than a machine is chosen from. */
