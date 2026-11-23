@@ -113,6 +113,10 @@ export const USAGE_GROUPS = [
 ] as const;
 export type UsageGroup = (typeof USAGE_GROUPS)[number];
 
+/** What a call of a model was for: a turn of its actor, or compacting the actor's conversation. */
+export const USAGE_KINDS = ['turn', 'compaction'] as const;
+export type UsageKind = (typeof USAGE_KINDS)[number];
+
 /** Which calls are added up, and by what. Each filter narrows them. */
 export const usageQuerySchema = z.object({
   /** From this time on. */
@@ -126,6 +130,8 @@ export const usageQuerySchema = z.object({
   account: accountIdSchema.optional(),
   provider: providerIdSchema.optional(),
   model: modelIdSchema.optional(),
+  /** The calls of turns, or those that compacted a conversation. Both without it. */
+  kind: z.enum(USAGE_KINDS).optional(),
   /** With it, the totals of each group as well, the one that cost most first. */
   by: z.enum(USAGE_GROUPS).optional(),
 });

@@ -122,6 +122,42 @@ function describeTool(tool: unknown, index: number, names: Set<string>): ToolDec
   return { name, description, parameters: schema, retrySafe: retrySafe === true };
 }
 
+/** An agent's own compaction numbers, checked: whole numbers of tokens, by model. */
+function describeCompaction(settings: unknown): AgentDefinition['compactionSettings'] {
+  if (settings === undefined) return undefined;
+  if (!isDict(settings)) {
+    throw new InvalidAgent('compactionSettings is an object of numbers by model ID');
+  }
+  const described: { [model: string]: { threshold?: number; reserve?: number } } = {};
+  for (const [model, numbers] of Object.entries(settings)) {
+    if (!isDict(numbers)) {
+      throw new InvalidAgent(`compactionSettings.${model} is an object with threshold and reserve`);
+    }
+    const { threshold, reserve, ...rest } = numbers;
+    const other = Object.keys(rest)[0];
+    if (other !== undefined) {
+      throw new InvalidAgent(
+        `compactionSettings.${model} has ${other}: it has threshold and reserve`,
+      );
+    }
+    for (const [field, value] of [
+      ['threshold', threshold],
+      ['reserve', reserve],
+    ] as const) {
+      if (value !== undefined && !(Number.isInteger(value) && (value as number) >= 0)) {
+        throw new InvalidAgent(
+          `compactionSettings.${model}.${field} is a whole number of tokens, 0 or more`,
+        );
+      }
+    }
+    described[model] = {
+      ...(threshold === undefined ? {} : { threshold: threshold as number }),
+      ...(reserve === undefined ? {} : { reserve: reserve as number }),
+    };
+  }
+  return Object.keys(described).length === 0 ? undefined : described;
+}
+
 type SubagentDeclaration = NonNullable<AgentDefinition['subagents']>[number];
 
 function describeSubagent(subagent: unknown, index: number, ids: Set<string>): SubagentDeclaration {
@@ -270,6 +306,8 @@ function describe(agent: Dict): AgentDefinition {
   const ids = new Set<string>();
   const subagents = listed.map((subagent, index) => describeSubagent(subagent, index, ids));
 
+  const compactionSettings = describeCompaction(agent['compactionSettings']);
+
   const schedule = agent['schedule'];
   if (schedule !== undefined && (!isDict(schedule) || !isFn(schedule['handler']))) {
     throw new InvalidAgent("The agent's schedule has no handler");
@@ -284,6 +322,7 @@ function describe(agent: Dict): AgentDefinition {
     inputs: declared,
     ...(providerOptions === undefined ? {} : { providerOptions }),
     ...(subagents.length === 0 ? {} : { subagents }),
+    ...(compactionSettings === undefined ? {} : { compactionSettings }),
     ...(secrets.length === 0 ? {} : { secrets: [...new Set(secrets as string[])] }),
     ...(features.length === 0 ? {} : { features }),
   };
