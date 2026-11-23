@@ -361,3 +361,59 @@
   color: var(--ink-muted);
   font-size: 12.5px;
 }
+
+/* An agent of the Agents filter: its checkbox, and an arrow to its actors, drawn beside the list. */
+.filter-chip__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.filter-chip__row .filter-chip__option {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-chip__row .filter-chip__option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-chip__row[data-open] {
+  background: var(--hover);
+}
+
+.filter-chip__more {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.filter-chip__more:hover,
+.filter-chip__row[data-open] .filter-chip__more {
+  color: var(--ink);
+}
+
+.filter-chip__more:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.pop.filter-chip__beside {
+  width: max-content;
+  min-width: 200px;
+  max-width: 300px;
+  max-height: 288px;
+  overflow-y: auto;
+  transform-origin: top left;
+}

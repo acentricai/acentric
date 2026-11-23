@@ -3,7 +3,7 @@
 // Installed as the page's `fetch`.
 
 import { ROLE_PERMISSIONS } from '@acentric/protocol';
-import type { Machine, Role, Sandbox, SandboxProviderAccount } from '@acentric/protocol';
+import type { Actor, Machine, Role, Sandbox, SandboxProviderAccount } from '@acentric/protocol';
 
 type Person = { readonly id: string; readonly email: string; password: string; role: Role };
 
@@ -31,6 +31,30 @@ export function machineOf(name: string, more: Partial<Machine> = {}): Machine {
   };
 }
 
+/** An actor of an agent, idle and on no machine unless said. */
+export function actorOf(id: string, agent: string, more: Partial<Actor> = {}): Actor {
+  return {
+    id: id as Actor['id'],
+    name: null,
+    externalId: null,
+    agent: agent as Actor['agent'],
+    deployment: { id: `dep_${'0'.repeat(26)}` as never, version: 1 },
+    pinned: false,
+    behind: null,
+    modelId: 'fake-1',
+    reasoning: 'medium',
+    configuration: null,
+    machine: null,
+    parent: null,
+    status: 'idle',
+    lastTurn: null,
+    pendingInputs: 0,
+    createdAt: NOW,
+    archivedAt: null,
+    ...more,
+  } as Actor;
+}
+
 export type FakeServer = ReturnType<typeof fakeServer>;
 
 const json = (status: number, body: unknown) =>
@@ -54,6 +78,7 @@ export function fakeServer() {
   const agents: { id: string; name: string }[] = [];
   const providers: SandboxProviderAccount[] = [];
   const sandboxes: Sandbox[] = [];
+  const actors: Actor[] = [];
   let made = 0;
 
   const principal = (person: Person) => ({
@@ -93,7 +118,12 @@ export function fakeServer() {
     });
   };
 
-  const answer = (method: string, path: string, body: Record<string, unknown>): Response => {
+  const answer = (
+    method: string,
+    path: string,
+    body: Record<string, unknown>,
+    query: URLSearchParams,
+  ): Response => {
     if (method === 'GET' && path === '/v1/me') {
       const person = signedIn === undefined ? undefined : people.get(signedIn);
       return person === undefined
@@ -145,16 +175,53 @@ export function fakeServer() {
       if (signedIn === person.email) signedIn = undefined;
       return json(204, null);
     }
-    return machineRoutes(method, path, body);
+    return machineRoutes(method, path, body, query);
   };
 
   /** The routes of machines and sandboxes, for one signed in. */
-  const machineRoutes = (method: string, path: string, body: Record<string, unknown>): Response => {
+  const machineRoutes = (
+    method: string,
+    path: string,
+    body: Record<string, unknown>,
+    query: URLSearchParams,
+  ): Response => {
     if (signedIn === undefined) return refused(401, 'unauthenticated', 'The request has no key');
+    if (method === 'GET' && path === '/v1/actors') {
+      const items = actors.filter(
+        (actor) =>
+          actor.agent === query.get('agent') &&
+          (query.get('status') === null || actor.status === query.get('status')),
+      );
+      return json(200, { items, nextCursor: null });
+    }
+    const anActor = /^\/v1\/actors\/([^/]+)$/.exec(path);
+    if (method === 'GET' && anActor !== null) {
+      const found = actors.find((actor) => actor.id === anActor[1]);
+      return found === undefined
+        ? refused(404, 'not_found', 'There is no such actor')
+        : json(200, found);
+    }
     if (method === 'GET' && path === '/v1/agents') {
       return json(200, { items: agents, nextCursor: null });
     }
-    if (method === 'GET' && path === '/v1/machines') return json(200, { items: machines });
+    if (method === 'GET' && path === '/v1/machines') {
+      const agentsAsked = query.get('agent')?.split(',');
+      const actorsAsked = query.get('actor')?.split(',');
+      if (agentsAsked === undefined && actorsAsked === undefined) {
+        return json(200, { items: machines });
+      }
+      // As the server has it: the machines of the agents' actors not archived, and of the actors.
+      const used = new Set(
+        actors
+          .filter(
+            (actor) =>
+              (agentsAsked?.includes(actor.agent) === true && actor.status !== 'archived') ||
+              actorsAsked?.includes(actor.id) === true,
+          )
+          .map((actor) => actor.machine?.id),
+      );
+      return json(200, { items: machines.filter((one) => used.has(one.id)) });
+    }
     if (method === 'POST' && path === '/v1/machines') {
       const name = String(body['name']);
       if (machines.some((one) => one.name === name)) {
@@ -265,7 +332,7 @@ export function fakeServer() {
     calls.push({ method, path: url.pathname, body });
     const refusal = next;
     next = undefined;
-    return refusal === undefined ? answer(method, url.pathname, body) : refusal();
+    return refusal === undefined ? answer(method, url.pathname, body, url.searchParams) : refusal();
   }) as typeof globalThis.fetch;
 
   return {
@@ -278,6 +345,7 @@ export function fakeServer() {
     },
     machines,
     agents,
+    actors,
     providers,
     sandboxes,
     link(token: string, kind: 'setup' | 'invite' | 'reset', email?: string) {
