@@ -31,6 +31,8 @@ export type Scaffolded = {
   } | null;
   /** The family of its model, when the harness knows it. */
   readonly family?: ModelFamily;
+  /** Whether another actor spawned it: it is told how a subagent works. */
+  readonly spawned?: boolean;
 };
 
 /**
@@ -93,6 +95,30 @@ function machine(of: NonNullable<Scaffolded['machine']>, images: boolean): strin
   }`;
 }
 
+const SUBAGENTS = `# Subagents
+
+You can create other agents to work for you, of the kinds \`spawn_agent\` lists. A subagent has its own conversation and sees nothing of yours: all it knows is what you send it.
+
+\`spawn_agent\` creates one, idle, under a name you choose, and \`message_agent\` gives it work. Brief it as you would a capable colleague who has just walked in: what you want and why, what you already know, what is out of scope, and what to send back.
+
+It answers by a message, which arrives as a notice with its name. Until then you know nothing of its result: do not guess at it, and do not ask how it is getting on. Do work that does not overlap with its task, or end your turn. It keeps its conversation, so a follow-up needs no second briefing.
+
+You can message a subagent at any time, while it works too: to change its task, add to it, or ask it for something.
+
+Use subagents for independent work that can go on side by side. Do small things yourself, and do not also do what you handed over.
+
+\`stop\` with a subagent's name stops it and everything it started.`;
+
+const SPAWNED = `# You are a subagent
+
+Another agent created you to do part of its work. It is \`parent\` here, and its messages reach you marked <message from="parent">: they are your instructions. It may send you more at any time, a change or a question, while you work too.
+
+Your parent cannot see this conversation, not even the last thing you say. It receives only what you send with \`message_agent\` to \`parent\`. When the work is done, send one message with everything it needs: what you found or did, what you could not do, and anything it has to decide. Write it to stand alone: your parent has not seen what you saw. Then end your turn by saying only: Completed.
+
+Do not send progress unless you were asked for it. Ask your parent when you cannot go on without an answer, and settle the rest yourself.
+
+You keep this conversation after you report.`;
+
 /** What the harness tells the model of an actor, before its agent's own instructions. */
 export function scaffoldOf(actor: Scaffolded): string {
   const has = (tool: string): boolean => actor.tools.includes(tool);
@@ -100,6 +126,8 @@ export function scaffoldOf(actor: Scaffolded): string {
   const pieces = [NOTICES];
   if (commands) pieces.push(tasks(has('schedule'), actor.family));
   if (commands && actor.machine !== null) pieces.push(machine(actor.machine, has('view_image')));
+  if (has('spawn_agent')) pieces.push(SUBAGENTS);
+  if (actor.spawned === true) pieces.push(SPAWNED);
   return pieces.join('\n\n');
 }
 

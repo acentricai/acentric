@@ -16,8 +16,8 @@ import {
 import type {
   AbortResponse,
   Actor,
-  ActorMachineRequest,
   ActorId,
+  ActorMachineRequest,
   Agent,
   AgentDefinition,
   AgentId,
@@ -37,14 +37,16 @@ import type {
   Name,
   PrincipalRef,
   Reasoning,
+  SystemMessage,
   UsageGroup,
   UsageReport,
+  UserMessage,
 } from '@acentric/protocol';
 
 import type { Access } from './accounts.ts';
 import { bashKind } from './bash.ts';
 import { Blobs } from './blobs.ts';
-import { Tasks } from './tasks.ts';
+import { NOTICE, Tasks } from './tasks.ts';
 import type { EngineTool, TaskKind, TaskTimes } from './tasks.ts';
 import type { BlobStore } from './blobs.ts';
 import { MemoryBus } from './bus.ts';
@@ -75,13 +77,14 @@ import { InvalidMachine, Machines, OWN } from './machines.ts';
 import type { MachineTimes, MachinesOptions } from './machines.ts';
 import type { SandboxProvider } from './sandbox.ts';
 import { scheduleKind } from './schedule.ts';
+import { AGENT_MESSAGE, subagentTools } from './subagents.ts';
 import type { Fired } from './schedule.ts';
 import { Sandboxes } from './sandboxes.ts';
 import type { SandboxTimes } from './sandboxes.ts';
 import { instructionsOf } from './scaffold.ts';
 import { SecretsUnavailable } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
-import type { ActorsQuery, PageOf, Paged, Store } from './store.ts';
+import type { ActorsQuery, PageOf, Paged, Stopping, Store } from './store.ts';
 import type { UsageFilter } from './usage.ts';
 import { viewImage } from './view-image.ts';
 
@@ -211,6 +214,26 @@ function plainMessage(payload: Json): string {
   return (payload as { readonly text: string }).text;
 }
 
+/** What stopping an actor stopped, as the model that asked for it is told. */
+function whatStopped(stopped: AbortResponse): string {
+  const parts = [
+    ...(stopped.interrupted ? ['its turn was interrupted'] : []),
+    ...(stopped.tasks.length > 0
+      ? [
+          `${String(stopped.tasks.length)} of its tasks ${stopped.tasks.length === 1 ? 'was' : 'were'} stopped (${stopped.tasks
+            .map((task) => task.id)
+            .join(', ')})`,
+        ]
+      : []),
+    ...(stopped.agents.length > 0
+      ? [`its own subagents were stopped too (${stopped.agents.join(', ')})`]
+      : []),
+  ];
+  return parts.length === 0
+    ? 'it was doing nothing. It is idle, and can be sent more.'
+    : `${parts.join(', ')}. It is idle, and can be sent more.`;
+}
+
 export class Engine {
   readonly #store: Store;
   readonly #executor: Executor;
@@ -230,6 +253,9 @@ export class Engine {
   readonly #maxHot: number;
   /** The drivers, the one touched longest ago first. */
   readonly #drivers = new Map<ActorId, ActorDriver>();
+  /** The actors that are being stopped: no turn of theirs starts until they have been. */
+  readonly #stopping = new Set<ActorId>();
+  readonly #report: (error: unknown) => void;
   readonly #loading = new Map<ActorId, Promise<ActorDriver>>();
   readonly #providers: Providers;
   readonly #features: readonly string[];
@@ -269,6 +295,7 @@ export class Engine {
       ((error: unknown) => {
         console.error(error);
       });
+    this.#report = report;
     const kept = options.machines;
     this.machines =
       kept === undefined
@@ -304,6 +331,7 @@ export class Engine {
     this.#features = [
       ...(options.features ?? []),
       'schedule',
+      'subagents',
       ...(this.machines === undefined ? [] : ['machine']),
     ];
     // Every actor's model can send its later self a note.
@@ -320,9 +348,34 @@ export class Engine {
               ...(kept?.stopGraceMs === undefined ? {} : { stopGraceMs: kept.stopGraceMs }),
             }),
           ];
-    // What the engine itself offers a model that answers at once: an image from its machine.
-    const ownTools =
-      this.machines === undefined
+    // An actor spawns others of the agents its own lists, and talks with them by messages.
+    const subagents = subagentTools({
+      child: (parent, name) => this.#store.findChild(parent, name),
+      children: (parent) => this.#store.listChildren(parent),
+      agentNamed: async (name) => {
+        const agent = await this.#store.findAgent(name);
+        return agent === undefined
+          ? undefined
+          : { id: agent.id, definition: await this.#definition(agent.activeDeployment.id) };
+      },
+      // What a subagent is created with takes as long as its agent's code takes.
+      call: (actor, path, argument) =>
+        this.#call(
+          actor.deployment.id,
+          path,
+          argument,
+          contextOf(actor),
+          new AbortController().signal,
+        ),
+      envOf: (actor) => this.#envOf(actor),
+      create: async (given) => (await this.createActor(given)).actor,
+      post: (to, mail) => this.#post(to, mail),
+    });
+    // What the engine itself offers a model that answers at once: an image from its machine,
+    // and its subagents.
+    const ownTools = [
+      ...subagents,
+      ...(this.machines === undefined
         ? []
         : [
             viewImage(
@@ -335,7 +388,8 @@ export class Engine {
                   ?.input?.includes('image') === true,
               wake,
             ),
-          ];
+          ]),
+    ];
     this.tasks = new Tasks({
       store: options.store,
       clock: this.#clock,
@@ -355,6 +409,13 @@ export class Engine {
           // An actor that is gone, or an engine that is going away, has nothing to tell.
           if (!(error instanceof ActorNotFound) && !this.#closing) report(error);
         });
+    });
+    // `stop` with the name of a subagent stops it, as the actor that spawned it.
+    this.tasks.onStopAgent(async (actor, name) => {
+      const child = await this.#store.findChild(actor, name);
+      if (child === undefined) return undefined;
+      const stopped = await this.abort(child.actor.id, 'parent');
+      return { text: `stopped ${name}: ${whatStopped(stopped)}` };
     });
     this.#host = {
       store: options.store,
@@ -381,6 +442,7 @@ export class Engine {
         return found === undefined ? undefined : { id: found.id, version };
       },
       ownTools: (actor, definition) => ownTools.filter((one) => one.available(actor, definition)),
+      stopping: (actor) => this.#stopping.has(actor),
       instructions: (actor, definition, own) => {
         const { machine } = actor;
         const facts = machine === null ? undefined : this.machines?.facts(machine.id);
@@ -393,6 +455,7 @@ export class Engine {
                 ? null
                 : { cwd: machine.cwd, os: facts?.os ?? null, arch: facts?.arch ?? null },
             ...(family === undefined ? {} : { family }),
+            ...(actor.parent === null ? {} : { spawned: true }),
           },
           definition.instructions,
         );
@@ -688,6 +751,11 @@ export class Engine {
     readonly externalId?: ExternalId;
     /** The machine it works on, for an actor of an agent that says `machine: true`. */
     readonly machine?: ActorMachineRequest;
+    /**
+     * For a subagent: the actor that spawns it, the name that actor gives it, and the call of
+     * its model that does. It is the engine's own to say: no request from outside gives it.
+     */
+    readonly parent?: { readonly id: ActorId; readonly name: string; readonly call: string };
   }): Promise<{ readonly actor: Actor; readonly created: boolean }> {
     if (this.#closing) throw new Unavailable();
     const agent = await this.getAgent(given.agent);
@@ -732,6 +800,7 @@ export class Engine {
         given.machine === undefined
           ? null
           : { id: given.machine.id, cwd: given.machine.cwd, env: Object.keys(env).toSorted() },
+      parent: given.parent === undefined ? null : { id: given.parent.id, name: given.parent.name },
       status: 'idle',
       lastTurn: null,
       pendingInputs: 0,
@@ -771,6 +840,7 @@ export class Engine {
       { ...actor, configuration },
       configurationGiven,
       sealed,
+      given.parent?.call ?? null,
     );
     return { actor: record.actor, created };
   }
@@ -933,9 +1003,62 @@ export class Engine {
     return { input: input.id, status: 'accepted' };
   }
 
+  /**
+   * Puts a message of another actor's in an actor's mailbox, once for one `id`: its parent's,
+   * which is a message as a person's is, or a subagent's, which is a notice. Rejects for an
+   * actor that is archived, or is no more.
+   */
+  async #post(
+    to: ActorId,
+    mail: { readonly id: string; readonly message: UserMessage | SystemMessage },
+  ): Promise<void> {
+    const driver = await this.#driver(to);
+    if (driver.record.actor.status === 'archived') throw new ActorArchived(to);
+    if ((await this.#store.findInput(to, mail.id)) !== undefined) return;
+    const now = this.#clock();
+    const input: Input = {
+      id: this.#ids.make('input', now),
+      actor: to,
+      type: mail.message.role === 'user' ? AGENT_MESSAGE : NOTICE,
+      externalId: mail.id as ExternalId,
+      message: mail.message,
+      receivedAt: now,
+      deliveredAt: null,
+    };
+    // Said twice at once, the other got there first.
+    if ((await this.#store.addInput(input)) === 'duplicate') return;
+    (await this.#driver(to)).receive(input);
+  }
+
+  /**
+   * An actor and the actors above it: the one that spawned it, the one that spawned that, and
+   * so on to one that was created from outside.
+   */
+  async lineage(id: ActorId): Promise<Actor[]> {
+    const line = [await this.getActor(id)];
+    for (let above = line[0]?.parent; above !== null && above !== undefined;) {
+      const parent = (await this.#store.loadActor(above.id))?.actor;
+      if (parent === undefined) break;
+      line.push(parent);
+      above = parent.parent;
+    }
+    return line;
+  }
+
+  /** The subagents of an actor, in the order it spawned them. */
+  async children(id: ActorId): Promise<Actor[]> {
+    await this.getActor(id);
+    return this.#store.listChildren(id);
+  }
+
   /** Ends the turn an actor is in. What waits in its mailbox stays, and starts the next. */
   async interrupt(id: ActorId): Promise<Actor> {
-    return (await this.#driver(id)).interrupt();
+    const driver = await this.#driver(id);
+    const working = driver.record.turn.phase !== 'idle';
+    const actor = await driver.interrupt();
+    // The actor that spawned it waits on it, and is told what was done to it from outside.
+    if (working) await this.#tellParent(actor, 'interrupted', 'person');
+    return actor;
   }
 
   /**
@@ -944,13 +1067,79 @@ export class Engine {
    * no turn, and are in their place when something new does. Resolves once all of it has
    * stopped.
    */
-  async abort(id: ActorId): Promise<AbortResponse> {
+  async abort(id: ActorId, by: Stopping['by'] = 'person'): Promise<AbortResponse> {
+    return this.#stop(id, { how: 'abort', by });
+  }
+
+  /**
+   * Stops an actor and, each in the same way, the actors it spawned and theirs. It is written
+   * down first that it is being stopped, so that an engine that goes away in the middle is
+   * gone on from by the next. No turn of the actor starts until it has been stopped.
+   */
+  async #stop(id: ActorId, stopping: Stopping): Promise<AbortResponse> {
+    const { how, by } = stopping;
     const driver = await this.#driver(id);
+    const before = driver.record.actor;
     const interrupted = driver.record.turn.phase !== 'idle';
-    await driver.hush();
-    await driver.interrupt('the turn was aborted by a person, and it is being stopped');
-    const tasks = await this.tasks.stopAll(id);
-    return { actor: (await this.#driver(id)).record.actor, interrupted, tasks };
+    this.#stopping.add(id);
+    try {
+      await this.#store.setStopping(id, stopping);
+      // What waited starts no turn: it is there for the next one that something new starts.
+      await driver.hush();
+      const who = by === 'parent' ? 'the agent that created it' : 'a person';
+      const why = `the turn was aborted by ${who}, and it is being stopped`;
+      if (how === 'archive' && before.status !== 'archived') await driver.archive(why);
+      else await driver.interrupt(why);
+      const tasks = await this.tasks.stopAll(id);
+      const agents: string[] = [];
+      for (const child of await this.#store.listChildren(id)) {
+        // The engine is going away: the next one finds it written down, and goes on.
+        if (this.#closing) break;
+        await this.#stop(child.id, { how, by: 'parent' });
+        if (child.parent !== null) agents.push(child.parent.name);
+      }
+      const now = await this.#driver(id);
+      if (this.#closing) return { actor: now.record.actor, interrupted, tasks, agents };
+      // What their stopping said is not what starts the next turn either.
+      await now.hush([NOTICE]);
+      await this.#store.setStopping(id, null);
+      const stopped = interrupted || tasks.length > 0 || agents.length > 0;
+      if (stopped || (how === 'archive' && before.status !== 'archived')) {
+        await this.#tellParent(before, how === 'archive' ? 'archived' : 'aborted', by);
+      }
+      return { actor: now.record.actor, interrupted, tasks, agents };
+    } finally {
+      this.#stopping.delete(id);
+      // Something a person sent while it was being stopped is new: it starts a turn.
+      if (!this.#closing) this.#drivers.get(id)?.wake();
+    }
+  }
+
+  /**
+   * Tells the actor that spawned this one what was done to it from outside. It may wait on
+   * this one, and would otherwise wait for ever. Not when it was the parent itself that did it.
+   */
+  async #tellParent(
+    actor: Actor,
+    how: 'interrupted' | 'aborted' | 'archived',
+    by: Stopping['by'],
+  ): Promise<void> {
+    if (by !== 'person' || actor.parent === null) return;
+    const { id: parent, name } = actor.parent;
+    const message: SystemMessage = {
+      role: 'system',
+      content: [{ type: 'text', text: `<agent name="${name}" status="${how}" by="person"/>` }],
+      metadata: { agent: { from: actor.id, name, status: how } },
+    };
+    try {
+      await this.#post(parent, {
+        id: `told:${actor.id}:${String(this.#ids.make('input', this.#clock()))}`,
+        message,
+      });
+    } catch (error) {
+      // A parent that is archived, or gone, is told nothing.
+      if (!(error instanceof ActorArchived) && !(error instanceof ActorNotFound)) throw error;
+    }
   }
 
   /** Has an actor whose last turn failed try it again, with nothing new. */
@@ -960,14 +1149,17 @@ export class Engine {
 
   /** Puts an actor away: it takes no input until it is unarchived. A turn it is in is ended. */
   async archive(id: ActorId): Promise<Actor> {
-    const actor = await (await this.#driver(id)).archive();
-    // What it had running is stopped with it. Their endings start no turn.
-    await this.tasks.stopAll(id);
-    return actor;
+    // What it had running is stopped with it, and so are the actors it spawned, and theirs.
+    return (await this.#stop(id, { how: 'archive', by: 'person' })).actor;
   }
 
+  /** Takes an actor out again, and the actors it spawned, and theirs. */
   async unarchive(id: ActorId): Promise<Actor> {
-    return (await this.#driver(id)).unarchive();
+    const actor = await (await this.#driver(id)).unarchive();
+    for (const child of await this.#store.listChildren(id)) {
+      if (child.status === 'archived') await this.unarchive(child.id);
+    }
+    return actor;
   }
 
   /**
@@ -979,6 +1171,12 @@ export class Engine {
     await this.machines?.load();
     // The tasks that were under way are watched again, before any call that waits for one.
     await this.tasks.recover();
+    // An actor an engine before this one was stopping is gone on with, down its tree.
+    for (const { actor, ...stopping } of await this.#store.listStopping()) {
+      this.#stop(actor, stopping).catch((error: unknown) => {
+        if (!(error instanceof ActorNotFound) && !this.#closing) this.#report(error);
+      });
+    }
     const owed = await this.#store.unfinished();
     for (const id of owed) (await this.#driver(id)).wake(true);
     return owed.length;
