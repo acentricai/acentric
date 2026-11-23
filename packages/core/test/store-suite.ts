@@ -667,7 +667,23 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         await store.setSecret({ agent: id, name: 'KEY', sealed: 's', updatedAt: NOW });
         const actor = await create({}, id);
         await store.addInput(inputOf(actor, 'hello'));
-        await store.commit(actor.id, 0, change({ append: [said(1, 'hello')] }));
+        await store.commit(
+          actor.id,
+          0,
+          change({
+            append: [said(1, 'hello')],
+            compaction: {
+              kind: 'summary',
+              atSeq: 1,
+              keepFromSeq: 1,
+              tokensBefore: 0,
+              reason: 'asked',
+              createdAt: NOW,
+              replacement: [],
+            },
+          }),
+        );
+        expect(await store.listCompactions(actor.id)).toHaveLength(1);
         const other = await create();
         await store.addInput(inputOf(other, 'still here'));
 
@@ -681,6 +697,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         expect(await store.secretNames(id)).toEqual([]);
         expect(await store.loadActor(actor.id)).toBeUndefined();
         expect(await store.conversation(actor.id)).toEqual([]);
+        expect(await store.listCompactions(actor.id)).toEqual([]);
         expect(await store.unfinished()).toEqual([other.id]);
         // Its name is free again, and there is no agent of it to delete twice.
         expect(await store.deleteAgent(id)).toBeUndefined();

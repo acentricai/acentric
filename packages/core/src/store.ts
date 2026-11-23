@@ -43,8 +43,8 @@ import type {
   UserId,
 } from '@acentric/protocol';
 
-import type { ActorRecord, Change } from './state.ts';
-import type { UsageFilter } from './usage.ts';
+import type { ActorRecord, Change, StoredCompaction } from './state.ts';
+import type { UsageFilter, UsageRecord } from './usage.ts';
 
 /** A commit named an epoch that has passed: something else has written to the actor since. */
 export class StaleEpoch extends Error {
@@ -415,6 +415,15 @@ export interface Store {
    * well when one is asked for. A call is written with the step that ends it (see `commit`).
    */
   usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport>;
+  /** Writes down a call of a model that no step of a turn ends: one that compacted a conversation. */
+  recordUsage(record: UsageRecord): Promise<void>;
+
+  // Compactions (see `compaction.ts`). One is kept by the step that makes it.
+
+  /** The newest compaction of an actor's conversation, with what stands for the older part. */
+  latestCompaction(actor: ActorId): Promise<StoredCompaction | undefined>;
+  /** The compactions of an actor's conversation, newest first. */
+  listCompactions(actor: ActorId): Promise<StoredCompaction[]>;
 
   // Blobs: the images and files of conversations, whose bytes are kept apart (see `blobs.ts`)
 

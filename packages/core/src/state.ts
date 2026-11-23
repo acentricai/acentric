@@ -10,10 +10,12 @@ import type { UsageRecord } from './usage.ts';
 import type {
   Actor,
   ActorStatus,
+  Compaction,
   ConversationEntry,
   DeploymentRef,
   InputId,
   Json,
+  Message,
   Name,
   Reasoning,
   ToolResultMessage,
@@ -112,6 +114,14 @@ export type Change = {
   readonly sent: { readonly fingerprint: string | null; readonly reasoningFrom: number } | null;
   /** For a step that ends a call of the model, answered or failed: what the call used. */
   readonly usage: UsageRecord | null;
+  /** For a step that compacts the conversation: what the model is sent from then on. */
+  readonly compaction?: StoredCompaction;
+};
+
+/** A compaction as it is kept: what it was, and what stands for the older part. */
+export type StoredCompaction = Compaction & {
+  /** The messages the model is sent in place of everything before `keepFromSeq`. */
+  readonly replacement: readonly Message[];
 };
 
 /** An actor with `patch` applied. */
