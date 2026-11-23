@@ -1,7 +1,8 @@
 // A server to measure under load: this repository's, started as its program starts it, from the
 // same settings, with real HTTP, SQLite, workerd and blobs. Only the model is a stand-in, in the
-// process: it answers after LOAD_MODEL_MS (a fifth either way), first with a call of the agent's
-// tool and then with a few hundred tokens of text, and says what it used. So what is measured is
+// process: first a call of the agent's tool, then a few hundred tokens of text, saying what it
+// used. It answers after LOAD_MODEL_MS (a fifth either way), or, with LOAD_MODEL_MS=mixed, as
+// models do: seven calls in ten in under 2 seconds, the rest in 2 to 10 (2.5 on the average). So what is measured is
 // the server, and a model as slow as a real one is waited for as one is.
 //
 //   ACENTRIC_ADMIN_KEY=… ACENTRIC_METRICS_PORT=9464 LOAD_MODEL_MS=2000 \
@@ -17,17 +18,23 @@ import { readSettings, start } from '../src/index.ts';
 import { createLogger } from '../src/log.ts';
 import { LOAD_MODEL_KEY } from './load-shared.ts';
 
-const delay = Number(process.env['LOAD_MODEL_MS'] ?? '0');
+const given = process.env['LOAD_MODEL_MS'] ?? '0';
+const delay = given === 'mixed' ? 0 : Number(given);
+/** How long the model takes to answer one call, in milliseconds. */
+const answersIn = (): number => {
+  if (given !== 'mixed') return delay * (0.8 + Math.random() * 0.4);
+  return Math.random() < 0.7 ? Math.random() * 2000 : 2000 + Math.random() * 8000;
+};
 /** About 300 tokens: an answer as long as a model's often is. */
 const ANSWER =
   `${'The order was refunded twice, a second apart, by the payments service retrying a call that had in fact gone through. '.repeat(12)}`.trim();
 
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms * (0.8 + Math.random() * 0.4)));
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const model: ModelRunner = {
   async run(step) {
-    if (delay > 0) await wait(delay);
+    const ms = answersIn();
+    if (ms > 0) await wait(ms);
     const asked = step.messages.findLastIndex((message) => message.role === 'user');
     const answered = step.messages
       .slice(asked + 1)
@@ -65,7 +72,7 @@ const server = await start(settings, {
   logger,
 });
 logger.info(
-  `load server listening on ${server.server.url}, the model answering in ${String(delay)}ms`,
+  `load server listening on ${server.server.url}, the model answering in ${given === 'mixed' ? '0-10s, mostly under 2' : `${String(delay)}ms`}`,
 );
 if (server.metricsUrl !== undefined) logger.info(`metrics at ${server.metricsUrl}`);
 
