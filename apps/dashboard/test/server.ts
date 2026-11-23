@@ -1,7 +1,35 @@
-// A stand-in for the server, as the dashboard's tests have it: the routes of signing in, answered
-// as the server answers them, and every call written down. Installed as the page's `fetch`.
+// A stand-in for the server, as the dashboard's tests have it: the routes of signing in, of
+// machines and of sandboxes, answered as the server answers them, and every call written down.
+// Installed as the page's `fetch`.
 
-type Person = { readonly id: string; readonly email: string; password: string };
+import { ROLE_PERMISSIONS } from '@acentric/protocol';
+import type { Machine, Role, Sandbox, SandboxProviderAccount } from '@acentric/protocol';
+
+type Person = { readonly id: string; readonly email: string; password: string; role: Role };
+
+const NOW = 1_795_305_600_000;
+
+/** A machine as the server has one just added: not enrolled, for the agents given. */
+export function machineOf(name: string, more: Partial<Machine> = {}): Machine {
+  return {
+    id: `mch_${name.replaceAll('-', '').padEnd(26, '0').slice(0, 26)}` as Machine['id'],
+    name,
+    agents: [],
+    enrolled: false,
+    online: false,
+    os: null,
+    arch: null,
+    home: null,
+    hostname: null,
+    version: null,
+    current: null,
+    provider: null,
+    createdAt: NOW,
+    enrolledAt: null,
+    lastSeenAt: null,
+    ...more,
+  };
+}
 
 export type FakeServer = ReturnType<typeof fakeServer>;
 
@@ -22,20 +50,26 @@ export function fakeServer() {
   /** What the next call is refused with, when a test says so. */
   let next: (() => Response) | undefined;
   const calls: { method: string; path: string; body: unknown }[] = [];
+  const machines: Machine[] = [];
+  const agents: { id: string; name: string }[] = [];
+  const providers: SandboxProviderAccount[] = [];
+  const sandboxes: Sandbox[] = [];
+  let made = 0;
 
-  const principal = (email: string) => ({
+  const principal = (person: Person) => ({
     type: 'user',
-    user: `usr_${email.split('@')[0] ?? 'x'}`,
-    email,
-    role: 'owner',
-    permissions: [],
+    user: person.id,
+    email: person.email,
+    role: person.role,
+    permissions: ROLE_PERMISSIONS[person.role],
     session: 'ses_1',
   });
-  const add = (email: string, password: string): Person => {
-    const person = { id: `usr_${String(people.size + 1)}`, email, password };
+  const add = (email: string, password: string, role: Role = 'owner'): Person => {
+    const person = { id: `usr_${String(people.size + 1)}`, email, password, role };
     people.set(email, person);
     return person;
   };
+  const machine = (id: string) => machines.find((one) => one.id === id);
   const signedInAnswer = (person: Person) => {
     signedIn = person.email;
     return json(201, {
@@ -61,9 +95,10 @@ export function fakeServer() {
 
   const answer = (method: string, path: string, body: Record<string, unknown>): Response => {
     if (method === 'GET' && path === '/v1/me') {
-      return signedIn === undefined
+      const person = signedIn === undefined ? undefined : people.get(signedIn);
+      return person === undefined
         ? refused(401, 'unauthenticated', 'The request has no key')
-        : json(200, principal(signedIn));
+        : json(200, principal(person));
     }
     if (method === 'POST' && path === '/v1/sign-in') {
       const person = people.get(String(body['email']));
@@ -110,6 +145,115 @@ export function fakeServer() {
       if (signedIn === person.email) signedIn = undefined;
       return json(204, null);
     }
+    return machineRoutes(method, path, body);
+  };
+
+  /** The routes of machines and sandboxes, for one signed in. */
+  const machineRoutes = (method: string, path: string, body: Record<string, unknown>): Response => {
+    if (signedIn === undefined) return refused(401, 'unauthenticated', 'The request has no key');
+    if (method === 'GET' && path === '/v1/agents') {
+      return json(200, { items: agents, nextCursor: null });
+    }
+    if (method === 'GET' && path === '/v1/machines') return json(200, { items: machines });
+    if (method === 'POST' && path === '/v1/machines') {
+      const name = String(body['name']);
+      if (machines.some((one) => one.name === name)) {
+        return refused(409, 'name_taken', `There is a machine ${name} already`);
+      }
+      const added = machineOf(name, { agents: (body['agents'] ?? []) as Machine['agents'] });
+      machines.push(added);
+      return json(201, { machine: added, token: `token-${name}`, expiresAt: NOW + 3_600_000 });
+    }
+    const one = /^\/v1\/machines\/([^/]+)(\/token)?$/.exec(path);
+    if (one !== null) {
+      const found = machine(one[1] ?? '');
+      if (found === undefined) return refused(404, 'not_found', 'There is no such machine');
+      if (method === 'POST' && one[2] === '/token') {
+        made += 1;
+        return json(201, { machine: found, token: `token-again-${String(made)}`, expiresAt: NOW });
+      }
+      if (method === 'PATCH') {
+        Object.assign(found, { agents: body['agents'] });
+        return json(200, found);
+      }
+      if (method === 'DELETE') {
+        machines.splice(machines.indexOf(found), 1);
+        return json(204, null);
+      }
+    }
+    if (method === 'GET' && path === '/v1/providers') return json(200, { items: providers });
+    if (method === 'POST' && path === '/v1/providers') {
+      if (body['kind'] !== 'boat' || typeof body['apiKey'] !== 'string') {
+        return refused(400, 'invalid_request', 'The body is not what this takes');
+      }
+      if (body['apiKey'] === 'boat_refused') {
+        return refused(502, 'sandbox_provider_failed', 'Boat refused the API key');
+      }
+      made += 1;
+      const added: SandboxProviderAccount = {
+        id: `prv_${String(made).padStart(26, '0')}` as SandboxProviderAccount['id'],
+        kind: 'boat',
+        name: String(body['name']),
+        account: 'ada@example.test',
+        sandboxes: 0,
+        createdAt: NOW,
+      };
+      providers.push(added);
+      return json(201, added);
+    }
+    const provider = /^\/v1\/providers\/([^/]+)(\/sandboxes)?$/.exec(path);
+    if (provider !== null) {
+      const found = providers.find((each) => each.id === provider[1]);
+      if (found === undefined) return refused(404, 'not_found', 'There is no such account');
+      if (method === 'GET' && provider[2] === '/sandboxes') {
+        return json(200, { items: sandboxes.filter((each) => each.provider === found.id) });
+      }
+      if (method === 'DELETE') {
+        if (sandboxes.some((each) => each.provider === found.id)) {
+          return refused(409, 'conflict', "Remove this account's sandboxes first");
+        }
+        providers.splice(providers.indexOf(found), 1);
+        return json(204, null);
+      }
+    }
+    if (method === 'POST' && path === '/v1/sandboxes') {
+      const account = providers.find((each) => each.id === body['provider']);
+      if (account === undefined) return refused(404, 'not_found', 'There is no such account');
+      made += 1;
+      const added = machineOf(String(body['name'] ?? `sandbox-${String(made)}`), {
+        agents: (body['agents'] ?? []) as Machine['agents'],
+        provider: account.id,
+        enrolled: true,
+        online: true,
+        os: 'linux',
+        arch: 'x64',
+      });
+      machines.push(added);
+      const sandbox: Sandbox = {
+        machine: added,
+        provider: account.id,
+        kind: account.kind,
+        providerSandboxId: `sbx_${String(made)}`,
+        vcpu: Number(body['vcpu']),
+        memoryGB: Number(body['memoryGB']),
+        idleTimeoutSeconds: Number(body['idleTimeoutSeconds'] ?? 3600),
+        state: 'running',
+      };
+      sandboxes.push(sandbox);
+      account.sandboxes += 1;
+      return json(201, sandbox);
+    }
+    const sandbox = /^\/v1\/sandboxes\/([^/]+)$/.exec(path);
+    if (method === 'DELETE' && sandbox !== null) {
+      const found = sandboxes.find((each) => each.machine.id === sandbox[1]);
+      if (found === undefined) return refused(404, 'not_found', 'There is no such sandbox');
+      sandboxes.splice(sandboxes.indexOf(found), 1);
+      machines.splice(
+        machines.findIndex((each) => each.id === found.machine.id),
+        1,
+      );
+      return json(204, null);
+    }
     return refused(404, 'not_found', 'There is no such route');
   };
 
@@ -127,11 +271,15 @@ export function fakeServer() {
   return {
     fetch,
     calls,
-    /** A person who has an account, signed in or not. */
-    person(email: string, password: string, signIn = false) {
-      add(email, password);
+    /** A person who has an account, signed in or not, an owner unless said. */
+    person(email: string, password: string, signIn = false, role: Role = 'owner') {
+      add(email, password, role);
       if (signIn) signedIn = email;
     },
+    machines,
+    agents,
+    providers,
+    sandboxes,
     link(token: string, kind: 'setup' | 'invite' | 'reset', email?: string) {
       links.set(token, { kind, ...(email === undefined ? {} : { email }) });
     },

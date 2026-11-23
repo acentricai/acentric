@@ -31,9 +31,9 @@ describe('signing in', () => {
     type('Email', '  ada@example.test ');
     type('Password', PASSWORD);
     press('Sign in');
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy();
     expect(screen.getByText('ada@example.test')).toBeTruthy();
-    expect(page.where()).toBe('/');
+    expect(page.where()).toBe('/agents');
     expect(server.calls.find((call) => call.path === '/v1/sign-in')?.body).toEqual({
       email: 'ada@example.test',
       password: PASSWORD,
@@ -83,16 +83,16 @@ describe('signing in', () => {
     type('Email', 'ada@example.test');
     type('Password', PASSWORD);
     press('Sign in');
-    await screen.findByRole('heading', { name: 'Signed in' });
-    expect(page.where()).toBe('/');
+    await screen.findByRole('heading', { name: 'Agents' });
+    expect(page.where()).toBe('/agents');
   });
 
   it('is not shown to someone signed in already: they go where they were going', async () => {
     const server = fakeServer();
     server.person('ada@example.test', PASSWORD, true);
     const page = open('/sign-in?redirect=%2F', server);
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeTruthy();
-    expect(page.where()).toBe('/');
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy();
+    expect(page.where()).toBe('/agents');
   });
 });
 
@@ -106,16 +106,17 @@ describe('a page for someone signed in', () => {
     type('Email', 'ada@example.test');
     type('Password', PASSWORD);
     press('Sign in');
-    await screen.findByRole('heading', { name: 'Signed in' });
-    expect(page.where()).toBe('/');
+    await screen.findByRole('heading', { name: 'Agents' });
+    expect(page.where()).toBe('/agents');
   });
 
   it('signs out, and is then a page of signing in', async () => {
     const server = fakeServer();
     server.person('ada@example.test', PASSWORD, true);
     const page = open('/', server);
-    await screen.findByRole('heading', { name: 'Signed in' });
-    press('Sign out');
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: /ada@example\.test/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }));
     await screen.findByRole('heading', { name: 'Sign in' });
     expect(page.where()).toBe('/sign-in');
     expect(server.signedIn).toBeUndefined();
@@ -149,8 +150,8 @@ describe('a page for someone signed in', () => {
       expect(screen.getByText('The server could not be reached.')).toBeTruthy();
       down = false;
       press('Try again');
-      expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeTruthy();
-      expect(page.where()).toBe('/');
+      expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy();
+      expect(page.where()).toBe('/agents');
     },
   );
 });
@@ -166,8 +167,8 @@ describe('the setup link', () => {
     type('Email', 'ada@example.test');
     type('Password', PASSWORD);
     press('Create account');
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeTruthy();
-    expect(page.where()).toBe('/');
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy();
+    expect(page.where()).toBe('/agents');
     expect(server.calls.find((call) => call.path === '/v1/setup')?.body).toEqual({
       token: 'al_setup',
       email: 'ada@example.test',
@@ -185,7 +186,7 @@ describe('the setup link', () => {
     type('Email', 'ada@example.test');
     type('Password', PASSWORD);
     press('Create account');
-    await screen.findByRole('heading', { name: 'Signed in' });
+    await screen.findByRole('heading', { name: 'Agents' });
     expect(server.calls.find((call) => call.path === '/v1/setup')?.body).not.toHaveProperty(
       'displayName',
     );
@@ -235,7 +236,7 @@ describe('an invite', () => {
     type('Password', PASSWORD);
     press('Create account');
     expect(await screen.findByText('grace@example.test')).toBeTruthy();
-    expect(page.where()).toBe('/');
+    expect(page.where()).toBe('/agents');
   });
 
   it('says when the email is taken, and marks only the email', async () => {
@@ -294,7 +295,7 @@ describe('a reset link', () => {
     type('Email', 'ada@example.test');
     type('Password', PASSWORD);
     press('Sign in');
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy();
   });
 
   it('says what to do when it was used', async () => {
@@ -324,10 +325,10 @@ describe('a call the server answers as no one signed in', () => {
     const server = fakeServer();
     server.person('ada@example.test', PASSWORD, true);
     const page = open('/', server);
-    await screen.findByRole('heading', { name: 'Signed in' });
+    await screen.findByRole('heading', { name: 'Agents' });
     // A call of a page of theirs, after their session ended elsewhere.
     server.refuseNext(() => server.refused(401, 'unauthenticated', 'The session has ended'));
     await api.call('agents.list').catch(() => undefined);
-    await waitFor(() => expect(page.where()).toBe('/sign-in?redirect=%2F'));
+    await waitFor(() => expect(page.where()).toBe('/sign-in?redirect=%2Fagents'));
   });
 });
