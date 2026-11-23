@@ -1,6 +1,7 @@
 {
   "name": "@acentric/store",
-  "version": "0.15.0-alpha.0",
+  "version": "0.15.0",
+  "private": true,
   "description": "Where the engine keeps what it has: the store, on SQLite.",
   "license": "Apache-2.0",
   "repository": {
@@ -22,10 +23,6 @@
   ],
   "engines": {
     "node": ">=24"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "devDependencies": {
     "@acentric/ai": "workspace:*",

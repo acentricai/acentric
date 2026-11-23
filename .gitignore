@@ -9,10 +9,6 @@ coverage/
 # Rust's build output.
 target/
 
-# The licence is copied into each package when it is packed (scripts/copy-license.ts).
-/packages/*/LICENSE
-/apps/*/LICENSE
-*.tgz
 
 .env
 .env.*
