@@ -133,7 +133,12 @@ COPY --from=build /repo/apps/cli/dist/acentric.mjs downloads/
 # The machine program of this build, which the server hands out at /install.sh.
 COPY --from=build /repo/apps/machine/install.sh downloads/install.sh
 COPY --from=machine /out downloads/machine/
-RUN mkdir /data && chown node:node /data
+# The server's program by its name, for its commands: `acentric-server backup`, `restore` and
+# `reset-link`, run in the container beside the server.
+RUN chmod +x dist/bin.js && ln -s /app/dist/bin.js /usr/local/bin/acentric-server
+# /data is what the server keeps. /backups is for its backups, when a volume of their own is put
+# there (ACENTRIC_BACKUP_DIR=/backups): a volume Docker makes is owned as the folder it is on.
+RUN mkdir /data /backups && chown node:node /data /backups
 VOLUME /data
 EXPOSE 4000
 USER node
