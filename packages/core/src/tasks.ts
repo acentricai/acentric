@@ -18,6 +18,7 @@
 import type {
   Actor,
   ActorId,
+  AgentDefinition,
   ContentPart,
   ImagePart,
   Input,
@@ -93,11 +94,11 @@ export type TaskKind = {
     readonly required?: readonly string[];
   };
   /** The tool's description for an actor, when it is not the same for every one. */
-  describe?(actor: Actor): string;
+  describe?(actor: Actor, definition: AgentDefinition | undefined): string;
   /** Lets go of whatever the kind holds, when the engine is going away. */
   close?(): Promise<void>;
-  /** Whether an actor can start one. Every actor can without it. */
-  available?(actor: Actor): boolean;
+  /** Whether an actor can start one, by itself and by what its agent says it is. Every actor can without it. */
+  available?(actor: Actor, definition: AgentDefinition | undefined): boolean;
   /**
    * Checks the arguments the model gave, and returns what a task is started with. Throws what
    * is wrong with them. `timeout`, in seconds, is given to a kind that keeps its own.
@@ -393,8 +394,9 @@ export class Tasks {
    * The tools an actor's model has for tasks: one to start each kind the actor can start, and
    * `stop`. None for an actor that can start none.
    */
-  tools(actor: Actor, subagents = false): EngineTool[] {
-    const kinds = this.#kinds.filter((kind) => kind.available?.(actor) ?? true);
+  tools(actor: Actor, definition?: AgentDefinition): EngineTool[] {
+    const subagents = (definition?.subagents ?? []).length > 0;
+    const kinds = this.#kinds.filter((kind) => kind.available?.(actor, definition) ?? true);
     if (kinds.length === 0) return [];
     const waitAndTimeout = {
       wait: {
@@ -411,7 +413,7 @@ export class Tasks {
       ...kinds.map((kind): EngineTool => ({
         type: 'function',
         name: kind.tool.name,
-        description: kind.describe?.(actor) ?? kind.tool.description,
+        description: kind.describe?.(actor, definition) ?? kind.tool.description,
         parameters: {
           type: 'object',
           properties: {
@@ -506,6 +508,7 @@ export class Tasks {
     actor: Actor,
     call: { readonly id: string; readonly name: string; readonly args: JsonObject },
     waiting: Waiting,
+    definition?: AgentDefinition,
   ): Promise<Answer | undefined> {
     if (call.name === 'stop') {
       const { task } = call.args;
@@ -515,7 +518,7 @@ export class Tasks {
       return this.#stopForModel(actor.id, task);
     }
     const kind = this.#kinds.find((one) => one.tool.name === call.name);
-    if (kind === undefined || kind.available?.(actor) === false) {
+    if (kind === undefined || kind.available?.(actor, definition) === false) {
       return { text: `There is no tool ${call.name}`, isError: true };
     }
 

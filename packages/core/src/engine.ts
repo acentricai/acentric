@@ -47,13 +47,14 @@ import type {
 
 import type { Access } from './accounts.ts';
 import { bashKind } from './bash.ts';
+import { codeKind } from './code.ts';
 import { Blobs } from './blobs.ts';
 import { NOTICE, Tasks } from './tasks.ts';
 import type { EngineTool, TaskKind, TaskTimes } from './tasks.ts';
 import type { BlobStore } from './blobs.ts';
 import { MemoryBus } from './bus.ts';
 import type { EventBus } from './bus.ts';
-import { ActorDriver, contentOf, machineRuleUnmet } from './driver.ts';
+import { ActorDriver, contentOf, machineRuleUnmet, offeredTools } from './driver.ts';
 import type { ActorUpdate, Clock, Host, Timer } from './driver.ts';
 import {
   ActorArchived,
@@ -343,6 +344,7 @@ export class Engine {
       'schedule',
       'subagents',
       'compaction-settings',
+      'codemode',
       ...(this.machines === undefined ? [] : ['machine']),
     ];
     // Every actor's model can send its later self a note.
@@ -359,6 +361,17 @@ export class Engine {
               ...(kept?.stopGraceMs === undefined ? {} : { stopGraceMs: kept.stopGraceMs }),
             }),
           ];
+    // A model whose agent has tools for scripts writes scripts that call them.
+    const code = codeKind({
+      store: options.store,
+      clock: this.#clock,
+      report,
+      actorOf: async (actor) => (await this.#store.loadActor(actor))?.actor,
+      definitionOf: (actor) => this.#definition(actor.deployment.id),
+      // A tool takes as long as it takes.
+      call: (actor, path, argument, signal) =>
+        this.#call(actor.deployment.id, path, argument, contextOf(actor), signal),
+    });
     // An actor spawns others of the agents its own lists, and talks with them by messages.
     const subagents = subagentTools({
       child: (parent, name) => this.#store.findChild(parent, name),
@@ -407,7 +420,7 @@ export class Engine {
       inputId: (now) => this.#ids.make('input', now),
       keep: (actor, content) => this.blobs.keep(actor, content),
       report,
-      kinds: [...bash, schedule, ...(options.kinds ?? [])],
+      kinds: [...bash, code, schedule, ...(options.kinds ?? [])],
       ...(options.taskTimes === undefined ? {} : { times: options.taskTimes }),
     });
     // A notice is in the mailbox already: its actor is told, and starts a turn for it.
@@ -1509,7 +1522,7 @@ export class Engine {
   #fingerprintOf(definition: AgentDefinition): string {
     let fingerprint = this.#fingerprints.get(definition);
     if (fingerprint === undefined) {
-      const tools = definition.tools.map(({ name, description, parameters }) => [
+      const tools = offeredTools(definition).map(({ name, description, parameters }) => [
         name,
         description,
         parameters,

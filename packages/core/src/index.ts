@@ -28,6 +28,7 @@ export * from './schedule.ts';
 export * from './compaction.ts';
 export * from './subagents.ts';
 export * from './bash.ts';
+export * from './code.ts';
 export * from './view-image.ts';
 export * from './scaffold.ts';
 export * from './families.ts';
