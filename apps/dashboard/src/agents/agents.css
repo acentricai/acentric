@@ -1,0 +1,287 @@
+/* Page-specific pieces from the reference's agents.css and sessions.css.
+   Shared tables, fields, tabs, dialogs and their entrances live in components.css. */
+
+.agents-page > *,
+.agent-page > *,
+.agent-page .agent-section > * {
+  min-width: 0;
+}
+
+/* ---------- Agents list ---------- */
+
+.agents-list td {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.agent-page .release-cell {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.agent-page .sessions-table .release-cell {
+  white-space: nowrap;
+}
+
+/* ---------- Agent page ---------- */
+
+.agent-page .agent-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.agent-page .agent-head__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.agent-page .agent-head__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 8px 0 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.agent-page .agent-head__facts > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-page .agent-head__facts > span + span::before {
+  margin: 0 10px;
+  color: var(--line-field-focus);
+  content: '·';
+}
+
+.agent-page .agent-section .section-empty {
+  padding: 0;
+  text-align: left;
+}
+
+.agent-page .facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.agent-page .facts > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.agent-page .facts dt {
+  color: var(--ink-muted);
+}
+
+.agent-page .facts dd {
+  margin: 0;
+  min-width: 0;
+}
+
+/* ---------- Target data and in-place deployment details ---------- */
+
+.agent-model {
+  font-size: 13px;
+}
+
+.agent-commands,
+.agent-table-empty {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.agent-commands .command,
+.agent-table-empty .command {
+  width: 100%;
+}
+
+.agent-table-empty {
+  color: var(--ink-muted);
+}
+
+.agent-page .agent-head__main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-page .agent-head__loading {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: 12px;
+}
+
+.agent-page .agent-head__loading > span:first-child {
+  width: 36px;
+}
+
+.agent-page .agent-head__loading > span + span {
+  width: 160px;
+}
+
+.agent-actor-id {
+  padding-right: 7px;
+}
+
+.agent-actor-link {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+}
+
+.agent-actor-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.agent-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.agent-version__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.agent-version__button svg {
+  flex: none;
+  color: var(--ink-muted);
+  transition: transform 200ms var(--ease-out);
+}
+
+.agent-version__button[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+.agent-version__button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.agent-deployments .detail-row > td {
+  padding: var(--space-5) var(--space-3);
+  white-space: normal;
+}
+
+.agent-declares {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  animation: log-in 220ms var(--ease-out) both;
+}
+
+.agent-declarations {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-declarations li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* The shared dialog supplies dialog-in / scrim-in. Closing reverses their
+   shapes before the page unmounts the modal and restores focus. */
+.agent-dialog[data-closing] {
+  pointer-events: none;
+}
+
+.agent-dialog[data-closing] .dialog {
+  animation: agent-dialog-out 180ms var(--ease-reveal) both;
+}
+
+.agent-dialog[data-closing] .dialog::backdrop {
+  animation: agent-scrim-out 180ms ease both;
+}
+
+@keyframes agent-dialog-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+@keyframes agent-scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Icons press in with the same timing as the reference sidebar's icons. */
+.agent-page .ac-btn > svg,
+.agent-page .dialog__close > svg,
+.agent-page .copy-button > svg,
+.agents-page .copy-button > svg {
+  transition: transform 150ms var(--ease-out);
+}
+
+.agent-page .ac-btn:active:not(:disabled) > svg,
+.agent-page .dialog__close:active > svg,
+.agent-page .copy-button:active > svg,
+.agents-page .copy-button:active > svg {
+  transform: scale(0.9);
+}
+
+/* The reference stacks header facts at phone widths. Tables keep every
+   target column and scroll sideways instead of hiding real data. */
+@media (max-width: 560px) {
+  .agent-page .agent-head__facts {
+    flex-direction: column;
+  }
+
+  .agent-page .agent-head__facts > span + span::before {
+    content: none;
+  }
+
+  .agent-page .facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agents-page *,
+  .agent-page *,
+  .agent-dialog .dialog,
+  .agent-dialog .dialog::backdrop {
+    animation: none !important;
+    transition: none !important;
+  }
+}
