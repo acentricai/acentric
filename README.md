@@ -10,8 +10,8 @@ which connect out to the engine, or ones the engine makes at a sandbox provider.
 > Fireworks and Anthropic), the framework an agent is written with, agents deployed as versions
 > that their running actors follow, agents' code run apart from the engine in isolates of
 > `workerd`, and a server with an HTTP API, API keys, sign-in for people with roles, an audit
-> log, model accounts and usage, a typed client, and the `acentric` command. It has no dashboard
-> yet.
+> log, model accounts and usage, a typed client, and the `acentric` command. Its dashboard has
+> the pages of signing in so far.
 
 ## Running the server
 
@@ -27,10 +27,11 @@ docker run -p 4000:4000 -v acentric-data:/data \
 
 - It prints an API key once, when it first starts. That key may do everything, and other keys
   are made with it. To choose the key yourself, set `ACENTRIC_ADMIN_KEY`.
-- It prints a setup link while it has no person yet. Whoever uses it becomes the owner. Until
-  the dashboard is built there is no page behind the link: its token is sent to
-  `POST /v1/setup` with an email and a password.
-- People are added by invite links an admin makes. The server sends no email. An owner who is
+- It prints a setup link while it has no person yet. Whoever uses it becomes the owner: the
+  link opens the dashboard, which the server serves beside its API, and asks for an email and a
+  password.
+- People are added by invite links an admin makes, which open at `/invite?token=…`. The
+  server sends no email. An owner who is
   locked out runs `acentric-server reset-link <email>` on the server itself.
 - Set `ACENTRIC_PUBLIC_URL` to where people reach the server, so that its links start there.
 - It keeps everything it has in `/data`: its database, and the images and files of

@@ -81,12 +81,13 @@ COPY packages/executor/package.json packages/executor/
 COPY packages/sandbox/package.json packages/sandbox/
 COPY apps/server/package.json apps/server/
 COPY apps/cli/package.json apps/cli/
+COPY apps/dashboard/package.json apps/dashboard/
 RUN pnpm install --frozen-lockfile
 
 COPY packages packages
 COPY apps apps
 COPY scripts scripts
-RUN pnpm build
+RUN pnpm build && pnpm --filter @acentric/dashboard build
 
 # The server alone, with what it needs to run and nothing it was built with.
 RUN pnpm --filter @acentric/server deploy --prod --legacy /out
@@ -96,13 +97,16 @@ ENV NODE_ENV=production \
     ACENTRIC_HOST=0.0.0.0 \
     ACENTRIC_PORT=4000 \
     ACENTRIC_DATA=/data \
-    ACENTRIC_DOWNLOADS=/app/downloads
+    ACENTRIC_DOWNLOADS=/app/downloads \
+    ACENTRIC_DASHBOARD=/app/dashboard
 # What workerd checks the sites agents' code calls against: the slim image has none.
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /out .
+# The dashboard of this build, which the server serves beside the API.
+COPY --from=build /repo/apps/dashboard/dist dashboard/
 # The acentric command of this build, which the server hands out at /install-cli.sh.
 COPY --from=build /repo/apps/cli/install.sh downloads/install-cli.sh
 COPY --from=build /repo/apps/cli/dist/acentric.mjs downloads/

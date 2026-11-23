@@ -54,11 +54,12 @@ jobs:
         run: |
           docker run --detach --name server --publish 127.0.0.1:4000:4000 acentric-server
           for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error http://127.0.0.1:4000/health; then exit 0; fi
+            if curl --fail --silent --show-error http://127.0.0.1:4000/health; then break; fi
+            if [ "$attempt" = 30 ]; then docker logs server; exit 1; fi
             sleep 1
           done
-          docker logs server
-          exit 1
+          # It serves the dashboard of its build, at the address its setup link opens.
+          curl --fail --silent --show-error http://127.0.0.1:4000/setup | grep --quiet '<div id="root">'
 
   rust:
     name: Rust (${{ matrix.os }})
