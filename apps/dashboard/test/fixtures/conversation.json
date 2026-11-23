@@ -1,0 +1,277 @@
+[
+  {
+    "seq": 1,
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "hello there"
+        }
+      ]
+    },
+    "createdAt": 1795107203726,
+    "input": {
+      "type": "message",
+      "id": "m1"
+    }
+  },
+  {
+    "seq": 2,
+    "message": {
+      "role": "assistant",
+      "provider": "anthropic",
+      "api": "anthropic-messages",
+      "model": "claude-opus-5-5",
+      "id": "msg_1",
+      "timestamp": 1795107204146,
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "The user said hello; answer briefly.",
+          "signature": "signed:The user said hello; answer briefly."
+        },
+        {
+          "type": "text",
+          "text": "Hello! You said: hello there"
+        }
+      ]
+    },
+    "createdAt": 1795107204147,
+    "completion": {
+      "stopReason": "stop",
+      "usage": {
+        "totalInput": 100,
+        "input": 100,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 0.0004,
+          "output": 0.0004,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.0008
+        }
+      }
+    }
+  },
+  {
+    "seq": 3,
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "where is my order A-1042?"
+        }
+      ]
+    },
+    "createdAt": 1795107205237,
+    "input": {
+      "type": "message",
+      "id": "m2"
+    }
+  },
+  {
+    "seq": 4,
+    "message": {
+      "role": "assistant",
+      "provider": "anthropic",
+      "api": "anthropic-messages",
+      "model": "claude-opus-5-5",
+      "id": "msg_3",
+      "timestamp": 1795107205647,
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_2",
+          "name": "lookup_order",
+          "input": {
+            "id": "A-1042"
+          }
+        }
+      ]
+    },
+    "createdAt": 1795107205648,
+    "completion": {
+      "stopReason": "tool_use",
+      "usage": {
+        "totalInput": 100,
+        "input": 100,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 0.0004,
+          "output": 0.0004,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.0008
+        }
+      }
+    }
+  },
+  {
+    "seq": 5,
+    "message": {
+      "role": "tool_result",
+      "toolCallId": "toolu_2",
+      "toolName": "lookup_order",
+      "toolType": "function",
+      "content": [
+        {
+          "type": "text",
+          "text": "order A-1042, 10 lines, with key orders-key"
+        }
+      ]
+    },
+    "createdAt": 1795107205655
+  },
+  {
+    "seq": 6,
+    "message": {
+      "role": "assistant",
+      "provider": "anthropic",
+      "api": "anthropic-messages",
+      "model": "claude-opus-5-5",
+      "id": "msg_4",
+      "timestamp": 1795107206065,
+      "content": [
+        {
+          "type": "text",
+          "text": "The order has 10 lines. Anything else?"
+        }
+      ]
+    },
+    "createdAt": 1795107206066,
+    "completion": {
+      "stopReason": "stop",
+      "usage": {
+        "totalInput": 100,
+        "input": 100,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 0.0004,
+          "output": 0.0004,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.0008
+        }
+      }
+    }
+  },
+  {
+    "seq": 7,
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "please fail this one"
+        }
+      ]
+    },
+    "createdAt": 1795107207746,
+    "input": {
+      "type": "message",
+      "id": "m3"
+    }
+  },
+  {
+    "seq": 8,
+    "message": {
+      "role": "assistant",
+      "provider": "anthropic",
+      "api": "anthropic-messages",
+      "model": "claude-opus-5-5",
+      "id": "msg_6",
+      "timestamp": 1795107208155,
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_5",
+          "name": "fail",
+          "input": {}
+        }
+      ]
+    },
+    "createdAt": 1795107208155,
+    "completion": {
+      "stopReason": "tool_use",
+      "usage": {
+        "totalInput": 100,
+        "input": 100,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 0.0004,
+          "output": 0.0004,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.0008
+        }
+      }
+    }
+  },
+  {
+    "seq": 9,
+    "message": {
+      "role": "tool_result",
+      "toolCallId": "toolu_5",
+      "toolName": "fail",
+      "toolType": "function",
+      "content": [
+        {
+          "type": "text",
+          "text": "fail failed: out of stock"
+        }
+      ],
+      "isError": true
+    },
+    "createdAt": 1795107208158
+  },
+  {
+    "seq": 10,
+    "message": {
+      "role": "assistant",
+      "provider": "anthropic",
+      "api": "anthropic-messages",
+      "model": "claude-opus-5-5",
+      "id": "msg_8",
+      "timestamp": 1795107208564,
+      "content": [
+        {
+          "type": "text",
+          "text": "The order has 10 lines. Anything else?"
+        }
+      ]
+    },
+    "createdAt": 1795107208564,
+    "completion": {
+      "stopReason": "stop",
+      "usage": {
+        "totalInput": 100,
+        "input": 100,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": {
+          "source": "estimated",
+          "input": 0.0004,
+          "output": 0.0004,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.0008
+        }
+      }
+    }
+  }
+]
