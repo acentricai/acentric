@@ -29,8 +29,9 @@ promises, how to check that an image is the one released, and what an upgrade ca
 [CHANGELOG.md](CHANGELOG.md) says what changed in each. To build the image yourself instead,
 `docker build -t acentric-server .`.
 
-- It prints an API key once, when it first starts. That key may do everything, and other keys
-  are made with it. To choose the key yourself, set `ACENTRIC_ADMIN_KEY`.
+- When it first starts with no key, it makes an API key that may do everything, which other
+  keys are made with, and writes it to `/data/first-admin-key`: not to its log. To choose the
+  key yourself, set `ACENTRIC_ADMIN_KEY`.
 - It prints a setup link while it has no person yet. Whoever uses it becomes the owner: the
   link opens the dashboard, which the server serves beside its API, and asks for an email and a
   password.
@@ -43,7 +44,9 @@ promises, how to check that an image is the one released, and what an upgrade ca
   and `acentric-server backup` and `restore` take and put back one: see
   [BACKUPS.md](BACKUPS.md). Do not copy `/data` while it runs.
 - `ACENTRIC_SECRET_KEY` is what agents' secrets and the keys of model accounts are sealed
-  with. Without it, the server keeps neither.
+  with. Without it, the server keeps neither. It and the admin key are read from files too,
+  by `ACENTRIC_SECRET_KEY_FILE` and `ACENTRIC_ADMIN_KEY_FILE`, as the recipes give them. How
+  to change it is in [SECRETS.md](SECRETS.md).
 - The server makes machines itself, as sandboxes, at the providers it was set up with. For
   Docker, set `ACENTRIC_DOCKER_HOST`, such as `unix:///var/run/docker.sock`, and
   `ACENTRIC_DOCKER_IMAGE` to the sandbox image of the server's version,
