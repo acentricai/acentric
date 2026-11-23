@@ -47,6 +47,11 @@ export const toolDeclarationSchema = z.object({
   parameters: jsonObjectSchema,
   /** Whether a call a crash cut off is safe to make again. */
   retrySafe: z.boolean(),
+  /**
+   * True for a tool of the model's scripts: the model is not offered it, and a script it
+   * writes calls it (see `code`).
+   */
+  codemode: z.boolean().optional(),
 });
 export type ToolDeclaration = z.infer<typeof toolDeclarationSchema>;
 
