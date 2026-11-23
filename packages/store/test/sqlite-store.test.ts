@@ -10,6 +10,7 @@ import { bashSuite } from '../../core/test/bash-suite.ts';
 import { engineSuite } from '../../core/test/engine-suite.ts';
 import { machinesSuite } from '../../core/test/machines-suite.ts';
 import { sandboxesSuite } from '../../core/test/sandboxes-suite.ts';
+import { scheduleSuite } from '../../core/test/schedule-suite.ts';
 import { storeSuite } from '../../core/test/store-suite.ts';
 import { tasksSuite } from '../../core/test/tasks-suite.ts';
 import { upgradeSuite } from '../../core/test/upgrade-suite.ts';
@@ -30,6 +31,7 @@ tasksSuite('on SQLite', () => SqliteStore.open(database()));
 machinesSuite('on SQLite', () => SqliteStore.open(database()));
 bashSuite('on SQLite', () => SqliteStore.open(database()));
 sandboxesSuite('on SQLite', () => SqliteStore.open(database()));
+scheduleSuite('on SQLite', () => SqliteStore.open(database()));
 
 const NOW = 1_795_305_600_000;
 let made = 0;

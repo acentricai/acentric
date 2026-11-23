@@ -236,6 +236,7 @@ describe('an actor on a machine', () => {
     expect(runner.steps[0]?.tools.map((tool) => tool.name)).toEqual([
       'lookup_order',
       'bash',
+      'schedule',
       'stop',
     ]);
     expect(runner.steps[0]?.instructions).toContain('Your working directory is ~/work.');

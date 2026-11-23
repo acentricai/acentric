@@ -103,7 +103,12 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
           model: 'fake-1',
           // What the harness tells every actor, and then the agent's own.
           instructions: told('You answer questions about orders.'),
-          tools: [{ type: 'function', name: 'lookup_order' }],
+          // The agent's own, and then the two every actor has: a note for later, and a way to stop one.
+          tools: [
+            { type: 'function', name: 'lookup_order' },
+            { type: 'function', name: 'schedule' },
+            { type: 'function', name: 'stop' },
+          ],
           messages: [{ role: 'user', content: [{ type: 'text', text: 'Why two refunds?' }] }],
         });
         expect(one.steps[1]?.messages.map((message) => message.role)).toEqual([

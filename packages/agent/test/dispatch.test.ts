@@ -652,3 +652,59 @@ describe("the machine an agent's code is given", () => {
     });
   });
 });
+
+describe("an agent's schedule handler", () => {
+  const fired = { note: 'Check the deploy.', dueAt: 1_795_305_600_000, firedAt: 1_795_305_600_250 };
+  const got: unknown[] = [];
+  const timed = entryOf(
+    new Agent({
+      provider: 'anthropic',
+      instructions: 'You keep time.',
+      configuration: Configuration,
+      schedule: {
+        handler: ({ note, dueAt, firedAt }, given) => {
+          got.push(dueAt, firedAt, given.configuration);
+          if (note === 'number') return 5 as unknown as string;
+          return `${note} (${String(firedAt.getTime() - dueAt.getTime())} ms late, for ${given.actor})`;
+        },
+      },
+    }),
+  );
+
+  it('writes what the notice of a schedule that fired says, given its note, its times and the actor', async () => {
+    expect(await timed.call('schedule.handler', fired, context, host())).toEqual({
+      ok: true,
+      value: `Check the deploy. (250 ms late, for ${context.actor})`,
+    });
+    // Its times are dates, and its context the actor's, as any of the agent's code has it.
+    expect(got).toEqual([
+      new Date(fired.dueAt),
+      new Date(fired.firedAt),
+      { region: 'eu', unit: 'hours' },
+    ]);
+  });
+
+  it('fails when it returns what is not text, and for an agent that has none', async () => {
+    expect(
+      await timed.call('schedule.handler', { ...fired, note: 'number' }, context, host()),
+    ).toEqual({
+      ok: false,
+      kind: 'error',
+      error: { name: 'Error', message: 'it returned what is not text' },
+    });
+    const none = entryOf(new Agent({ provider: 'openai', instructions: '' }));
+    expect(await none.call('schedule.handler', fired, context, host())).toMatchObject({
+      ok: false,
+      error: { message: 'The agent has no schedule handler' },
+    });
+  });
+
+  it('is what an agent with a schedule has: one with none is not an agent', () => {
+    expect(() =>
+      entryOf(
+        new Agent({ provider: 'openai', instructions: '', schedule: {} as never }),
+      ).describe(),
+    ).toThrow("The agent's schedule has no handler");
+    expect(timed.describe().features).toEqual(['schedule']);
+  });
+});

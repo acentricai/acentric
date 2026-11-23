@@ -46,6 +46,13 @@ export default new Agent({
         }),
     },
   ],
+  // A note it sent itself is put down where it works, and comes with where that was.
+  schedule: {
+    handler: async ({ note, dueAt }, { machine }) => {
+      await machine.write('notes/due.txt', `${note} (due ${dueAt.toISOString()})`);
+      return `${note}\nIt is in notes/due.txt.`;
+    },
+  },
   inputs: {
     upload: {
       schema: z.object({ name: z.string(), base64: z.string() }),

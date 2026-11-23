@@ -87,6 +87,9 @@ export function turnSuite(
         'whoami',
         'broken',
         'never',
+        // What every actor has beside its agent's own.
+        'schedule',
+        'stop',
       ]);
       expect(runner.steps[0]?.tools[0]?.parameters).toMatchObject({
         type: 'object',
