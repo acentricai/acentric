@@ -540,34 +540,43 @@ export function MenuItem({
 export type Choice = { readonly value: string; readonly label: string };
 
 /**
- * A filter of several choices, as a chip: dashed with `+` and the filter's name while nothing is
- * chosen; once something is, the name, what is chosen (its name, or how many), and a button at
- * its start that clears it. It opens a list with a checkbox for each choice, which stays open
- * while choices are made. A choice made is told as the one choice that changed, so that two made
- * before the page is drawn again are both kept.
+ * A filter as a chip: dashed with `+` and the filter's name while nothing is chosen; once
+ * something is, the name, what is chosen (its name, or how many), and a button at its start that
+ * clears it. It opens `children` in a list under it, which stays open while choices are made, and
+ * `aside` beside that list.
  */
-export function FilterChip({
+export function FilterPill({
   name,
-  choices,
-  chosen,
-  onToggle,
+  labels,
   onClear,
+  onClose,
+  children,
+  aside,
 }: {
   name: string;
-  choices: readonly Choice[];
-  chosen: readonly string[];
-  onToggle: (value: string) => void;
+  /** What is chosen, by name. */
+  labels: readonly string[];
   onClear: () => void;
+  /** When the list is closed. */
+  onClose?: () => void;
+  children: ReactNode;
+  aside?: ReactNode;
 }) {
   const popover = usePopover();
   const id = useId();
-  const ticked = choices.filter((choice) => chosen.includes(choice.value));
   const value =
-    ticked.length === 0
+    labels.length === 0
       ? undefined
-      : ticked.length === 1
-        ? (ticked[0]?.label ?? '')
-        : `${String(ticked.length)} selected`;
+      : labels.length === 1
+        ? (labels[0] ?? '')
+        : `${String(labels.length)} selected`;
+  const closed = useRef(onClose);
+  useEffect(() => {
+    closed.current = onClose;
+  });
+  useEffect(() => {
+    if (!popover.open) closed.current?.();
+  }, [popover.open]);
   return (
     <div
       className="filter-chip"
@@ -599,11 +608,7 @@ export function FilterChip({
           className="filter-chip__button"
           aria-expanded={popover.open}
           aria-controls={popover.open ? id : undefined}
-          aria-label={
-            ticked.length === 0
-              ? name
-              : `${name}: ${safeText(ticked.map((choice) => choice.label).join(', '))}`
-          }
+          aria-label={labels.length === 0 ? name : `${name}: ${safeText(labels.join(', '))}`}
           onClick={() => popover.setOpen((open) => !open)}
         >
           {value === undefined && <IconPlus size={13} stroke={1.75} aria-hidden="true" />}
@@ -618,19 +623,64 @@ export function FilterChip({
       </span>
       {popover.open && (
         <div id={id} role="group" aria-label={name} className="pop filter-chip__pop">
-          {choices.map((choice) => {
-            const on = chosen.includes(choice.value);
-            return (
-              <label key={choice.value} className="filter-chip__option" data-on={on || undefined}>
-                <input type="checkbox" checked={on} onChange={() => onToggle(choice.value)} />
-                <span>{displayText(choice.label)}</span>
-              </label>
-            );
-          })}
-          {choices.length === 0 && <p className="filter-chip__none">Nothing to choose from.</p>}
+          {children}
         </div>
       )}
+      {popover.open && aside}
     </div>
+  );
+}
+
+/** One choice of a filter's list: a checkbox and its name. */
+export function FilterOption({
+  label,
+  on,
+  onToggle,
+}: {
+  label: string;
+  on: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <label className="filter-chip__option" data-on={on || undefined}>
+      <input type="checkbox" checked={on} onChange={onToggle} />
+      <span>{displayText(label)}</span>
+    </label>
+  );
+}
+
+/**
+ * A filter of several choices, each with a checkbox. A choice made is told as the one choice
+ * that changed, so that two made before the page is drawn again are both kept.
+ */
+export function FilterChip({
+  name,
+  choices,
+  chosen,
+  onToggle,
+  onClear,
+}: {
+  name: string;
+  choices: readonly Choice[];
+  chosen: readonly string[];
+  onToggle: (value: string) => void;
+  onClear: () => void;
+}) {
+  const labels = choices
+    .filter((choice) => chosen.includes(choice.value))
+    .map((choice) => choice.label);
+  return (
+    <FilterPill name={name} labels={labels} onClear={onClear}>
+      {choices.map((choice) => (
+        <FilterOption
+          key={choice.value}
+          label={choice.label}
+          on={chosen.includes(choice.value)}
+          onToggle={() => onToggle(choice.value)}
+        />
+      ))}
+      {choices.length === 0 && <p className="filter-chip__none">Nothing to choose from.</p>}
+    </FilterPill>
   );
 }
 
