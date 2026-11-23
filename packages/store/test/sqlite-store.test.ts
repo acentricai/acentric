@@ -11,6 +11,7 @@ import { engineSuite } from '../../core/test/engine-suite.ts';
 import { machinesSuite } from '../../core/test/machines-suite.ts';
 import { sandboxesSuite } from '../../core/test/sandboxes-suite.ts';
 import { scheduleSuite } from '../../core/test/schedule-suite.ts';
+import { subagentsSuite } from '../../core/test/subagents-suite.ts';
 import { storeSuite } from '../../core/test/store-suite.ts';
 import { tasksSuite } from '../../core/test/tasks-suite.ts';
 import { upgradeSuite } from '../../core/test/upgrade-suite.ts';
@@ -32,6 +33,7 @@ machinesSuite('on SQLite', () => SqliteStore.open(database()));
 bashSuite('on SQLite', () => SqliteStore.open(database()));
 sandboxesSuite('on SQLite', () => SqliteStore.open(database()));
 scheduleSuite('on SQLite', () => SqliteStore.open(database()));
+subagentsSuite('on SQLite', () => SqliteStore.open(database()));
 
 const NOW = 1_795_305_600_000;
 let made = 0;
@@ -51,6 +53,7 @@ const actorOf = (): Actor => {
     reasoning: 'medium',
     configuration: null,
     machine: null,
+    parent: null,
     status: 'idle',
     lastTurn: null,
     pendingInputs: 0,

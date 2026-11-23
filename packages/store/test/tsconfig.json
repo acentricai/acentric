@@ -20,6 +20,7 @@
     "../../core/test/fake-provider.ts",
     "../../core/test/sandboxes-suite.ts",
     "../../core/test/schedule-suite.ts",
+    "../../core/test/subagents-suite.ts",
     "../../core/test/world.ts"
   ],
   "references": [
