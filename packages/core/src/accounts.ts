@@ -14,6 +14,7 @@ import type { Account, AccountId, Agent, AgentId, PrincipalRef } from '@acentric
 import type { Audit } from './audit.ts';
 import { Conflict, EngineError } from './errors.ts';
 import { IdSource } from './ids.ts';
+import { sealedFor } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import type { Store, StoredAccount } from './store.ts';
 
@@ -254,7 +255,7 @@ export class Accounts {
     const { id } = stored.account;
     let made = this.#runners.get(id);
     if (made?.sealed !== stored.sealed) {
-      const opened = this.#secrets.open(`account\0${id}`, stored.sealed, `The account ${id}`);
+      const opened = this.#secrets.open(sealedFor.account(id), stored.sealed, `The account ${id}`);
       const credential = JSON.parse(opened) as Credential;
       const runner = provider.runner({
         credential,
@@ -277,7 +278,7 @@ export class Accounts {
   }
 
   #seal(id: AccountId, credential: Credential): string {
-    return this.#secrets.seal(`account\0${id}`, JSON.stringify(credential));
+    return this.#secrets.seal(sealedFor.account(id), JSON.stringify(credential));
   }
 
   /** Makes an account its provider's only default. */

@@ -89,7 +89,7 @@ import type { Fired } from './schedule.ts';
 import { Sandboxes } from './sandboxes.ts';
 import type { SandboxTimes } from './sandboxes.ts';
 import { instructionsOf } from './scaffold.ts';
-import { SecretsUnavailable } from './secrets.ts';
+import { SecretsUnavailable, sealedFor } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import type { ActorsQuery, PageOf, Paged, Stopping, Store } from './store.ts';
 import type { StoredCompaction } from './state.ts';
@@ -944,7 +944,7 @@ export class Engine {
 
   /** What an actor's variables are sealed as: they open as no other actor's. */
   static #bound(actor: string): string {
-    return `actor:${actor}:env`;
+    return sealedFor.actorEnv(actor);
   }
 
   /** An actor's variables, sealed. Null for none. */
