@@ -61,6 +61,14 @@ The server backs itself up every day, and before an upgrade, onto its volume `ba
 kubectl -n acentric exec acentric-0 -- acentric-server backup > "acentric-$(date -u +%F).tar"
 ```
 
+To have each copied to a bucket as well, off the cluster, add `ACENTRIC_BACKUP_URL` (such as
+`s3://my-bucket/acentric`) and `AWS_REGION` to the settings in a `configMapGenerator` patch. The
+server reaches the bucket with the pod's identity on EKS (IRSA or Pod Identity, with a
+ServiceAccount of your own), or with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` added to the
+`acentric-secrets` Secret; at another store, `AWS_ENDPOINT_URL_S3` too. What the key may do is
+in [BACKUPS.md](../../BACKUPS.md#a-bucket). One there is put back as below, with its
+`s3://` URL after `restore` and no stdin.
+
 To put one back: stop the server, and run the restore in a pod of its own on the server's volume,
 with the backup on its stdin.
 

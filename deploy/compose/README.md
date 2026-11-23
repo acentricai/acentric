@@ -33,8 +33,9 @@ first person, the owner.
 ## Backups
 
 The server backs itself up every day, and before an upgrade, into the volume `acentric_backups`
-([BACKUPS.md](../../BACKUPS.md)). Copy them off this machine as well, for instance from a cron
-job:
+([BACKUPS.md](../../BACKUPS.md)). Have them copied off this machine as well: set
+`ACENTRIC_BACKUP_URL` in `.env` to a bucket, with what reaches it beside it (`.env.example` has
+them), and each is copied there too. Or copy one off yourself, for instance from a cron job:
 
 ```sh
 docker compose exec -T server acentric-server backup > "acentric-$(date -u +%F).tar"
@@ -48,7 +49,9 @@ docker compose run --rm --no-deps -T server acentric-server restore < acentric-2
 docker compose up -d
 ```
 
-What was there is kept in `/data/before-restore-<time>`.
+One in the bucket is put back by its URL, in place of `< file`:
+`… acentric-server restore s3://my-bucket/acentric/<name>.tar`. What was there is kept in
+`/data/before-restore-<time>`.
 
 ## Upgrading
 
@@ -66,4 +69,6 @@ port in `ACENTRIC_PUBLIC_URL` too. People then use that address: plain HTTP is s
 that HTTPS works and HTTP is sent to it, that the server is on no other port, that its scripts
 have its address, that the command it hands out deploys an agent, that an actor's events come as
 they happen, and that a machine's daemon enrols and stays connected through Caddy when it is told
-Caddy's authority with `SSL_CERT_FILE`, and does not when it is not. CI runs it.
+Caddy's authority with `SSL_CERT_FILE`, and does not when it is not; that a backup is taken and
+put back, and one copied to a bucket at a store that speaks S3's API (versitygw) and put back
+from it. CI runs it.

@@ -47,6 +47,10 @@ Quadlet):
 sudo docker exec acentric acentric-server backup > "acentric-$(date -u +%F).tar"
 ```
 
+With `ACENTRIC_BACKUP_URL` and what reaches the bucket in `/etc/acentric/acentric.env`, each is
+copied to a bucket as well ([BACKUPS.md](../../BACKUPS.md#a-bucket)), and one there is put back
+by its `s3://` URL in place of `< file`.
+
 To put one back, with the service stopped:
 
 ```sh
