@@ -90,6 +90,10 @@ export class Blobs {
   readonly #clock: () => number;
   /** The last thing that was kept or removed: the next waits for it. */
   #last: Promise<unknown> = Promise.resolve();
+  /** How many backups are copying blobs now: while any is, none is removed. */
+  #holds = 0;
+  /** Whether removing was asked for while it was held back: done once it is let go. */
+  #owed = false;
 
   constructor(options: {
     readonly store: Store;
@@ -208,6 +212,11 @@ export class Blobs {
    */
   collect(): Promise<number> {
     return this.#alone(async () => {
+      // A backup is copying what the store refers to: removing waits until it is done.
+      if (this.#holds > 0) {
+        this.#owed = true;
+        return 0;
+      }
       const gone = await this.#store.dropUnreferencedBlobs();
       for (const digest of gone) await this.#bytes?.remove(digest);
       return gone.length;
@@ -229,6 +238,26 @@ export class Blobs {
       for (const digest of gone) await store.remove(digest);
       return gone.size;
     });
+  }
+
+  /**
+   * Does `work` with no blob removed while it is done: what a backup copies the blobs in. New
+   * blobs are kept meanwhile as ever. It starts once whatever was being kept or removed is done,
+   * and what was to be removed while it went on is removed after it.
+   */
+  async withoutRemovals<T>(work: () => Promise<T>): Promise<T> {
+    await this.#alone(async () => {
+      this.#holds += 1;
+    });
+    try {
+      return await work();
+    } finally {
+      this.#holds -= 1;
+      if (this.#holds === 0 && this.#owed) {
+        this.#owed = false;
+        void this.collect().catch(() => {});
+      }
+    }
   }
 
   /** Does one thing after whatever was being kept or removed is done. */
