@@ -222,7 +222,7 @@
   height: 100%;
   object-fit: cover;
   object-position: 50% 75%;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   animation: art-in 1200ms var(--ease-reveal) both;
 }
 

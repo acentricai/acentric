@@ -615,7 +615,7 @@ body {
 .theme-toggle {
   display: inline-flex;
   padding: 2px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--hover);
 }
 
@@ -626,7 +626,7 @@ body {
   height: 26px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--ink-muted);
   cursor: pointer;
