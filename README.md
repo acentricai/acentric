@@ -15,15 +15,18 @@ which connect out to the engine, or ones the engine makes at a sandbox provider.
 
 ## Running the server
 
-The server can be built from this repository as an image and run. Nothing of it is promised to
-stay as it is.
+The server is an image, for linux/amd64 and linux/arm64:
 
 ```sh
-docker build -t acentric-server .
 docker run -p 4000:4000 -v acentric-data:/data \
   -e ACENTRIC_SECRET_KEY=<32 bytes, as 64 hex characters> \
-  acentric-server
+  ghcr.io/acentricai/acentric-server:0.15.0
 ```
+
+Run an exact version, and change it on purpose: [VERSIONS.md](VERSIONS.md) says what a version
+promises, how to check that an image is the one released, and what an upgrade carries over.
+[CHANGELOG.md](CHANGELOG.md) says what changed in each. To build the image yourself instead,
+`docker build -t acentric-server .`.
 
 - It prints an API key once, when it first starts. That key may do everything, and other keys
   are made with it. To choose the key yourself, set `ACENTRIC_ADMIN_KEY`.
@@ -39,9 +42,9 @@ docker run -p 4000:4000 -v acentric-data:/data \
 - `ACENTRIC_SECRET_KEY` is what agents' secrets and the keys of model accounts are sealed
   with. Without it, the server keeps neither.
 - The server makes machines itself, as sandboxes, at the providers it was set up with. For
-  Docker, build the sandbox image with `docker build --target sandbox -t acentric-sandbox .`
-  and set `ACENTRIC_DOCKER_HOST`, such as `unix:///var/run/docker.sock`, and
-  `ACENTRIC_DOCKER_IMAGE`. Whoever may make a sandbox then has the computer Docker is on. For
+  Docker, set `ACENTRIC_DOCKER_HOST`, such as `unix:///var/run/docker.sock`, and
+  `ACENTRIC_DOCKER_IMAGE` to the sandbox image of the server's version,
+  `ghcr.io/acentricai/acentric-sandbox:0.15.0`. Whoever may make a sandbox then has the computer Docker is on. For
   Boat (boat.dev), build its snapshot with `deploy/sandbox/boat-template.sh` and set
   `ACENTRIC_BOAT_TEMPLATE` to the name it prints. An
   account at the provider is added with `POST /v1/providers`, and a sandbox is made with
@@ -59,7 +62,9 @@ Every setting is listed at the top of `apps/server/src/settings.ts`.
 
 ## Using it
 
-The `acentric` command is installed from your own server, so it is always the server's version:
+The `acentric` command is installed from your own server, so it is always the server's version.
+It needs Node 24 or newer: where there is none, the script fetches Node from nodejs.org into
+`~/.acentric`, for the command alone.
 
 ```sh
 curl -fsSL http://localhost:4000/install-cli.sh | sh
@@ -92,9 +97,9 @@ next time it is used, and `acentric update` does it without asking.
 | `apps/cli`          | `acentric`           | The command: sign in to an engine, start a project, deploy.            |
 | `apps/machine`      | `acentric-machine`   | The daemon that runs on a machine, in Rust.                            |
 
-A developer installs `@acentric/agent`, `@acentric/client` and `acentric`. The other packages
-are what the server is made of: they are published so that the server can be installed, and
-they may change in any release.
+None of these is published to npm: the server's image is what is released. A developer gets
+the command and the machine program from their server, and `@acentric/agent` in each project
+`acentric init` makes. The packages may change in any release.
 
 Which package may depend on which is written down in `boundaries.json`, and checked.
 
