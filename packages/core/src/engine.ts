@@ -63,6 +63,7 @@ import {
   ActorArchived,
   ActorBusy,
   ActorNotFound,
+  Conflict,
   AgentNotFound,
   CodeUnavailable,
   InvalidAgent,
@@ -1266,6 +1267,33 @@ export class Engine {
       if (child.status === 'archived') await this.unarchive(child.id);
     }
     return actor;
+  }
+
+  /**
+   * Deletes an archived actor and every subagent under it, with their conversations, tasks,
+   * scripts and commands; the images and files only they referred to go too. What they cost
+   * stays in the usage. One that is not archived is refused: it is archived first, which ends
+   * what it is in.
+   */
+  async deleteActor(id: ActorId): Promise<ActorId[]> {
+    if (this.#closing) throw new Unavailable();
+    const actor = await this.getActor(id);
+    if (actor.status !== 'archived') {
+      throw new Conflict(`The actor ${id} is not archived: archive it before it is deleted`);
+    }
+    const gone = (await this.#store.deleteActor(id)) ?? [];
+    for (const one of gone) {
+      const driver = this.#drivers.get(one);
+      if (driver !== undefined) {
+        // Whatever it would store now has nowhere to go.
+        driver.dead = true;
+        driver.abandon(new ActorNotFound(one));
+        this.#drivers.delete(one);
+      }
+      this.tasks.forget(one);
+    }
+    if (gone.length > 0) await this.blobs.collect();
+    return gone;
   }
 
   /**

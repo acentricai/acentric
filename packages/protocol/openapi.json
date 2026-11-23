@@ -1908,6 +1908,108 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "actors.delete",
+        "summary": "Deletes an archived actor and its subagents, with their conversations and the images and files only they had. What they cost stays in the usage.",
+        "tags": [
+          "actors"
+        ],
+        "x-acentric-auth": {
+          "on": "actor",
+          "permission": "actors:write",
+          "param": "actor"
+        },
+        "parameters": [
+          {
+            "name": "actor",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind actor, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^act_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "act_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/actors/{actor}/archive": {

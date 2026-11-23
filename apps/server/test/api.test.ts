@@ -464,6 +464,29 @@ describe('actors', () => {
       status: 409,
     });
   });
+
+  it('are deleted once they are archived, with their subagents, and the deletion is written down', async () => {
+    const { admin, deploy } = await api();
+    const { agent } = await deploy();
+    const { actor } = await admin.call('actors.create', { params: { agent: agent.id }, body: {} });
+    const params = { actor: actor.id };
+    expect(await refusal(admin.call('actors.delete', { params }))).toEqual({
+      code: 'conflict',
+      status: 409,
+    });
+    await admin.call('actors.archive', { params });
+    await admin.call('actors.delete', { params });
+    expect(await refusal(admin.call('actors.get', { params }))).toEqual({
+      code: 'not_found',
+      status: 404,
+    });
+    const { items } = await admin.call('audit.list', { query: { action: 'actor.delete' } });
+    expect(items[0]).toMatchObject({
+      action: 'actor.delete',
+      target: { type: 'actor', id: actor.id },
+      detail: { agent: agent.id, actors: 1 },
+    });
+  });
 });
 
 describe('a conversation', () => {
