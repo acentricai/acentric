@@ -50,6 +50,7 @@ export function engineArea(shared: Shared) {
       keep: 3,
       next: NOW + 3_600_000,
       last: null,
+      bucket: null,
       items: [],
     },
     fail: null,
@@ -94,6 +95,8 @@ export function engineArea(shared: Shared) {
           version: '0.15.0',
           createdAt: NOW,
           bytes: 5 * 1_048_576,
+          onServer: true,
+          inBucket: status.bucket !== null,
         };
         status.items.unshift(backup);
         status.last = { ok: true, at: NOW, name: backup.name };
