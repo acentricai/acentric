@@ -44,7 +44,7 @@ images:
     newTag: $version
 configMapGenerator:
   - name: acentric-settings
-    behavior: replace
+    behavior: merge
     literals:
       - ACENTRIC_PUBLIC_URL=$url
 EOF
@@ -80,6 +80,20 @@ echo "$health"
 echo "$health" | grep -q '"ok":true' || fail "the server is not up"
 get "$url/setup" | grep -q '<div id="root">' || fail "no dashboard"
 get "$url/install-cli.sh" | grep -q "SERVER='$url'" || fail "install-cli.sh has another address"
+
+step "Its backups go on their own volume, and its metrics are on a port of their own"
+backups=$(get "$url/v1/backups")
+echo "$backups" | grep -q '"dir":"/backups"' || fail "its backups are not on /backups: $backups"
+# On a cluster of one machine (kind, k3s), both volumes are on its one disk: the folder is
+# what is checked here, not the disk.
+metrics=$(kubectl -n acentric exec acentric-0 -- node -e \
+  "fetch('http://127.0.0.1:9464/metrics').then((r) => r.text()).then((t) => process.stdout.write(t))")
+echo "$metrics" | grep -q '^acentric_build_info{version=' || fail "no metrics at :9464/metrics"
+# What the API's port answers at /metrics is the dashboard's page, not the metrics.
+if get "$url/metrics" 2> /dev/null | grep -q '^acentric_build_info'; then
+  fail "the metrics are on the API's port"
+fi
+echo "backups on /backups, and metrics at :9464/metrics, not through the Service"
 
 step "The command, installed from the server, makes a project and deploys its agent"
 home="$work/home"
