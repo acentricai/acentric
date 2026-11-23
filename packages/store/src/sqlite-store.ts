@@ -16,6 +16,7 @@ import type {
   MachinePatch,
   NewCommand,
   StoredCommand,
+  Stopping,
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
@@ -150,7 +151,11 @@ class Line {
     } else if (refused?.kind === 'NameTaken') {
       const said = refused.args[1];
       const of =
-        said === 'agent' || said === 'account' || said === 'machine' || said === 'provider account'
+        said === 'agent' ||
+        said === 'account' ||
+        said === 'machine' ||
+        said === 'provider account' ||
+        said === 'subagent'
           ? said
           : 'actor';
       waiting.reject(new NameTaken(String(refused.args[0]), of));
@@ -257,8 +262,8 @@ export class SqliteStore implements Store {
     return this.#write.ask('agentsOf' satisfies Operation, account);
   }
 
-  quietInputs(actor: ActorId): Promise<void> {
-    return this.#write.ask('quietInputs' satisfies Operation, actor);
+  quietInputs(actor: ActorId, only?: readonly string[]): Promise<void> {
+    return this.#write.ask('quietInputs' satisfies Operation, actor, only);
   }
 
   startTask(task: NewTask): Promise<StoredTask> {
@@ -345,6 +350,25 @@ export class SqliteStore implements Store {
 
   loadCommand(actor: string, task: string): Promise<StoredCommand | undefined> {
     return this.#write.ask('loadCommand' satisfies Operation, actor, task);
+  }
+
+  findChild(
+    parent: ActorId,
+    name: string,
+  ): Promise<{ readonly actor: Actor; readonly spawnedBy: string | null } | undefined> {
+    return this.#write.ask('findChild' satisfies Operation, parent, name);
+  }
+
+  listChildren(parent: ActorId): Promise<Actor[]> {
+    return this.#write.ask('listChildren' satisfies Operation, parent);
+  }
+
+  setStopping(actor: ActorId, stopping: Stopping | null): Promise<void> {
+    return this.#write.ask('setStopping' satisfies Operation, actor, stopping);
+  }
+
+  listStopping(): Promise<({ readonly actor: ActorId } & Stopping)[]> {
+    return this.#write.ask('listStopping' satisfies Operation);
   }
 
   addSandboxProvider(provider: StoredSandboxProvider): Promise<void> {
@@ -536,8 +560,15 @@ export class SqliteStore implements Store {
     actor: Actor,
     configurationGiven: Json | null = null,
     env: string | null = null,
+    spawnedBy: string | null = null,
   ): Promise<{ readonly record: ActorRecord; readonly created: boolean }> {
-    return this.#write.ask('createActor' satisfies Operation, actor, configurationGiven, env);
+    return this.#write.ask(
+      'createActor' satisfies Operation,
+      actor,
+      configurationGiven,
+      env,
+      spawnedBy,
+    );
   }
 
   // Read where they are written: a command is sent with what was just kept.

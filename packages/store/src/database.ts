@@ -13,6 +13,7 @@ import type {
   MachinePatch,
   NewCommand,
   StoredCommand,
+  Stopping,
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
@@ -156,6 +157,7 @@ function totalsOfRow(row: SumsRow): UsageTotals {
 const GROUP_BY: { readonly [G in UsageGroup]: string } = {
   agent: 'agent_id',
   actor: 'actor_id',
+  root: 'root_actor_id',
   account: "COALESCE(account_id, '')",
   provider: 'provider',
   model: 'model',
@@ -220,6 +222,9 @@ type ActorRow = {
   created_at: number;
   archived_at: number | null;
   machine: string | null;
+  parent_id: string | null;
+  parent_name: string | null;
+  spawned_by: string | null;
   pending: number;
 };
 
@@ -441,6 +446,7 @@ function recordOf(row: ActorRow): ActorRecord {
       reasoning: row.reasoning,
       configuration: row.configuration === null ? null : JSON.parse(row.configuration),
       machine: row.machine === null ? null : JSON.parse(row.machine),
+      parent: row.parent_id === null ? null : { id: row.parent_id, name: row.parent_name },
       status: row.status,
       lastTurn: row.last_turn === null ? null : JSON.parse(row.last_turn),
       pendingInputs: row.pending,
@@ -507,6 +513,7 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'setSecret',
   'deleteSecret',
   'createActor',
+  'setStopping',
   'setActorEnv',
   'commit',
   'addInput',
@@ -838,6 +845,7 @@ export function operations(db: DatabaseSync) {
       only('at < ?', filter.to);
       only('agent_id = ?', filter.agent);
       only('actor_id = ?', filter.actor);
+      only('root_actor_id = ?', filter.root);
       only('account_id = ?', filter.account);
       only('provider = ?', filter.provider);
       only('model = ?', filter.model);
@@ -1102,7 +1110,18 @@ export function operations(db: DatabaseSync) {
       actor: Actor,
       configurationGiven: Json | null = null,
       env: string | null = null,
+      spawnedBy: string | null = null,
     ): { record: ActorRecord; created: boolean } {
+      if (
+        actor.parent !== null &&
+        get(
+          'SELECT 1 FROM actors WHERE parent_id = ? AND parent_name = ?',
+          actor.parent.id,
+          actor.parent.name,
+        ) !== undefined
+      ) {
+        throw new Refused('NameTaken', [actor.parent.name, 'subagent']);
+      }
       if (actor.externalId !== null) {
         const there = get<ActorRow>(
           `${ACTOR} WHERE agent_id = ? AND external_id = ?`,
@@ -1118,8 +1137,9 @@ export function operations(db: DatabaseSync) {
       run(
         `INSERT INTO actors (id, agent_id, deployment_id, deployment_version, pinned, behind, name, external_id,
            model, reasoning, configuration, configuration_given, sent, reasoning_from, status,
-           last_turn, turn, owed, epoch, next_seq, created_at, archived_at, machine, machine_env)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?, ?, ?)`,
+           last_turn, turn, owed, epoch, next_seq, created_at, archived_at, machine, machine_env,
+           parent_id, parent_name, spawned_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?, ?, ?, ?, ?, ?)`,
         actor.id,
         actor.agent,
         actor.deployment.id,
@@ -1139,6 +1159,9 @@ export function operations(db: DatabaseSync) {
         actor.archivedAt,
         actor.machine === null ? null : JSON.stringify(actor.machine),
         env,
+        actor.parent?.id ?? null,
+        actor.parent?.name ?? null,
+        spawnedBy,
       );
       return {
         record: {
@@ -1202,6 +1225,7 @@ export function operations(db: DatabaseSync) {
       only('status', query.status);
       only('name', query.name);
       only('external_id', query.externalId);
+      only('parent_id', query.parent);
       const rows = all<ActorRow>(
         `${ACTOR} WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT ?`,
         ...values,
@@ -1216,6 +1240,18 @@ export function operations(db: DatabaseSync) {
     },
 
     commit(id: ActorId, epoch: number, change: Change): void {
+      /** The actor at the top of an actor's tree of subagents: itself, for one created from outside. */
+      const rootOf = (actor: ActorId): ActorId => {
+        let top = actor;
+        for (;;) {
+          const row = get<{ parent_id: ActorId | null }>(
+            'SELECT parent_id FROM actors WHERE id = ?',
+            top,
+          );
+          if (row === undefined || row.parent_id === null) return top;
+          top = row.parent_id;
+        }
+      };
       // What of the actor itself changes, each as the column it is and what goes in it.
       const { set, sent } = change;
       const json = (value: Json | null | undefined) =>
@@ -1274,12 +1310,13 @@ export function operations(db: DatabaseSync) {
         const { usage: used } = change;
         const counted = used.usage;
         run(
-          `INSERT INTO usage (at, actor_id, agent_id, version, account_id, provider, model,
-             failure, total_input, input, output, reasoning, cache_read, cache_write,
+          `INSERT INTO usage (at, actor_id, root_actor_id, agent_id, version, account_id, provider,
+             model, failure, total_input, input, output, reasoning, cache_read, cache_write,
              web_searches, cost, cost_source, duration_ms)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           used.at,
           used.actor,
+          rootOf(used.actor),
           used.agent,
           used.version,
           used.account,
@@ -1378,8 +1415,18 @@ export function operations(db: DatabaseSync) {
       ).map((row) => JSON.parse(row.entry) as ConversationEntry);
     },
 
-    quietInputs(actor: ActorId): void {
-      run('UPDATE inputs SET quiet = 1 WHERE actor_id = ? AND delivered_at IS NULL', actor);
+    quietInputs(actor: ActorId, only?: readonly string[]): void {
+      if (only === undefined) {
+        run('UPDATE inputs SET quiet = 1 WHERE actor_id = ? AND delivered_at IS NULL', actor);
+        return;
+      }
+      for (const type of only) {
+        run(
+          'UPDATE inputs SET quiet = 1 WHERE actor_id = ? AND delivered_at IS NULL AND type = ?',
+          actor,
+          type,
+        );
+      }
     },
 
     unfinished(): ActorId[] {
@@ -1592,6 +1639,36 @@ export function operations(db: DatabaseSync) {
         id,
       );
       return unended;
+    },
+
+    findChild(
+      parent: ActorId,
+      name: string,
+    ): { actor: Actor; spawnedBy: string | null } | undefined {
+      const row = get<ActorRow>(`${ACTOR} WHERE parent_id = ? AND parent_name = ?`, parent, name);
+      return row === undefined
+        ? undefined
+        : { actor: recordOf(row).actor, spawnedBy: row.spawned_by };
+    },
+
+    listChildren(parent: ActorId): Actor[] {
+      return all<ActorRow>(`${ACTOR} WHERE parent_id = ? ORDER BY created_at, id`, parent).map(
+        (row) => recordOf(row).actor,
+      );
+    },
+
+    setStopping(actor: ActorId, stopping: Stopping | null): void {
+      run(
+        'UPDATE actors SET stopping = ? WHERE id = ?',
+        stopping === null ? null : JSON.stringify(stopping),
+        actor,
+      );
+    },
+
+    listStopping(): ({ actor: ActorId } & Stopping)[] {
+      return all<{ id: ActorId; stopping: string }>(
+        'SELECT id, stopping FROM actors WHERE stopping IS NOT NULL ORDER BY created_at, id',
+      ).map((row) => ({ actor: row.id, ...(JSON.parse(row.stopping) as Stopping) }));
     },
 
     addSandboxProvider(provider: StoredSandboxProvider): void {

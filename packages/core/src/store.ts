@@ -226,8 +226,14 @@ export type CommandPatch = Partial<
   >
 >;
 
+/** How an actor is being stopped: put away too, or not, and by a person or by the actor that spawned it. */
+export type Stopping = {
+  readonly how: 'abort' | 'archive';
+  readonly by: 'person' | 'parent';
+};
+
 /** What has a name that no other of its kind has. */
-export type Named = 'actor' | 'agent' | 'account' | 'machine' | 'provider account';
+export type Named = 'actor' | 'agent' | 'account' | 'machine' | 'provider account' | 'subagent';
 
 export class NameTaken extends Error {
   override readonly name = 'NameTaken';
@@ -236,7 +242,9 @@ export class NameTaken extends Error {
     super(
       of === 'actor'
         ? `An actor of this agent is named ${name} already`
-        : `${of === 'agent' || of === 'account' ? 'An' : 'A'} ${of} is named ${name} already`,
+        : of === 'subagent'
+          ? `The actor has a subagent ${name} already`
+          : `${of === 'agent' || of === 'account' ? 'An' : 'A'} ${of} is named ${name} already`,
     );
   }
 }
@@ -271,6 +279,8 @@ export type ActorsQuery = PageOf & {
   readonly status?: Actor['status'];
   readonly name?: string;
   readonly externalId?: string;
+  /** The subagents of this actor. */
+  readonly parent?: ActorId;
 };
 
 /** A model account as the store keeps it: its credential sealed, never the credential. */
@@ -501,7 +511,26 @@ export interface Store {
     actor: Actor,
     configurationGiven?: Json | null,
     env?: string | null,
+    /** For a subagent: the call of its parent's model that spawned it. */
+    spawnedBy?: string | null,
   ): Promise<{ readonly record: ActorRecord; readonly created: boolean }>;
+  /**
+   * The subagent an actor gave a name, with the call that spawned it. An actor's subagents
+   * have each a name of their own: a second of one name is refused with `NameTaken`.
+   */
+  findChild(
+    parent: ActorId,
+    name: string,
+  ): Promise<{ readonly actor: Actor; readonly spawnedBy: string | null } | undefined>;
+  /** The subagents of an actor, in the order they were spawned. */
+  listChildren(parent: ActorId): Promise<Actor[]>;
+  /**
+   * Writes down that an actor is being stopped, and by whom, or with null that it has been:
+   * what a process that starts looks for, to go on stopping it.
+   */
+  setStopping(actor: ActorId, stopping: Stopping | null): Promise<void>;
+  /** The actors that were being stopped, each with how and by whom. */
+  listStopping(): Promise<({ readonly actor: ActorId } & Stopping)[]>;
   /** The variables an actor's commands are run with, sealed. Null for an actor that has none. */
   actorEnv(actor: ActorId): Promise<string | null>;
   /**
@@ -557,7 +586,7 @@ export interface Store {
    * Marks everything that waits in an actor's mailbox quiet: it starts no turn, and joins the
    * next one that something else starts.
    */
-  quietInputs(actor: ActorId): Promise<void>;
+  quietInputs(actor: ActorId, only?: readonly string[]): Promise<void>;
 
   /** The actors with something owed: a turn under way, or mail that waits and is not quiet. */
   unfinished(): Promise<ActorId[]>;

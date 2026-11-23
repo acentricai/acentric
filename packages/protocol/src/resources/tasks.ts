@@ -71,6 +71,8 @@ export const abortResponseSchema = z
     /** Whether it was in a turn, which was ended. */
     interrupted: z.boolean(),
     tasks: z.array(taskSchema),
+    /** Its subagents that were stopped with it, by the names it gave them. */
+    agents: z.array(z.string()),
   })
   .meta({ id: 'AbortResponse' });
 export type AbortResponse = z.infer<typeof abortResponseSchema>;

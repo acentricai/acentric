@@ -81,6 +81,7 @@ function world(given: { readonly bytes?: BlobStore | null } = {}) {
       reasoning: 'medium',
       configuration: null,
       machine: null,
+      parent: null,
       status: 'idle',
       lastTurn: null,
       pendingInputs: 0,

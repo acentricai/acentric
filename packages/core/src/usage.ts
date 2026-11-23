@@ -17,6 +17,11 @@ import type {
 export type UsageRecord = {
   readonly at: number;
   readonly actor: ActorId;
+  /**
+   * The actor at the top of its tree of subagents: itself, for one created from outside. The
+   * store that keeps the record says which.
+   */
+  readonly root?: ActorId;
   readonly agent: AgentId;
   /** The version of the agent the actor was on. */
   readonly version: number;
@@ -39,6 +44,8 @@ export type UsageFilter = {
   readonly to?: number;
   readonly agent?: AgentId;
   readonly actor?: ActorId;
+  /** An actor created from outside, and every actor under it. */
+  readonly root?: ActorId;
   readonly account?: AccountId;
   readonly provider?: string;
   readonly model?: string;
@@ -97,6 +104,7 @@ export function passes(record: UsageRecord, filter: UsageFilter): boolean {
     (filter.to === undefined || record.at < filter.to) &&
     (filter.agent === undefined || record.agent === filter.agent) &&
     (filter.actor === undefined || record.actor === filter.actor) &&
+    (filter.root === undefined || (record.root ?? record.actor) === filter.root) &&
     (filter.account === undefined || record.account === filter.account) &&
     (filter.provider === undefined || record.provider === filter.provider) &&
     (filter.model === undefined || record.model === filter.model)
@@ -110,6 +118,8 @@ export function groupKey(record: UsageRecord, by: UsageGroup): string {
       return record.agent;
     case 'actor':
       return record.actor;
+    case 'root':
+      return record.root ?? record.actor;
     case 'account':
       return record.account ?? '';
     case 'provider':
