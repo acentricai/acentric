@@ -529,6 +529,7 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'setActive',
   'deleteAgent',
   'deleteActor',
+  'freePages',
   'removeExpired',
   'pruneAudit',
   'pruneUsage',
@@ -584,6 +585,10 @@ export const WRITES: ReadonlySet<Operation> = new Set([
 export function open(path: string, readOnly: boolean, fullFsync = false): DatabaseSync {
   const db = new DatabaseSync(path, { readOnly });
   if (!readOnly) {
+    // What is removed is given back to the disk, a little at a time, as the server asks: for a
+    // new database, which is made so before anything is written to it; for one made before,
+    // once it is vacuumed (`acentric-server compact`), which this asks for.
+    db.exec('PRAGMA auto_vacuum = INCREMENTAL');
     // A commit is on the disk before anyone is told of it. Readers do not wait for a writer.
     db.exec('PRAGMA journal_mode = WAL');
     db.exec('PRAGMA synchronous = FULL');
@@ -825,6 +830,20 @@ export function operations(db: DatabaseSync) {
       }
       run('DELETE FROM actors WHERE id IN (SELECT value FROM json_each(?))', these);
       return ids;
+    },
+
+    /**
+     * Gives the pages nothing is in back to the disk, for a database made to (a new one is):
+     * how many bytes went. None, for one that is not.
+     */
+    freePages(): number {
+      const size = (get<{ page_size: number }>('PRAGMA page_size') ?? { page_size: 0 }).page_size;
+      const free = () =>
+        (get<{ freelist_count: number }>('PRAGMA freelist_count') ?? { freelist_count: 0 })
+          .freelist_count;
+      const before = free();
+      db.exec('PRAGMA incremental_vacuum');
+      return (before - free()) * size;
     },
 
     archivedBefore(before: number, limit: number): ActorId[] {

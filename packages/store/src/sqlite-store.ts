@@ -242,6 +242,11 @@ export class SqliteStore implements Store {
     return this.#write.ask('deleteActor' satisfies Operation, id);
   }
 
+  /** Gives the pages nothing is in back to the disk, and says how many bytes went. */
+  freePages(): Promise<number> {
+    return this.#write.ask('freePages' satisfies Operation);
+  }
+
   archivedBefore(before: number, limit: number): Promise<ActorId[]> {
     return this.#read.ask('archivedBefore' satisfies Operation, before, limit);
   }
