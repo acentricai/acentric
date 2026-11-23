@@ -19,12 +19,19 @@ pnpm install
 | `pnpm lint`       | Lints with oxlint. A warning fails it.                         |
 | `pnpm format`     | Formats with Prettier. `pnpm format:check` only checks.        |
 | `pnpm boundaries` | Checks which package depends on which (see below).             |
+| `pnpm versions`   | Checks that every package and the daemon have one version.     |
 | `pnpm check`      | All of the above but `format`: what CI runs for TypeScript.    |
 | `pnpm check:rust` | `cargo fmt`, `clippy` and `test`: what CI runs for the daemon. |
 | `pnpm clean`      | Removes what `build` made.                                     |
 | `pnpm bench`      | Measures how fast the engine turns, on a database on disk.     |
 
 Run `pnpm check`, and `pnpm check:rust` if you changed the daemon, before you open a pull request.
+
+CI runs what a change can break, as `.github/workflows/ci.yml` says at its top: the checks of
+formatting, lint, boundaries and versions always; the TypeScript tests, on Node 24, and the
+server's image for a change to anything but Markdown; the daemon's checks on Linux and macOS
+for a change to the daemon. main tests Node 26 too, and does not test again a commit whose files
+a pull request's checks passed with.
 
 ## How the repository is laid out
 

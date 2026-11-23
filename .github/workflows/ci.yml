@@ -1,5 +1,20 @@
 name: CI
 
+# What runs is what a change can break:
+#
+# - Formatting, lint, boundaries and versions run for every change. They take a minute.
+# - The TypeScript tests and the server's image run for a change to anything but prose
+#   (Markdown and the licence).
+# - The daemon's checks, in Rust on Linux and macOS, run for a change to the daemon or its
+#   toolchain. macOS minutes cost ten times Linux ones.
+# - A pull request tests on Node 24, the oldest Node the packages run on. main tests on Node
+#   26, which the image ships, too.
+#
+# A commit pushed to main that has the very files of a pull request whose checks passed, as a
+# rebase merge of an up-to-date pull request has, is not tested again: main then runs only what
+# a pull request does not (Node 26), and the image, which keeps the cache pull requests build
+# from.
+
 on:
   push:
     branches: [main]
@@ -13,17 +28,98 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  typescript:
-    name: TypeScript (Node ${{ matrix.node }})
+  changes:
+    name: What changed
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # The oldest Node the packages run on, and the one the image ships.
-        node: [24, 26]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+      rust: ${{ steps.changes.outputs.rust }}
+      tested: ${{ steps.tested.outputs.tested }}
+      node: ${{ steps.tested.outputs.node }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: changes
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # What was changed: by the pull request, or by the push. With nothing to compare
+          # with, everything is taken to have changed.
+          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            git diff --name-only "$BASE...$GITHUB_SHA" > changed.txt
+          else
+            echo everything > changed.txt
+          fi
+          sed 's/^/  /' changed.txt
+          prose='(\.md|^LICENSE)$'
+          rust='^(apps/machine/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|\.github/workflows/ci\.yml$)'
+          code=$(grep -Evq "$prose" changed.txt && echo true || echo false)
+          [ "$(cat changed.txt)" = everything ] && code=true
+          has_rust=$(grep -Eq "$rust|^everything$" changed.txt && echo true || echo false)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "rust=$has_rust" >> "$GITHUB_OUTPUT"
+          echo "code: $code, rust: $has_rust"
+      - id: tested
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # On main: whether the pull request this commit came from passed with these very
+          # files. Its head is compared by tree, which is the same when nothing differs.
+          tested=false
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            tree=$(git rev-parse "$GITHUB_SHA^{tree}")
+            for head in $(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[].head.sha'); do
+              [ "$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$head" --jq .tree.sha)" = "$tree" ] || continue
+              passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head&event=pull_request&status=success" \
+                --jq '[.workflow_runs[] | select(.name == "CI")] | length')
+              if [ "$passed" -gt 0 ]; then tested=true; echo "Passed as $head."; fi
+            done
+          fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then node='[24]'
+          elif [ "$tested" = true ]; then node='[26]'
+          else node='[24, 26]'; fi
+          echo "tested=$tested" >> "$GITHUB_OUTPUT"
+          echo "node=$node" >> "$GITHUB_OUTPUT"
+          echo "tested: $tested, node: $node"
+
+  lint:
+    name: Format, lint, boundaries, versions
+    needs: changes
+    if: needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       # The pnpm version is the root package.json's `packageManager`.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm boundaries
+      - run: pnpm versions
+
+  typescript:
+    name: TypeScript (Node ${{ matrix.node }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.changes.outputs.node) }}
+    steps:
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -34,9 +130,6 @@ jobs:
       # rust-toolchain.toml's.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm boundaries
       # The server's tests make sandboxes at the Docker of this runner, from an image they
       # build: here they are not passed over.
       - run: pnpm test
@@ -45,10 +138,24 @@ jobs:
 
   image:
     name: Server image
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - run: docker build --tag acentric-server .
+      - uses: docker/setup-buildx-action@v4
+      # Built from GitHub's cache of earlier builds, which main keeps and releases read too:
+      # the machine program is compiled again only when what it is built from changed.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          load: true
+          tags: acentric-server
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       # The image has what the server needs and nothing it was built with: it has to start.
       - name: The server starts in its image, and says it is up
         run: |
@@ -63,7 +170,10 @@ jobs:
 
   rust:
     name: Rust (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
