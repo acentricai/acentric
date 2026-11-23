@@ -12,12 +12,14 @@ import type { RouterHistory } from '@tanstack/react-router';
 
 import { isApiError, meQuery, queryClient } from './api.ts';
 import { FailedPage } from './pages/failed.tsx';
-import { HomePage } from './pages/home.tsx';
 import { InvitePage } from './pages/invite.tsx';
 import { NotFoundPage } from './pages/not-found.tsx';
 import { ResetPage } from './pages/reset.tsx';
 import { SetupPage } from './pages/setup.tsx';
 import { SignInPage } from './pages/sign-in.tsx';
+import { AppShell } from './shell/AppShell.tsx';
+import { firstTab, SECTIONS } from './shell/nav.ts';
+import { NotFound } from './shell/NotFound.tsx';
 import { signInSearch, tokenSearch } from './url.ts';
 
 /** Who is signed in, as the server says: undefined for no one. Rejects when it cannot say. */
@@ -69,7 +71,7 @@ const reset = createRoute({
   component: ResetPage,
 });
 
-/** Every page of a person signed in. */
+/** Every page of a person signed in, in the shell: the sidebar, and the page beside it. */
 const people = createRoute({
   getParentRoute: () => root,
   id: 'signed-in',
@@ -78,23 +80,38 @@ const people = createRoute({
     if (me === undefined || me.type !== 'user') {
       throw redirect({ to: '/sign-in', search: signInSearch({ redirect: location.href }) });
     }
+    return { me };
   },
-  component: Outlet,
+  component: AppShell,
+  // An address of no page keeps the sidebar.
+  notFoundComponent: NotFound,
 });
 
+/** `/` is the first tab the person may see. */
 const home = createRoute({
   getParentRoute: () => people,
   path: '/',
-  component: HomePage,
+  beforeLoad: ({ context }) => {
+    const tab = firstTab(context.me);
+    if (tab !== undefined) throw redirect({ to: tab.path, replace: true });
+  },
+  component: NotFound,
 });
 
-const tree = root.addChildren([signIn, setup, invite, reset, people.addChildren([home])]);
+const tree = root.addChildren([
+  signIn,
+  setup,
+  invite,
+  reset,
+  people.addChildren([home, ...SECTIONS.flatMap((section) => section.routes(people))]),
+]);
 
 /** The dashboard's router: on the browser's history, or on another, for tests. */
 export function makeRouter(history?: RouterHistory) {
   return createRouter({
     routeTree: tree,
     defaultPreload: false,
+    scrollRestoration: true,
     ...(history === undefined ? {} : { history }),
   });
 }

@@ -1,0 +1,113 @@
+/* Loading, failure and nothing-yet states, for data from the API. Quiet and
+   monochrome: a shimmer the shape of what's coming, an error in the API's
+   words with a retry, and an empty state that says what would fill it. */
+
+.skeleton {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.skeleton__line,
+.skeleton__title,
+.skeleton__panel {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--wash) 0%, var(--stone) 40%, var(--wash) 80%);
+  background-size: 300% 100%;
+  animation: shimmer 1600ms var(--ease-reveal) infinite;
+}
+
+.skeleton__line {
+  height: 14px;
+}
+
+.skeleton__title {
+  width: 220px;
+  height: 30px;
+  margin-bottom: 28px;
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.skeleton__panel {
+  height: 96px;
+  border-radius: var(--radius-md);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.state-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.state-error > svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--danger);
+}
+
+.state-error > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.state-error--compact {
+  padding: 12px 14px;
+}
+
+.state-error__title,
+.state-empty__title {
+  margin: 0 0 2px;
+  font-weight: 500;
+}
+
+.state-empty {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 28px 20px;
+  border: 1px dashed var(--line-field);
+  border-radius: var(--radius-md);
+}
+
+.state-empty .note {
+  margin: 0;
+  max-width: var(--prose-max);
+}
+
+.form-error {
+  margin: 12px 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__line,
+  .skeleton__title,
+  .skeleton__panel {
+    animation: none;
+  }
+}
+
+.pop__error {
+  margin: 4px 10px 6px;
+  max-width: 240px;
+}

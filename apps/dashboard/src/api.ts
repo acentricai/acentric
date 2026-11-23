@@ -64,6 +64,11 @@ export function isApiError(error: unknown, status?: number, code?: string): erro
   );
 }
 
+/** Whether a read failed for now, and is worth trying again soon: the server was not reached, or was busy. */
+export const isTransientRead = (error: unknown): boolean =>
+  error instanceof TypeError ||
+  (error instanceof ApiError && (error.status === 429 || error.status >= 500));
+
 /** A failed call, in words a person reads. */
 export function errorText(error: unknown): string {
   if (error instanceof ApiError) return error.message;
