@@ -15,7 +15,7 @@ import type {
   Usage,
 } from '@acentric/protocol';
 
-import type { ActorPatch, ActorRecord, Change, OwedCall, Turn } from './state.ts';
+import type { ActorPatch, ActorRecord, Change, OwedCall, StoredCompaction, Turn } from './state.ts';
 
 /** How a call of the model that failed is made again. */
 export type RetryPolicy = {
@@ -107,7 +107,21 @@ export type MachineEvent =
       readonly moved?: readonly { readonly call: string; readonly text: string }[];
     }
   | { readonly type: 'archive' }
-  | { readonly type: 'unarchive' };
+  | { readonly type: 'unarchive' }
+  /**
+   * The conversation was compacted: in a turn, before a call of the model, or between turns
+   * when someone asked. `line` follows it in the conversation, and says what is still going
+   * on. In a turn, the call of the model is made as a first try.
+   */
+  | {
+      readonly type: 'compacted';
+      readonly compaction: Omit<StoredCompaction, 'atSeq' | 'createdAt'>;
+      readonly line: Message;
+      /** The model's reasoning from before it is no longer sent: for a summary its provider did not write. */
+      readonly withoutReasoning?: boolean;
+    }
+  /** The conversation was to be compacted for the turn to go on, and could not be. */
+  | { readonly type: 'compaction_failed'; readonly reason: string };
 
 /** A call of the model that was made: with which account, of which provider, and how long it took. */
 export type ModelCall = {
@@ -315,6 +329,36 @@ export function decide(
       );
       const wait = event.retryAfterMs ?? backoff;
       return { ...goesOn({ ...turn, attempt: turn.attempt + 1, retryAt: now + wait }), usage };
+    }
+
+    case 'compacted': {
+      const idle = turn.phase === 'idle';
+      if (!idle && turn.phase !== 'model') return refuse();
+      if (idle && actor.status !== 'idle') return refuse();
+      const compaction: StoredCompaction = {
+        ...event.compaction,
+        atSeq: record.nextSeq,
+        createdAt: now,
+      };
+      const base = idle
+        ? { ...ends('ok', undefined, [entry(event.line)]), lastTurn: actor.lastTurn }
+        : // The call the turn was at is made as a first try: the conversation it is sent is another.
+          goesOn({ ...turn, attempt: 1, retryAt: null }, [entry(event.line)]);
+      return {
+        ...base,
+        compaction,
+        // Its calls are sent with its own reasoning level again: the conversation starts anew.
+        set: { reasoningSent: null },
+        sent:
+          event.withoutReasoning === true
+            ? { fingerprint: record.sent, reasoningFrom: record.nextSeq }
+            : null,
+      };
+    }
+
+    case 'compaction_failed': {
+      if (turn.phase !== 'model') return refuse();
+      return ends('failed', event.reason);
     }
 
     case 'cut_off': {
