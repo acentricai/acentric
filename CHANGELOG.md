@@ -3,6 +3,28 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## Unreleased
+
+- **Upgrades, tested.** CI upgrades the last release's server to each commit of `main`, on
+  data it filled, and goes back again; a release does it before anything is pushed. Every
+  release leaves a backup of a server filled as people fill one, which each later version
+  opens in its tests.
+- **A server that is upgrading says so.** While a new version backs up and changes the
+  database, its port answers 503 with why, and 200 at the new `/health/live`. The Kubernetes
+  recipe's startup and liveness probes ask `/health/live`, so a long upgrade is not stopped
+  and started again.
+- **Keys from files.** `ACENTRIC_SECRET_KEY`, `ACENTRIC_SECRET_KEYS_OLD` and
+  `ACENTRIC_ADMIN_KEY` are read from the file `<name>_FILE` names, too. Every recipe now gives
+  the keys as files: **take the recipe of the version you run** (0.15.0's are at its tag).
+- **The first key is not logged.** A server with no admin key writes the key it makes to
+  `/data/first-admin-key`, for its user alone, in place of printing it.
+- **Changing the secrets key.** `acentric-server reseal` seals everything again with the
+  current key, and the server says, as it starts, what is still sealed with an old one
+  ([SECRETS.md](SECRETS.md)).
+- **Fixed:** a backup now names the key of actors' variables among the keys it needs; the
+  Compose recipe's `.env.example` was missing from the repository; the AWS recipe's data
+  volume was not formatted (its label was too long for XFS).
+
 ## 0.15.0
 
 The first release of the rewritten engine. It has nothing in common with the npm packages of
