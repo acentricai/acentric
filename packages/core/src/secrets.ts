@@ -59,6 +59,60 @@ export function secretKeyOf(given: string): Uint8Array {
   return key;
 }
 
+/**
+ * What each kind of sealed value is sealed for: a value sealed for one thing does not open as
+ * another's. Here once, for what seals them and for what seals them again with another key.
+ */
+export const sealedFor = {
+  secret: (agent: string, name: string) => `${agent}\0${name}`,
+  account: (account: string) => `account\0${account}`,
+  provider: (provider: string) => `provider:${provider}`,
+  actorEnv: (actor: string) => `actor:${actor}:env`,
+} as const;
+
+/** The ID of the key `sealed` was sealed with. Undefined for what is not sealed as `seal` seals. */
+export function sealedWith(sealed: string): string | undefined {
+  const [format, id] = sealed.split('.');
+  return format === FORMAT && id !== undefined && id !== '' ? id : undefined;
+}
+
+/**
+ * Seals a value with the current of `keys`. `bound` says what the value is of: a value sealed
+ * for one thing does not open as another's, though both are in the same store.
+ */
+export function sealWith(keys: SecretKeys, bound: string, value: string): string {
+  const nonce = randomBytes(NONCE_BYTES);
+  const cipher = createCipheriv('aes-256-gcm', keys.keys[keys.current] as Uint8Array, nonce);
+  cipher.setAAD(Buffer.from(bound));
+  const body = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+  const bytes = Buffer.concat([nonce, body, cipher.getAuthTag()]);
+  return `${FORMAT}.${keys.current}.${bytes.toString('base64')}`;
+}
+
+/** Opens what `sealWith` sealed for the same thing. `what` names it, for when it does not open. */
+export function openWith(keys: SecretKeys, bound: string, sealed: string, what: string): string {
+  const [format, id, data, ...rest] = sealed.split('.');
+  if (format !== FORMAT || id === undefined || data === undefined || rest.length > 0) {
+    throw new Error(`${what} is not sealed in a way this engine reads`);
+  }
+  const key = keys.keys[id];
+  if (key === undefined) {
+    throw new Error(`${what} was sealed with the key ${id}, which this engine was not given`);
+  }
+  const bytes = Buffer.from(data, 'base64');
+  const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, NONCE_BYTES));
+  decipher.setAAD(Buffer.from(bound));
+  decipher.setAuthTag(bytes.subarray(bytes.length - TAG_BYTES));
+  try {
+    return Buffer.concat([
+      decipher.update(bytes.subarray(NONCE_BYTES, bytes.length - TAG_BYTES)),
+      decipher.final(),
+    ]).toString('utf8');
+  } catch {
+    throw new Error(`${what} does not open with the key ${id}: it was sealed with another`);
+  }
+}
+
 export class Secrets {
   readonly #store: Store;
   readonly #keys: SecretKeys | undefined;
@@ -88,7 +142,7 @@ export class Secrets {
   /** Sets the secret `name` of `agent`, in place of the value it had. */
   async set(agent: AgentId, name: string, value: string): Promise<void> {
     if (!NAME.test(name)) throw new InvalidSecretName(name);
-    const sealed = this.seal(`${agent}\0${name}`, value);
+    const sealed = this.seal(sealedFor.secret(agent, name), value);
     await this.#store.setSecret({ agent, name, sealed, updatedAt: this.#clock() });
   }
 
@@ -114,7 +168,11 @@ export class Secrets {
   async get(agent: AgentId, name: string): Promise<string | undefined> {
     const secret = await this.#store.getSecret(agent, name);
     if (secret === undefined) return undefined;
-    return this.open(`${agent}\0${name}`, secret.sealed, `The secret ${name} of ${agent}`);
+    return this.open(
+      sealedFor.secret(agent, name),
+      secret.sealed,
+      `The secret ${name} of ${agent}`,
+    );
   }
 
   /**
@@ -126,7 +184,7 @@ export class Secrets {
     let sealed = 0;
     for (const secret of await this.#store.allSecrets()) {
       if (secret.sealed.split('.')[1] === current) continue;
-      const bound = `${secret.agent}\0${secret.name}`;
+      const bound = sealedFor.secret(secret.agent, secret.name);
       const value = this.open(bound, secret.sealed, `The secret ${secret.name}`);
       await this.#store.setSecret({ ...secret, sealed: this.seal(bound, value) });
       sealed += 1;
@@ -139,38 +197,12 @@ export class Secrets {
    * one thing does not open as another's, though both are in the same store.
    */
   seal(bound: string, value: string): string {
-    const { current, keys } = this.#required();
-    const nonce = randomBytes(NONCE_BYTES);
-    const cipher = createCipheriv('aes-256-gcm', keys[current] as Uint8Array, nonce);
-    cipher.setAAD(Buffer.from(bound));
-    const body = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-    const bytes = Buffer.concat([nonce, body, cipher.getAuthTag()]);
-    return `${FORMAT}.${current}.${bytes.toString('base64')}`;
+    return sealWith(this.#required(), bound, value);
   }
 
   /** Opens what `seal` sealed for the same thing. `what` names it, for when it does not open. */
   open(bound: string, sealed: string, what: string): string {
-    const { keys } = this.#required();
-    const [format, id, data, ...rest] = sealed.split('.');
-    if (format !== FORMAT || id === undefined || data === undefined || rest.length > 0) {
-      throw new Error(`${what} is not sealed in a way this engine reads`);
-    }
-    const key = keys[id];
-    if (key === undefined) {
-      throw new Error(`${what} was sealed with the key ${id}, which this engine was not given`);
-    }
-    const bytes = Buffer.from(data, 'base64');
-    const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, NONCE_BYTES));
-    decipher.setAAD(Buffer.from(bound));
-    decipher.setAuthTag(bytes.subarray(bytes.length - TAG_BYTES));
-    try {
-      return Buffer.concat([
-        decipher.update(bytes.subarray(NONCE_BYTES, bytes.length - TAG_BYTES)),
-        decipher.final(),
-      ]).toString('utf8');
-    } catch {
-      throw new Error(`${what} does not open with the key ${id}: it was sealed with another`);
-    }
+    return openWith(this.#required(), bound, sealed, what);
   }
 
   #required(): SecretKeys {

@@ -29,6 +29,7 @@ import { pipeline } from 'node:stream/promises';
 
 import { SCHEMA_VERSION } from '@acentric/store';
 
+import { sealedKeys } from '../sealed.ts';
 import { lockData, LOCK_FILE } from './lock.ts';
 import { END, header, padding, readArchive, write } from './tar.ts';
 
@@ -78,19 +79,7 @@ const sha256Of = async (path: string): Promise<string> => {
 
 /** The IDs of the keys that sealed what a database has sealed in it. */
 function keysOf(db: DatabaseSync): string[] {
-  const ids = new Set<string>();
-  const sealed = [
-    'SELECT sealed AS value FROM secrets',
-    'SELECT sealed AS value FROM accounts',
-    'SELECT credential AS value FROM sandbox_providers WHERE credential IS NOT NULL',
-  ];
-  for (const query of sealed) {
-    for (const row of db.prepare(query).all() as { value: string }[]) {
-      const id = row.value.split('.')[1];
-      if (id !== undefined && id !== '') ids.add(id);
-    }
-  }
-  return [...ids].toSorted();
+  return [...sealedKeys(db).keys()].toSorted();
 }
 
 /**

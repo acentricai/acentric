@@ -37,7 +37,7 @@ import { MachineNotFound } from './machines.ts';
 import type { Machines } from './machines.ts';
 import { LABEL_MACHINE, LABEL_PROVIDER, ProviderFailed } from './sandbox.ts';
 import type { ProviderSandbox, SandboxAccount, SandboxProvider } from './sandbox.ts';
-import { SecretsUnavailable } from './secrets.ts';
+import { SecretsUnavailable, sealedFor } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import { NameTaken } from './store.ts';
 import type { Store, StoredMachine, StoredSandbox, StoredSandboxProvider } from './store.ts';
@@ -217,7 +217,7 @@ export class Sandboxes {
 
   /** What an account's key is sealed as: it opens as no other account's. */
   static #bound(provider: SandboxProviderId): string {
-    return `provider:${provider}`;
+    return sealedFor.provider(provider);
   }
 
   /** The provider an account is at, when this engine was set up with it. */
