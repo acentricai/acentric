@@ -62,6 +62,8 @@ import type { Semaphore } from './limits.ts';
 import { OutOfTurn, decide } from './machine.ts';
 import type { MachineEvent, Rules } from './machine.ts';
 import { applyChange } from './state.ts';
+import { tell } from './observer.ts';
+import type { EngineObserver, ToolKind } from './observer.ts';
 import type { ActorPatch, ActorRecord, Change, OwedCall, StoredCompaction, Turn } from './state.ts';
 import type { Store } from './store.ts';
 import { offered } from './view-image.ts';
@@ -154,6 +156,8 @@ export type Host = {
   /** Whether the engine is shutting down: nothing new is begun. */
   closing(): boolean;
   report(error: unknown): void;
+  /** Told of turns, calls of models and tool calls, as they happen. */
+  readonly observer?: EngineObserver;
   /** Called when a driver has stopped: it may have nothing left to do. */
   rested(driver: ActorDriver): void;
 };
@@ -302,6 +306,8 @@ export class ActorDriver {
   #view: { readonly from: number; readonly entries: Entry[] } | null = null;
   /** The call that is owed was refused as too large, and the conversation was compacted for it. */
   #justCompacted = false;
+  /** When the turn going on began, in this process. */
+  #turnBegan: number | undefined;
   #running: Promise<void> | null = null;
   /** Something came while the driver was running: it looks once more before it stops. */
   #woken = false;
@@ -794,7 +800,7 @@ export class ActorDriver {
                 // The call that was refused is written down, as any call that failed is.
                 if (called !== undefined) {
                   const { actor } = this.record;
-                  await this.#host.store.recordUsage({
+                  const record = {
                     at: called.at,
                     actor: actor.id,
                     agent: actor.agent,
@@ -805,7 +811,9 @@ export class ActorDriver {
                     usage: null,
                     failure: error.kind,
                     durationMs: clock() - called.at,
-                  });
+                  };
+                  await this.#host.store.recordUsage(record);
+                  tell(this.#host.observer, 'modelCalled', record);
                 }
                 this.#justCompacted = true;
                 return;
@@ -859,9 +867,20 @@ export class ActorDriver {
     try {
       const run = async (call: OwedCall): Promise<void> => {
         const { signal } = controller;
-        const result = await untilAborted(this.#runTool(call, cutOff, signal), signal);
+        const began = this.#host.clock();
+        const kind: { value: ToolKind } = { value: 'agent' };
+        const result = await untilAborted(this.#runTool(call, cutOff, signal, kind), signal);
         // Given up: the turn was ended, or the engine is going away. The call stays owed.
         if (result === ABORTED || result === undefined || this.#interrupt) return;
+        const { actor } = this.record;
+        tell(this.#host.observer, 'toolFinished', {
+          actor: actor.id,
+          agent: actor.agent,
+          name: call.name,
+          kind: kind.value,
+          isError: result.isError === true,
+          durationMs: this.#host.clock() - began,
+        });
         await this.#apply(() => ({
           type: 'tool_finished',
           call: call.id,
@@ -891,6 +910,8 @@ export class ActorDriver {
     call: OwedCall,
     cutOff: boolean,
     signal: AbortSignal,
+    /** Set to the kind of tool the call was of, for what is told of it. */
+    kind: { value: ToolKind } = { value: 'agent' },
   ): Promise<ToolResultMessage | undefined> {
     const { actor } = this.record;
     const answer = (content: ContentPart[], isError: boolean): ToolResultMessage => ({
@@ -908,6 +929,7 @@ export class ActorDriver {
     const { tasks } = this.#host;
     const definition = await this.#host.definition(actor.deployment.id);
     if (tasks.handles(call.name)) {
+      kind.value = 'task';
       const own = tasks.tools(actor, definition).find((tool) => tool.name === call.name);
       const given = own === undefined ? call.arguments : withoutEmpty(call.arguments, own);
       if (typeof given !== 'object' || given === null || Array.isArray(given)) {
@@ -934,6 +956,7 @@ export class ActorDriver {
       .ownTools(actor, definition)
       .find((one) => one.tool.name === call.name);
     if (ownTool !== undefined) {
+      kind.value = 'engine';
       const given = withoutEmpty(call.arguments, ownTool.tool);
       if (typeof given !== 'object' || given === null || Array.isArray(given)) {
         return answer(
@@ -1140,11 +1163,11 @@ export class ActorDriver {
     const messages = await this.#host.blobs.withBytes(step.messages);
     for (let attempt = 1; ; attempt += 1) {
       const at = clock();
-      const used = (usage: ModelAnswer['usage'], failure: string | null) =>
-        store.recordUsage({
+      const used = async (usage: ModelAnswer['usage'], failure: string | null) => {
+        const record = {
           at,
           actor: actor.id,
-          kind: 'compaction',
+          kind: 'compaction' as const,
           agent: actor.agent,
           version: actor.deployment.version,
           account: access.account,
@@ -1153,7 +1176,10 @@ export class ActorDriver {
           usage: usage ?? null,
           failure,
           durationMs: clock() - at,
-        });
+        };
+        await store.recordUsage(record);
+        tell(this.#host.observer, 'modelCalled', record);
+      };
       try {
         const answer = await untilAborted(access.runner.run({ ...step, messages }, signal), signal);
         if (answer === ABORTED) throw new Error('The compaction was given up');
@@ -1333,6 +1359,22 @@ export class ActorDriver {
     for (const entry of change.append) bus.publish(before.actor.id, { type: 'message', entry });
     const was = before.actor;
     const is = this.record.actor;
+    const { observer } = this.#host;
+    if (change.usage !== null) tell(observer, 'modelCalled', change.usage);
+    if (was.status !== 'working' && is.status === 'working') {
+      this.#turnBegan = clock();
+      tell(observer, 'turnStarted', { actor: is.id, agent: is.agent });
+    }
+    if (is.lastTurn !== null && was.lastTurn !== is.lastTurn) {
+      tell(observer, 'turnEnded', {
+        actor: is.id,
+        agent: is.agent,
+        end: is.lastTurn.end,
+        ...(is.lastTurn.reason === undefined ? {} : { reason: is.lastTurn.reason }),
+        durationMs: this.#turnBegan === undefined ? undefined : clock() - this.#turnBegan,
+      });
+      this.#turnBegan = undefined;
+    }
     if (
       was.status !== is.status ||
       was.pendingInputs !== is.pendingInputs ||
