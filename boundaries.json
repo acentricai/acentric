@@ -16,5 +16,6 @@
     "@acentric/sandbox",
     "@acentric/client"
   ],
-  "acentric": ["@acentric/protocol", "@acentric/client"]
+  "acentric": ["@acentric/protocol", "@acentric/client"],
+  "@acentric/dashboard": ["@acentric/protocol", "@acentric/client"]
 }

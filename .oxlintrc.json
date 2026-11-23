@@ -14,7 +14,13 @@
       }
     ],
     "unicorn/consistent-function-scoping": "off",
-    "unicorn/require-post-message-target-origin": "off"
+    "unicorn/require-post-message-target-origin": "off",
+    "import/no-unassigned-import": [
+      "error",
+      {
+        "allow": ["**/*.css"]
+      }
+    ]
   },
   "env": {
     "builtin": true

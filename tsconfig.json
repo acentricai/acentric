@@ -60,6 +60,9 @@
     },
     {
       "path": "apps/cli/test"
+    },
+    {
+      "path": "apps/dashboard"
     }
   ]
 }
