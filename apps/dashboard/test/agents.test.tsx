@@ -265,6 +265,20 @@ describe('an actor’s page', () => {
     expect(area(server).sent).toHaveLength(1);
   });
 
+  it('offers a message of text to an actor whose agent declares no input, as every agent takes one', async () => {
+    const server = signedIn();
+    const plain = area(server).agent('plain', 1, [definitionOf({ inputs: [] })]);
+    server.actors.push(actorFor(plain, 7));
+    open(`/actors/${idOf('act', 7)}`, server);
+    const type = (await screen.findByRole('combobox', { name: 'Input type' })) as HTMLSelectElement;
+    await waitFor(() =>
+      expect([...type.options].map((option) => option.value)).toEqual(['message']),
+    );
+    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
   it('interrupts one that is working, and archives it after asking', async () => {
     const { server } = withAgents();
     const actor = idOf('act', 1);

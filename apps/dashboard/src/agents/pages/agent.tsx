@@ -42,7 +42,7 @@ import {
   errorText,
   type Column,
 } from '../../ui.tsx';
-import { curl, engine, isApiError, queryClient } from '../api.ts';
+import { curl, engine, inputTypes, isApiError, queryClient } from '../api.ts';
 import { ActorLink, AgentLink, actorPath, agentPath } from '../links.tsx';
 import {
   keys,
@@ -86,13 +86,11 @@ export function AgentLayout() {
               <span className="mono">{version(detail.data.latestDeployment.version)}</span>
               <span className="mono">{definition.provider}</span>
               <AccountFact agent={detail.data} />
-              {definition.inputs.length > 0 && (
-                <span className="chips">
-                  {definition.inputs.map((input) => (
-                    <Label key={input.type}>{input.type}</Label>
-                  ))}
-                </span>
-              )}
+              <span className="chips">
+                {inputTypes(definition).map((type) => (
+                  <Label key={type}>{type}</Label>
+                ))}
+              </span>
             </div>
           ) : detail.isPending || latest.isPending ? (
             <div className="agent-head__loading" role="status" aria-label="Loading the agent">

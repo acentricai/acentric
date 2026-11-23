@@ -152,3 +152,14 @@ export function curl(method: string, path: string, body?: unknown): string {
   }
   return parts.join(' \\\n  ');
 }
+
+/**
+ * The types of input an agent takes: those it declares, and a message of text, which every
+ * agent takes unless it declares a `message` of its own.
+ */
+export function inputTypes(definition: {
+  readonly inputs: readonly { readonly type: string }[];
+}): string[] {
+  const declared = definition.inputs.map((input) => input.type);
+  return declared.includes('message') ? declared : ['message', ...declared];
+}

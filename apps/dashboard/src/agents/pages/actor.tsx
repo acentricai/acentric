@@ -65,7 +65,7 @@ import {
   useNow,
   type Column,
 } from '../../ui.tsx';
-import { curl, engine, isApiError, queryClient } from '../api.ts';
+import { curl, engine, inputTypes, isApiError, queryClient } from '../api.ts';
 import { ActorLink, AgentLink } from '../links.tsx';
 import { bandEnding, type Band, type LogItem, type Row } from '../log/model.ts';
 import type { Standing } from '../log/stream.ts';
@@ -1373,7 +1373,7 @@ export function SendBar({
   onSent: (answer: SendInputResponse) => void;
 }) {
   const detail = useDeployment(info.agent, info.deployment.id);
-  const inputs = (detail.data?.definition.inputs ?? []).map((input) => input.type);
+  const inputs = detail.data === undefined ? [] : inputTypes(detail.data.definition);
   const [type, setType] = useState('');
   const [payload, setPayload] = useState('');
   const [jsonError, setJsonError] = useState<string | null>(null);
