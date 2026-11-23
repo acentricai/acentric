@@ -80,6 +80,21 @@ export const PERSONAL = 'personal';
 
 export type TokenSearch = { token?: string | undefined };
 
+/**
+ * What `Go to` takes: an agent, an actor (`agent/actor`), or an actor alone (`/actor`). Each is
+ * named by its ID or its name; an actor alone is named by its ID.
+ */
+export function parseGoTo(input: string): { agent?: string; actor?: string } | null {
+  const raw = input.trim();
+  const trimmed = raw.replace(/^\/+|\/+$/g, '');
+  if (trimmed === '') return null;
+  const [first, second, ...rest] = trimmed.split('/');
+  if (first === undefined || first === '' || rest.length > 0) return null;
+  if (second !== undefined && second !== '') return { agent: first, actor: second };
+  // A leading slash names an actor: actors are known by their ID alone.
+  return raw.startsWith('/') ? { actor: first } : { agent: first };
+}
+
 /** The token of a setup, invite or reset link. Whether it is good is the server's to say. */
 export function tokenSearch(search: Raw): TokenSearch {
   const token = search['token'];

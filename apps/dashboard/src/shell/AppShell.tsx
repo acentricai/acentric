@@ -1,18 +1,32 @@
-// The signed-in app: the sidebar, a slim top bar with the collapse control and
-// where you are, and the page. The sidebar collapses to an icon rail (⌘B or
-// Ctrl+B, remembered), and on a phone it becomes a drawer.
+// The signed-in app: the sidebar, a slim top bar with the collapse control,
+// where you are and Go to, and the page. The sidebar collapses to an icon
+// rail (⌘B or Ctrl+B, remembered), and on a phone it becomes a drawer.
 
 import {
+  IconArrowRight,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconMenu2,
 } from '@tabler/icons-react';
-import { Link, Outlet, useLocation, type LinkOptions } from '@tanstack/react-router';
-import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+  type LinkOptions,
+} from '@tanstack/react-router';
+import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
+import { goToPath } from '../agents/api.ts';
+import { actorName } from '../agents/pages/agent.tsx';
+import { agentPath } from '../agents/links.tsx';
+import { useActor, useAgent } from '../agents/queries.ts';
 import { useMe } from '../me.ts';
 import { session } from '../session.ts';
-import { tabAt } from './nav.ts';
+import { parseGoTo } from '../url.ts';
+import { typing } from './keyboard.ts';
+import { tabAt, visibleSections } from './nav.ts';
 import { NotFound } from './NotFound.tsx';
 import { Sidebar } from './Sidebar.tsx';
 
@@ -34,11 +48,34 @@ function useMedia(query: string): boolean {
 
 type Crumb = { label: string; link?: LinkOptions; mono?: boolean; title?: string };
 
-/** Where you are, from the route: the tab. */
+type Params = { agent?: string; actor?: string };
+
+/** Where you are, from the route: the tab, the agent, the actor. */
 function useCrumbs(): Crumb[] {
   const pathname = useLocation({ select: (l) => l.pathname });
+  const { agent, actor } = useParams({ strict: false }) as Params;
+  // An actor's agent is known once the actor has been read: the actor page reads it too.
+  const read = useActor(actor ?? '', actor !== undefined);
+  const of = agent ?? (actor === undefined ? undefined : read.data?.agent);
+  const named = useAgent(of ?? '');
+  if (pathname === '/account' || pathname.startsWith('/account/')) return [{ label: 'Account' }];
   const tab = tabAt(pathname)?.tab;
-  return tab === undefined ? [] : [{ label: tab.name, link: { to: tab.path } }];
+  const crumbs: Crumb[] = [];
+  if (tab !== undefined) crumbs.push({ label: tab.name, link: { to: tab.path } });
+  if (of !== undefined) {
+    if (actor !== undefined && crumbs.length === 0) {
+      crumbs.push({ label: 'Agents', link: { to: '/agents' as never } });
+    }
+    crumbs.push({ label: named.data?.name ?? of, link: { to: agentPath(of) } });
+  }
+  if (actor !== undefined) {
+    crumbs.push({
+      label: read.data === undefined ? actorName({ id: actor, name: null }) : actorName(read.data),
+      mono: true,
+      title: actor,
+    });
+  }
+  return crumbs;
 }
 
 export function AppShell() {
@@ -51,6 +88,8 @@ export function AppShell() {
   // A page of a tab this person may not see is not here.
   const here = tabAt(pathname);
   const hidden = here !== undefined && me.data !== undefined && !here.tab.shown(me.data);
+  // Go to opens agents and actors: only for a person who may read them.
+  const agents = visibleSections(me.data).some((s) => s.id === 'agents');
 
   const toggle = useCallback(
     () => (phone ? setDrawer((open) => !open) : session.toggleSidebar()),
@@ -145,11 +184,66 @@ export function AppShell() {
               </Fragment>
             ))}
           </nav>
+          {agents && <GoTo />}
         </header>
         <main id="main" className="page" tabIndex={-1}>
           {hidden ? <NotFound /> : <Outlet />}
         </main>
       </div>
     </div>
+  );
+}
+
+/** Go to: `agent`, `agent/actor` or `/actor` opens it. `/` focuses it. */
+function GoTo() {
+  const navigate = useNavigate();
+  const input = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState('');
+
+  useEffect(() => {
+    const press = (event: KeyboardEvent) => {
+      if (event.key !== '/' || typing(event)) return;
+      event.preventDefault();
+      input.current?.focus();
+    };
+    window.addEventListener('keydown', press);
+    return () => window.removeEventListener('keydown', press);
+  }, []);
+
+  return (
+    <form
+      className="search goto"
+      role="search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const target = parseGoTo(value);
+        if (target === null) return;
+        setValue('');
+        input.current?.blur();
+        void goToPath(target).then((path) => navigate({ to: path as never }));
+      }}
+    >
+      <IconArrowRight size={14} stroke={1.75} aria-hidden="true" />
+      <input
+        ref={input}
+        type="text"
+        aria-label="Go to"
+        placeholder="go to…"
+        value={value}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoComplete="off"
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            setValue('');
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      <kbd className="goto__key" aria-hidden="true">
+        /
+      </kbd>
+    </form>
   );
 }
