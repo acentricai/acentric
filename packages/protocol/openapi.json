@@ -1500,6 +1500,19 @@
                 "telegram:4411"
               ]
             }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "required": false,
+            "description": "An ID of kind actor, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^act_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "act_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
           }
         ],
         "responses": {
@@ -1535,6 +1548,107 @@
           },
           "403": {
             "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/actors/{actor}/subagents": {
+      "get": {
+        "operationId": "actors.subagents",
+        "summary": "Lists the actors an actor spawned, in the order it spawned them.",
+        "tags": [
+          "actors"
+        ],
+        "x-acentric-auth": {
+          "on": "actor",
+          "permission": "actors:read",
+          "param": "actor"
+        },
+        "parameters": [
+          {
+            "name": "actor",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind actor, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^act_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "act_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubagentList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6101,6 +6215,19 @@
             }
           },
           {
+            "name": "root",
+            "in": "query",
+            "required": false,
+            "description": "An ID of kind actor, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^act_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "act_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
             "name": "account",
             "in": "query",
             "required": false,
@@ -6146,6 +6273,7 @@
               "enum": [
                 "agent",
                 "actor",
+                "root",
                 "account",
                 "provider",
                 "model",
@@ -8302,12 +8430,19 @@
             "items": {
               "$ref": "#/components/schemas/Task"
             }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
           "actor",
           "interrupted",
-          "tasks"
+          "tasks",
+          "agents"
         ]
       },
       "AcceptInviteRequest": {
@@ -8643,6 +8778,33 @@
               }
             ]
           },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^act_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "description": "An ID of kind actor, made by the engine.",
+                    "examples": [
+                      "act_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -8731,6 +8893,7 @@
           "reasoning",
           "configuration",
           "machine",
+          "parent",
           "status",
           "lastTurn",
           "pendingInputs",
@@ -9071,6 +9234,39 @@
             },
             "additionalProperties": {
               "$ref": "#/components/schemas/Json"
+            }
+          },
+          "subagents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "agent": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "creates": {
+                  "type": "boolean"
+                },
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/Json"
+                  }
+                }
+              },
+              "required": [
+                "agent",
+                "description",
+                "creates"
+              ]
             }
           },
           "secrets": {
@@ -12345,6 +12541,20 @@
         "required": [
           "user",
           "session"
+        ]
+      },
+      "SubagentList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Actor"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "Task": {
