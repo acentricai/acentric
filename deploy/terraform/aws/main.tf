@@ -169,7 +169,7 @@ resource "aws_volume_attachment" "data" {
 # A snapshot of the data volume every day, the newest snapshot_days kept: the whole disk, as it
 # was, beside the server's own backups.
 resource "aws_dlm_lifecycle_policy" "snapshots" {
-  description        = "${var.name}: the data volume, every day"
+  description        = "${var.name} data volume every day"
   execution_role_arn = aws_iam_role.snapshots.arn
   state              = "ENABLED"
 
