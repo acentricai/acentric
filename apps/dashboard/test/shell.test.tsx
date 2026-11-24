@@ -201,9 +201,9 @@ describe('the People section of Settings', () => {
 
     // Its dialogs open over Settings, and closing one leaves Settings open.
     fireEvent.click(within(page).getByRole('button', { name: 'Invite' }));
-    const invite = await screen.findByRole('dialog', { name: 'Invite someone' });
+    const invite = await screen.findByRole('dialog', { name: 'Invite member' });
     fireEvent.click(within(invite).getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('dialog', { name: 'Invite someone' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Invite member' })).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
   });
 
