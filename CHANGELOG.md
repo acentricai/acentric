@@ -3,6 +3,21 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## Unreleased
+
+- **Fixed:** one who followed an actor's events and went could stop the actor answering: a
+  listener that fails is its own failure now. A stream that catches up a long conversation
+  reads the next part once the last is taken, not all of it into memory.
+- **Fixed:** an agent's MCP servers were reached from the server past `ACENTRIC_AGENT_NETWORK`:
+  this machine, its private network, a cloud's metadata address. They are reached as far as
+  agents' code may reach now.
+- **Fixed:** what a server holds in memory had no end: actors only read, the code of every
+  deployment ever called, every email a sign-in failed with, and every SQL statement made. Each
+  has a number now ([LIMITS.md](LIMITS.md)).
+- **Fixed:** with `ACENTRIC_BACKUP_EVERY` past 24 days, the server took backups one after
+  another. A backup now checks that the data's disk has room for the copy of the database it
+  makes there, where only the backups' disk was checked.
+
 ## 0.16.0
 
 **Upgrading from 0.15.0.** The database, deployed agents, machines' daemons and the command
