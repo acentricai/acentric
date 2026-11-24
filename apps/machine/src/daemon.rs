@@ -218,6 +218,16 @@ pub struct Daemon {
     /// Which build this daemon is.
     build: Option<String>,
     session: Option<Session>,
+    /// The update being taken, on a thread of its own, and the request it answers.
+    updating: Option<Updating>,
+}
+
+/// An update the engine asked for: fetched on a thread of its own, so that the connection, the
+/// commands' time limits and what they write go on meanwhile. It is answered once it is done.
+struct Updating {
+    id: u64,
+    digest: String,
+    done: std::sync::mpsc::Receiver<Result<bool, Refused>>,
 }
 
 impl Daemon {
@@ -277,6 +287,7 @@ impl Daemon {
             environment,
             build: update::own_build(),
             session: None,
+            updating: None,
         })
     }
 
@@ -289,6 +300,11 @@ impl Daemon {
         let mut connect_at = 0u64;
         let mut restart = false;
         while !sys::stopped() && !restart {
+            // An update that is done is answered, and the daemon becomes the new program.
+            if self.updated() {
+                restart = true;
+                continue;
+            }
             // What ended is stored, whether there is a connection to say it on or not.
             for ended in self.commands.tick() {
                 if let Some(session) = self.session.as_mut().filter(|session| session.ready) {
@@ -430,6 +446,39 @@ impl Daemon {
                 }
                 log("connected");
             }
+            FromEngine::Request { id, method, params } if method == "update" => {
+                let refused = if self.updating.is_some() {
+                    Some(Refused::new(
+                        ErrorCode::Failed,
+                        "An update is being taken already",
+                    ))
+                } else {
+                    match serde_json::from_value::<UpdateParams>(params) {
+                        Ok(params) => {
+                            self.begin_update(id, params.digest);
+                            None
+                        }
+                        Err(error) => Some(Refused::new(ErrorCode::Invalid, error.to_string())),
+                    }
+                };
+                if let Some(refused) = refused {
+                    let Some(session) = self.session.as_mut() else {
+                        return Err(());
+                    };
+                    let error = ResponseError {
+                        code: refused.code,
+                        message: &refused.message,
+                    };
+                    send(
+                        &mut session.socket,
+                        &FromDaemon::Response {
+                            id,
+                            result: None,
+                            error: Some(error),
+                        },
+                    )?;
+                }
+            }
             FromEngine::Request { id, method, params } => {
                 let answered = self.answer(&method, params);
                 let Some(session) = self.session.as_mut() else {
@@ -460,6 +509,59 @@ impl Daemon {
         Ok(Next::GoOn)
     }
 
+    /// Starts taking the build `digest`, on a thread of its own: it is answered when it is done.
+    fn begin_update(&mut self, id: u64, digest: String) {
+        let server = self.enrolled.identity.server.clone();
+        let expected = digest.clone();
+        let (tell, done) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tell.send(update::update(&server, &expected));
+        });
+        self.updating = Some(Updating { id, digest, done });
+    }
+
+    /// Answers an update that is done, on the connection there is. True when the program was
+    /// replaced, and the daemon is to become the new one.
+    fn updated(&mut self) -> bool {
+        let Some(updating) = self.updating.as_ref() else {
+            return false;
+        };
+        let answered = match updating.done.try_recv() {
+            Ok(answered) => answered,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(Refused::new(
+                ErrorCode::Failed,
+                "The update stopped before it was done",
+            )),
+        };
+        let Some(Updating { id, digest, .. }) = self.updating.take() else {
+            return false;
+        };
+        let (result, error, replaced) = match &answered {
+            Ok(updated) => (
+                Some(json!({ "updated": updated, "build": digest })),
+                None,
+                *updated,
+            ),
+            Err(refused) => (
+                None,
+                Some(ResponseError {
+                    code: refused.code,
+                    message: &refused.message,
+                }),
+                false,
+            ),
+        };
+        // The connection that asked may have gone: the engine asks again on the next one.
+        if let Some(session) = self.session.as_mut() {
+            let _ = send(
+                &mut session.socket,
+                &FromDaemon::Response { id, result, error },
+            );
+        }
+        replaced
+    }
+
     /// Does what a request asks, and gives what it is answered with.
     fn answer(&mut self, method: &str, params: Value) -> Result<(Value, Next), Refused> {
         fn read<T: serde::de::DeserializeOwned>(params: Value) -> Result<T, Refused> {
@@ -483,12 +585,6 @@ impl Daemon {
                 files::write(home, &read::<WriteParams>(params)?)?,
                 Next::GoOn,
             )),
-            "update" => {
-                let params: UpdateParams = read(params)?;
-                let updated = update::update(&self.enrolled.identity.server, &params.digest)?;
-                let next = if updated { Next::Restart } else { Next::GoOn };
-                Ok((json!({ "updated": updated, "build": params.digest }), next))
-            }
             _ => Err(Refused::new(ErrorCode::Invalid, "There is no such method")),
         }
     }

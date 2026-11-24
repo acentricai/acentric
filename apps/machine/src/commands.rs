@@ -37,7 +37,7 @@ use crate::sys;
 /// the command, not this shell: the trap is the shell's own, and a command it starts does not
 /// inherit it. What this shell has to say itself, such as that the command was terminated,
 /// goes nowhere: the log is the command's alone.
-const WRAPPER: &str = r#"echo $$ > "$2/pid"
+const WRAPPER: &str = r#"echo $$ > "$2/pid.shell" && mv "$2/pid.shell" "$2/pid"
 trap : TERM INT HUP
 bash -c "$1" 2>&1
 code=$?
@@ -297,7 +297,11 @@ impl Commands {
         })?;
         let pid = child.id() as i32;
         // The shell writes this too, for a daemon that ends between the line above and this one.
-        let _ = fs::write(dir.join("pid"), format!("{pid}\n"));
+        // Each writes a file of its own and moves it into place, so that it is whole when read.
+        let beside = dir.join("pid.daemon");
+        if fs::write(&beside, format!("{pid}\n")).is_ok() {
+            let _ = fs::rename(&beside, dir.join("pid"));
+        }
         // It is not waited for here: it is looked at with every other, and outlives the daemon.
         drop(child);
         self.running.insert(
