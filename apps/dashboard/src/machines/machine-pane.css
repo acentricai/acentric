@@ -145,8 +145,9 @@
   color: var(--ink);
 }
 
-/* Drawn over the page, so no scrolling table cuts it off; Menu places it. */
-.pop.more-menu__pop {
+/* Drawn over the page, so no scrolling table cuts it off; this Menu places it, by where its
+   button is. Only this one: the shared Menu's opens below its button, where it is. */
+.pop.more-menu__pop--placed {
   position: fixed;
   z-index: 30;
   display: grid;
