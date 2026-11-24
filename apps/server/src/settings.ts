@@ -37,6 +37,8 @@
 //                           does. Reached with AWS's own credentials: the environment's, a
 //                           profile's, or the role of the instance, container or pod. Without
 //                           it, they are in the folder only
+//   ACENTRIC_UPDATE_CHECK   `off` for a server that does not ask GitHub's releases of the
+//                           engine whether there is a newer version. On without it
 //   ACENTRIC_RETAIN_ARCHIVED  how long an archived actor is kept, such as 90d: then it is
 //                           deleted, with its subagents and their conversations. Without it,
 //                           for ever
@@ -119,6 +121,8 @@ export type Settings = {
   readonly backups: BackupSettings | undefined;
   /** The folder backups go in, whether the environment has them on or not. */
   readonly backupDir: string;
+  /** Whether the server asks GitHub's releases for a newer version. */
+  readonly updateCheck: boolean;
   /** How the server writes its log, and the least it writes. */
   readonly log: { readonly format: Format; readonly level: Level };
   /** The port metrics are served at. Undefined when none are. */
@@ -350,6 +354,10 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
       'ACENTRIC_BACKUP_URL is where the server copies its backups, and ACENTRIC_BACKUP_EVERY=off is for a server that takes none',
     );
   }
+  const updateCheck = given('ACENTRIC_UPDATE_CHECK') ?? 'on';
+  if (updateCheck !== 'on' && updateCheck !== 'off') {
+    throw new InvalidSettings(`ACENTRIC_UPDATE_CHECK is on or off, and is ${updateCheck}`);
+  }
   const backupDir = resolve(given('ACENTRIC_BACKUP_DIR') ?? `${data}/backups`);
   const backups: BackupSettings | undefined =
     every === 'off'
@@ -369,6 +377,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     adminKey,
     secretKeys,
     backupDir,
+    updateCheck: updateCheck === 'on',
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
     maxTurns: wholeNumber('ACENTRIC_MAX_TURNS', 1000, 1, 10_000),
