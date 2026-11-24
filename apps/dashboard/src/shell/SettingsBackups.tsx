@@ -49,10 +49,7 @@ export function BackupsSettings() {
         </div>
         <FormError error={take.error} />
         {off ? (
-          <Notice title="This server takes no backups of its own">
-            It was started with ACENTRIC_BACKUP_EVERY=off. Back it up on the server with{' '}
-            <code>acentric-server backup</code>.
-          </Notice>
+          <Notice title="Backups are not yet enabled" />
         ) : status.isPending ? (
           <Skeleton rows={3} label="Loading the backups" />
         ) : data === undefined ? (
