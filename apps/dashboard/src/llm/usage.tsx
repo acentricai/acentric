@@ -185,11 +185,6 @@ function Tiles({ total }: { total: UsageTotals | undefined }) {
             label: 'Spend',
             value: dollars(total.cost),
             notes: [
-              total.estimatedCost > 0
-                ? total.estimatedCost === total.cost
-                  ? 'estimated from prices'
-                  : `${dollars(total.estimatedCost)} estimated`
-                : null,
               total.unpriced > 0 ? `${compact(total.unpriced)} calls of unknown price` : null,
             ],
           },
