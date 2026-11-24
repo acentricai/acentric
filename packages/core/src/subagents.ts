@@ -34,7 +34,7 @@ import {
 import type { CallResult } from './executor.ts';
 import { issuesText } from './executor.ts';
 import { NameTaken } from './store.ts';
-import type { OwnTool } from './view-image.ts';
+import type { OwnTool } from './own-tool.ts';
 
 /** What an actor calls the one that spawned it. No subagent can have it for a name. */
 export const PARENT = 'parent';

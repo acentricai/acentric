@@ -103,7 +103,12 @@ export type TaskKind = {
    * Checks the arguments the model gave, and returns what a task is started with. Throws what
    * is wrong with them. `timeout`, in seconds, is given to a kind that keeps its own.
    */
-  input(args: JsonObject, actor: Actor, limits: { readonly timeout?: number }): Json;
+  input(
+    args: JsonObject,
+    actor: Actor,
+    limits: { readonly timeout?: number },
+    definition?: AgentDefinition,
+  ): Json;
   /**
    * The kind stops its own work at the timeout, and says so in how the work ended. Without
    * it, the engine does, which holds only while the engine runs.
@@ -541,7 +546,12 @@ export class Tasks {
       if (timeout === 0) return { text: 'timeout is more than 0 seconds', isError: true };
       let input: Json;
       try {
-        input = kind.input(own, actor, timeout === undefined ? {} : { timeout: timeout as number });
+        input = kind.input(
+          own,
+          actor,
+          timeout === undefined ? {} : { timeout: timeout as number },
+          definition,
+        );
       } catch (error) {
         const why = error instanceof Error ? error.message : String(error);
         return { text: `The arguments of ${call.name} are not valid: ${why}`, isError: true };

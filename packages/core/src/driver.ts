@@ -66,8 +66,8 @@ import { tell } from './observer.ts';
 import type { EngineObserver, ToolKind } from './observer.ts';
 import type { ActorPatch, ActorRecord, Change, OwedCall, StoredCompaction, Turn } from './state.ts';
 import type { Store } from './store.ts';
-import { offered } from './view-image.ts';
-import type { OwnTool } from './view-image.ts';
+import { offered } from './own-tool.ts';
+import type { OwnTool } from './own-tool.ts';
 
 /** The time, in milliseconds. */
 export type Clock = () => number;

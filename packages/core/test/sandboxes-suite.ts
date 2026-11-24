@@ -819,29 +819,6 @@ export function sandboxesSuite(name: string, open: () => Promise<Store>): void {
         expect((await results())[1]).toContain('is a sandbox that is still starting up');
       });
 
-      it('has it started again for an image its model asks to see', async () => {
-        const { one, provider, actor, results } = await asleep(
-          [
-            calls({ id: 'c1', name: 'view_image', arguments: { path: 'shot.png' } }),
-            says('I see.'),
-          ],
-          {},
-          undefined,
-          'fake-eyes',
-        );
-        // The smallest there is: the eight bytes every PNG starts with, and its size.
-        const png = Buffer.alloc(24);
-        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png);
-        png.write('IHDR', 12, 'ascii');
-        png.writeUInt32BE(4, 16);
-        png.writeUInt32BE(4, 20);
-        provider.only.daemon.files.set('shot.png', png);
-        await one.say(actor.id, 'Look.');
-        await one.it.settled(actor.id);
-        expect(provider.asked('start')).toEqual(['sbx-1 3600']);
-        expect((await results())[0]).toContain('image/png');
-      });
-
       it('does not count the time its sandbox takes to start against the time its code has', async () => {
         // What makes of what an actor is sent has 150 ms, and its sandbox takes 300 to start.
         const { one, provider, actor } = await asleep(

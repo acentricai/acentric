@@ -417,6 +417,28 @@ fn a_daemon_proves_itself_runs_what_it_is_asked_and_says_how_each_ended() {
         &json!({ "type": "ack", "actor": "act_1", "task": "b1" }),
     );
 
+    // `show` is the daemon's own, on the command's PATH: the images come with the ending.
+    let show = json!({ "actor": "act_1", "task": "b9", "command": "printf 'GIF89a..' > shot.gif && show shot.gif && echo shown; show notes.txt; printf text > notes.txt; show notes.txt", "cwd": "~/work" });
+    engine.ask(&mut socket, "run", show);
+    let ended = next(&mut socket, "ended");
+    let kept = machine.dir().join("tasks/act_1/b9/images/1");
+    assert_eq!(
+        ended["images"],
+        json!([{ "path": kept.to_string_lossy(), "name": "shot.gif" }])
+    );
+    assert_eq!(std::fs::read(&kept).unwrap(), b"GIF89a..");
+    assert_eq!(
+        ended["tail"].as_str(),
+        Some(
+            "shown\nshow: there is no file notes.txt\nshow: notes.txt is not a png, jpeg, gif or webp image\n"
+        )
+    );
+    assert_eq!(ended["exit"].as_i64(), Some(1));
+    send(
+        &mut socket,
+        &json!({ "type": "ack", "actor": "act_1", "task": "b9" }),
+    );
+
     // A command that is stopped says that it was, and what it had written.
     engine.ask(
         &mut socket,

@@ -508,6 +508,7 @@ type CommandRow = {
   bytes: number | null;
   lines: number | null;
   tail: string | null;
+  images: string | null;
   log: string | null;
   error: string | null;
   started_at: number;
@@ -530,6 +531,7 @@ function commandOf(row: CommandRow): StoredCommand {
     bytes: row.bytes,
     lines: row.lines,
     tail: row.tail,
+    images: row.images === null ? [] : JSON.parse(row.images),
     log: row.log,
     error: row.error,
     startedAt: row.started_at,
@@ -547,6 +549,7 @@ const COMMAND_COLUMNS: { readonly [F in keyof CommandPatch]-?: string } = {
   bytes: 'bytes',
   lines: 'lines',
   tail: 'tail',
+  images: 'images',
   log: 'log',
   error: 'error',
   endedAt: 'ended_at',
@@ -2348,7 +2351,9 @@ export function operations(db: DatabaseSync) {
       for (const [field, value] of Object.entries(patch)) {
         if (value === undefined) continue;
         sets.push(`${COMMAND_COLUMNS[field as keyof CommandPatch]} = ?`);
-        values.push(typeof value === 'boolean' ? (value ? 1 : 0) : value);
+        if (typeof value === 'boolean') values.push(value ? 1 : 0);
+        else if (Array.isArray(value)) values.push(JSON.stringify(value));
+        else values.push(value as SQLInputValue);
       }
       if (sets.length > 0) {
         run(

@@ -1064,6 +1064,7 @@ export class Machines {
           bytes: Math.round(ended.bytes),
           lines: Math.round(ended.lines),
           tail: ended.tail,
+          images: ended.images ?? [],
           error:
             status === 'lost'
               ? 'It is gone and left no exit status: its machine restarted, or it was killed from outside'

@@ -54,6 +54,15 @@ export const helloSchema = z.object({
 });
 export type Hello = z.infer<typeof helloSchema>;
 
+/** An image a command showed with `show`. */
+export const shownImageSchema = z.object({
+  /** Where the image is kept on the machine. */
+  path: z.string(),
+  /** The file as the command named it. */
+  name: z.string(),
+});
+export type ShownImage = z.infer<typeof shownImageSchema>;
+
 /**
  * How a command ended. The daemon keeps it and sends it again on every connection until the
  * engine acknowledges it.
@@ -75,6 +84,8 @@ export const endedSchema = z.object({
   lines: z.number().nonnegative(),
   /** The end of what it wrote. */
   tail: z.string(),
+  /** The images it showed with `show`, in the order it showed them. A daemon before them sends none. */
+  images: z.array(shownImageSchema).optional(),
 });
 export type CommandEnded = z.infer<typeof endedSchema>;
 

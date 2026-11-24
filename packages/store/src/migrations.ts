@@ -447,6 +447,12 @@ const MIGRATIONS: readonly string[] = [
     bytes BLOB NOT NULL
   ) STRICT;
   `,
+  // 4: the images a command showed.
+  `
+  -- The images a command showed with \`show\`, as JSON: [{ path, name }], in the order it
+  -- showed them. NULL for none.
+  ALTER TABLE commands ADD COLUMN images TEXT;
+  `,
 ];
 
 /** The version a database is at when it has had every migration. */

@@ -91,13 +91,13 @@ import { AGENT_MESSAGE, subagentTools } from './subagents.ts';
 import type { Fired } from './schedule.ts';
 import { Sandboxes } from './sandboxes.ts';
 import type { SandboxTimes } from './sandboxes.ts';
+import { IMAGE_SIDE } from './images.ts';
 import { instructionsOf } from './scaffold.ts';
 import { SecretsUnavailable, sealedFor } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import type { ActorsQuery, PageOf, Paged, Stopping, Store } from './store.ts';
 import type { StoredCompaction } from './state.ts';
 import type { UsageCallsAsked, UsageFilter, UsageGrouping } from './usage.ts';
-import { viewImage } from './view-image.ts';
 
 /**
  * Gives what an actor's model is called with: a runner, or a runner and the model account it
@@ -377,12 +377,20 @@ export class Engine {
       clock: this.#clock,
       handle: (actor, fired) => this.#scheduleNotice(actor, fired),
     });
+    // Whether a provider's model is shown images, as its provider says. One it does not say of is not.
+    const takesImages = (provider: string, model: string): boolean =>
+      this.#providers.has(provider) &&
+      this.#providers
+        .get(provider)
+        .models.find((info) => info.id === model)
+        ?.input?.includes('image') === true;
     const bash =
       this.machines === undefined
         ? []
         : [
             bashKind(this.machines, {
               wake,
+              takesImages,
               ...(kept?.stopGraceMs === undefined ? {} : { stopGraceMs: kept.stopGraceMs }),
             }),
           ];
@@ -433,25 +441,8 @@ export class Engine {
       create: async (given) => (await this.createActor(given)).actor,
       post: (to, mail) => this.#post(to, mail),
     });
-    // What the engine itself offers a model that answers at once: an image from its machine,
-    // and its subagents.
-    const ownTools = [
-      ...subagents,
-      ...(this.machines === undefined
-        ? []
-        : [
-            viewImage(
-              this.machines,
-              (provider, model) =>
-                this.#providers.has(provider) &&
-                this.#providers
-                  .get(provider)
-                  .models.find((info) => info.id === model)
-                  ?.input?.includes('image') === true,
-              wake,
-            ),
-          ]),
-    ];
+    // What the engine itself offers a model that answers at once: its subagents.
+    const ownTools = [...subagents];
     this.tasks = new Tasks({
       store: options.store,
       clock: this.#clock,
@@ -552,6 +543,9 @@ export class Engine {
                 : { cwd: machine.cwd, os: facts?.os ?? null, arch: facts?.arch ?? null },
             ...(family === undefined ? {} : { family }),
             ...(actor.parent === null ? {} : { spawned: true }),
+            ...(takesImages(definition.provider, actor.modelId)
+              ? { images: { side: IMAGE_SIDE[definition.provider] ?? null } }
+              : {}),
           },
           definition.instructions,
         );

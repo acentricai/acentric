@@ -216,6 +216,18 @@ pub struct Ended {
     pub lines: u64,
     /// The end of what it wrote.
     pub tail: String,
+    /// The images it showed with `show`, in the order it showed them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<Shown>,
+}
+
+/// An image a command showed with `show`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Shown {
+    /// Where the image is kept on the machine.
+    pub path: String,
+    /// The file as the command named it.
+    pub name: String,
 }
 
 /// What the daemon sends.
@@ -336,6 +348,7 @@ mod tests {
             bytes: 3,
             lines: 1,
             tail: "hi\n".into(),
+            images: Vec::new(),
         };
         assert_eq!(
             serde_json::to_value(FromDaemon::Ended(&ended)).unwrap(),
@@ -352,6 +365,22 @@ mod tests {
         };
         assert_eq!(serde_json::to_value(&exited).unwrap()["by"], Value::Null);
         assert!(!serde_json::to_string(&exited).unwrap().contains("\"by\""));
+        // Images only when it showed some, and then each with where it is and what it was.
+        assert!(!serde_json::to_string(&exited).unwrap().contains("images"));
+        let showed = Ended {
+            images: vec![Shown {
+                path: "/t/images/1".into(),
+                name: "chart.png".into(),
+            }],
+            ..exited.clone()
+        };
+        assert_eq!(
+            serde_json::to_value(&showed).unwrap()["images"],
+            json!([{ "path": "/t/images/1", "name": "chart.png" }])
+        );
+        // What an older daemon kept, read again by this one.
+        let older: Ended = serde_json::from_str(&serde_json::to_string(&exited).unwrap()).unwrap();
+        assert!(older.images.is_empty());
         assert_eq!(
             serde_json::to_value(FromDaemon::Response {
                 id: 3,
