@@ -361,7 +361,9 @@ function TimeChart({
                           <span
                             key={provider}
                             className="usage-chart__part"
-                            style={{ flexGrow: value, background: seriesOf(provider) }}
+                            // Its share of the day: grown by the raw value, the parts of a day
+                            // under 1 would leave the column's foot empty.
+                            style={{ flexGrow: value / all, background: seriesOf(provider) }}
                           />
                         );
                       })}
@@ -570,7 +572,7 @@ function Tokens({ total }: { total: UsageTotals | undefined }) {
                 <span
                   key={part.label}
                   className="usage-split__part"
-                  style={{ flexGrow: part.value, background: part.series }}
+                  style={{ flexGrow: part.value / whole, background: part.series }}
                   title={`${part.label}: ${compact(part.value)}`}
                 />
               ),
