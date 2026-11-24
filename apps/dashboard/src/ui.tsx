@@ -207,18 +207,27 @@ export function CopyButton({
   value,
   what,
   text = false,
+  label,
 }: {
   value: string;
   /** For assistive technology: what is copied. */
   what: string;
   text?: boolean;
+  /** A full-size button with these words, as a dialog's footer has. */
+  label?: string;
 }) {
   const [done, setDone] = useCopied();
   return (
     <button
       type="button"
-      className={text ? buttonClass('secondary', 'sm') : 'icon-button copy-button'}
-      aria-label={`Copy ${what}`}
+      className={
+        label !== undefined
+          ? buttonClass('secondary')
+          : text
+            ? buttonClass('secondary', 'sm')
+            : 'icon-button copy-button'
+      }
+      aria-label={label ?? `Copy ${what}`}
       title={text ? undefined : 'Copy'}
       data-copied={done || undefined}
       onClick={(event) => {
@@ -227,11 +236,15 @@ export function CopyButton({
       }}
     >
       {done ? (
-        <IconCheck size={text ? 13 : 14} stroke={2} aria-hidden="true" />
+        <IconCheck size={label !== undefined ? 15 : text ? 13 : 14} stroke={2} aria-hidden="true" />
       ) : (
-        <IconCopy size={text ? 13 : 14} stroke={1.75} aria-hidden="true" />
+        <IconCopy
+          size={label !== undefined ? 15 : text ? 13 : 14}
+          stroke={1.75}
+          aria-hidden="true"
+        />
       )}
-      {text && 'Copy'}
+      {label ?? (text && 'Copy')}
       <span className="visually-hidden" aria-live="polite">
         {done ? 'Copied' : ''}
       </span>

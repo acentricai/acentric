@@ -66,9 +66,10 @@ describe('the API keys page', () => {
     fireEvent.click(await within(dialog()).findByRole('menuitemradio', { name: 'orders' }));
     press('New key', dialog());
 
-    const shown = await screen.findByRole('dialog', { name: 'ci' });
+    const shown = await screen.findByRole('dialog', { name: 'Save your API key' });
     expect(within(shown).getByText(/^ak_.*_secret-1$/)).toBeTruthy();
-    expect(within(shown).getByText(/^export ENGINE_API_KEY=ak_/)).toBeTruthy();
+    expect(within(shown).queryByText(/ENGINE_API_KEY/)).toBeNull();
+    expect(within(shown).getByRole('button', { name: 'Copy key' })).toBeTruthy();
     expect(server.areas.engine.keys[0]).toMatchObject({
       label: 'ci',
       scope: { type: 'agent', agent: ORDERS },
@@ -94,9 +95,9 @@ describe('the API keys page', () => {
     fireEvent.click(await within(dialog()).findByRole('button', { name: /^Actor: / }));
     fireEvent.click(await within(dialog()).findByRole('menuitemradio', { name: 'eu-desk' }));
     press('New key', dialog());
-    await screen.findByRole('dialog', { name: 'desk' });
+    await screen.findByRole('dialog', { name: 'Save your API key' });
     expect(server.areas.engine.keys[0]?.permissions).toEqual([...HOLDABLE.actor]);
-    press('Done', screen.getByRole('dialog', { name: 'desk' }));
+    press('Done', screen.getByRole('dialog', { name: 'Save your API key' }));
     expect(await screen.findByText('Actor eu-desk')).toBeTruthy();
   });
 
@@ -107,7 +108,7 @@ describe('the API keys page', () => {
     press('New key');
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'mine' } });
     press('New key', dialog());
-    await screen.findByRole('dialog', { name: 'mine' });
+    await screen.findByRole('dialog', { name: 'Save your API key' });
     expect(server.areas.engine.keys[0]?.permissions).toEqual(
       PERMISSIONS.filter((permission) => ROLE_PERMISSIONS.member.includes(permission)),
     );
@@ -150,7 +151,7 @@ describe('the API keys page', () => {
     press('New key');
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'old' } });
     press('New key', dialog());
-    press('Done', await screen.findByRole('dialog', { name: 'old' }));
+    press('Done', await screen.findByRole('dialog', { name: 'Save your API key' }));
     press('Revoke', await waitFor(() => rowOf('old')));
     press('Revoke', await screen.findByRole('dialog', { name: 'Revoke old?' }));
     await waitFor(() => expect(server.areas.engine.keys).toEqual([]));

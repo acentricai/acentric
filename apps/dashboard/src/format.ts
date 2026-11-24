@@ -32,6 +32,19 @@ export function fullTime(at: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${clock(at)}`;
 }
 
+/** `Tue, Nov 24, 2026, 7:47 PM GMT+5:30`: a time to read as a sentence. */
+export function longTime(at: number): string {
+  return new Date(at).toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
 /** `14:02:07`. */
 export function clock(at: number): string {
   const d = new Date(at);
