@@ -72,6 +72,7 @@ export function engineArea(shared: Shared) {
       latest: null,
       next: null,
       releases: [],
+      updater: null,
     },
     refreshed: 0,
   };
@@ -96,6 +97,35 @@ export function engineArea(shared: Shared) {
     // Updates
     if (method === 'GET' && path === '/v1/updates') {
       if (query.get('refresh') === 'true') updates.refreshed += 1;
+      return json(200, updates.status);
+    }
+    if (method === 'POST' && path === '/v1/updates/request') {
+      const at = (body['at'] as number | null | undefined) ?? null;
+      updates.status = {
+        ...updates.status,
+        updater: {
+          state:
+            body['action'] === 'download' ? 'downloaded' : at === null ? 'updating' : 'waiting',
+          version: body['version'] as string,
+          at,
+          error: null,
+          changedAt: NOW,
+        },
+      };
+      return json(200, updates.status);
+    }
+    if (method === 'DELETE' && path === '/v1/updates/request') {
+      const was = updates.status.updater;
+      updates.status = {
+        ...updates.status,
+        updater: {
+          state: 'cancelled',
+          version: was?.version ?? null,
+          at: null,
+          error: null,
+          changedAt: NOW,
+        },
+      };
       return json(200, updates.status);
     }
     // Backups
