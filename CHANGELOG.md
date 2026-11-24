@@ -5,6 +5,8 @@ What changed in each version, for the people who run a server. What a version pr
 
 ## Unreleased
 
+- **Changed:** while a new version upgrades the database, the dashboard's own files are served
+  as ever, so that it opens and says it is updating. The API answers 503 then, as before.
 - **Added:** the next version is taken from the dashboard where an updater runs beside the
   server: Compose's recipe has one, with `COMPOSE_PROFILES=updater`. It downloads the version's
   image, checks its signature, takes it now or at a time, and puts back the one before when the
