@@ -35,6 +35,7 @@ import { personOf, sessionCookie } from './auth.ts';
 import type { Granted } from './auth.ts';
 import { ApiFailure } from './errors.ts';
 import type { BackupControl } from './backups/control.ts';
+import type { UpdateCheck } from './updates.ts';
 import type { Streams } from './events.ts';
 
 export type Parts = {
@@ -47,6 +48,10 @@ export type Parts = {
   readonly streams: Streams;
   /** The server's own backups, and how they are set. */
   readonly backups?: BackupControl;
+  /** Whether there are versions after this one. */
+  readonly updates?: UpdateCheck;
+  /** What the server says it is. */
+  readonly version?: string;
 };
 
 /** An answer with headers of its own: what sets, or clears, the dashboard's cookie. */
@@ -831,6 +836,16 @@ export const handlers: Handlers = {
     if (backups === undefined) throw noBackups();
     return backups.configure(asked.body, refOf(asked));
   },
+  'updates.get': (asked, { updates, version }) =>
+    updates?.status(asked.query.refresh === true) ?? {
+      current: version ?? '',
+      check: 'off',
+      checkedAt: null,
+      error: null,
+      latest: null,
+      next: null,
+      releases: [],
+    },
 };
 
 /** An object without the fields that were not given. */

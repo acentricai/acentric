@@ -13,6 +13,7 @@ import type { AppOptions } from './app.ts';
 import type { Downloads } from './downloads.ts';
 import { Streams } from './events.ts';
 import type { BackupControl } from './backups/control.ts';
+import type { UpdateCheck } from './updates.ts';
 import { takeDaemons } from './machines.ts';
 
 export type ServerOptions = {
@@ -23,6 +24,7 @@ export type ServerOptions = {
   readonly secrets: Secrets;
   readonly accounts: Accounts;
   readonly backups?: BackupControl;
+  readonly updates?: UpdateCheck;
   readonly version: string;
   /** 0 takes any free port. */
   readonly port: number;
