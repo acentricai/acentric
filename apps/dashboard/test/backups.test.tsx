@@ -153,7 +153,7 @@ describe('the Backups section of Settings', () => {
     const server = signedIn();
     server.areas.engine.backups.status = null;
     const page = within(await section(server));
-    expect(await page.findByText('This server takes no backups of its own')).toBeTruthy();
+    expect(await page.findByText('Backups are not yet enabled')).toBeTruthy();
     expect(page.queryByRole('button', { name: /Back up now/ })).toBeNull();
   });
 
