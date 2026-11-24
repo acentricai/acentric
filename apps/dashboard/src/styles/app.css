@@ -763,43 +763,6 @@ dialog.ac-dialog.prefs::backdrop {
   display: none;
 }
 
-/* A name as it is, with a pencil before it, seen when the row is hovered, that edits it. */
-.prefs-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.prefs-name__edit {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--ink-muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 150ms var(--ease-out);
-}
-
-.prefs-row--name:hover .prefs-name__edit,
-.prefs-name__edit:focus-visible {
-  opacity: 1;
-}
-
-.prefs-name__edit:hover {
-  background: var(--hover);
-  color: var(--ink);
-}
-
-.prefs-name__edit:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
 .prefs-name__none {
   color: var(--ink-muted);
   font-size: 14px;
