@@ -104,7 +104,7 @@ describe('the sidebar', () => {
     ).toBe('page');
     const page = within(dialog).getByRole('region', { name: 'Account' });
     expect(await within(page).findByText('ada@example.test')).toBeTruthy();
-    expect(within(page).getByRole('textbox', { name: 'Name' })).toBeTruthy();
+    expect(within(page).getByRole('button', { name: 'Edit name' })).toBeTruthy();
     expect(within(page).getByRole('table', { name: 'Sessions' })).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
@@ -122,6 +122,12 @@ describe('the Account section of Settings', () => {
     let dialog = await screen.findByRole('dialog', { name: 'Settings' });
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Edit profile picture' }));
     expect(within(dialog).getByRole('menuitem', { name: 'Upload photo' })).toBeTruthy();
+    // A file picker that was cancelled leaves Settings open.
+    fireEvent(
+      within(dialog).getByLabelText('Choose a picture'),
+      new Event('cancel', { bubbles: true }),
+    );
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
     expect(within(dialog).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     cleanup();
@@ -145,18 +151,29 @@ describe('the Account section of Settings', () => {
     expect(await within(dialog).findByRole('menuitem', { name: 'Upload photo' })).toBeTruthy();
   });
 
-  it('keeps a name as it is left, with no Save to press', async () => {
+  it('shows the name, edited from a pencil and kept as it is left', async () => {
     const server = fakeServer();
     server.person('ada@example.test', 'a-password-for-tests', true);
     open('/', server);
     await screen.findByRole('heading', { name: 'Agents' });
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     const dialog = await screen.findByRole('dialog', { name: 'Settings' });
-    const name = await within(dialog).findByRole('textbox', { name: 'Name' });
+    // Shown as it is, and edited from the pencil beside it.
+    expect(within(dialog).queryByRole('textbox', { name: 'Name' })).toBeNull();
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Edit name' }));
+    const name = within(dialog).getByRole('textbox', { name: 'Name' });
     fireEvent.change(name, { target: { value: 'Ada Lovelace' } });
     fireEvent.blur(name);
-    expect(await within(dialog).findByText('Saved')).toBeTruthy();
-    expect((name as HTMLInputElement).value).toBe('Ada Lovelace');
+    expect(await within(dialog).findByText('Ada Lovelace')).toBeTruthy();
+    expect(within(dialog).queryByRole('textbox', { name: 'Name' })).toBeNull();
+
+    // Escape puts it back, and Settings stays open.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Edit name' }));
+    const again = within(dialog).getByRole('textbox', { name: 'Name' });
+    fireEvent.change(again, { target: { value: 'Someone else' } });
+    fireEvent.keyDown(again, { key: 'Escape' });
+    expect(within(dialog).getByText('Ada Lovelace')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
   });
 });
 
