@@ -489,7 +489,7 @@ export function Menu({
             id={id}
             role="menu"
             aria-label={label}
-            className="pop more-menu__pop"
+            className="pop more-menu__pop more-menu__pop--placed"
             style={{ top: place.top, right: place.right }}
             onKeyDown={(event) => {
               if (event.key === 'Tab') menu.close();
