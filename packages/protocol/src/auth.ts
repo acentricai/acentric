@@ -45,6 +45,8 @@ export const PERMISSIONS = [
   'usage:read',
   /** Reading where the server's backups stand, and having one taken. */
   'backups:manage',
+  /** Having the server take a newer version, where an updater beside it does that. */
+  'updates:manage',
 ] as const;
 
 export const permissionSchema = z.enum(PERMISSIONS);
@@ -114,6 +116,7 @@ const ADMIN: readonly Permission[] = [
   'users:manage',
   'audit:read',
   'backups:manage',
+  'updates:manage',
 ];
 
 /**

@@ -25,6 +25,7 @@ export const PERMISSION_TEXT: { readonly [P in Permission]: string } = {
   'audit:read': 'Read the audit log',
   'usage:read': 'Read what model calls used and cost',
   'backups:manage': "Read where the server's backups stand, and take one",
+  'updates:manage': 'Have the server take a newer version',
 };
 
 /** The scopes a person may make keys for: a person reaches the whole engine. */

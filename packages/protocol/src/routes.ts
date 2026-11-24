@@ -40,7 +40,7 @@ import {
   backupsSchema,
   setBackupSettingsRequestSchema,
 } from './resources/backups.ts';
-import { updatesQuerySchema, updatesSchema } from './resources/updates.ts';
+import { updateRequestSchema, updatesQuerySchema, updatesSchema } from './resources/updates.ts';
 import {
   actorSchema,
   conversationEntrySchema,
@@ -1121,6 +1121,26 @@ export const routes = defineRoutes({
     response: updatesSchema,
     status: 200,
     errors: [],
+  },
+  'updates.request': {
+    method: 'POST',
+    path: '/v1/updates/request',
+    summary:
+      'Asks the updater beside the server to download the next version, or to take it, now or at a time. In place of what it was asked before.',
+    auth: { on: 'engine', permission: 'updates:manage' },
+    body: updateRequestSchema,
+    response: updatesSchema,
+    status: 200,
+    errors: ['conflict', 'unavailable'],
+  },
+  'updates.cancel': {
+    method: 'DELETE',
+    path: '/v1/updates/request',
+    summary: 'Takes back what the updater was asked, unless it is taking the version already.',
+    auth: { on: 'engine', permission: 'updates:manage' },
+    response: updatesSchema,
+    status: 200,
+    errors: ['conflict', 'unavailable'],
   },
 });
 
