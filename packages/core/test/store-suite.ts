@@ -542,6 +542,31 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       });
     });
 
+    describe('backup settings', () => {
+      it('are none until kept, and kept in place of those there were', async () => {
+        expect(await store.loadBackupSettings()).toBeUndefined();
+        const set = {
+          enabled: true,
+          everyMs: 86_400_000,
+          keep: 3,
+          bucket: {
+            url: 's3://acme/acentric',
+            endpoint: 'https://s3.example.test',
+            region: null,
+            accessKeyId: 'AKIA',
+            secret: 'v1.k.sealed',
+          },
+          changedAt: NOW,
+          changedBy: 'usr_1',
+        };
+        await store.saveBackupSettings(set);
+        expect(await store.loadBackupSettings()).toEqual(set);
+        const off = { ...set, enabled: false, bucket: null, changedAt: NOW + 1, changedBy: null };
+        await store.saveBackupSettings(off);
+        expect(await store.loadBackupSettings()).toEqual(off);
+      });
+    });
+
     describe('lists', () => {
       /** Every page of a list, read `limit` at a time. */
       const pages = async <T>(

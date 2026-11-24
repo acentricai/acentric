@@ -200,6 +200,33 @@ export type StoredSandboxProvider = {
   readonly createdAt: number;
 };
 
+/**
+ * How the server backs itself up, as set from the dashboard: what wins over the environment's
+ * ACENTRIC_BACKUP_EVERY, ACENTRIC_BACKUP_KEEP and ACENTRIC_BACKUP_URL once it is kept.
+ */
+export type StoredBackupSettings = {
+  /** Whether it backs itself up at all. */
+  readonly enabled: boolean;
+  /** How often one is taken. */
+  readonly everyMs: number;
+  /** How many of each kind are kept. */
+  readonly keep: number;
+  /** The bucket each is copied to as well. Null for none. */
+  readonly bucket: {
+    /** s3://bucket/folder. */
+    readonly url: string;
+    /** Where a store that is not S3 is reached. Null for S3. */
+    readonly endpoint: string | null;
+    readonly region: string | null;
+    readonly accessKeyId: string;
+    /** The secret access key, sealed. */
+    readonly secret: string;
+  } | null;
+  readonly changedAt: number;
+  /** Who set it, as the audit log says one: `usr_…` or `key_…`. */
+  readonly changedBy: string | null;
+};
+
 /** What of a machine changes. A field that is absent stays as it is. */
 export type MachinePatch = Partial<Omit<StoredMachine, 'id' | 'createdAt'>>;
 
@@ -752,6 +779,13 @@ export interface Store {
     id: MachineId,
     lost: { readonly error: string; readonly endedAt: number },
   ): Promise<StoredCommand[] | undefined>;
+
+  // How the server backs itself up, as set from the dashboard
+
+  /** Undefined until they were set. */
+  loadBackupSettings(): Promise<StoredBackupSettings | undefined>;
+  /** Keeps them in place of those there were. */
+  saveBackupSettings(settings: StoredBackupSettings): Promise<void>;
 
   // Accounts at providers of sandboxes (see `sandboxes.ts`)
 

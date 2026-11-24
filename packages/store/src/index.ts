@@ -4,3 +4,4 @@ export { FileBlobStore } from './file-blob-store.ts';
 export { SqliteStore } from './sqlite-store.ts';
 export type { SqliteOptions } from './sqlite-store.ts';
 export { SCHEMA_VERSION } from './migrations.ts';
+export { readBackupSettings } from './database.ts';

@@ -21,6 +21,7 @@ import type {
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
+  StoredBackupSettings,
   PageOf,
   Paged,
   Redeem,
@@ -444,6 +445,14 @@ export class SqliteStore implements Store {
 
   listStopping(): Promise<({ readonly actor: ActorId } & Stopping)[]> {
     return this.#write.ask('listStopping' satisfies Operation);
+  }
+
+  loadBackupSettings(): Promise<StoredBackupSettings | undefined> {
+    return this.#write.ask('loadBackupSettings' satisfies Operation);
+  }
+
+  saveBackupSettings(settings: StoredBackupSettings): Promise<void> {
+    return this.#write.ask('saveBackupSettings' satisfies Operation, settings);
   }
 
   addSandboxProvider(provider: StoredSandboxProvider): Promise<void> {

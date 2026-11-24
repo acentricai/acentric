@@ -68,6 +68,7 @@ export const sealedFor = {
   account: (account: string) => `account\0${account}`,
   provider: (provider: string) => `provider:${provider}`,
   actorEnv: (actor: string) => `actor:${actor}:env`,
+  backupBucket: () => 'backups:bucket',
 } as const;
 
 /** The ID of the key `sealed` was sealed with. Undefined for what is not sealed as `seal` seals. */
