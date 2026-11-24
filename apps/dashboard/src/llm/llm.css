@@ -11,15 +11,6 @@
   gap: 8px;
 }
 
-/* One row of filters, above everything they scope. */
-.usage-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
-}
-
 /* The numbers of the range. */
 .usage-tiles {
   display: grid;

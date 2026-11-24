@@ -1,6 +1,6 @@
-// `/usage`: what model calls cost, over a range of days. The filters in one row scope everything
-// below them: the totals, the spend of each day, how much of each provider's input was read from
-// its prompt cache, and what each agent, actor, account or model spent.
+// `/usage`: what model calls cost, over a range of days. The range, beside the heading, scopes
+// everything below it: the totals, the spend of each day, how much of each provider's input was
+// read from its prompt cache, and what each agent spent.
 
 import type { UsageGroup, UsageTotals } from '@acentric/protocol';
 import { Link } from '@tanstack/react-router';
@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react';
 import { useAgentNames } from '../machines/agents.tsx';
 import { LoadError, PageHeader } from '../machines/ui.tsx';
 import { may, useMe } from '../me.ts';
-import { Dropdown, Segmented } from '../ui.tsx';
+import { Segmented } from '../ui.tsx';
 import type { Group } from './api.ts';
 import {
   cacheShare,
@@ -48,7 +48,7 @@ const GROUPS: ReadonlyArray<{ value: By; label: string }> = [
 
 export function UsagePage() {
   const [range, setRange] = useState<Range>('30');
-  const [by, setBy] = useState<By>('agent');
+  const by: By = 'agent';
   // Read once for the page, so that a refetch does not move the range under it.
   const from = useMemo(() => (range === 'all' ? undefined : rangeStart(Number(range))), [range]);
   const scope = from === undefined ? {} : { from };
@@ -68,11 +68,9 @@ export function UsagePage() {
   const error = daily.error ?? groups.error ?? byProvider.error;
   return (
     <div className="list-page llm-page usage-page">
-      <PageHeader title="LLM Usage" spaced />
-      <div className="usage-filters rise">
+      <PageHeader title="LLM Usage" spaced>
         <Segmented label="Range" value={range} options={RANGES} onChange={setRange} />
-        <Dropdown label="Group" value={by} options={GROUPS} onChange={setBy} />
-      </div>
+      </PageHeader>
       {error !== null && (
         <LoadError
           things="usage"
