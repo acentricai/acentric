@@ -2,7 +2,7 @@
 // is wrong with where they go, Back up now, and the backups there are. It reads what the Backups
 // page reads.
 
-import { IconDatabaseExport, IconPower } from '@tabler/icons-react';
+import { IconDatabaseExport, IconPencil, IconPower } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
@@ -44,6 +44,7 @@ export function BackupsSettings() {
   const data = status.data;
   const [turningOn, setTurningOn] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [turningOff, setTurningOff] = useState(false);
 
   return (
     <div className="prefs-page">
@@ -58,15 +59,10 @@ export function BackupsSettings() {
               Turn on
             </Button>
           )}
-          {!off && (
-            <Button
-              size="sm"
-              busy={take.isPending}
-              disabled={data === undefined}
-              onClick={() => take.mutate()}
-            >
-              <IconDatabaseExport size={15} stroke={1.75} aria-hidden="true" />
-              Back up now
+          {!off && data !== undefined && (
+            <Button size="sm" onClick={() => setTurningOff(true)}>
+              <IconPower size={15} stroke={1.75} aria-hidden="true" />
+              Turn off
             </Button>
           )}
         </div>
@@ -100,22 +96,40 @@ export function BackupsSettings() {
             <div className="prefs-rows">
               <div className="prefs-row">
                 <span className="prefs-row__name">Next backup</span>
-                <span className="prefs-row__plain">
-                  {data.next === null ? '—' : <Next at={data.next} />}
+                <span className="prefs-row__form">
+                  <button
+                    type="button"
+                    className={`prefs-row__act${take.isPending ? ' prefs-row__act--shown' : ''}`}
+                    aria-label="Back up now"
+                    title="Back up now"
+                    disabled={take.isPending}
+                    onClick={() => take.mutate()}
+                  >
+                    <IconDatabaseExport size={16} stroke={1.75} aria-hidden="true" />
+                  </button>
+                  <span className="prefs-row__plain">
+                    {data.next === null ? '—' : <Next at={data.next} />}
+                  </span>
                 </span>
               </div>
               <div className="prefs-row">
                 <span className="prefs-row__name">Stored on</span>
                 <span className="prefs-row__form">
+                  <button
+                    type="button"
+                    className="prefs-row__act"
+                    aria-label="Change"
+                    title="Change"
+                    onClick={() => setEditing(true)}
+                  >
+                    <IconPencil size={16} stroke={1.75} aria-hidden="true" />
+                  </button>
                   <span
                     className="prefs-row__plain"
                     title={data.bucket === null ? undefined : data.bucket.url}
                   >
                     {data.bucket === null ? 'Server' : 'Server and bucket'}
                   </span>
-                  <Button size="sm" onClick={() => setEditing(true)}>
-                    Change
-                  </Button>
                 </span>
               </div>
             </div>
@@ -151,6 +165,13 @@ export function BackupsSettings() {
       </section>
       {turningOn && <SettingsDialog onClose={() => setTurningOn(false)} />}
       {editing && <EditSettings onClose={() => setEditing(false)} />}
+      {turningOff && data !== undefined && (
+        <TurnOffDialog
+          everyMs={data.everyMs}
+          keep={data.keep}
+          onClose={() => setTurningOff(false)}
+        />
+      )}
     </div>
   );
 }
@@ -332,6 +353,46 @@ function SettingsDialog({ current, onClose }: { current?: BackupSettings; onClos
         )}
         <FormError error={turnOn.error} />
       </form>
+    </Dialog>
+  );
+}
+
+/** Turns the server's backups off, once asked whether to. */
+function TurnOffDialog({
+  everyMs,
+  keep,
+  onClose,
+}: {
+  everyMs: number;
+  keep: number;
+  onClose: () => void;
+}) {
+  const turnOff = useMutation({
+    mutationFn: () => engine.setBackupSettings({ enabled: false, everyMs, keep, bucket: null }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: backupQueries.status }),
+        queryClient.invalidateQueries({ queryKey: backupQueries.settings }),
+      ]);
+      onClose();
+    },
+  });
+  return (
+    <Dialog
+      title="Turn off backups?"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose} data-autofocus>
+            Cancel
+          </Button>
+          <Button variant="danger" busy={turnOff.isPending} onClick={() => turnOff.mutate()}>
+            Turn off
+          </Button>
+        </>
+      }
+    >
+      <FormError error={turnOff.error} />
     </Dialog>
   );
 }
