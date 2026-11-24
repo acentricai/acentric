@@ -698,8 +698,49 @@ dialog.ac-dialog.prefs::backdrop {
   max-width: 100%;
 }
 
-.prefs-photo {
+.prefs-photo .dropdown__button {
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.prefs-photo .dropdown__button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.prefs-photo__face {
+  position: relative;
+  display: block;
   font-size: 14px;
+}
+
+/* A pencil over the picture, on hover or while its menu is open. */
+.prefs-photo__edit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+}
+
+.prefs-photo .dropdown__button:hover .prefs-photo__edit,
+.prefs-photo .dropdown__button:focus-visible .prefs-photo__edit,
+.prefs-photo .dropdown__button[aria-expanded='true'] .prefs-photo__edit,
+.prefs-photo__face[data-busy] .prefs-photo__edit {
+  opacity: 1;
+}
+
+.prefs-photo .more-menu__pop {
+  min-width: 190px;
 }
 
 .prefs-photo__file {

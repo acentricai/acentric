@@ -1,7 +1,7 @@
 // The shell of a person signed in: the sections they may see, where `/` takes them, and a page
 // they may not see.
 
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import type { Role } from '@acentric/protocol';
@@ -120,8 +120,9 @@ describe('the Account section of Settings', () => {
     await screen.findByRole('heading', { name: 'Agents' });
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     let dialog = await screen.findByRole('dialog', { name: 'Settings' });
-    expect(await within(dialog).findByRole('button', { name: 'Upload' })).toBeTruthy();
-    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Edit profile picture' }));
+    expect(within(dialog).getByRole('menuitem', { name: 'Upload photo' })).toBeTruthy();
+    expect(within(dialog).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     cleanup();
     queryClient.clear();
@@ -136,10 +137,12 @@ describe('the Account section of Settings', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     dialog = await screen.findByRole('dialog', { name: 'Settings' });
-    expect(await within(dialog).findByRole('button', { name: 'Change' })).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
-    expect(await within(dialog).findByRole('button', { name: 'Upload' })).toBeTruthy();
-    expect(ada.photo).toBeNull();
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Edit profile picture' }));
+    expect(within(dialog).getByRole('menuitem', { name: 'Replace photo' })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('menuitem', { name: 'Remove' }));
+    await waitFor(() => expect(ada.photo).toBeNull());
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Edit profile picture' }));
+    expect(await within(dialog).findByRole('menuitem', { name: 'Upload photo' })).toBeTruthy();
   });
 
   it('keeps a name as it is left, with no Save to press', async () => {

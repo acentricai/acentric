@@ -2,6 +2,7 @@
 // person signed in, their name and role, their password, and where they are signed in.
 
 import { PASSWORD_MIN, PHOTO_TYPES, type Session } from '@acentric/protocol';
+import { IconPencil, IconPhoto, IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -11,7 +12,7 @@ import { Avatar, CHOSEN_BYTES, sendPhoto, squarePhoto } from '../avatar.tsx';
 import { fullTime } from '../format.ts';
 import { useMe, type Me } from '../me.ts';
 import { sessionName } from '../pages/account.tsx';
-import { Button, FormError, LoadError, Skeleton } from '../ui.tsx';
+import { Button, FormError, LoadError, Menu, MenuItem, Skeleton } from '../ui.tsx';
 
 const ROLES: Record<Me['role'], string> = {
   owner: 'Owner',
@@ -104,48 +105,71 @@ function PhotoRow({ me }: { me: Me }) {
     onSuccess: done,
   });
   const has = me.photo !== null && me.photo !== undefined;
+  const busy = give.isPending || remove.isPending;
   return (
-    <Row name="Profile picture" note="PNG, JPEG or WebP, up to 10 MB.">
-      <div className="prefs-row__form">
-        <Avatar
-          user={me.user}
-          photo={me.photo}
-          name={me.displayName ?? me.email}
-          size={40}
-          className="me__avatar prefs-photo"
-        />
-        <input
-          ref={chooser}
-          type="file"
-          accept={PHOTO_TYPES.join(',')}
-          className="prefs-photo__file"
-          aria-label="Choose a picture"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file === undefined) return;
-            remove.reset();
-            setTooLarge(file.size > CHOSEN_BYTES);
-            if (file.size <= CHOSEN_BYTES) give.mutate(file);
-          }}
-        />
-        <Button size="sm" busy={give.isPending} onClick={() => chooser.current?.click()}>
-          {has ? 'Change' : 'Upload'}
-        </Button>
-        {has && (
-          <Button
-            size="sm"
-            variant="quiet"
-            busy={remove.isPending}
-            onClick={() => {
-              give.reset();
-              remove.mutate();
-            }}
-          >
-            Remove
-          </Button>
+    <Row name="Profile picture">
+      <input
+        ref={chooser}
+        type="file"
+        accept={PHOTO_TYPES.join(',')}
+        className="prefs-photo__file"
+        aria-label="Choose a picture"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file === undefined) return;
+          remove.reset();
+          setTooLarge(file.size > CHOSEN_BYTES);
+          if (file.size <= CHOSEN_BYTES) give.mutate(file);
+        }}
+      />
+      {/* The picture is the button: a pencil over it says so, and it opens what changes it. */}
+      <Menu
+        label="Edit profile picture"
+        align="end"
+        className="prefs-photo"
+        button={
+          <span className="prefs-photo__face" data-busy={busy || undefined}>
+            <Avatar
+              user={me.user}
+              photo={me.photo}
+              name={me.displayName ?? me.email}
+              size={40}
+              className="me__avatar"
+            />
+            <span className="prefs-photo__edit" aria-hidden="true">
+              <IconPencil size={16} stroke={1.75} />
+            </span>
+          </span>
+        }
+      >
+        {(close) => (
+          <>
+            <MenuItem
+              icon={<IconPhoto size={16} stroke={1.75} aria-hidden="true" />}
+              onSelect={() => {
+                close();
+                chooser.current?.click();
+              }}
+            >
+              {has ? 'Replace photo' : 'Upload photo'}
+            </MenuItem>
+            {has && (
+              <MenuItem
+                danger
+                icon={<IconTrash size={16} stroke={1.75} aria-hidden="true" />}
+                onSelect={() => {
+                  close();
+                  give.reset();
+                  remove.mutate();
+                }}
+              >
+                Remove
+              </MenuItem>
+            )}
+          </>
         )}
-      </div>
+      </Menu>
       {tooLarge && <p className="prefs-row__note">The picture is larger than 10 MB.</p>}
       <FormError error={give.error ?? remove.error} />
     </Row>
