@@ -450,14 +450,18 @@ export interface Store {
 
   // Model accounts
 
-  /** Keeps a new account. Rejects with `NameTaken` when its name is another's. */
+  /**
+   * Keeps a new account. Rejects with `NameTaken` when its name is another's. One that is its
+   * provider's default is the only one: no other of the provider is, in the same write.
+   */
   addAccount(account: StoredAccount): Promise<void>;
   loadAccount(id: AccountId): Promise<StoredAccount | undefined>;
   /** Every account, in the order they were made. */
   listAccounts(): Promise<StoredAccount[]>;
   /**
    * Keeps an account as it now is, in place of how it was. Rejects with `NameTaken` when its
-   * name is now another's.
+   * name is now another's. One that is its provider's default is the only one, as for
+   * `addAccount`.
    */
   saveAccount(account: StoredAccount): Promise<void>;
   removeAccount(id: AccountId): Promise<void>;

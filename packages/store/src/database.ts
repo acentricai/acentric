@@ -638,6 +638,18 @@ export function operations(db: DatabaseSync) {
     statement(sql).get(...values) as T | undefined;
   const all = <T>(sql: string, ...values: SQLInputValue[]) => statement(sql).all(...values) as T[];
 
+  /** No other account of its provider is the default, when this one is: in the same write. */
+  const onlyDefault = (stored: StoredAccount): void => {
+    if (!stored.account.default) return;
+    run(
+      `UPDATE accounts SET account = json_set(account, '$.default', json('false'))
+       WHERE id != ? AND json_extract(account, '$.provider') = ?
+         AND json_extract(account, '$.default') = 1`,
+      stored.account.id,
+      stored.account.provider,
+    );
+  };
+
   /** An agent's actors, and the subagents under them, of whatever agent, however deep. */
   const treeOf = (id: AgentId): ActorId[] =>
     all<{ id: ActorId }>(
@@ -926,6 +938,7 @@ export function operations(db: DatabaseSync) {
         JSON.stringify(stored.account),
         stored.sealed,
       );
+      onlyDefault(stored);
     },
 
     loadAccount(id: AccountId): StoredAccount | undefined {
@@ -949,6 +962,7 @@ export function operations(db: DatabaseSync) {
         stored.sealed,
         id,
       );
+      onlyDefault(stored);
     },
 
     removeAccount(id: AccountId): void {
