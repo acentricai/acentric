@@ -164,12 +164,31 @@ fn open(server: &str, machine: &str, poll: Duration) -> Result<WebSocket<Stream>
         .to_string();
     let port = uri.port_u16().unwrap_or(if secure { 443 } else { 80 });
     let failed = |error: io::Error| error.to_string();
-    let address = (host.trim_matches(['[', ']']), port)
+    // Each of the host's addresses in turn, until one answers: `localhost` is ::1 first, and a
+    // server may listen on 127.0.0.1 alone.
+    let addresses: Vec<_> = (host.trim_matches(['[', ']']), port)
         .to_socket_addrs()
         .map_err(failed)?
-        .next()
-        .ok_or_else(|| format!("{host} has no address"))?;
-    let tcp = TcpStream::connect_timeout(&address, CONNECT).map_err(failed)?;
+        .collect();
+    if addresses.is_empty() {
+        return Err(format!("{host} has no address"));
+    }
+    let mut last = None;
+    let mut reached = None;
+    for address in &addresses {
+        match TcpStream::connect_timeout(address, CONNECT) {
+            Ok(tcp) => {
+                reached = Some(tcp);
+                break;
+            }
+            Err(error) => last = Some(error),
+        }
+    }
+    let tcp = match (reached, last) {
+        (Some(tcp), _) => tcp,
+        (None, Some(error)) => return Err(failed(error)),
+        (None, None) => return Err(format!("{host} has no address")),
+    };
     tcp.set_nodelay(true).map_err(failed)?;
     tcp.set_read_timeout(Some(CONNECT)).map_err(failed)?;
     tcp.set_write_timeout(Some(WRITE)).map_err(failed)?;
