@@ -137,6 +137,7 @@ alone.
 | A request that deploys                | 40 MB; any other, 1 MB                                               |
 | An image or file from a machine       | 8 MB                                                                 |
 | A secret                              | 64 KB                                                                |
+| A picture of a person                 | 2 MiB: a PNG, JPEG or WebP                                           |
 | A page of a list                      | 200                                                                  |
 | How long a command is waited for      | 300 seconds                                                          |
 | How long a sandbox is kept, idle      | 30 days                                                              |
