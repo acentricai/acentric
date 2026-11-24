@@ -179,21 +179,20 @@ describe('the People page', () => {
     open('/people', server);
     await screen.findByText('No invites waiting.');
     press('Invite');
-    const role = within(dialog()).getByLabelText('Role') as HTMLSelectElement;
-    // An owner may invite anyone.
-    expect([...role.options].map((option) => option.value)).toEqual([
-      'viewer',
-      'member',
-      'admin',
-      'owner',
-    ]);
-    fireEvent.change(role, { target: { value: 'admin' } });
-    fireEvent.change(within(dialog()).getByLabelText(/^For/), { target: { value: 'Dee' } });
-    press('Make a link', dialog());
+    // An owner may invite anyone, chosen from the dashboard's own dropdown.
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Role: Member' }));
+    expect(
+      within(dialog())
+        .getAllByRole('menuitemradio')
+        .map((option) => option.textContent),
+    ).toEqual(['Viewer', 'Member', 'Admin', 'Owner']);
+    fireEvent.click(within(dialog()).getByRole('menuitemradio', { name: 'Admin' }));
+    expect(within(dialog()).queryByLabelText(/^For/)).toBeNull();
+    press('Create invite link', dialog());
     const made = await screen.findByRole('dialog', { name: 'Invite made' });
     expect(within(made).getByText(`${window.location.origin}/invite?token=invite-1`)).toBeTruthy();
     press('Done', made);
-    const row = await waitFor(() => rowOf('Dee'));
+    const row = await waitFor(() => rowOf('Admin'));
     expect(within(row).getByText('Admin')).toBeTruthy();
     expect(within(row).getByText('ada@example.test')).toBeTruthy();
     press('Revoke', row);
@@ -241,8 +240,12 @@ describe('the People page', () => {
     fireEvent.keyDown(owners, { key: 'Escape' });
     // An admin gives only the roles below admin.
     press('Invite');
-    const role = within(dialog()).getByLabelText('Role') as HTMLSelectElement;
-    expect([...role.options].map((option) => option.value)).toEqual(['viewer', 'member']);
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Role: Member' }));
+    expect(
+      within(dialog())
+        .getAllByRole('menuitemradio')
+        .map((option) => option.textContent),
+    ).toEqual(['Viewer', 'Member']);
   });
 
   it('says why the server refused, and removes a person', async () => {

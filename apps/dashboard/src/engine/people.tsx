@@ -29,6 +29,7 @@ import {
   Confirm,
   CopyButton,
   Dialog,
+  Dropdown,
   Field,
   FormError,
   Label,
@@ -57,7 +58,7 @@ export const ROLE_NAMES: { readonly [R in Role]: string } = {
   owner: 'Owner',
 };
 
-/** What each role may do, in the invite dialog's words. */
+/** What each role may do, in the role dialog's words. */
 const ROLE_TEXT: { readonly [R in Role]: string } = {
   viewer: 'Reads agents, actors and usage',
   member: 'Deploys agents and works with actors, machines and keys',
@@ -301,10 +302,9 @@ function LinkOnce({ link, expiresAt, what }: { link: string; expiresAt: number; 
 export function InviteDialog({ me, onClose }: { me: Me | undefined; onClose: () => void }) {
   const roles = rolesFor(me);
   const [role, setRole] = useState<Role>('member');
-  const [note, setNote] = useState('');
   const formId = useId();
   const invite = useMutation({
-    mutationFn: () => engine.invite(role, note.trim() === '' ? undefined : note.trim()),
+    mutationFn: () => engine.invite(role, undefined),
     onSuccess: refresh,
   });
   if (invite.data !== undefined) {
@@ -332,13 +332,13 @@ export function InviteDialog({ me, onClose }: { me: Me | undefined; onClose: () 
   }
   return (
     <Dialog
-      title="Invite someone"
+      title="Invite member"
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" form={formId} variant="primary" busy={invite.isPending}>
-            Make a link
+            Create invite link
           </Button>
         </>
       }
@@ -351,40 +351,15 @@ export function InviteDialog({ me, onClose }: { me: Me | undefined; onClose: () 
           if (!invite.isPending) invite.mutate();
         }}
       >
-        <Field label="Role" hint={ROLE_TEXT[role]}>
-          {(id) => (
-            <span className="select">
-              <select
-                id={id}
-                className="ac-input"
-                value={role}
-                onChange={(event) => setRole(event.target.value as Role)}
-              >
-                {roles.map((each) => (
-                  <option key={each} value={each}>
-                    {ROLE_NAMES[each]}
-                  </option>
-                ))}
-              </select>
-            </span>
-          )}
-        </Field>
-        <Field
-          label="For"
-          optional
-          hint="A note of who it is for. Whoever opens it gives their own email."
-        >
-          {(id) => (
-            <input
-              id={id}
-              className="ac-input"
-              autoComplete="off"
-              maxLength={128}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-            />
-          )}
-        </Field>
+        <div className="ac-field">
+          <span className="ac-field__label">Role</span>
+          <Dropdown
+            label="Role"
+            value={role}
+            options={roles.map((each) => ({ value: each, label: ROLE_NAMES[each] }))}
+            onChange={setRole}
+          />
+        </div>
         <FormError error={invite.error} />
       </form>
     </Dialog>
