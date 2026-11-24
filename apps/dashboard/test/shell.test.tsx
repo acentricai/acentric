@@ -104,7 +104,6 @@ describe('the sidebar', () => {
     ).toBe('page');
     const page = within(dialog).getByRole('region', { name: 'Account' });
     expect(await within(page).findByText('ada@example.test')).toBeTruthy();
-    expect(within(page).getByRole('button', { name: 'Edit name' })).toBeTruthy();
     expect(within(page).getByRole('table', { name: 'Sessions' })).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
@@ -151,29 +150,16 @@ describe('the Account section of Settings', () => {
     expect(await within(dialog).findByRole('menuitem', { name: 'Upload photo' })).toBeTruthy();
   });
 
-  it('shows the name, edited from a pencil and kept as it is left', async () => {
+  it('shows the name as it is, with nothing to change it', async () => {
     const server = fakeServer();
     server.person('ada@example.test', 'a-password-for-tests', true);
     open('/', server);
     await screen.findByRole('heading', { name: 'Agents' });
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     const dialog = await screen.findByRole('dialog', { name: 'Settings' });
-    // Shown as it is, and edited from the pencil beside it.
+    expect(await within(dialog).findByText('None given')).toBeTruthy();
     expect(within(dialog).queryByRole('textbox', { name: 'Name' })).toBeNull();
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Edit name' }));
-    const name = within(dialog).getByRole('textbox', { name: 'Name' });
-    fireEvent.change(name, { target: { value: 'Ada Lovelace' } });
-    fireEvent.blur(name);
-    expect(await within(dialog).findByText('Ada Lovelace')).toBeTruthy();
-    expect(within(dialog).queryByRole('textbox', { name: 'Name' })).toBeNull();
-
-    // Escape puts it back, and Settings stays open.
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Edit name' }));
-    const again = within(dialog).getByRole('textbox', { name: 'Name' });
-    fireEvent.change(again, { target: { value: 'Someone else' } });
-    fireEvent.keyDown(again, { key: 'Escape' });
-    expect(within(dialog).getByText('Ada Lovelace')).toBeTruthy();
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Edit name' })).toBeNull();
   });
 });
 
