@@ -177,46 +177,91 @@ function PhotoRow({ me }: { me: Me }) {
 }
 
 function NameRow({ me }: { me: Me }) {
+  const [editing, setEditing] = useState(false);
   const [name, setName] = useState(me.displayName ?? '');
   const save = useMutation({
     mutationFn: () => api.call('me.update', { body: { displayName: name.trim() || null } }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: keys.me }),
+    onSuccess: () => {
+      setEditing(false);
+      void queryClient.invalidateQueries({ queryKey: keys.me });
+    },
   });
   const unchanged = (name.trim() || null) === me.displayName;
-  const submit = () => {
-    if (!unchanged && !save.isPending) save.mutate();
+  const finish = () => {
+    if (save.isPending) return;
+    if (unchanged) setEditing(false);
+    else save.mutate();
+  };
+  const stop = () => {
+    save.reset();
+    setName(me.displayName ?? '');
+    setEditing(false);
   };
   return (
-    <Row name="Name" label="prefs-name">
-      <form
-        className="prefs-row__form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <input
-          id="prefs-name"
-          className="ac-input ac-input--md prefs-row__input"
-          value={name}
-          maxLength={200}
-          autoComplete="name"
-          placeholder={me.email}
-          onChange={(event) => {
-            save.reset();
-            setName(event.target.value);
-          }}
-          // Kept as it is left: no Save to press.
-          onBlur={submit}
-        />
-        {save.isSuccess && unchanged && (
-          <span className="prefs-row__saved" role="status">
-            Saved
+    <div className="prefs-row prefs-row--name">
+      <div className="prefs-row__text">
+        {editing ? (
+          <label className="prefs-row__name" htmlFor="prefs-name">
+            Name
+          </label>
+        ) : (
+          <span className="prefs-row__name">Name</span>
+        )}
+      </div>
+      <div className="prefs-row__value">
+        {editing ? (
+          <form
+            className="prefs-row__form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              finish();
+            }}
+          >
+            <input
+              id="prefs-name"
+              className="ac-input ac-input--md prefs-row__input"
+              value={name}
+              maxLength={200}
+              autoComplete="name"
+              placeholder={me.email}
+              // Opened to be changed: it is where the keys go.
+              autoFocus
+              onChange={(event) => {
+                save.reset();
+                setName(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape') return;
+                // Escape puts it back as it was, and leaves Settings open.
+                event.preventDefault();
+                event.stopPropagation();
+                stop();
+              }}
+              // Kept as it is left: no Save to press.
+              onBlur={finish}
+            />
+          </form>
+        ) : (
+          <span className="prefs-name">
+            <button
+              type="button"
+              className="prefs-name__edit"
+              aria-label="Edit name"
+              onClick={() => {
+                setName(me.displayName ?? '');
+                setEditing(true);
+              }}
+            >
+              <IconPencil size={15} stroke={1.75} aria-hidden="true" />
+            </button>
+            <span className={me.displayName === null ? 'prefs-name__none' : 'prefs-row__plain'}>
+              {me.displayName ?? 'None given'}
+            </span>
           </span>
         )}
-      </form>
-      <FormError error={save.error} />
-    </Row>
+        <FormError error={save.error} />
+      </div>
+    </div>
   );
 }
 
