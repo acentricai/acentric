@@ -213,7 +213,8 @@ describe('the setup link', () => {
     });
     type('Email', 'ada@example.test');
     fireEvent.submit(screen.getByRole('button', { name: 'Create account' }));
-    expect((await toast()).textContent).toBe('The body is not what this takes');
+    // What the server found wrong is said.
+    expect((await toast()).textContent).toBe('A password is 10 characters or more');
     expect(invalid('Password')).toBe(true);
     expect(invalid('Email')).toBe(false);
   });

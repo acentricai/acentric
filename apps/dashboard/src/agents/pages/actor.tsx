@@ -47,6 +47,7 @@ import { useMachines } from '../../machines/queries.ts';
 import { may as holds, useMe, type Me } from '../../me.ts';
 import { typing } from '../../shell/keyboard.ts';
 import {
+  ErrorToast,
   Ago,
   Button,
   copyText,
@@ -464,11 +465,7 @@ function StopDialog({
       }
     >
       <p className="ac-dialog__body">{sentence}</p>
-      {error !== null && (
-        <p className="ac-field__error form-error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorToast error={error} />
     </Dialog>
   );
 }
@@ -1533,8 +1530,7 @@ export function SendBar({
       </div>
       {(fieldError !== null || otherError !== null || answer !== null) && (
         <div className="composer__status" role="status">
-          {fieldError !== null && <p className="ac-field__error">{fieldError}</p>}
-          {otherError !== null && <p className="ac-field__error">{otherError}</p>}
+          <ErrorToast error={fieldError ?? otherError} />
           {answer !== null && fieldError === null && otherError === null && (
             <span className="session-status" key={answer}>
               <Status

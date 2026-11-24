@@ -29,6 +29,7 @@ import { isApiError } from './api.ts';
 import { displayText, CopyNotice, safeText } from './text.tsx';
 import { fullTime, relative, NOTHING } from './format.ts';
 import { usePopover } from '../popover.ts';
+import { ErrorToast } from '../ui.tsx';
 
 // Time, kept current
 
@@ -157,14 +158,9 @@ export function Field({
   );
 }
 
-/** An inline error under a form or in a dialog, in the API's words. */
+/** A request's error, in the API's words, as a toast. */
 export function FormError({ error }: { error: unknown }) {
-  if (error === null || error === undefined || error === false) return null;
-  return (
-    <p className="ac-field__error form-error" role="alert">
-      {displayText(errorText(error))}
-    </p>
-  );
+  return <ErrorToast error={error}>{displayText(errorText(error))}</ErrorToast>;
 }
 
 // Copying
@@ -823,11 +819,9 @@ export function Confirm({
       }
     >
       <p className="ac-dialog__body">{displayText(sentence)}</p>
-      {error != null && (
-        <p className="ac-field__error" role="alert">
-          {typeof error === 'string' ? displayText(error) : error}
-        </p>
-      )}
+      <ErrorToast error={error}>
+        {typeof error === 'string' ? displayText(error) : error}
+      </ErrorToast>
     </Dialog>
   );
 }
