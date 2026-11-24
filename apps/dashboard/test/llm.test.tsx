@@ -51,7 +51,7 @@ const choose = async (account: string, item: string) => {
 describe('the LLM providers section', () => {
   it('is in the sidebar for one who may manage accounts, and Usage for one who may read it', async () => {
     open('/usage', signedIn('viewer'));
-    expect(await screen.findByRole('heading', { name: 'Usage' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'LLM Usage' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Usage' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Accounts' })).toBeNull();
   });
