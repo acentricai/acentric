@@ -122,6 +122,19 @@ describe('the store on SQLite', () => {
     await after.store.close();
   });
 
+  it('stores the writes asked for before it was closed, when they come with the close', async () => {
+    // One thread, which reads as well, as a database in memory has: the close goes at once,
+    // with the writes before it.
+    const store = await SqliteStore.open(':memory:');
+    // Enough that the thread is still at the first when the rest and the close come.
+    const actors = Array.from({ length: 2_000 }, actorOf);
+    // Not waited for: the close is sent with them, and is taken with them.
+    const writes = actors.map((actor) => store.createActor(actor));
+    await store.close();
+    const settled = await Promise.allSettled(writes);
+    expect(settled.filter((one) => one.status === 'rejected')).toEqual([]);
+  });
+
   it('stores writes that come together in one transaction, and so waits for the disk once', async () => {
     const store = await SqliteStore.open(database());
     const actors = Array.from({ length: 50 }, actorOf);
