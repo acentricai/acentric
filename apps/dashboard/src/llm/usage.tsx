@@ -21,7 +21,6 @@ import {
   dollars,
   duration,
   percent,
-  PROVIDER_NAMES,
   providerName,
   rangeStart,
   ticks,
@@ -65,14 +64,16 @@ const written = (value: number, measure: Measure): string =>
   measure === 'cost' ? dollars(value) : compact(value);
 
 /**
- * The series a provider is drawn in: the same one whatever the range, in the order the providers
- * are known, so that a provider keeps its shade. Those past the fifth share the last.
+ * The hue a provider is drawn in: its own, whatever the range, so that it keeps it on every part
+ * of the page. One the dashboard does not know of is gray.
  */
-const KNOWN = Object.keys(PROVIDER_NAMES);
-const seriesOf = (provider: string): string => {
-  const at = KNOWN.indexOf(provider);
-  return `var(--series-${String(Math.min(at === -1 ? KNOWN.length : at, 4))})`;
+const HUES: { readonly [provider: string]: string } = {
+  anthropic: 'var(--chart-1)',
+  openai: 'var(--chart-2)',
+  fireworks: 'var(--chart-3)',
+  chatgpt: 'var(--chart-4)',
 };
+const seriesOf = (provider: string): string => HUES[provider] ?? 'var(--series-2)';
 
 export function UsagePage() {
   const [range, setRange] = useState<Range>('30');
@@ -485,10 +486,10 @@ function Bars({
 function Tokens({ total }: { total: UsageTotals | undefined }) {
   if (total === undefined) return null;
   const parts = [
-    { label: 'Input', value: total.input, series: 'var(--series-0)' },
-    { label: 'Read from cache', value: total.cacheRead, series: 'var(--series-1)' },
-    { label: 'Written to cache', value: total.cacheWrite, series: 'var(--series-2)' },
-    { label: 'Output', value: total.output, series: 'var(--series-3)' },
+    { label: 'Input', value: total.input, series: 'var(--chart-1)' },
+    { label: 'Read from cache', value: total.cacheRead, series: 'var(--chart-2)' },
+    { label: 'Written to cache', value: total.cacheWrite, series: 'var(--chart-3)' },
+    { label: 'Output', value: total.output, series: 'var(--chart-4)' },
   ];
   const whole = parts.reduce((sum, part) => sum + part.value, 0);
   return (
