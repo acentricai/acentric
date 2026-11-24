@@ -1465,7 +1465,7 @@ export class Engine {
    */
   #unloadPast(keep: DeploymentId): void {
     if (this.#loaded.size <= this.#maxLoaded) return;
-    for (const id of [...this.#loaded.keys()]) {
+    for (const id of this.#loaded.keys()) {
       if (this.#loaded.size <= this.#maxLoaded) break;
       if (id === keep || this.#calling.has(id)) continue;
       this.#loaded.delete(id);

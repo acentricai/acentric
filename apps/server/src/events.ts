@@ -105,13 +105,14 @@ export class Streams {
                 if (entries.length < CATCH_UP) break;
                 // The next page is read once this one is taken: one who reads slowly is not
                 // sent the whole conversation into memory to wait for them.
-                while (!closed && (controller.desiredSize ?? 0) <= 0) {
+                for (;;) {
+                  if (closed) return;
+                  if ((controller.desiredSize ?? 0) > 0) break;
                   await new Promise<void>((resolve) => {
                     room = resolve;
                   });
                   room = null;
                 }
-                if (closed) return;
               }
             }
             send({
