@@ -81,7 +81,9 @@ describe('a page inside a frame', () => {
 describe('a long name, shown short', () => {
   it('is its first words that fit, then …, or its first word cut when that alone is too long', () => {
     expect(shortOf('ci deploys')).toBe('ci deploys');
-    expect(shortOf('The first key, made when the engine first started')).toBe('The first…');
-    expect(shortOf('averyveryveryverylongnamewithoutspaces')).toBe('averyveryver…');
+    expect(shortOf('The first key, made when the engine first started')).toBe(
+      'The first key, made…',
+    );
+    expect(shortOf('averyveryveryverylongnamewithoutspaces')).toBe('averyveryveryverylon…');
   });
 });
