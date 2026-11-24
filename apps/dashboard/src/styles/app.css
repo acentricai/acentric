@@ -491,10 +491,16 @@ body {
 }
 
 /* The dialog: large, over the page, which is blurred behind it. */
+/* Its left edge just past the sidebar's, as wide again on the right: the page beside the
+   sidebar, but for a gap round it. About four fifths of the window down. */
 dialog.ac-dialog.prefs {
-  width: min(1240px, calc(100vw - 64px));
+  width: min(
+    1400px,
+    calc(100vw - 32px),
+    max(720px, calc(100vw - 2 * (var(--side-w, 240px) + 12px)))
+  );
   max-width: none;
-  height: min(860px, calc(100dvh - 64px));
+  height: min(1000px, calc(100dvh - 32px), max(540px, 80dvh));
   max-height: none;
   padding: 0;
   overflow: hidden;
@@ -518,20 +524,20 @@ dialog.ac-dialog.prefs::backdrop {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 14px 16px 14px 20px;
+  padding: 12px 12px 12px 18px;
   border-bottom: 1px solid var(--hairline);
 }
 
 .prefs__title {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
-  line-height: 24px;
+  line-height: 26px;
 }
 
 .prefs__body {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 220px 1fr;
   min-height: 0;
 }
 
@@ -540,7 +546,7 @@ dialog.ac-dialog.prefs::backdrop {
   flex-direction: column;
   gap: var(--space-3);
   min-height: 0;
-  padding: 16px 12px;
+  padding: 16px;
   overflow-y: auto;
   border-right: 1px solid var(--hairline);
   background: var(--panel);
@@ -622,7 +628,7 @@ dialog.ac-dialog.prefs::backdrop {
 .prefs__page {
   min-width: 0;
   min-height: 0;
-  padding: 20px 28px 32px;
+  padding: 20px 22px 28px;
   overflow-y: auto;
 }
 
