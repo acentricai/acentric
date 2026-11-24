@@ -7,12 +7,14 @@ import { afterEach, vi } from 'vitest';
 
 import { queryClient, whenSignedOut } from '../src/api.ts';
 import { makeRouter, signedOut } from '../src/router.tsx';
+import { resetUpdating } from '../src/updating.tsx';
 import { fakeServer } from './server.ts';
 import type { FakeServer } from './server.ts';
 
 afterEach(() => {
   cleanup();
   queryClient.clear();
+  resetUpdating();
   vi.unstubAllGlobals();
 });
 

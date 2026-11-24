@@ -20,6 +20,7 @@ import { SignInPage } from './pages/sign-in.tsx';
 import { AppShell } from './shell/AppShell.tsx';
 import { firstTab, SECTIONS } from './shell/nav.ts';
 import { NotFound } from './shell/NotFound.tsx';
+import { UpdatingGate } from './updating.tsx';
 import { signInSearch, tokenSearch } from './url.ts';
 
 /** Who is signed in, as the server says: undefined for no one. Rejects when it cannot say. */
@@ -33,7 +34,12 @@ async function signedIn() {
 }
 
 const root = createRootRoute({
-  component: Outlet,
+  // While the server takes a new version, every page says it is updating.
+  component: () => (
+    <UpdatingGate>
+      <Outlet />
+    </UpdatingGate>
+  ),
   notFoundComponent: NotFoundPage,
   errorComponent: FailedPage,
 });

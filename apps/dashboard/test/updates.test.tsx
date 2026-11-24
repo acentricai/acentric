@@ -2,9 +2,10 @@
 // release notes are written in.
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { Markdown, blocksOf } from '../src/markdown.tsx';
+import { reopening } from '../src/updating.tsx';
 import { open } from './render.tsx';
 import { fakeServer } from './server.ts';
 
@@ -249,4 +250,50 @@ describe('release notes in Markdown', () => {
     );
     expect(screen.queryByRole('link', { name: 'bad' })).toBeNull();
   });
+});
+
+describe('the dashboard while the server updates', () => {
+  const reopened: string[] = [];
+  const was = reopening.to;
+  beforeEach(() => {
+    reopened.length = 0;
+    reopening.to = (path) => void reopened.push(path);
+  });
+  afterEach(() => {
+    reopening.to = was;
+  });
+
+  it('says it is updating while the database is upgraded, and opens at home once it answers', async () => {
+    const server = signedIn();
+    server.health.upgrading = true;
+    open('/usage', server);
+    expect(await screen.findByRole('heading', { name: 'Updating…' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+    server.health.upgrading = false;
+    server.health.version = '0.17.0';
+    await waitFor(() => expect(reopened).toEqual(['/']), { timeout: 5000 });
+  }, 15_000);
+
+  it('says it is updating once the updater takes a version, and opens at home once it is done', async () => {
+    const server = signedIn();
+    server.areas.engine.updates.status = {
+      ...server.areas.engine.updates.status,
+      latest: '0.17.0',
+      next: '0.17.0',
+      updater: { state: 'updating', version: '0.17.0', at: null, error: null, changedAt: 1 },
+    };
+    const page = await section(server);
+    expect(await screen.findByRole('heading', { name: 'Updating…' })).toBeTruthy();
+    expect(page).toBeTruthy();
+    // While it restarts, nothing answers: and then the one before, as the updater put it back.
+    server.health.reached = false;
+    await new Promise((done) => setTimeout(done, 2500));
+    expect(reopened).toEqual([]);
+    server.health.reached = true;
+    server.areas.engine.updates.status = {
+      ...server.areas.engine.updates.status,
+      updater: { state: 'failed', version: '0.17.0', at: null, error: 'not healthy', changedAt: 2 },
+    };
+    await waitFor(() => expect(reopened).toEqual(['/']), { timeout: 5000 });
+  }, 15_000);
 });

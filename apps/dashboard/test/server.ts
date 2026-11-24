@@ -75,6 +75,8 @@ export function fakeServer() {
   const sandboxes: Sandbox[] = [];
   const actors: Actor[] = [];
   let made = 0;
+  /** What /health says: a version, and whether it is upgrading, or is not reached at all. */
+  const health = { version: '0.16.1', upgrading: false, reached: true };
   const shared = { people, agents, actors };
   const areaOf = {
     agents: agentsArea(shared),
@@ -344,7 +346,16 @@ export function fakeServer() {
   };
 
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
+    const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
+    // What says whether the server is updating: not a call of the API, and not counted.
+    if (url.pathname === '/health') {
+      if (!health.reached) throw new TypeError('Failed to fetch');
+      return json(health.upgrading ? 503 : 200, {
+        ok: !health.upgrading,
+        version: health.version,
+        ...(health.upgrading ? { upgrading: true } : {}),
+      });
+    }
     const method = init?.method ?? 'GET';
     const body =
       typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {};
@@ -357,6 +368,7 @@ export function fakeServer() {
   return {
     fetch,
     calls,
+    health,
     /** A person who has an account, signed in or not, an owner unless said. */
     person(email: string, password: string, signIn = false, role: Role = 'owner') {
       const added = add(email, password, role);
