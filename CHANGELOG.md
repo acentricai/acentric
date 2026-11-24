@@ -41,6 +41,11 @@ What changed in each version, for the people who run a server. What a version pr
   and usage past `ACENTRIC_RETAIN_ARCHIVED`, `ACENTRIC_RETAIN_AUDIT` and
   `ACENTRIC_RETAIN_USAGE`, when they are set ([DATA.md](DATA.md)). A new database gives back to
   the disk what is removed; `acentric-server compact` has one made before do so.
+- **A guide to running a server.** [deploy/README.md](deploy/README.md) goes from which
+  recipe, through what to have before it starts and its first start, to what to watch and do
+  while it runs. [SETTINGS.md](SETTINGS.md) has every setting. [VERSIONS.md](VERSIONS.md) says
+  which versions go to which at once and what an upgrade looks like as it goes, and each
+  recipe has how to upgrade it and go back.
 - **Fixed:** deleting an agent left its actors' machine commands in the database.
 - **Fixed:** the Kubernetes recipe's settings, replaced in its README's example, dropped
   `ACENTRIC_BACKUP_DIR`, so backups were on the data's volume: they are merged now.
