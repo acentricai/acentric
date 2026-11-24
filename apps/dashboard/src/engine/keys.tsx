@@ -23,7 +23,7 @@ import {
   errorText,
 } from '../ui.tsx';
 import { engine, queryClient } from './api.ts';
-import { grantable, PERMISSION_TEXT, reachText, SCOPES, type ScopeType } from './scopes.ts';
+import { grantable, reachText, SCOPES, type ScopeType } from './scopes.ts';
 
 import './keys.css';
 
@@ -35,6 +35,7 @@ export const keyQueries = {
   keys: ['keys'] as const,
   agents: ['agents', 'list'] as const,
   actorsOf: (agent: string) => ['actors', 'of', agent] as const,
+  allActors: ['actors', 'all'] as const,
   actor: (actor: string) => ['actors', actor] as const,
 };
 
@@ -301,17 +302,17 @@ export function NewKeyDialog({
   // The agent a key of one agent reaches, or whose actor a key of one actor reaches.
   const [agent, setAgent] = useState('');
   const [actor, setActor] = useState('');
-  const [ticked, setTicked] = useState<ReadonlySet<Permission>>(new Set());
   const [expiry, setExpiry] = useState<(typeof EXPIRIES)[number]['value']>('never');
   const formId = useId();
   const agents = useAgents(type !== 'engine');
   const actors = useQuery({
-    queryKey: keyQueries.actorsOf(agent),
-    queryFn: async ({ signal }) => (await engine.actorsOf(agent, signal)).items,
-    enabled: type === 'actor' && agent !== '',
+    queryKey: keyQueries.allActors,
+    queryFn: async ({ signal }) => (await engine.allActors(signal)).items,
+    enabled: type === 'actor',
   });
-  const offered = grantable(me, type);
-  const permissions = offered.filter((permission) => ticked.has(permission));
+  // Every permission the key's reach can hold, of those the maker holds: what to hold is not
+  // asked, for now.
+  const permissions = grantable(me, type);
   const scope: Scope =
     type === 'engine'
       ? { type: 'engine' }
@@ -322,20 +323,13 @@ export function NewKeyDialog({
     name.trim() !== '' &&
     permissions.length > 0 &&
     (type === 'engine' || (type === 'agent' ? agent !== '' : actor !== ''));
-  const tick = (permission: Permission, on: boolean) =>
-    setTicked((was) => {
-      const next = new Set(was);
-      if (on) next.add(permission);
-      else next.delete(permission);
-      return next;
-    });
   const create = useMutation({
     mutationFn: () => {
       const ms = EXPIRIES.find((each) => each.value === expiry)?.ms ?? null;
       return engine.createKey({
         label: name.trim(),
         scope,
-        permissions,
+        permissions: [...permissions],
         service: false,
         ...(ms === null ? {} : { expiresAt: Date.now() + ms }),
       });
@@ -403,22 +397,21 @@ export function NewKeyDialog({
             options={SCOPES.map((each) => [each, SCOPE_NAMES[each]] as const)}
             onChange={(value) => {
               setType(value);
+              setAgent('');
               setActor('');
             }}
           />
         </div>
-        {type !== 'engine' && (
+        {type === 'agent' && (
           <div className="ac-field">
             <span className="ac-field__label">Agent</span>
             <Dropdown
               label="Agent"
               value={agent}
               placeholder={agents.isPending ? 'Loading…' : 'Choose an agent'}
+              empty="No agents"
               options={(agents.data ?? []).map((each) => ({ value: each.id, label: each.name }))}
-              onChange={(value) => {
-                setAgent(value);
-                setActor('');
-              }}
+              onChange={setAgent}
             />
           </div>
         )}
@@ -428,7 +421,8 @@ export function NewKeyDialog({
             <Dropdown
               label="Actor"
               value={actor}
-              placeholder={agent !== '' && actors.isPending ? 'Loading…' : 'Choose an actor'}
+              placeholder={actors.isPending ? 'Loading…' : 'Choose an actor'}
+              empty="No actors"
               options={(actors.data ?? []).map((each) => ({
                 value: each.id,
                 label: each.name ?? each.id,
@@ -437,24 +431,6 @@ export function NewKeyDialog({
             />
           </div>
         )}
-        <div className="ac-field">
-          <span className="ac-field__label">Permissions</span>
-          <div className="scopes">
-            <fieldset className="scopes__product">
-              {offered.map((permission) => (
-                <label key={permission} className="check" title={PERMISSION_TEXT[permission]}>
-                  <input
-                    type="checkbox"
-                    checked={ticked.has(permission)}
-                    onChange={(event) => tick(permission, event.target.checked)}
-                  />
-                  <code>{permission}</code>
-                  <span className="note">{PERMISSION_TEXT[permission]}</span>
-                </label>
-              ))}
-            </fieldset>
-          </div>
-        </div>
       </form>
     </Dialog>
   );

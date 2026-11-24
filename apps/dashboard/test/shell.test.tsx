@@ -237,7 +237,6 @@ describe('the API keys section of Settings', () => {
     fireEvent.click(within(page).getByRole('button', { name: 'New key' }));
     const making = await screen.findByRole('dialog', { name: 'New key' });
     fireEvent.change(within(making).getByLabelText('Name'), { target: { value: 'ci' } });
-    fireEvent.click(within(making).getByLabelText(/actors:read/));
     fireEvent.click(within(making).getByRole('button', { name: 'New key' }));
     const shown = await screen.findByRole('dialog', { name: 'ci' });
     fireEvent.click(within(shown).getByRole('button', { name: 'Done' }));

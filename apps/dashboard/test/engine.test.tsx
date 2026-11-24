@@ -33,11 +33,6 @@ const rowOf = (text: string) => {
   if (row === undefined || row === null) throw new Error(`No row has ${text}`);
   return row;
 };
-const offered = () =>
-  within(dialog())
-    .getAllByRole('checkbox')
-    .map((box) => box.closest('label')?.querySelector('code')?.textContent);
-
 describe('the API keys page', () => {
   it('opens after the pages that read the agents too, as a fresh tab goes to it', async () => {
     // The Agents, Keys and Machines pages read the same list of agents, kept once: each must
@@ -64,11 +59,11 @@ describe('the API keys page', () => {
     press('New key');
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'ci' } });
     fireEvent.click(within(dialog()).getByRole('radio', { name: 'One agent' }));
-    // Only what a key of one agent can hold is offered.
-    expect(offered()).toEqual(HOLDABLE.agent);
+    // What it may do is not asked: it is given all a key of one agent can hold.
+    expect(within(dialog()).queryByRole('checkbox')).toBeNull();
+    expect(within(dialog()).queryByRole('button', { name: /^Actor: / })).toBeNull();
     fireEvent.click(await within(dialog()).findByRole('button', { name: /^Agent: / }));
     fireEvent.click(await within(dialog()).findByRole('menuitemradio', { name: 'orders' }));
-    fireEvent.click(within(dialog()).getByLabelText(/agents:read/));
     press('New key', dialog());
 
     const shown = await screen.findByRole('dialog', { name: 'ci' });
@@ -77,7 +72,7 @@ describe('the API keys page', () => {
     expect(server.areas.engine.keys[0]).toMatchObject({
       label: 'ci',
       scope: { type: 'agent', agent: ORDERS },
-      permissions: ['agents:read'],
+      permissions: [...HOLDABLE.agent],
       expiresAt: null,
     });
     press('Done', shown);
@@ -88,33 +83,49 @@ describe('the API keys page', () => {
     expect(document.body.textContent).not.toContain('secret-1');
   });
 
-  it('chooses a key’s actor among its agent’s, and offers what an actor’s key can hold', async () => {
+  it('chooses a key’s actor among every actor, and gives it all an actor’s key can hold', async () => {
     const server = signedIn();
     open('/keys', server);
     await screen.findByText('No keys');
     press('New key');
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'desk' } });
     fireEvent.click(within(dialog()).getByRole('radio', { name: 'One actor' }));
-    expect(offered()).toEqual(HOLDABLE.actor);
-    fireEvent.click(await within(dialog()).findByRole('button', { name: /^Agent: / }));
-    fireEvent.click(await within(dialog()).findByRole('menuitemradio', { name: 'orders' }));
+    expect(within(dialog()).queryByRole('button', { name: /^Agent: / })).toBeNull();
     fireEvent.click(await within(dialog()).findByRole('button', { name: /^Actor: / }));
     fireEvent.click(await within(dialog()).findByRole('menuitemradio', { name: 'eu-desk' }));
-    fireEvent.click(within(dialog()).getByLabelText(/actors:send/));
     press('New key', dialog());
     await screen.findByRole('dialog', { name: 'desk' });
+    expect(server.areas.engine.keys[0]?.permissions).toEqual([...HOLDABLE.actor]);
     press('Done', screen.getByRole('dialog', { name: 'desk' }));
     expect(await screen.findByText('Actor eu-desk')).toBeTruthy();
   });
 
-  it('offers only the permissions the person holds', async () => {
-    open('/keys', signedIn('member'));
+  it('gives a key all the permissions the person holds, and no others', async () => {
+    const server = signedIn('member');
+    open('/keys', server);
     await screen.findByText('No keys');
     press('New key');
-    expect(offered()).toEqual(
+    fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'mine' } });
+    press('New key', dialog());
+    await screen.findByRole('dialog', { name: 'mine' });
+    expect(server.areas.engine.keys[0]?.permissions).toEqual(
       PERMISSIONS.filter((permission) => ROLE_PERMISSIONS.member.includes(permission)),
     );
-    expect(offered()).not.toContain('users:manage');
+  });
+
+  it('says there is nothing to choose, and opens no empty list', async () => {
+    const server = fakeServer();
+    server.person('ada@example.test', 'a-password-for-tests', true, 'owner');
+    open('/keys', server);
+    await screen.findByText('No keys');
+    press('New key');
+    fireEvent.click(within(dialog()).getByRole('radio', { name: 'One agent' }));
+    const agent = await within(dialog()).findByRole('button', { name: 'Agent: No agents' });
+    expect((agent as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(dialog()).getByRole('radio', { name: 'One actor' }));
+    const actor = await within(dialog()).findByRole('button', { name: 'Actor: No actors' });
+    expect((actor as HTMLButtonElement).disabled).toBe(true);
+    expect(within(dialog()).queryByRole('menu')).toBeNull();
   });
 
   it('says why the server refused a key', async () => {
@@ -123,7 +134,6 @@ describe('the API keys page', () => {
     await screen.findByText('No keys');
     press('New key');
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'ci' } });
-    fireEvent.click(within(dialog()).getByLabelText(/audit:read/));
     server.refuseNext(() =>
       server.refused(403, 'forbidden', 'It does not hold audit:read, so it cannot give it'),
     );
@@ -139,7 +149,6 @@ describe('the API keys page', () => {
     await screen.findByText('No keys');
     press('New key');
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'old' } });
-    fireEvent.click(within(dialog()).getByLabelText(/agents:read/));
     press('New key', dialog());
     press('Done', await screen.findByRole('dialog', { name: 'old' }));
     press('Revoke', await waitFor(() => rowOf('old')));

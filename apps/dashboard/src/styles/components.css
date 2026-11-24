@@ -1672,6 +1672,10 @@ tr:hover .row-action,
   color: var(--ink-muted);
 }
 
+.dropdown__button:disabled {
+  cursor: default;
+}
+
 .dialog-form .dropdown,
 .dialog-form .dropdown__button {
   width: 100%;
