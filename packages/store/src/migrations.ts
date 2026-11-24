@@ -453,6 +453,12 @@ const MIGRATIONS: readonly string[] = [
   -- showed them. NULL for none.
   ALTER TABLE commands ADD COLUMN images TEXT;
   `,
+  // 5: the instructions an agent's code made for an actor.
+  `
+  -- An actor's own instructions, made by its agent's code when it was created or last moved
+  -- to another version of its agent. NULL for an actor whose agent's instructions are text.
+  ALTER TABLE actors ADD COLUMN instructions TEXT;
+  `,
 ];
 
 /** The version a database is at when it has had every migration. */

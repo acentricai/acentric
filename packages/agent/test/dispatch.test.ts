@@ -754,6 +754,94 @@ describe("an agent's schedule handler", () => {
   });
 });
 
+describe("an agent's instructions made for each actor", () => {
+  const given: unknown[] = [];
+  const made = entryOf(
+    new Agent({
+      provider: 'anthropic',
+      configuration: Configuration,
+      machine: true,
+      instructions: (actor) => {
+        given.push(actor);
+        if (actor.configuration.region === 'none') return 5 as unknown as string;
+        if (actor.configuration.region === 'later') return Promise.resolve('x') as never;
+        if (actor.configuration.region === 'broken') throw new RangeError('No such region');
+        return `You answer for ${actor.configuration.region}, in ${actor.machine.cwd}.`;
+      },
+    }),
+  );
+  const onMachine: BundleContext = {
+    ...context,
+    machine: { id: makeId('machine', source(3)), cwd: '~/work', env: { TOKEN: 'secret' } },
+  };
+
+  it('are said to be made by the code, and are no text of their own', () => {
+    const said = made.describe();
+    expect(said.instructions).toBe('');
+    expect(said.features).toEqual(['machine', 'actor-instructions']);
+    expect(agentDefinitionSchema.parse(said)).toEqual(said);
+    expect(entry.describe().features ?? []).not.toContain('actor-instructions');
+  });
+
+  it('are made from what the actor was created with and where it works: no variables, no secrets', async () => {
+    given.length = 0;
+    expect(await made.call('instructions.make', null, onMachine, host())).toEqual({
+      ok: true,
+      value: 'You answer for eu, in ~/work.',
+    });
+    expect(given).toEqual([
+      {
+        agent: context.agent,
+        agentName: 'support',
+        actor: context.actor,
+        actorName: null,
+        externalId: 'telegram:4411',
+        configuration: { region: 'eu', unit: 'hours' },
+        modelId: 'claude-opus-5-5',
+        reasoning: 'medium',
+        machine: { id: onMachine.machine?.id, cwd: '~/work' },
+      },
+    ]);
+    expect(Object.isFrozen(given[0])).toBe(true);
+  });
+
+  it('fail when the function throws, returns what is not text, or does not return at once', async () => {
+    const asked = (region: string) =>
+      made.call(
+        'instructions.make',
+        null,
+        { ...onMachine, configuration: { region, unit: 'hours' } },
+        host(),
+      );
+    expect(await asked('broken')).toEqual({
+      ok: false,
+      kind: 'error',
+      error: { name: 'RangeError', message: 'No such region' },
+    });
+    expect(await asked('none')).toMatchObject({
+      ok: false,
+      error: { message: 'it returned what is not text' },
+    });
+    expect(await asked('later')).toMatchObject({
+      ok: false,
+      error: {
+        message:
+          'it returned a promise: instructions are made at once, by a function that is not async',
+      },
+    });
+    expect(await entry.call('instructions.make', null, context, host())).toMatchObject({
+      ok: false,
+      error: { message: 'The agent has no function that makes its instructions' },
+    });
+  });
+
+  it('are text or a function: an agent with anything else is not one', () => {
+    expect(() =>
+      entryOf(new Agent({ provider: 'openai', instructions: 5 as never })).describe(),
+    ).toThrow('The instructions are not text, nor a function that makes them');
+  });
+});
+
 describe("an agent's MCP servers", () => {
   const withServers = (mcps: unknown) =>
     entryOf(new Agent({ provider: 'anthropic', instructions: '', mcps: mcps as never }));

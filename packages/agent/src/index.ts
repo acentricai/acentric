@@ -17,6 +17,12 @@ export { SecretNotSet } from './context.ts';
 export type { Context, Machine, MachineOf, Secrets } from './context.ts';
 export { InvalidAgent } from './dispatch.ts';
 export type { Input, InputSchemas } from './input.ts';
+export type {
+  Instructions,
+  InstructionsContext,
+  InstructionsMachine,
+  InstructionsMachineOf,
+} from './instructions.ts';
 export type { McpHeaders, McpServer } from './mcp.ts';
 export type { KnownModelId, KnownModels, ModelId, Provider, Reasoning } from './models.ts';
 export type {

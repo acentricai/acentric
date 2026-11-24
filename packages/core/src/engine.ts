@@ -92,6 +92,7 @@ import type { Fired } from './schedule.ts';
 import { Sandboxes } from './sandboxes.ts';
 import type { SandboxTimes } from './sandboxes.ts';
 import { IMAGE_SIDE } from './images.ts';
+import { ACTOR_INSTRUCTIONS, makeInstructions, makesInstructions } from './instructions.ts';
 import { instructionsOf } from './scaffold.ts';
 import { SecretsUnavailable, sealedFor } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
@@ -370,6 +371,7 @@ export class Engine {
       'compaction-settings',
       'codemode',
       'mcps',
+      ACTOR_INSTRUCTIONS,
       ...(this.machines === undefined ? [] : ['machine']),
     ];
     // Every actor's model can send its later self a note.
@@ -530,7 +532,7 @@ export class Engine {
           '</compacted>',
         ].join('\n');
       },
-      instructions: (actor, definition, own) => {
+      instructions: (actor, definition, own, made) => {
         const { machine } = actor;
         const facts = machine === null ? undefined : this.machines?.facts(machine.id);
         const family = familyOf(actor.modelId);
@@ -547,7 +549,8 @@ export class Engine {
               ? { images: { side: IMAGE_SIDE[definition.provider] ?? null } }
               : {}),
           },
-          definition.instructions,
+          // Its own, made by its agent's code, or its agent's, the same for every actor.
+          made ?? definition.instructions,
         );
       },
       fingerprint: (definition, own, instructions) =>
@@ -937,6 +940,23 @@ export class Engine {
       }
       configuration = checked.value;
     }
+    // An agent whose code makes each actor's instructions makes this one's now: they are its
+    // own from then on.
+    let instructions: string | null = null;
+    if (makesInstructions(definition)) {
+      const made = await makeInstructions(
+        (...args) => this.#timed(...args),
+        deployment.id,
+        contextOf({ ...actor, configuration }),
+      );
+      if (!made.ok) {
+        if (made.lost) throw new CodeUnavailable(made.why);
+        throw new InvalidAgent(
+          `The agent's instructions could not be made for the actor: ${made.why}`,
+        );
+      }
+      instructions = made.instructions;
+    }
     // Sealed before anything is stored: an engine that keeps no secrets takes none of these.
     const sealed = this.#sealEnv(actor.id, env);
     const { record, created } = await this.#store.createActor(
@@ -944,6 +964,7 @@ export class Engine {
       configurationGiven,
       sealed,
       given.parent?.call ?? null,
+      instructions,
     );
     return { actor: record.actor, created };
   }
@@ -1523,8 +1544,9 @@ export class Engine {
     const machine = path === 'configuration.validate' ? null : context.machine;
     let env: MachineEnv = {};
     try {
-      // The code is given the variables too, as they are now.
-      if (machine !== null) env = await this.#envOf(context.actor);
+      // The code is given the variables too, as they are now: not to make instructions with,
+      // which a model reads.
+      if (machine !== null && path !== 'instructions.make') env = await this.#envOf(context.actor);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, kind: 'error', error: { name: 'Error', message } };

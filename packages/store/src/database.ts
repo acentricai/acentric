@@ -335,6 +335,7 @@ type ActorRow = {
   reasoning: string;
   configuration: string | null;
   configuration_given: string | null;
+  instructions: string | null;
   sent: string | null;
   reasoning_from: number;
   reasoning_sent: string | null;
@@ -666,6 +667,7 @@ function recordOf(row: ActorRow): ActorRecord {
     nextSeq: row.next_seq,
     configurationGiven:
       row.configuration_given === null ? null : (JSON.parse(row.configuration_given) as Json),
+    instructions: row.instructions,
     sent: row.sent,
     reasoningFrom: row.reasoning_from,
     reasoningSent: row.reasoning_sent as ActorRecord['reasoningSent'],
@@ -1527,6 +1529,7 @@ export function operations(db: DatabaseSync) {
       configurationGiven: Json | null = null,
       env: string | null = null,
       spawnedBy: string | null = null,
+      instructions: string | null = null,
     ): { record: ActorRecord; created: boolean } {
       if (
         actor.parent !== null &&
@@ -1554,8 +1557,8 @@ export function operations(db: DatabaseSync) {
         `INSERT INTO actors (id, agent_id, deployment_id, deployment_version, pinned, behind, name, external_id,
            model, reasoning, configuration, configuration_given, sent, reasoning_from, status,
            last_turn, turn, owed, epoch, next_seq, created_at, archived_at, machine, machine_env,
-           parent_id, parent_name, spawned_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?, ?, ?, ?, ?, ?)`,
+           parent_id, parent_name, spawned_by, instructions)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
         actor.id,
         actor.agent,
         actor.deployment.id,
@@ -1578,6 +1581,7 @@ export function operations(db: DatabaseSync) {
         actor.parent?.id ?? null,
         actor.parent?.name ?? null,
         spawnedBy,
+        instructions,
       );
       return {
         record: {
@@ -1586,6 +1590,7 @@ export function operations(db: DatabaseSync) {
           epoch: 0,
           nextSeq: 1,
           configurationGiven,
+          instructions,
           sent: null,
           reasoningFrom: 1,
           reasoningSent: null,
@@ -1730,6 +1735,7 @@ export function operations(db: DatabaseSync) {
           more.push(['deployment_id', set.deployment.id]);
           more.push(['deployment_version', set.deployment.version]);
         }
+        if (set.instructions !== undefined) more.push(['instructions', set.instructions]);
         if (set.reasoningSent !== undefined) more.push(['reasoning_sent', set.reasoningSent]);
         if (set.pinned !== undefined) more.push(['pinned', set.pinned ? 1 : 0]);
         if (set.behind !== undefined) more.push(['behind', json(set.behind)]);

@@ -97,6 +97,7 @@ type Kept = {
   epoch: number;
   nextSeq: number;
   configurationGiven: Json | null;
+  instructions: string | null;
   sent: string | null;
   reasoningFrom: number;
   reasoningSent: Actor['reasoning'] | null;
@@ -583,6 +584,7 @@ export class MemoryStore implements Store {
     configurationGiven: Json | null = null,
     env: string | null = null,
     spawnedBy: string | null = null,
+    instructions: string | null = null,
   ): Promise<{ record: ActorRecord; created: boolean }> {
     const siblings = [...this.#actors.values()].filter((kept) => kept.actor.agent === actor.agent);
     if (actor.parent !== null && (await this.findChild(actor.parent.id, actor.parent.name))) {
@@ -602,6 +604,7 @@ export class MemoryStore implements Store {
       epoch: 0,
       nextSeq: 1,
       configurationGiven: copy(configurationGiven),
+      instructions,
       sent: null,
       reasoningFrom: 1,
       reasoningSent: null,
@@ -695,6 +698,7 @@ export class MemoryStore implements Store {
     if (change.set?.configurationGiven !== undefined) {
       kept.configurationGiven = copy(change.set.configurationGiven);
     }
+    if (change.set?.instructions !== undefined) kept.instructions = change.set.instructions;
     if (change.set?.reasoningSent !== undefined) kept.reasoningSent = change.set.reasoningSent;
     if (change.usage !== null) await this.recordUsage(change.usage);
     if (change.compaction !== undefined) {

@@ -114,6 +114,7 @@ export type CallOutcome =
  * The functions of an agent the engine calls, by path:
  *
  *   configuration.validate    (value)    what the schema returns for it
+ *   instructions.make         ()         the instructions of an actor, made from its context
  *   tools.<name>.execute      (args)     checks the arguments, then runs the tool
  *   inputs.<type>.handler     (payload)  checks the payload, then runs the handler
  *   schedule.handler          (fired)    what the notice of a schedule that fired says

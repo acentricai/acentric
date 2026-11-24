@@ -12,6 +12,7 @@ import type { CompactionSettings } from './compaction.ts';
 import type { MachineOf } from './context.ts';
 import { entryOf } from './dispatch.ts';
 import type { Input, InputSchemas } from './input.ts';
+import type { Instructions } from './instructions.ts';
 import type { McpServer } from './mcp.ts';
 import type { Provider } from './models.ts';
 import type { ScheduleOptions } from './schedule.ts';
@@ -45,8 +46,14 @@ export type AgentOptions<
    * when `false`, which it is without this. Its code's context has the machine's files.
    */
   readonly machine?: M;
-  /** What the model is told, besides what the engine tells it. */
-  readonly instructions: string;
+  /**
+   * What the model is told, besides what the engine tells it: text, or a function that makes
+   * it for each actor from what the actor was created with, such as its configuration and
+   * where it works. The function is pure and returns at once: it is run when an actor is
+   * created, and its instructions stay what it returned. It is run again only when the actor
+   * moves to another version of the agent, between turns.
+   */
+  readonly instructions: Instructions<NoInfer<TConfig>, NoInfer<M>>;
   /**
    * The schema of the configuration an actor is created with. What is given is checked
    * against it, and what it returns is in the context of the agent's code. Without it, an
@@ -96,6 +103,16 @@ export type AgentOptions<
  *       provider: 'anthropic',
  *       instructions: 'You review changes.',
  *     });
+ *
+ * Instructions made for each actor:
+ *
+ *     export default new Agent({
+ *       provider: 'anthropic',
+ *       configuration: z.object({ repo: z.string() }),
+ *       machine: true,
+ *       instructions: ({ configuration, machine }) =>
+ *         `You review changes to ${configuration.repo}, checked out at ${machine.cwd}.`,
+ *     });
  */
 export class Agent<
   P extends Provider = Provider,
@@ -109,7 +126,7 @@ export class Agent<
 > {
   readonly provider: P;
   readonly machine: M;
-  readonly instructions: string;
+  readonly instructions: Instructions<TConfig, M>;
   readonly configuration: Schema<TConfig, TConfigInput> | undefined;
   readonly tools: readonly AnyTool<TConfig, MachineOf<M>>[];
   readonly mcps: { readonly [name: string]: McpServer<TConfig, MachineOf<M>> };

@@ -676,6 +676,7 @@ export class SqliteStore implements Store {
     configurationGiven: Json | null = null,
     env: string | null = null,
     spawnedBy: string | null = null,
+    instructions: string | null = null,
   ): Promise<{ readonly record: ActorRecord; readonly created: boolean }> {
     return this.#write.ask(
       'createActor' satisfies Operation,
@@ -683,6 +684,7 @@ export class SqliteStore implements Store {
       configurationGiven,
       env,
       spawnedBy,
+      instructions,
     );
   }
 

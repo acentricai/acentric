@@ -746,6 +746,132 @@ export function upgradeSuite(name: string, open: () => Promise<Store>): void {
       });
     });
 
+    describe('instructions made for each actor', () => {
+      /** The agent with instructions its code makes from an actor's configuration. */
+      const making = (said: (region: string) => string) => ({
+        definition: {
+          instructions: '',
+          configuration: { schema: null },
+          features: ['actor-instructions'],
+        },
+        functions: {
+          // Without one, an actor is of the region it defaults to.
+          'configuration.validate': (given: Json) => given ?? { region: 'eu' },
+          'instructions.make': (_argument: Json, context: { configuration: Json | null }) =>
+            said((context.configuration as { region: string }).region),
+        },
+      });
+      const made = making((region) => `You answer for ${region}.`);
+      const remade = making((region) => `You answer for ${region}, and keep it short.`);
+      const broken = making(() => {
+        throw new RangeError('No such region');
+      });
+      const madeCalls = (one: ReturnType<World['engine']>) =>
+        one.executor.made.filter((call) => call.path === 'instructions.make');
+
+      it('are made when an actor is created, each from its own, and its model is sent them', async () => {
+        const one = w.engine([says('One.'), says('Two.')], { versions: { 'made@1': made } });
+        await one.deploy('made@1');
+        const eu = await one.createActor({ configuration: { region: 'eu' } });
+        const us = await one.createActor({ configuration: { region: 'us' } });
+        expect(madeCalls(one)).toHaveLength(2);
+        await one.say(eu.id, 'Hello.');
+        await one.it.settled(eu.id);
+        await one.say(us.id, 'Hello.');
+        await one.it.settled(us.id);
+        expect(one.steps.map((step) => step.instructions)).toEqual([
+          told('You answer for eu.'),
+          told('You answer for us.'),
+        ]);
+        expect(await store.loadActor(eu.id)).toMatchObject({ instructions: 'You answer for eu.' });
+        // An actor of an agent whose instructions are text has none of its own.
+        const plain = await one.createActor({ version: 1 });
+        expect(await store.loadActor(plain.id)).toMatchObject({ instructions: null });
+      });
+
+      it('stay what they were made: a change of its configuration, or an engine that starts again, makes none', async () => {
+        const one = w.engine([says('One.')], { versions: { 'made@1': made } });
+        await one.deploy('made@1');
+        const actor = await one.createActor({ configuration: { region: 'eu' } });
+        await one.it.updateActor(actor.id, { configuration: { region: 'us' }, reasoning: 'high' });
+
+        const again = w.engine([says('Two.')], { versions: { 'made@1': made } });
+        await again.say(actor.id, 'Hello.');
+        await again.it.settled(actor.id);
+        expect(again.steps[0]?.instructions).toBe(told('You answer for eu.'));
+        expect(madeCalls(one)).toHaveLength(1);
+        expect(madeCalls(again)).toEqual([]);
+      });
+
+      it('that cannot be made refuse the actor, which is not created', async () => {
+        const one = w.engine([], { versions: { 'broken@1': broken } });
+        await one.deploy('broken@1');
+        await expect(
+          one.createActor({ name: 'eu-desk', configuration: { region: 'eu' } }),
+        ).rejects.toMatchObject({
+          name: 'InvalidAgent',
+          message: "The agent's instructions could not be made for the actor: No such region",
+        });
+        expect((await one.it.listActors()).items).toEqual([]);
+      });
+
+      it('are made again when it moves to another version, and kept when they cannot be', async () => {
+        const one = w.engine([says('One.'), says('Two.'), says('Three.'), says('Four.')], {
+          versions: { 'made@2': made, 'broken@3': broken, 'orders@4': reworded },
+        });
+        const actor = await one.createActor();
+        const turn = async () => {
+          await one.say(actor.id, 'Hello.');
+          await one.it.settled(actor.id);
+        };
+        await turn();
+        await one.deploy('made@2');
+        await turn();
+        await one.deploy('broken@3');
+        await turn();
+        expect(await one.it.getActor(actor.id)).toMatchObject({
+          deployment: { version: 3 },
+          lastTurn: { end: 'ok' },
+        });
+        expect(one.failures).toEqual([
+          expect.objectContaining({
+            message: `The instructions of version 3 of the agent could not be made for the actor ${actor.id}, which keeps the ones it has: No such region`,
+          }),
+        ]);
+        await one.deploy('orders@4');
+        await turn();
+        expect(one.steps.map((step) => step.instructions)).toEqual([
+          told(w.definition.instructions),
+          told('You answer for eu.'),
+          told('You answer for eu.'),
+          told(KIND),
+        ]);
+        expect(await store.loadActor(actor.id)).toMatchObject({ instructions: null });
+      });
+
+      it('of an agent whose were text keep that text when its new version cannot make them', async () => {
+        const one = w.engine([says('One.')], { versions: { 'broken@2': broken } });
+        const actor = await one.createActor();
+        await one.deploy('broken@2');
+        const moved = await one.it.updateActor(actor.id, { version: 2 });
+        expect(moved.deployment.version).toBe(2);
+        await one.say(actor.id, 'Hello.');
+        await one.it.settled(actor.id);
+        expect(one.steps[0]?.instructions).toBe(told(w.definition.instructions));
+      });
+
+      it('are made again when a person moves it to another version', async () => {
+        const one = w.engine([says('One.')], { versions: { 'made@1': made, 'remade@2': remade } });
+        await one.deploy('made@1');
+        const actor = await one.createActor({ configuration: { region: 'eu' }, version: 2 });
+        await one.deploy('remade@2');
+        await one.it.updateActor(actor.id, { version: 3 });
+        await one.say(actor.id, 'Hello.');
+        await one.it.settled(actor.id);
+        expect(one.steps[0]?.instructions).toBe(told('You answer for eu, and keep it short.'));
+      });
+    });
+
     describe('the model’s reasoning', () => {
       const thought = (text: string) => reasoned('Thinking it through.', says(text));
       const versions = {

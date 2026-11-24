@@ -620,7 +620,8 @@ export interface Store {
 
   /**
    * Keeps a new actor, idle and with nothing said. `configurationGiven` is its configuration
-   * as it was given, and `env` the variables its commands are run with, sealed. When it has an
+   * as it was given, `env` the variables its commands are run with, sealed, and `instructions`
+   * its own, which its agent's code made for it. When it has an
    * external ID that an actor of its agent has already, that actor is given back and nothing
    * is kept. Rejects with `NameTaken` when its name is another's.
    */
@@ -630,6 +631,7 @@ export interface Store {
     env?: string | null,
     /** For a subagent: the call of its parent's model that spawned it. */
     spawnedBy?: string | null,
+    instructions?: string | null,
   ): Promise<{ readonly record: ActorRecord; readonly created: boolean }>;
   /**
    * The subagent an actor gave a name, with the call that spawned it. An actor's subagents
