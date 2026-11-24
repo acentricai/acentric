@@ -34,7 +34,12 @@ import {
   usageQuerySchema,
   usageReportSchema,
 } from './resources/accounts.ts';
-import { backupSchema, backupsSchema } from './resources/backups.ts';
+import {
+  backupSchema,
+  backupSettingsSchema,
+  backupsSchema,
+  setBackupSettingsRequestSchema,
+} from './resources/backups.ts';
 import {
   actorSchema,
   conversationEntrySchema,
@@ -1083,6 +1088,27 @@ export const routes = defineRoutes({
     response: backupSchema,
     status: 201,
     errors: ['unavailable'],
+  },
+  'backups.settings': {
+    method: 'GET',
+    path: '/v1/backups/settings',
+    summary:
+      "How the server backs itself up: the environment's settings, or those set through the API. Never the bucket's secret.",
+    auth: { on: 'engine', permission: 'backups:manage' },
+    response: backupSettingsSchema,
+    status: 200,
+    errors: [],
+  },
+  'backups.configure': {
+    method: 'PUT',
+    path: '/v1/backups/settings',
+    summary:
+      "Sets how the server backs itself up, in place of the environment's settings, without a restart. A bucket is checked first, by writing to it; its secret is kept sealed.",
+    auth: { on: 'engine', permission: 'backups:manage' },
+    body: setBackupSettingsRequestSchema,
+    response: backupSettingsSchema,
+    status: 200,
+    errors: ['conflict', 'unavailable'],
   },
 });
 
