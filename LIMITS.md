@@ -126,16 +126,18 @@ alone.
 
 ## Every limit there is
 
-|                                     |                                                                  |
-| ----------------------------------- | ---------------------------------------------------------------- |
-| Actors in a turn at once            | `ACENTRIC_MAX_TURNS`, 1,000 without it                           |
-| Actors kept in memory between turns | 1,000                                                            |
-| Processes of agents' code           | `ACENTRIC_CODE_PROCESSES`, 2 without it; each replaced past 1 GB |
-| An agent's code                     | 10 MB                                                            |
-| A request that deploys              | 40 MB; any other, 1 MB                                           |
-| An image or file from a machine     | 8 MB                                                             |
-| A secret                            | 64 KB                                                            |
-| A page of a list                    | 200                                                              |
-| How long a command is waited for    | 300 seconds                                                      |
-| How long a sandbox is kept, idle    | 30 days                                                          |
-| Servers on one folder of data       | 1                                                                |
+|                                       |                                                                      |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| Actors in a turn at once              | `ACENTRIC_MAX_TURNS`, 1,000 without it                               |
+| Actors kept in memory between turns   | 1,000                                                                |
+| Deployments' code held, for calls     | 300: past it, the one called longest ago is loaded again when called |
+| Emails whose failed sign-ins are kept | 10,000                                                               |
+| Processes of agents' code             | `ACENTRIC_CODE_PROCESSES`, 2 without it; each replaced past 1 GB     |
+| An agent's code                       | 10 MB                                                                |
+| A request that deploys                | 40 MB; any other, 1 MB                                               |
+| An image or file from a machine       | 8 MB                                                                 |
+| A secret                              | 64 KB                                                                |
+| A page of a list                      | 200                                                                  |
+| How long a command is waited for      | 300 seconds                                                          |
+| How long a sandbox is kept, idle      | 30 days                                                              |
+| Servers on one folder of data         | 1                                                                    |
