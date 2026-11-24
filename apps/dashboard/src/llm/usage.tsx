@@ -402,9 +402,6 @@ function TimeChart({
                         </span>
                       );
                     })}
-                {shown.whole !== null && shown.whole.failed > 0 && (
-                  <span>{compact(shown.whole.failed)} failed</span>
-                )}
               </div>
             )}
           </div>
