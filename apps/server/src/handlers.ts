@@ -230,7 +230,13 @@ export const handlers: Handlers = {
     if (scope.type === 'agent' || query.name !== undefined) {
       const one =
         query.name === undefined
-          ? await engine.getAgent((scope as { agent: Agent['id'] }).agent)
+          ? // A key of an agent that was deleted sees none: the list of one is empty.
+            await engine
+              .getAgent((scope as { agent: Agent['id'] }).agent)
+              .catch((error: unknown) => {
+                if (error instanceof AgentNotFound) return undefined;
+                throw error;
+              })
           : await engine.findAgent(query.name);
       return onePage(one !== undefined && reaches(scope, { agent: one.id }) ? [one] : []);
     }
