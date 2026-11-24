@@ -24,7 +24,7 @@ export class MemoryBus implements EventBus {
    */
   publish(actor: ActorId, event: ActorEvent): void {
     // As they are now: one may stop listening while it is told.
-    for (const listener of [...(this.#listeners.get(actor) ?? [])]) {
+    for (const listener of Array.from(this.#listeners.get(actor) ?? [])) {
       try {
         listener(event);
       } catch (error) {
