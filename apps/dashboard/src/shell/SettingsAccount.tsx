@@ -1,7 +1,7 @@
 // The Account section of Settings, as rows of a name and what it is, beside each other: the
-// person signed in, their name and role, where they are signed in, and their password.
+// person signed in, their name and role, and where they are signed in.
 
-import { PASSWORD_MIN, PHOTO_TYPES } from '@acentric/protocol';
+import { PHOTO_TYPES } from '@acentric/protocol';
 import { IconLogout, IconPencil, IconPhoto, IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -14,7 +14,7 @@ import { fullTime } from '../format.ts';
 import { useMe, type Me } from '../me.ts';
 import { sessionName } from '../pages/account.tsx';
 import { signOut } from '../sign-out.ts';
-import { Button, FormError, LoadError, Menu, MenuItem, Skeleton } from '../ui.tsx';
+import { FormError, LoadError, Menu, MenuItem, Skeleton } from '../ui.tsx';
 
 const ROLES: Record<Me['role'], string> = {
   owner: 'Owner',
@@ -89,7 +89,6 @@ export function AccountSettings() {
         </Row>
       </section>
       <SessionsGroup me={me.data} />
-      <PasswordGroup />
     </div>
   );
 }
@@ -185,84 +184,6 @@ function NameRow({ me }: { me: Me }) {
         {me.displayName ?? 'None given'}
       </span>
     </Row>
-  );
-}
-
-function PasswordGroup() {
-  const [current, setCurrent] = useState('');
-  const [password, setPassword] = useState('');
-  const change = useMutation({
-    mutationFn: () => api.call('me.password', { body: { current, password } }),
-    onSuccess: () => {
-      setCurrent('');
-      setPassword('');
-      void queryClient.invalidateQueries({ queryKey: sessionsKey });
-    },
-  });
-  const short = password.length > 0 && password.length < PASSWORD_MIN;
-  return (
-    <section className="prefs-group" aria-labelledby="prefs-password">
-      <h3 className="prefs-group__title" id="prefs-password">
-        Password
-      </h3>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          change.mutate();
-        }}
-      >
-        <Row name="Current password" label="prefs-current">
-          <input
-            id="prefs-current"
-            type="password"
-            className="ac-input ac-input--md prefs-row__input"
-            value={current}
-            autoComplete="current-password"
-            onChange={(event) => {
-              change.reset();
-              setCurrent(event.target.value);
-            }}
-          />
-        </Row>
-        <Row
-          name="New password"
-          note={
-            short
-              ? `A password is ${String(PASSWORD_MIN)} characters or more.`
-              : `${String(PASSWORD_MIN)} characters or more. Changing it signs you out everywhere but this browser.`
-          }
-          label="prefs-new"
-        >
-          <input
-            id="prefs-new"
-            type="password"
-            className="ac-input ac-input--md prefs-row__input"
-            value={password}
-            autoComplete="new-password"
-            aria-invalid={short || undefined}
-            onChange={(event) => {
-              change.reset();
-              setPassword(event.target.value);
-            }}
-          />
-        </Row>
-        <div className="prefs-group__actions">
-          <FormError error={change.error} />
-          {change.isSuccess && (
-            <span className="prefs-row__saved" role="status">
-              The password is changed.
-            </span>
-          )}
-          <Button
-            type="submit"
-            busy={change.isPending}
-            disabled={current === '' || password.length < PASSWORD_MIN}
-          >
-            Change password
-          </Button>
-        </div>
-      </form>
-    </section>
   );
 }
 
