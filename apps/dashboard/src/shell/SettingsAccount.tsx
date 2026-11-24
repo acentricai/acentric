@@ -2,6 +2,7 @@
 // person signed in, their name and role, and where they are signed in.
 
 import { PHOTO_TYPES } from '@acentric/protocol';
+import type { Session } from '@acentric/protocol';
 import { IconLogout, IconPencil, IconPhoto, IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -12,7 +13,6 @@ import { api, keys, queryClient } from '../api.ts';
 import { Avatar, CHOSEN_BYTES, sendPhoto, squarePhoto } from '../avatar.tsx';
 import { fullTime } from '../format.ts';
 import { useMe, type Me } from '../me.ts';
-import { sessionName } from '../pages/account.tsx';
 import { signOut } from '../sign-out.ts';
 import { FormError, LoadError, Menu, MenuItem, Skeleton } from '../ui.tsx';
 
@@ -266,4 +266,10 @@ function SessionsGroup({ me }: { me: Me }) {
       <FormError error={end.error} />
     </section>
   );
+}
+
+/** Where a session signed in from, in words. */
+export function sessionName(session: Session): string {
+  if (session.label !== null) return session.label;
+  return session.client === 'cli' ? 'The command' : 'A browser';
 }

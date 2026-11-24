@@ -58,7 +58,6 @@ function useCrumbs(): Crumb[] {
   const read = useActor(actor ?? '', actor !== undefined);
   const of = agent ?? (actor === undefined ? undefined : read.data?.agent);
   const named = useAgent(of ?? '');
-  if (pathname === '/account' || pathname.startsWith('/account/')) return [{ label: 'Account' }];
   const tab = tabAt(pathname)?.tab;
   const crumbs: Crumb[] = [];
   if (tab !== undefined) crumbs.push({ label: tab.name, link: { to: tab.path } });

@@ -13,84 +13,6 @@ const signedIn = (role: 'owner' | 'member' = 'owner') => {
   return server;
 };
 
-describe('the Backups page', () => {
-  it('says there is none yet, that they are on the data’s disk, and how often one is taken', async () => {
-    open('/backups', signedIn());
-    expect(
-      await screen.findByText('No backup has been taken since the server started'),
-    ).toBeTruthy();
-    expect(screen.getByText('The backups are on the disk of what they back up')).toBeTruthy();
-    expect(screen.getByText(/One is taken every day/)).toBeTruthy();
-    expect(screen.getByText('/data/backups')).toBeTruthy();
-    expect(screen.getByText('No backups there yet.')).toBeTruthy();
-  });
-
-  it('takes one when asked, and lists it', async () => {
-    const server = signedIn();
-    open('/backups', server);
-    await screen.findByText('No backup has been taken since the server started');
-    fireEvent.click(screen.getByRole('button', { name: /Back up now/ }));
-    expect(await screen.findByText('The last backup was taken')).toBeTruthy();
-    const table = within(screen.getByRole('table', { name: 'Backups' }));
-    await waitFor(() => expect(table.getAllByRole('row')).toHaveLength(2));
-    expect(table.getByText('Manual')).toBeTruthy();
-    expect(table.getByText('5.0 MB')).toBeTruthy();
-    expect(server.calls.some((call) => call.method === 'POST' && call.path === '/v1/backups')).toBe(
-      true,
-    );
-  });
-
-  it('says why the last one failed', async () => {
-    const server = signedIn();
-    server.areas.engine.backups.fail =
-      '/data/backups has 3 MB free, and a backup needs about 40 MB';
-    open('/backups', server);
-    await screen.findByText('No backup has been taken since the server started');
-    fireEvent.click(screen.getByRole('button', { name: /Back up now/ }));
-    expect(await screen.findByText('The last backup failed')).toBeTruthy();
-    expect((await screen.findAllByText(/has 3 MB free/)).length).toBeGreaterThan(0);
-  });
-
-  it('says the bucket they are copied to, and where each is, and not that they are lost with the disk', async () => {
-    const server = signedIn();
-    const status = server.areas.engine.backups.status;
-    if (status === null) throw new Error('backups are on');
-    status.bucket = { url: 's3://acme-backups/acentric', error: null };
-    open('/backups', server);
-    expect(await screen.findByText('s3://acme-backups/acentric')).toBeTruthy();
-    expect(screen.queryByText('The backups are on the disk of what they back up')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Back up now/ }));
-    const table = within(screen.getByRole('table', { name: 'Backups' }));
-    expect(await table.findByText('Server and bucket')).toBeTruthy();
-  });
-
-  it('says the bucket is not reached, and why', async () => {
-    const server = signedIn();
-    const status = server.areas.engine.backups.status;
-    if (status === null) throw new Error('backups are on');
-    status.bucket = {
-      url: 's3://acme-backups/acentric',
-      error: 'Listing s3://acme-backups/acentric failed: AccessDenied: Access Denied',
-    };
-    open('/backups', server);
-    expect(await screen.findByText('The bucket backups are copied to is not reached')).toBeTruthy();
-    expect(screen.getByText(/AccessDenied: Access Denied/)).toBeTruthy();
-  });
-
-  it('says a server with them off takes none, and offers no button', async () => {
-    const server = signedIn();
-    server.areas.engine.backups.status = null;
-    open('/backups', server);
-    expect(await screen.findByText('This server takes no backups of its own')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Back up now/ })).toBeNull();
-  });
-
-  it('is not there for one who may not manage backups', async () => {
-    open('/backups', signedIn('member'));
-    expect(await screen.findByText('Nothing here, or you may not see it.')).toBeTruthy();
-  });
-});
-
 describe('where a backup is, in words', () => {
   it('is the server, the bucket, or both', () => {
     const backup = {
@@ -149,6 +71,25 @@ describe('the Backups section of Settings', () => {
     await waitFor(() => expect(table.getAllByRole('row')).toHaveLength(2));
     expect(table.getByText('Manual')).toBeTruthy();
     expect(page.queryByText('The last backup was taken')).toBeNull();
+  });
+
+  it('says why the last one failed, and that the bucket is not reached', async () => {
+    const server = signedIn();
+    server.areas.engine.backups.fail =
+      '/data/backups has 3 MB free, and a backup needs about 40 MB';
+    const status = server.areas.engine.backups.status;
+    if (status === null) throw new Error('backups are on');
+    status.bucket = {
+      url: 's3://acme-backups/acentric',
+      error: 'Listing s3://acme-backups/acentric failed: AccessDenied: Access Denied',
+    };
+    const page = within(await section(server));
+    expect(await page.findByText('The bucket backups are copied to is not reached')).toBeTruthy();
+    expect(page.getByText(/AccessDenied: Access Denied/)).toBeTruthy();
+    expect(page.getByText('Server and bucket')).toBeTruthy();
+    fireEvent.click(page.getByRole('button', { name: 'Back up now' }));
+    expect(await page.findByText('The last backup failed')).toBeTruthy();
+    expect((await page.findAllByText(/has 3 MB free/)).length).toBeGreaterThan(0);
   });
 
   it('turns them off, once asked whether to', async () => {
