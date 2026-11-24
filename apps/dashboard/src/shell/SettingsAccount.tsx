@@ -1,5 +1,5 @@
 // The Account section of Settings, as rows of a name and what it is, beside each other: the
-// person signed in, their name and role, their password, and where they are signed in.
+// person signed in, their name and role, where they are signed in, and their password.
 
 import { PASSWORD_MIN, PHOTO_TYPES, type Session } from '@acentric/protocol';
 import { IconPencil, IconPhoto, IconTrash } from '@tabler/icons-react';
@@ -86,8 +86,8 @@ export function AccountSettings() {
           <span className="prefs-row__plain">{ROLES[me.data.role]}</span>
         </Row>
       </section>
-      <PasswordGroup />
       <SessionsGroup me={me.data} />
+      <PasswordGroup />
     </div>
   );
 }
