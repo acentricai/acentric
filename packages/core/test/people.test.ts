@@ -545,6 +545,31 @@ describe('people', () => {
 });
 
 describe('a person’s API key', () => {
+  it('holds a service’s key made with it to the person too, as removing them takes it', async () => {
+    const { people, keys, owner, invited, as } = world();
+    const ada = await as(await owner());
+    const grace = await invited(ada, 'member', 'grace@example.com');
+    const hers = await keys.create(await as(grace), {
+      label: 'hers',
+      scope: { type: 'engine' },
+      permissions: ['keys:manage', 'agents:deploy', 'actors:read'],
+    });
+    const service = await keys.create(await keys.authenticate(hers.token), {
+      label: 'a service’s, made with hers',
+      scope: { type: 'engine' },
+      permissions: ['agents:deploy', 'actors:read'],
+      service: true,
+    });
+    expect((await keys.authenticate(service.token)).owner).toBeNull();
+
+    await people.update(ada, grace.user.id, { role: 'viewer' });
+    expect((await keys.authenticate(service.token)).permissions).toEqual(['actors:read']);
+    await people.update(ada, grace.user.id, { disabled: true });
+    await expect(keys.authenticate(service.token)).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+  });
+
   it('does no more than the person may now, and stops when they can no longer sign in', async () => {
     const { people, keys, owner, invited, as } = world();
     const ada = await as(await owner());

@@ -106,6 +106,8 @@ function holderOf(principal: Principal): Holder {
 const TOKEN = /^ak_([0-9a-z]{26})_([A-Za-z0-9_-]{43})$/;
 /** How often at most a key's last use is written down. */
 const USED_EVERY_MS = 60_000;
+/** How many keys above a key are looked at: more than any chain of keys made by keys is. */
+const MOST_PARENTS = 64;
 
 const hashOf = (secret: string): Buffer => createHash('sha256').update(secret).digest();
 
@@ -251,11 +253,21 @@ export class Keys {
     const now = this.#clock();
     if (key.expiresAt !== null && key.expiresAt <= now) throw refused;
     let { permissions } = key;
-    if (key.owner !== null && this.#holderOf !== undefined) {
-      const holder = await this.#holderOf(key.owner);
-      if (holder === undefined || holder.disabled) throw refused;
-      // What its person may no longer do, it may no longer do.
-      permissions = permissions.filter((one) => ROLE_PERMISSIONS[holder.role].includes(one));
+    // What its person may no longer do, it may no longer do; nor what the person of a key that
+    // made it may no longer do, as a service's key made with a person's: that one goes with
+    // their key when they are removed, and is held to them until then.
+    let holding: StoredKey | undefined = stored;
+    for (let depth = 0; holding !== undefined && depth < MOST_PARENTS; depth += 1) {
+      const owner = holding.key.owner;
+      if (owner !== null && this.#holderOf !== undefined) {
+        const holder = await this.#holderOf(owner);
+        if (holder === undefined || holder.disabled) throw refused;
+        permissions = permissions.filter((one) => ROLE_PERMISSIONS[holder.role].includes(one));
+      }
+      if (holding.parent === null) break;
+      holding = await this.#store.loadKey(holding.parent);
+      // A key whose maker was revoked was revoked with it.
+      if (holding === undefined) throw refused;
     }
     const touched = this.#touched.get(key.id) ?? key.lastUsedAt;
     if (touched === null || now - touched >= USED_EVERY_MS) {
