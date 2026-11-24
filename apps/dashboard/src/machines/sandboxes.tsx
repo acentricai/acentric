@@ -5,15 +5,10 @@ import { IconArrowLeft, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
-import type {
-  MachineAgents,
-  Sandbox,
-  SandboxProviderAccount as Provider,
-  SandboxState,
-} from '@acentric/protocol';
+import type { Sandbox, SandboxProviderAccount as Provider, SandboxState } from '@acentric/protocol';
 
 import { queryClient } from '../api.ts';
-import { AgentsField, agentsText, useAgentNames } from './agents.tsx';
+import { agentsText, useAgentNames } from './agents.tsx';
 import { engine } from './api.ts';
 import { keys, useProviders, useSandboxes } from './queries.ts';
 import { displayText, safeText } from './text.tsx';
@@ -404,7 +399,6 @@ function CreateSandboxDialog({ provider, onClose }: { provider: Provider; onClos
   const [size, setSize] = useState(1);
   const [idle, setIdle] = useState(3600);
   const [name, setName] = useState('');
-  const [agents, setAgents] = useState<MachineAgents>('*');
   const form = useId();
   const create = useMutation({
     mutationFn: () =>
@@ -412,7 +406,8 @@ function CreateSandboxDialog({ provider, onClose }: { provider: Provider; onClos
         provider: provider.id,
         ...(SIZES[size] ?? SIZES[1]),
         idleTimeoutSeconds: idle,
-        agents,
+        // For every agent, and any deployed later.
+        agents: '*',
         ...(name.trim() === '' ? {} : { name: name.trim() }),
       }),
     onSuccess: () => {
@@ -497,7 +492,6 @@ function CreateSandboxDialog({ provider, onClose }: { provider: Provider; onClos
             />
           )}
         </Field>
-        <AgentsField value={agents} onChange={setAgents} disabled={create.isPending} />
         <p className="note" role={create.isPending ? 'status' : undefined}>
           {create.isPending ? (
             'Creating the sandbox and waiting for its daemon to connect…'
