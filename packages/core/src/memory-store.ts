@@ -20,7 +20,8 @@ import type {
   SandboxProviderId,
   Session,
   SessionId,
-  UsageGroup,
+  Page,
+  UsageCall,
   UsageReport,
   User,
   UserId,
@@ -62,7 +63,8 @@ import type {
   StoredUser,
 } from './store.ts';
 
-import { reportOf } from './usage.ts';
+import { callsOf, reportOf } from './usage.ts';
+import type { UsageCallsAsked, UsageGrouping } from './usage.ts';
 import type { UsageFilter, UsageRecord } from './usage.ts';
 
 /**
@@ -391,8 +393,12 @@ export class MemoryStore implements Store {
       .map((agent) => agent.id);
   }
 
-  async usage(filter: UsageFilter = {}, by?: UsageGroup): Promise<UsageReport> {
-    return reportOf(this.#usage, filter, by);
+  async usage(filter: UsageFilter = {}, grouping?: UsageGrouping): Promise<UsageReport> {
+    return reportOf(this.#usage, filter, grouping);
+  }
+
+  async usageCalls(asked: UsageCallsAsked): Promise<Page<UsageCall>> {
+    return callsOf(this.#usage, asked);
   }
 
   async addKey(key: StoredKey): Promise<void> {

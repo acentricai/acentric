@@ -28,6 +28,7 @@ import type {
   ResponseOf,
   RouteId,
   routes,
+  Scope,
   Updates,
 } from '@acentric/protocol';
 import type { z } from 'zod';
@@ -121,6 +122,23 @@ function pageOf<T extends { readonly id: string }>(
   const rest = cursor === undefined ? all : all.filter((item) => item.id > cursor);
   const items = rest.slice(0, limit);
   return { items, nextCursor: rest.length > limit ? (items.at(-1)?.id ?? null) : null };
+}
+
+/**
+ * The usage a key is told of: what it reaches, whatever it asks for. Undefined when it asks for
+ * an agent or an actor it does not reach: of those there is nothing.
+ */
+function reachedBy(scope: Scope, filter: UsageFilter): UsageFilter | undefined {
+  const reached =
+    scope.type === 'engine'
+      ? filter
+      : scope.type === 'agent'
+        ? { ...filter, agent: scope.agent }
+        : { ...filter, actor: scope.actor };
+  return (filter.agent !== undefined && filter.agent !== reached.agent) ||
+    (filter.actor !== undefined && filter.actor !== reached.actor)
+    ? undefined
+    : reached;
 }
 
 const refOf = (granted: Granted): PrincipalRef =>
@@ -748,22 +766,17 @@ export const handlers: Handlers = {
     return undefined;
   },
   'usage.get': ({ query, scope }, { engine }) => {
-    const { by, ...asked } = query;
-    const filter: UsageFilter = defined(asked);
-    // A key is told of what it reaches, whatever it asks for: of the rest there is nothing.
-    const reached =
-      scope.type === 'engine'
-        ? filter
-        : scope.type === 'agent'
-          ? { ...filter, agent: scope.agent }
-          : { ...filter, actor: scope.actor };
-    if (
-      (filter.agent !== undefined && filter.agent !== reached.agent) ||
-      (filter.actor !== undefined && filter.actor !== reached.actor)
-    ) {
-      return reportOf([], {}, by);
-    }
-    return engine.usage(reached, by);
+    const { by, split, tz, ...asked } = query;
+    const grouping = defined({ by, split, tz });
+    const reached = reachedBy(scope, defined(asked));
+    return reached === undefined ? reportOf([], {}, grouping) : engine.usage(reached, grouping);
+  },
+  'usage.calls': ({ query, scope }, { engine }) => {
+    const { limit, cursor, ...asked } = query;
+    const reached = reachedBy(scope, defined(asked));
+    return reached === undefined
+      ? { items: [], nextCursor: null }
+      : engine.usageCalls({ ...reached, limit, ...defined({ cursor }) });
   },
   'usage.actor': (asked, { engine }) => engine.usage({ actor: actorOf(asked).id }),
 

@@ -37,14 +37,15 @@ import type {
   StoppedOnMachine,
   TaskStatus,
   TaskStoppedBy,
-  UsageGroup,
+  Page,
+  UsageCall,
   UsageReport,
   User,
   UserId,
 } from '@acentric/protocol';
 
 import type { ActorRecord, Change, StoredCompaction } from './state.ts';
-import type { UsageFilter, UsageRecord } from './usage.ts';
+import type { UsageCallsAsked, UsageFilter, UsageGrouping, UsageRecord } from './usage.ts';
 
 /** A commit named an epoch that has passed: something else has written to the actor since. */
 export class StaleEpoch extends Error {
@@ -509,7 +510,9 @@ export interface Store {
    * What was used, added up: every call of a model that a filter leaves, and by a group as
    * well when one is asked for. A call is written with the step that ends it (see `commit`).
    */
-  usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport>;
+  usage(filter?: UsageFilter, grouping?: UsageGrouping): Promise<UsageReport>;
+  /** A page of the calls a filter leaves, newest first. */
+  usageCalls(asked: UsageCallsAsked): Promise<Page<UsageCall>>;
   /** Writes down a call of a model that no step of a turn ends: one that compacted a conversation. */
   recordUsage(record: UsageRecord): Promise<void>;
 

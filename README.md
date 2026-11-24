@@ -64,8 +64,9 @@ promises, how to check that an image is the one released, and what an upgrade ca
   `acentric accounts add` and checked with the provider before it is kept. No key is read from
   the environment. The first account of a provider is its default, and an agent can be given
   another.
-- Every call of a model is written down with what it used and cost. `GET /v1/usage` adds it
-  up, by agent, actor, account, provider, model or day.
+- Every call of a model is written down with what it used, cost and took. `GET /v1/usage` adds
+  it up, by agent, actor, account, provider, model, day or hour (in a time zone asked for),
+  failure, kind or version, and each of those by another. `GET /v1/usage/calls` lists the calls.
 - Its API is described at `/v1/openapi.json`, and `@acentric/client` calls it.
 
 Every setting is in [SETTINGS.md](SETTINGS.md).

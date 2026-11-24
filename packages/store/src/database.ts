@@ -37,10 +37,13 @@ import type {
   StoredSession,
   StoredUser,
   Turn,
+  UsageCallsAsked,
   UsageFilter,
+  UsageGrouping,
   UsageRecord,
   StoredPhoto,
 } from '@acentric/core';
+import { percentileOf, timeKey } from '@acentric/core';
 import type {
   AccountId,
   Actor,
@@ -62,6 +65,8 @@ import type {
   SandboxProviderId,
   Session,
   SessionId,
+  Page,
+  UsageCall,
   UsageGroup,
   UsageReport,
   UsageTotals,
@@ -118,6 +123,8 @@ const SUMS = `COUNT(*) AS calls,
   COALESCE(SUM(CASE WHEN cost_source = 'estimated' THEN cost ELSE 0 END), 0) AS estimated_cost,
   COALESCE(SUM(failure IS NULL AND cost IS NULL), 0) AS unpriced,
   COALESCE(SUM(duration_ms), 0) AS duration_ms,
+  usage_ms(duration_ms, failure, 0.5) AS median_ms,
+  usage_ms(duration_ms, failure, 0.95) AS p95_ms,
   MIN(at) AS first,
   MAX(at) AS last`;
 
@@ -136,6 +143,8 @@ type SumsRow = {
   estimated_cost: number;
   unpriced: number;
   duration_ms: number;
+  median_ms: number | null;
+  p95_ms: number | null;
   first: number | null;
   last: number | null;
 };
@@ -155,12 +164,17 @@ function totalsOfRow(row: SumsRow): UsageTotals {
     estimatedCost: row.estimated_cost,
     unpriced: row.unpriced,
     durationMs: row.duration_ms,
+    medianMs: row.median_ms,
+    p95Ms: row.p95_ms,
     first: row.first,
     last: row.last,
   };
 }
 
-/** What each group of usage is by, as SQLite reads it off a row. */
+/**
+ * What each group of usage is by, as SQLite reads it off a row. A day or an hour is in the time
+ * zone given as the one value it takes, as the engine names one.
+ */
 const GROUP_BY: { readonly [G in UsageGroup]: string } = {
   agent: 'agent_id',
   actor: 'actor_id',
@@ -168,9 +182,110 @@ const GROUP_BY: { readonly [G in UsageGroup]: string } = {
   account: "COALESCE(account_id, '')",
   provider: 'provider',
   model: 'model',
-  // A day in UTC, as the engine names one.
-  day: "strftime('%Y-%m-%d', at / 1000, 'unixepoch')",
+  day: "usage_time(at, 'day', ?)",
+  hour: "usage_time(at, 'hour', ?)",
+  failure: "COALESCE(failure, '')",
+  kind: 'kind',
+  version: 'CAST(version AS TEXT)',
 };
+
+/** The values a group's expression takes: the time zone of a day's or an hour's. */
+const groupValues = (by: UsageGroup, tz: string | undefined): SQLInputValue[] =>
+  by === 'day' || by === 'hour' ? [tz ?? 'UTC'] : [];
+
+/** The functions the queries of usage call, which SQLite does not have: given to each database. */
+function addUsageFunctions(db: DatabaseSync): void {
+  db.function('usage_time', { deterministic: true }, (at, unit, tz) =>
+    timeKey(Number(at), unit === 'hour' ? 'hour' : 'day', typeof tz === 'string' ? tz : undefined),
+  );
+  // How long answered calls took: the least that a share of them took no longer than. What it
+  // keeps between rows is a plain object, which SQLite never sees: its types say otherwise.
+  type Kept = { durations: number[]; share: number };
+  const kept = (value: unknown) => value as Kept;
+  db.aggregate('usage_ms', {
+    start: () => ({ durations: [], share: 0.5 }) satisfies Kept as unknown as SQLInputValue,
+    step: (so_far, duration, failure, share) => {
+      const it = kept(so_far);
+      if (failure === null) it.durations.push(Number(duration));
+      it.share = Number(share);
+      return it as unknown as SQLInputValue;
+    },
+    result: (so_far) => percentileOf(kept(so_far).durations, kept(so_far).share),
+  });
+}
+
+type CallRow = {
+  id: number;
+  at: number;
+  actor_id: ActorId;
+  root_actor_id: ActorId;
+  kind: UsageCall['kind'];
+  agent_id: AgentId;
+  version: number;
+  account_id: AccountId | null;
+  provider: string;
+  model: string;
+  failure: string | null;
+  total_input: number;
+  input: number;
+  output: number;
+  reasoning: number;
+  cache_read: number;
+  cache_write: number;
+  web_searches: number;
+  cost: number | null;
+  cost_source: UsageCall['costSource'];
+  duration_ms: number;
+};
+
+function callOfRow(row: CallRow): UsageCall {
+  return {
+    at: row.at,
+    actor: row.actor_id,
+    root: row.root_actor_id,
+    agent: row.agent_id,
+    version: row.version,
+    account: row.account_id,
+    provider: row.provider,
+    model: row.model,
+    kind: row.kind,
+    failure: row.failure,
+    totalInput: row.total_input,
+    input: row.input,
+    cacheRead: row.cache_read,
+    cacheWrite: row.cache_write,
+    output: row.output,
+    reasoning: row.reasoning,
+    webSearches: row.web_searches,
+    cost: row.cost,
+    costSource: row.cost_source,
+    durationMs: row.duration_ms,
+  };
+}
+
+/** The clauses and values of a filter of usage, as SQLite reads them. */
+function usageWhere(filter: UsageFilter): { clauses: string[]; values: SQLInputValue[] } {
+  const clauses: string[] = [];
+  const values: SQLInputValue[] = [];
+  const only = (clause: string, value: string | number | undefined) => {
+    if (value === undefined) return;
+    clauses.push(clause);
+    values.push(value);
+  };
+  only('at >= ?', filter.from);
+  only('at < ?', filter.to);
+  only('agent_id = ?', filter.agent);
+  only('actor_id = ?', filter.actor);
+  only('root_actor_id = ?', filter.root);
+  only('account_id = ?', filter.account);
+  only('provider = ?', filter.provider);
+  only('model = ?', filter.model);
+  only('kind = ?', filter.kind);
+  if (filter.failed !== undefined) {
+    clauses.push(filter.failed ? 'failure IS NOT NULL' : 'failure IS NULL');
+  }
+  return { clauses, values };
+}
 
 type AccountRow = { account: string; sealed: string };
 
@@ -639,6 +754,7 @@ export const WRITES: ReadonlySet<Operation> = new Set([
 
 export function open(path: string, readOnly: boolean, fullFsync = false): DatabaseSync {
   const db = new DatabaseSync(path, { readOnly });
+  addUsageFunctions(db);
   if (!readOnly) {
     // What is removed is given back to the disk, a little at a time, as the server asks: for a
     // new database, which is made so before anything is written to it; for one made before,
@@ -1073,34 +1189,59 @@ export function operations(db: DatabaseSync) {
       ).map((row) => row.id);
     },
 
-    usage(filter: UsageFilter = {}, by?: UsageGroup): UsageReport {
-      const where: string[] = [];
-      const values: SQLInputValue[] = [];
-      const only = (clause: string, value: string | number | undefined) => {
-        if (value === undefined) return;
-        where.push(clause);
-        values.push(value);
-      };
-      only('at >= ?', filter.from);
-      only('at < ?', filter.to);
-      only('agent_id = ?', filter.agent);
-      only('actor_id = ?', filter.actor);
-      only('root_actor_id = ?', filter.root);
-      only('account_id = ?', filter.account);
-      only('provider = ?', filter.provider);
-      only('model = ?', filter.model);
-      only('kind = ?', filter.kind);
-      const left = where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`;
+    usage(filter: UsageFilter = {}, grouping: UsageGrouping = {}): UsageReport {
+      const { clauses, values } = usageWhere(filter);
+      const left = clauses.length === 0 ? '' : ` WHERE ${clauses.join(' AND ')}`;
       const totals = totalsOfRow(
         get<SumsRow>(`SELECT ${SUMS} FROM usage${left}`, ...values) as SumsRow,
       );
+      const { by, split, tz } = grouping;
       if (by === undefined) return { totals };
       const groups = all<SumsRow>(
         `SELECT ${GROUP_BY[by]} AS key, ${SUMS} FROM usage${left}
          GROUP BY key ORDER BY cost DESC, key`,
+        ...groupValues(by, tz),
         ...values,
       ).map((row) => ({ key: row.key ?? '', totals: totalsOfRow(row) }));
-      return { totals, groups };
+      if (split === undefined) return { totals, groups };
+      // Each group's own groups, in one query: each by the one it is of, what cost most first.
+      const within = new Map<string, { key: string; totals: UsageTotals }[]>();
+      for (const row of all<SumsRow & { outer: string | null }>(
+        `SELECT ${GROUP_BY[by]} AS outer, ${GROUP_BY[split]} AS key, ${SUMS} FROM usage${left}
+         GROUP BY outer, key ORDER BY cost DESC, key`,
+        ...groupValues(by, tz),
+        ...groupValues(split, tz),
+        ...values,
+      )) {
+        const outer = row.outer ?? '';
+        const of = within.get(outer) ?? [];
+        of.push({ key: row.key ?? '', totals: totalsOfRow(row) });
+        within.set(outer, of);
+      }
+      return {
+        totals,
+        groups: groups.map((group) => ({ ...group, groups: within.get(group.key) ?? [] })),
+      };
+    },
+
+    usageCalls(asked: UsageCallsAsked): Page<UsageCall> {
+      const { clauses, values } = usageWhere(asked);
+      const before = asked.cursor === undefined ? NaN : Number(asked.cursor);
+      if (Number.isInteger(before)) {
+        clauses.push('id < ?');
+        values.push(before);
+      }
+      const left = clauses.length === 0 ? '' : ` WHERE ${clauses.join(' AND ')}`;
+      const rows = all<CallRow>(
+        `SELECT * FROM usage${left} ORDER BY id DESC LIMIT ?`,
+        ...values,
+        asked.limit + 1,
+      );
+      const items = rows.slice(0, asked.limit);
+      return {
+        items: items.map(callOfRow),
+        nextCursor: rows.length > asked.limit ? String(items.at(-1)?.id ?? '') : null,
+      };
     },
 
     addKey(stored: StoredKey): void {

@@ -40,7 +40,9 @@ import type {
   StoredLink,
   StoredSession,
   StoredUser,
+  UsageCallsAsked,
   UsageFilter,
+  UsageGrouping,
   UsageRecord,
   StoredPhoto,
 } from '@acentric/core';
@@ -63,7 +65,8 @@ import type {
   SandboxProviderId,
   Session,
   SessionId,
-  UsageGroup,
+  Page,
+  UsageCall,
   UsageReport,
   User,
   UserId,
@@ -510,8 +513,12 @@ export class SqliteStore implements Store {
     return this.#write.ask('listBlobs' satisfies Operation);
   }
 
-  usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport> {
-    return this.#read.ask('usage' satisfies Operation, filter, by);
+  usage(filter?: UsageFilter, grouping?: UsageGrouping): Promise<UsageReport> {
+    return this.#read.ask('usage' satisfies Operation, filter, grouping);
+  }
+
+  usageCalls(asked: UsageCallsAsked): Promise<Page<UsageCall>> {
+    return this.#read.ask('usageCalls' satisfies Operation, asked);
   }
 
   recordUsage(record: UsageRecord): Promise<void> {
