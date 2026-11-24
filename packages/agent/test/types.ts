@@ -15,6 +15,7 @@ import type {
   CreateActor,
   CreateActorOf,
   InputsOf,
+  InstructionsMachine,
   Machine,
   StandardSchemaV1,
   WebSearchOptions,
@@ -440,4 +441,51 @@ type WithSecrets = [Expect<Equal<(typeof withSecrets)['secrets'], readonly strin
 /** An actor may be created with a name, and with the caller's own ID for it. */
 export const named: CreateActorOf<typeof withSecrets> = { name: 'eu-desk', externalId: 'telegram:4411' };
 
-export type More = [UnknownProvider, WithSecrets];
+// Instructions made for each actor: the function's context is typed by the agent's
+// configuration and by whether its actors work on a machine.
+
+const madeOnMachine = new Agent({
+  provider: 'anthropic',
+  configuration: z.object({ repo: z.string(), strict: z.boolean().default(false) }),
+  machine: true,
+  instructions: ({ configuration, machine, actorName, modelId }) => {
+    type Given = [
+      Expect<Equal<typeof configuration, { repo: string; strict: boolean }>>,
+      Expect<Equal<typeof machine, InstructionsMachine>>,
+    ];
+    const checks: Given = [true, true];
+    void checks;
+    return `${configuration.repo} at ${machine.cwd}, for ${actorName ?? modelId}`;
+  },
+});
+type MadeOnMachine = [Expect<Equal<CreateActorOf<typeof madeOnMachine>['configuration'], { repo: string; strict?: boolean | undefined }>>];
+
+new Agent({
+  provider: 'anthropic',
+  instructions: ({ machine }) => {
+    type NoMachine = [Expect<Equal<typeof machine, null>>];
+    const checks: NoMachine = [true];
+    void checks;
+    return 'You have no machine.';
+  },
+});
+
+new Agent({
+  provider: 'anthropic',
+  // @ts-expect-error Instructions are made at once: not by an async function.
+  instructions: async () => 'Later.',
+});
+
+new Agent({
+  provider: 'anthropic',
+  machine: true,
+  instructions: (context) => {
+    // @ts-expect-error Instructions are made without secrets.
+    void context.secrets;
+    // @ts-expect-error Instructions are made without the variables of the machine's commands.
+    void context.machine.env;
+    return '';
+  },
+});
+
+export type More = [UnknownProvider, WithSecrets, MadeOnMachine];

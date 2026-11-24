@@ -57,6 +57,7 @@ import {
   Unavailable,
 } from './errors.ts';
 import { contextOf as callContextOf, issuesText } from './executor.ts';
+import { makeInstructions, makesInstructions } from './instructions.ts';
 import type { CallContext, CallResult } from './executor.ts';
 import type { Semaphore } from './limits.ts';
 import { OutOfTurn, decide } from './machine.ts';
@@ -112,9 +113,15 @@ export type Host = {
   stopping(actor: ActorId): boolean;
   /**
    * The instructions an actor's model is sent: the harness's own, for what the actor has, and
-   * then its agent's. `own` is the engine's tools the actor is offered.
+   * then its agent's. `own` is the engine's tools the actor is offered, and `made` the actor's
+   * own instructions, which its agent's code made for it: null for an agent whose are text.
    */
-  instructions(actor: Actor, definition: AgentDefinition, own: readonly EngineTool[]): string;
+  instructions(
+    actor: Actor,
+    definition: AgentDefinition,
+    own: readonly EngineTool[],
+    made: string | null,
+  ): string;
   /**
    * What names the instructions and tools the model is sent for a definition, with the
    * engine's own tools the actor is offered and the instructions as they are sent.
@@ -596,7 +603,46 @@ export class ActorDriver {
       configuration: fit.configuration,
       configurationGiven: fit.given,
       behind: null,
+      ...(await this.#instructionsOn(active, fit.configuration)),
     };
+  }
+
+  /**
+   * The actor's instructions on a deployment it moves to: made by that deployment's code from
+   * what the actor is, or none of its own when that deployment's are text. When they cannot be
+   * made, it keeps the ones it has, and that is reported: the actor goes on.
+   */
+  async #instructionsOn(
+    deployment: DeploymentRef,
+    configuration: Json | null,
+  ): Promise<Pick<ActorPatch, 'instructions'>> {
+    const { actor, instructions } = this.record;
+    let definition: AgentDefinition;
+    try {
+      definition = await this.#host.definition(deployment.id);
+    } catch (error) {
+      this.#host.report(error);
+      return {};
+    }
+    if (!makesInstructions(definition)) return { instructions: null };
+    const made = await makeInstructions((...args) => this.#host.call(...args), deployment.id, {
+      ...callContextOf(actor),
+      configuration,
+    });
+    if (made.ok) return { instructions: made.instructions };
+    this.#host.report(
+      new Error(
+        `The instructions of version ${String(deployment.version)} of the agent could not be made for the actor ${actor.id}, which keeps the ones it has: ${made.why}`,
+      ),
+    );
+    if (instructions !== null) return {};
+    // Its agent's text, as it was on the deployment it leaves, is its own from now on.
+    try {
+      return { instructions: (await this.#host.definition(actor.deployment.id)).instructions };
+    } catch (error) {
+      this.#host.report(error);
+      return {};
+    }
   }
 
   /**
@@ -652,7 +698,10 @@ export class ActorDriver {
       fitted = {
         configuration: fit.configuration,
         configurationGiven: fit.given,
-        ...(moves ? { deployment: target } : {}),
+        // Its instructions change with the version of its agent, and with nothing else.
+        ...(moves
+          ? { deployment: target, ...(await this.#instructionsOn(target, fit.configuration)) }
+          : {}),
       };
     }
     return {
@@ -1048,7 +1097,7 @@ export class ActorDriver {
       ...this.#host.tasks.tools(actor, definition),
       ...this.#host.ownTools(actor, definition).map((one) => offered(one, actor, definition)),
     ];
-    const instructions = this.#host.instructions(actor, definition, own);
+    const instructions = this.#host.instructions(actor, definition, own, this.record.instructions);
     const fingerprint = this.#host.fingerprint(definition, own, instructions);
     const changed = this.record.sent !== null && this.record.sent !== fingerprint;
     const from =

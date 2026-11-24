@@ -39,6 +39,7 @@ function at(turn: Turn, said = 0, lastTurn: TurnEnd | null = null): ActorRecord 
     epoch: 0,
     nextSeq: said + 1,
     configurationGiven: null,
+    instructions: null,
     sent: null,
     reasoningFrom: 1,
     reasoningSent: null,

@@ -91,7 +91,10 @@ export type McpServerDeclaration = z.infer<typeof mcpServerDeclarationSchema>;
 export const agentDefinitionSchema = z
   .object({
     provider: providerIdSchema,
-    /** What the model is told, besides what the engine tells it. */
+    /**
+     * What the model is told, besides what the engine tells it. Empty for an agent whose code
+     * makes them for each actor: its `features` has `actor-instructions`.
+     */
     instructions: z.string(),
     /**
      * The configuration an actor is created with: the JSON Schema of it, or null when its

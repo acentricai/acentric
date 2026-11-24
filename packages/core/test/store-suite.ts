@@ -156,6 +156,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         epoch: 0,
         nextSeq: 1,
         configurationGiven: null,
+        instructions: null,
         sent: null,
         reasoningFrom: 1,
         reasoningSent: null,

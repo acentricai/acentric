@@ -297,6 +297,7 @@ function featuresOf(agent: Dict, tools: readonly unknown[]): string[] {
     ...(agent['schedule'] === undefined ? [] : ['schedule']),
     ...(used(agent['compactionSettings']) ? ['compaction-settings'] : []),
     ...(tools.some((tool) => isDict(tool) && tool['codemode'] === true) ? ['codemode'] : []),
+    ...(isFn(agent['instructions']) ? ['actor-instructions'] : []),
   ];
 }
 
@@ -305,7 +306,9 @@ function describe(agent: Dict): AgentDefinition {
   if (typeof provider !== 'string' || provider === '') {
     throw new InvalidAgent('The agent has no provider');
   }
-  if (typeof instructions !== 'string') throw new InvalidAgent('The instructions are not text');
+  if (typeof instructions !== 'string' && !isFn(instructions)) {
+    throw new InvalidAgent('The instructions are not text, nor a function that makes them');
+  }
   if (configuration !== undefined && validateOf(configuration) === undefined) {
     throw new InvalidAgent('configuration is not a schema');
   }
@@ -366,7 +369,8 @@ function describe(agent: Dict): AgentDefinition {
   const features = featuresOf(agent, tools);
   return {
     provider,
-    instructions,
+    // Made for each actor, by the agent's code, when there is one: `features` says so.
+    instructions: typeof instructions === 'string' ? instructions : '',
     configuration: configuration === undefined ? null : { schema: configurationSchema ?? null },
     tools: described,
     inputs: declared,
@@ -571,6 +575,35 @@ async function call(
     return 'issues' in checked
       ? checked
       : { value: json(checked.value ?? null, 'The configuration') };
+  }
+
+  if (path === 'instructions.make') {
+    const make = agent['instructions'];
+    if (!isFn(make)) throw new Error('The agent has no function that makes its instructions');
+    // What the actor was created with, and where it works: nothing to wait for, and no secret.
+    const made = (make as (context: Dict) => unknown)(
+      Object.freeze({
+        agent: sent.agent,
+        agentName: sent.agentName,
+        actor: sent.actor,
+        actorName: sent.actorName,
+        externalId: sent.externalId,
+        configuration: sent.configuration ?? undefined,
+        modelId: sent.modelId,
+        reasoning: sent.reasoning,
+        machine:
+          sent.machine === null
+            ? null
+            : Object.freeze({ id: sent.machine.id, cwd: sent.machine.cwd }),
+      }),
+    );
+    if (isDict(made) && isFn(made['then'])) {
+      throw new Error(
+        'it returned a promise: instructions are made at once, by a function that is not async',
+      );
+    }
+    if (typeof made !== 'string') throw new Error('it returned what is not text');
+    return { value: made };
   }
 
   // What the actor was created with is as its schema returned it then, and is given as it is.

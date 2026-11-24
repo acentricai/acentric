@@ -59,6 +59,12 @@ export type ActorRecord = {
    */
   readonly configurationGiven: Json | null;
   /**
+   * Its own instructions, which its agent's code made for it when it was created, or when it
+   * last moved to another version of its agent. Null for an actor whose agent's instructions
+   * are text, the same for every actor.
+   */
+  readonly instructions: string | null;
+  /**
    * What names the instructions and tools of the last call its model answered: when a call
    * is to be made with others, they have changed. Null until its model has answered.
    */
@@ -83,6 +89,7 @@ export type ActorPatch = {
   readonly reasoning?: Reasoning;
   readonly configuration?: Json | null;
   readonly configurationGiven?: Json | null;
+  readonly instructions?: string | null;
   readonly reasoningSent?: Reasoning | null;
   readonly deployment?: DeploymentRef;
   readonly pinned?: boolean;
@@ -128,7 +135,12 @@ export type StoredCompaction = Compaction & {
 export function patched(actor: Actor, patch: ActorPatch | null): Actor {
   if (patch === null) return actor;
   // Kept beside the actor, not in it.
-  const { configurationGiven: _given, reasoningSent: _sent, ...fields } = patch;
+  const {
+    configurationGiven: _given,
+    instructions: _instructions,
+    reasoningSent: _sent,
+    ...fields
+  } = patch;
   return { ...actor, ...fields };
 }
 
@@ -153,6 +165,8 @@ export function applyChange(
       change.set?.configurationGiven === undefined
         ? record.configurationGiven
         : change.set.configurationGiven,
+    instructions:
+      change.set?.instructions === undefined ? record.instructions : change.set.instructions,
     reasoningSent:
       change.set?.reasoningSent === undefined ? record.reasoningSent : change.set.reasoningSent,
     sent: change.sent === null ? record.sent : change.sent.fingerprint,
