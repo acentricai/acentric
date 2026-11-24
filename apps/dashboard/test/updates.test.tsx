@@ -52,8 +52,8 @@ describe('the Updates section of Settings', () => {
       ],
     };
     const page = await section(server);
-    expect(await page.findByText('Version 0.17.0 is available')).toBeTruthy();
-    expect(page.getByText('Update available')).toBeTruthy();
+    expect(await page.findByText('Update available')).toBeTruthy();
+    expect(page.queryByText('Version 0.17.0 is available')).toBeNull();
     expect(page.queryByText('Up to date')).toBeNull();
     const releases = within(page.getByLabelText('Releases'));
     expect(releases.getByText('Upgrading from 0.16.')).toBeTruthy();
@@ -97,6 +97,9 @@ describe('the Updates section of Settings', () => {
     const server = withNext(signedIn());
     const page = await section(server);
     await loaded(page);
+    // First only Download: to take it, it is downloaded first.
+    expect(update(page).queryByRole('button', { name: 'Update now' })).toBeNull();
+    expect(update(page).queryByRole('button', { name: 'Schedule' })).toBeNull();
     fireEvent.click(update(page).getByRole('button', { name: 'Download' }));
     expect(await page.findByText('0.17.0 downloaded')).toBeTruthy();
     expect(update(page).queryByRole('button', { name: 'Download' })).toBeNull();
@@ -110,6 +113,8 @@ describe('the Updates section of Settings', () => {
     const server = withNext(signedIn());
     const page = await section(server);
     await loaded(page);
+    fireEvent.click(update(page).getByRole('button', { name: 'Download' }));
+    await page.findByText('0.17.0 downloaded');
     fireEvent.click(update(page).getByRole('button', { name: 'Schedule' }));
     const dialog = within(
       await screen.findByRole('dialog', { name: 'Schedule the update to 0.17.0' }),
@@ -128,8 +133,8 @@ describe('the Updates section of Settings', () => {
     const server = withNext(signedIn());
     server.areas.engine.updates.status = { ...server.areas.engine.updates.status, updater: null };
     const page = await section(server);
-    expect(await page.findByText('Version 0.17.0 is available')).toBeTruthy();
-    expect(page.queryByRole('button', { name: 'Update now' })).toBeNull();
+    expect(await page.findByText('Update available')).toBeTruthy();
+    expect(page.queryByRole('button', { name: 'Download' })).toBeNull();
   });
 
   it('says why an update failed', async () => {

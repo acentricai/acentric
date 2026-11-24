@@ -76,9 +76,8 @@ export function UpdatesSettings() {
           />
         ) : (
           <>
-            {(data.next !== null || data.check !== 'ok' || updater?.state === 'failed') && (
+            {(data.check !== 'ok' || updater?.state === 'failed') && (
               <div className="prefs-notices">
-                {data.next !== null && <Notice title={`Version ${data.next} is available`} />}
                 {updater?.state === 'failed' && (
                   <Notice tone="danger" title={`The update to ${updater.version ?? 'it'} failed`}>
                     {updater.error}
@@ -227,7 +226,7 @@ function UpdateRow({
             Download
           </Button>
         )}
-        {(actions === 'ask' || actions === 'downloaded') && (
+        {actions === 'downloaded' && (
           <>
             <Button size="sm" onClick={onLater}>
               Schedule
