@@ -5,7 +5,7 @@ import type { Account, Role } from '@acentric/protocol';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { rangeStart, TIME_ZONE } from '../src/llm/format.ts';
+import { dayLabel, dayOf, rangeStart, TIME_ZONE } from '../src/llm/format.ts';
 import { reportOfCalls, totalsOf, type FakeCall } from './fake/llm.ts';
 import { open } from './render.tsx';
 import { fakeServer } from './server.ts';
@@ -323,29 +323,27 @@ describe('the Usage page', () => {
         tz: TIME_ZONE,
       }).toString(),
     );
-    const legend = await screen.findByRole('list', { name: 'Providers' });
-    expect(
-      within(legend)
+    // No table to turn it into, and no legend beneath it.
+    expect(screen.queryByRole('button', { name: 'Table' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Providers' })).toBeNull();
+    const days = () =>
+      within(screen.getByRole('list', { name: /by day$/ }))
         .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual(['Anthropic', 'OpenAI']);
-    fireEvent.click(screen.getByRole('button', { name: 'Table' }));
-    const table = screen.getByRole('table', { name: 'Spend by day' });
-    const head = within(table)
-      .getAllByRole('columnheader')
-      .map((cell) => cell.textContent);
-    expect(head).toEqual(['Day', 'Anthropic', 'OpenAI', 'All']);
-    const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows).toHaveLength(30);
-    expect(cells(rows[0] as HTMLElement).slice(1)).toEqual(['$3.00', '$1.00', '$4.00']);
-    expect(cells(rows[1] as HTMLElement).slice(1)).toEqual(['$2.00', '$0.00', '$2.00']);
+        .map((day) => day.getAttribute('aria-label'));
+    await waitFor(() => expect(days()).toHaveLength(30));
+    const today = dayLabel(dayOf(NOW));
+    const yesterday = dayLabel(dayOf(NOW - DAY));
+    expect(days().slice(-2)).toEqual([`${yesterday}: $2.00`, `${today}: $4.00`]);
+    // A day's tooltip names its providers' parts.
+    const column = within(screen.getByRole('list', { name: /by day$/ })).getAllByRole(
+      'listitem',
+    )[29] as HTMLElement;
+    fireEvent.focus(column);
+    const tip = screen.getByRole('status');
+    expect(tip.textContent).toBe(`$4.00${today}Anthropic$3.00OpenAI$1.00`);
     fireEvent.click(screen.getByRole('radio', { name: 'Calls' }));
-    const calls = await screen.findByRole('table', { name: 'Calls by day' });
-    expect(cells(within(calls).getAllByRole('row')[2] as HTMLElement).slice(1)).toEqual([
-      '2',
-      '0',
-      '2',
-    ]);
+    await screen.findByRole('heading', { name: 'Calls by day' });
+    expect(days().slice(-2)).toEqual([`${yesterday}: 2`, `${today}: 2`]);
   });
 
   it('shows what each provider, model and actor spent, and each agent', async () => {
