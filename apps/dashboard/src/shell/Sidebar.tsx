@@ -1,4 +1,4 @@
-// The sidebar: the mark and the engine, the grouped tabs and the account.
+// The sidebar: the mark and the engine, the grouped tabs, Settings and the account.
 // One hover highlight shared by every row, sliding and interruptible; an
 // active line that settles onto the current tab on a critically damped curve;
 // icons that press in. Positions are measured from the rendered rows, so
@@ -24,6 +24,7 @@ import type { Me } from '../me.ts';
 import { type Section, type Tab } from '../sections.ts';
 import { session } from '../session.ts';
 import { onTab, visibleSections } from './nav.ts';
+import { SettingsButton } from './Settings.tsx';
 import { UserMenu } from './UserMenu.tsx';
 
 type Box = { y: number; h: number; x: number; w: number };
@@ -46,6 +47,7 @@ export function Sidebar({ me, collapsed }: { me: Me | undefined; collapsed: bool
         </div>
       </div>
       <Navigation sections={sections} collapsed={collapsed} />
+      <SettingsButton collapsed={collapsed} />
       <UserMenu email={me?.email ?? ''} collapsed={collapsed} />
     </aside>
   );
