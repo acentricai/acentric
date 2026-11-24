@@ -803,6 +803,44 @@ dialog.ac-dialog.prefs::backdrop {
   color: var(--ink);
 }
 
+/* Signing out another session: an icon, seen when its row is hovered. */
+.prefs-table__out {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+}
+
+.prefs-table tr:hover .prefs-table__out,
+.prefs-table__out:focus-visible {
+  opacity: 1;
+}
+
+.prefs-table__out:hover {
+  background: var(--hover);
+  color: var(--danger);
+}
+
+.prefs-table__out:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* On a screen with no hover, it is there. */
+@media (hover: none) {
+  .prefs-table__out {
+    opacity: 1;
+  }
+}
+
 .prefs-table__action {
   width: 1%;
   text-align: right;

@@ -105,6 +105,8 @@ describe('the sidebar', () => {
     const page = within(dialog).getByRole('region', { name: 'Account' });
     expect(await within(page).findByText('ada@example.test')).toBeTruthy();
     expect(within(page).getByRole('table', { name: 'Sessions' })).toBeTruthy();
+    // No signing out of all others: each other session is signed out from its own row.
+    expect(within(page).queryByRole('button', { name: /everywhere/ })).toBeNull();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
