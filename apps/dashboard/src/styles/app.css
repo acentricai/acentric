@@ -718,6 +718,14 @@ dialog.ac-dialog.prefs::backdrop {
   max-width: 100%;
 }
 
+.prefs-photo {
+  font-size: 14px;
+}
+
+.prefs-photo__file {
+  display: none;
+}
+
 .prefs-row__saved {
   color: var(--ink-muted);
   font-size: 13px;
@@ -846,6 +854,11 @@ dialog.ac-dialog.prefs::backdrop {
 .me:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
+}
+
+/* A person's own picture, in the place of their letters. */
+.avatar-photo {
+  object-fit: cover;
 }
 
 .me__avatar {

@@ -48,7 +48,7 @@ export function Sidebar({ me, collapsed }: { me: Me | undefined; collapsed: bool
       </div>
       <Navigation sections={sections} collapsed={collapsed} />
       <SettingsButton collapsed={collapsed} />
-      <UserMenu email={me?.email ?? ''} collapsed={collapsed} />
+      <UserMenu me={me} collapsed={collapsed} />
     </aside>
   );
 }

@@ -4,11 +4,14 @@
 import { IconLogout, IconSelector, IconUserCircle } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
 
+import { Avatar } from '../avatar.tsx';
+import type { Me } from '../me.ts';
 import { usePopover } from '../popover.ts';
 import { signOut as endSession } from '../sign-out.ts';
 import { ThemeToggle } from '../theme.tsx';
 
-export function UserMenu({ email, collapsed }: { email: string; collapsed: boolean }) {
+export function UserMenu({ me, collapsed }: { me: Me | undefined; collapsed: boolean }) {
+  const email = me?.email ?? '';
   const navigate = useNavigate();
   const menu = usePopover();
   const signOut = async () => {
@@ -16,10 +19,6 @@ export function UserMenu({ email, collapsed }: { email: string; collapsed: boole
     await endSession();
     await navigate({ to: '/sign-in', replace: true });
   };
-  const initials = email
-    .replace(/[^A-Za-z0-9]/g, '')
-    .slice(0, 2)
-    .toUpperCase();
 
   return (
     <div className="side__footer" ref={menu.container}>
@@ -32,9 +31,7 @@ export function UserMenu({ email, collapsed }: { email: string; collapsed: boole
         aria-label={collapsed ? `Signed in as ${email}` : undefined}
         onClick={() => menu.setOpen((open) => !open)}
       >
-        <span className="me__avatar" aria-hidden="true">
-          {initials}
-        </span>
+        <Avatar user={me?.user ?? ''} photo={me?.photo} name={me?.displayName ?? email} />
         <span className="me__email">{email}</span>
         <IconSelector className="me__chevron" size={14} stroke={1.75} aria-hidden="true" />
       </button>

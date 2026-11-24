@@ -23,16 +23,22 @@ export function sessionOf(id: string, more: Partial<Session> = {}): Session {
 export function accountArea(_shared: Shared) {
   const sessions: Session[] = [sessionOf('ses_1', { label: 'Firefox on macOS' })];
   const answer: Area['answer'] = ({ method, path, body, person }: Call) => {
+    const user = () => ({
+      id: person.id,
+      email: person.email,
+      displayName: person.displayName ?? null,
+      role: person.role,
+      createdAt: NOW,
+      disabledAt: null,
+      photo: person.photo ?? null,
+    });
     if (method === 'PATCH' && path === '/v1/me') {
       person.displayName = (body['displayName'] as string | null) ?? null;
-      return json(200, {
-        id: person.id,
-        email: person.email,
-        displayName: person.displayName,
-        role: person.role,
-        createdAt: NOW,
-        disabledAt: null,
-      });
+      return json(200, user());
+    }
+    if (method === 'DELETE' && path === '/v1/me/photo') {
+      person.photo = null;
+      return json(200, user());
     }
     if (method === 'POST' && path === '/v1/me/password') {
       if (body['current'] !== person.password) {
