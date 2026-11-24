@@ -16,7 +16,7 @@
 //                           server keeps neither
 //   ACENTRIC_SECRET_KEYS_OLD  keys secrets were sealed with before, separated by commas, so
 //                           that what they sealed still opens after the key was changed
-//   ACENTRIC_AGENT_NETWORK  what agents' code may reach: `public` (without it), which is
+//   ACENTRIC_AGENT_NETWORK  what agents' code, and the MCP servers they name, may reach: `public` (without it), which is
 //                           public addresses only, or `any`
 //   ACENTRIC_AGENT_NETWORK_ALLOW  with `public`: private addresses and ranges agents' code
 //                           may reach as well, separated by commas, such as 10.0.0.0/8
