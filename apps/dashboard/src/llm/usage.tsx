@@ -235,8 +235,8 @@ function Tiles({ total }: { total: UsageTotals | undefined }) {
 type Day = { readonly day: string; readonly parts: readonly Group[]; readonly whole: Group | null };
 
 /**
- * Each day of the range as a column, by provider, in what is measured: a tooltip on each, a
- * legend of the providers when there are several, and a table to read instead.
+ * Each day of the range as a column, by provider, in what is measured: a tooltip on each names
+ * the providers of its parts.
  */
 function TimeChart({
   groups,
@@ -249,7 +249,6 @@ function TimeChart({
 }) {
   const [measure, setMeasure] = useState<Measure>('cost');
   const [hover, setHover] = useState<number | null>(null);
-  const [asTable, setAsTable] = useState(false);
   const byDay = new Map((groups ?? []).map((group) => [group.key, group]));
   const days: Day[] = daysBetween(from, Math.max(from, to)).map((day) => {
     const whole = byDay.get(day) ?? null;
@@ -284,42 +283,6 @@ function TimeChart({
       </div>
       {groups === undefined ? (
         <div className="usage-chart usage-chart--loading" aria-busy="true" />
-      ) : asTable ? (
-        <div className="ac-table-wrap">
-          <table className="ac-table usage-table" aria-label={`${measured} by day`}>
-            <thead>
-              <tr>
-                <th scope="col">Day</th>
-                {providers.map((provider) => (
-                  <th key={provider} scope="col" className="ac-table__num">
-                    {providerName(provider)}
-                  </th>
-                ))}
-                <th scope="col" className="ac-table__num">
-                  All
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {days.toReversed().map((day) => (
-                <tr key={day.day}>
-                  <td>{dayLabel(day.day)}</td>
-                  {providers.map((provider) => {
-                    const part = day.parts.find((each) => each.key === provider);
-                    return (
-                      <td key={provider} className="ac-table__num">
-                        {written(part === undefined ? 0 : valueOf(part, measure), measure)}
-                      </td>
-                    );
-                  })}
-                  <td className="ac-table__num">
-                    {written(day.whole === null ? 0 : valueOf(day.whole, measure), measure)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       ) : (
         <div className="usage-chart" onPointerLeave={() => setHover(null)}>
           <div className="usage-chart__axis" aria-hidden="true">
@@ -409,30 +372,6 @@ function TimeChart({
           </div>
         </div>
       )}
-      <div className="usage-panel__foot">
-        {providers.length > 1 && !asTable && (
-          <ul className="usage-legend" aria-label="Providers">
-            {providers.map((provider) => (
-              <li key={provider}>
-                <span
-                  className="usage-swatch"
-                  style={{ background: seriesOf(provider) }}
-                  aria-hidden="true"
-                />
-                {providerName(provider)}
-              </li>
-            ))}
-          </ul>
-        )}
-        <button
-          type="button"
-          className="chip chip--toggle"
-          aria-pressed={asTable}
-          onClick={() => setAsTable((was) => !was)}
-        >
-          Table
-        </button>
-      </div>
     </section>
   );
 }
