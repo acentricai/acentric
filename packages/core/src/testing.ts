@@ -52,6 +52,11 @@ export class InlineExecutor implements Executor {
   /** How many times code was loaded. */
   loads = 0;
 
+  /** How many deployments' code it holds now. */
+  get held(): number {
+    return this.#loaded.size;
+  }
+
   constructor(agents: { readonly [code: string]: InlineAgent }) {
     this.#agents = new Map(Object.entries(agents));
   }

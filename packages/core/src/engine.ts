@@ -186,11 +186,19 @@ export type EngineOptions = {
   readonly maxConcurrentTurns?: number;
   /** How many actors with nothing to do keep their driver, for when they are next sent something. 1000 without it. */
   readonly maxHotActors?: number;
+  /**
+   * How many deployments' code the executor holds, for their next calls: past it, the one called
+   * longest ago is given up, and loaded again when it is next called. 300 without it.
+   */
+  readonly maxLoadedDeployments?: number;
   /** Told of what a driver could not go on from. `console.error` without it. */
   readonly report?: (error: unknown) => void;
   /** Told of turns, calls of models and tool calls, as they happen: for logs and metrics. */
   readonly observer?: EngineObserver;
 };
+
+/** How many deployments' records are kept, read: each is small, and read again when it is wanted. */
+const KEPT_DEPLOYMENTS = 1000;
 
 const wait: Timer = (ms, signal) =>
   new Promise((resolve) => {
@@ -273,6 +281,9 @@ export class Engine {
   readonly sandboxes: Sandboxes | undefined;
   readonly #slots: Semaphore;
   readonly #maxHot: number;
+  readonly #maxLoaded: number;
+  /** How many calls of each deployment's code are going on: one with any is not given up. */
+  readonly #calling = new Map<DeploymentId, number>();
   /** The drivers, the one touched longest ago first. */
   readonly #drivers = new Map<ActorId, ActorDriver>();
   /** The actors that are being stopped: no turn of theirs starts until they have been. */
@@ -308,6 +319,7 @@ export class Engine {
     });
     this.#slots = new Semaphore(options.maxConcurrentTurns ?? 100);
     this.#maxHot = options.maxHotActors ?? 1000;
+    this.#maxLoaded = options.maxLoadedDeployments ?? 300;
     this.#providers = options.providers ?? builtInProviders();
     this.#secrets = options.secrets;
     this.#codeTimeoutMs = options.codeTimeoutMs ?? 30_000;
@@ -727,8 +739,9 @@ export class Engine {
       return refuse(error instanceof Error ? error : new Error(String(error)));
     }
     this.#agents.set(agentId, agent);
-    this.#deployments.set(id, Promise.resolve(deployment));
+    this.#remember(id, Promise.resolve(deployment));
     this.#loaded.set(id, Promise.resolve());
+    this.#unloadPast(id);
     return {
       agent,
       deployment,
@@ -1400,11 +1413,21 @@ export class Engine {
         if (stored === undefined) throw new Error(`There is no deployment ${id}`);
         return stored.deployment;
       });
-      this.#deployments.set(id, deployment);
       // One that could not be read is asked for again the next time.
       deployment.catch(() => this.#deployments.delete(id));
     }
+    this.#remember(id, deployment);
     return deployment;
+  }
+
+  /** Keeps what a deployment is, as the last used: past a number, the longest unused goes. */
+  #remember(id: DeploymentId, deployment: Promise<Deployment>): void {
+    this.#deployments.delete(id);
+    this.#deployments.set(id, deployment);
+    for (const old of this.#deployments.keys()) {
+      if (this.#deployments.size <= KEPT_DEPLOYMENTS) break;
+      this.#deployments.delete(old);
+    }
   }
 
   /** What a deployment's code said of itself when it was deployed. */
@@ -1415,7 +1438,11 @@ export class Engine {
   /** Gives the executor a deployment's code, once: a process that starts has none of it. */
   #ready(id: DeploymentId): Promise<void> {
     let loaded = this.#loaded.get(id);
-    if (loaded === undefined) {
+    if (loaded !== undefined) {
+      // Called: it is the last to be given up.
+      this.#loaded.delete(id);
+      this.#loaded.set(id, loaded);
+    } else {
       loaded = (async () => {
         const stored = await this.#store.loadDeployment(id);
         if (stored === undefined) throw new Error(`There is no deployment ${id}`);
@@ -1427,8 +1454,23 @@ export class Engine {
       })();
       this.#loaded.set(id, loaded);
       loaded.catch(() => this.#loaded.delete(id));
+      this.#unloadPast(id);
     }
     return loaded;
+  }
+
+  /**
+   * Gives up the code of deployments past the number, those called longest ago first: never
+   * `keep`, nor one whose code is being called, which is how one being loaded is kept too.
+   */
+  #unloadPast(keep: DeploymentId): void {
+    if (this.#loaded.size <= this.#maxLoaded) return;
+    for (const id of [...this.#loaded.keys()]) {
+      if (this.#loaded.size <= this.#maxLoaded) break;
+      if (id === keep || this.#calling.has(id)) continue;
+      this.#loaded.delete(id);
+      void Promise.resolve(this.#executor.unload(id)).catch(this.#report);
+    }
   }
 
   /** Calls a function of a deployment's code. Code that does not load fails the call. */
@@ -1439,6 +1481,25 @@ export class Engine {
     context: CallContext,
     signal: AbortSignal,
     /** Stops and starts the call's time limit, when it has one. */
+    limit?: { readonly pause: () => void; readonly resume: () => void },
+  ): Promise<CallResult> {
+    // Held while it is called: its code is not given up under it.
+    this.#calling.set(deployment, (this.#calling.get(deployment) ?? 0) + 1);
+    try {
+      return await this.#callLoaded(deployment, path, argument, context, signal, limit);
+    } finally {
+      const left = (this.#calling.get(deployment) ?? 1) - 1;
+      if (left === 0) this.#calling.delete(deployment);
+      else this.#calling.set(deployment, left);
+    }
+  }
+
+  async #callLoaded(
+    deployment: DeploymentId,
+    path: string,
+    argument: Json,
+    context: CallContext,
+    signal: AbortSignal,
     limit?: { readonly pause: () => void; readonly resume: () => void },
   ): Promise<CallResult> {
     try {
@@ -1627,6 +1688,9 @@ export class Engine {
         if (record === undefined) throw new ActorNotFound(id);
         const driver = new ActorDriver(this.#host, record, await this.#store.pendingInputs(id));
         this.#drivers.set(id, driver);
+        // An actor only read is kept as one that took a turn is: up to the number, past which
+        // those that rest longest are given up.
+        this.#giveUpPast(driver);
         return driver;
       })().finally(() => this.#loading.delete(id));
       this.#loading.set(id, loading);
@@ -1641,10 +1705,15 @@ export class Engine {
       this.#drivers.delete(driver.id);
       return;
     }
+    this.#giveUpPast();
+  }
+
+  /** Gives up those that rest, the longest untouched first, past the number: not `keep`. */
+  #giveUpPast(keep?: ActorDriver): void {
     if (this.#drivers.size <= this.#maxHot) return;
     for (const [id, other] of this.#drivers) {
       if (this.#drivers.size <= this.#maxHot) break;
-      if (other.resting) this.#drivers.delete(id);
+      if (other !== keep && other.resting) this.#drivers.delete(id);
     }
   }
 }

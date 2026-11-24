@@ -1015,6 +1015,42 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         expect(await w.roles(first)).toEqual(['user', 'assistant', 'user', 'assistant']);
         expect(one.steps.at(-1)?.messages).toHaveLength(3);
       });
+
+      it('have the code of no more deployments held than the number, and load it again', async () => {
+        const one = w.engine([says('Hello A.'), says('Hello B.'), says('Hello A again.')], {
+          versions: { 'orders@2': {} },
+          options: { maxLoadedDeployments: 1 },
+        });
+        const a = await one.createActor();
+        await one.deploy('orders@2', false);
+        const b = await one.createActor({ version: 2 });
+        for (const [actor, text] of [
+          [a.id, 'Hello.'],
+          [b.id, 'Hello.'],
+          [a.id, 'Hello again.'],
+        ] as const) {
+          await one.say(actor, text);
+          await one.it.settled(actor);
+          expect(one.executor.held).toBeLessThanOrEqual(1);
+        }
+        expect(await w.roles(a.id)).toEqual(['user', 'assistant', 'user', 'assistant']);
+        expect(await w.roles(b.id)).toEqual(['user', 'assistant']);
+        // A's code was given up for B's, and loaded again.
+        expect(one.executor.loads).toBeGreaterThanOrEqual(3);
+      });
+
+      it('keep no more drivers than the number when they are only read', async () => {
+        const one = w.engine([]);
+        const actors = [];
+        for (let index = 0; index < 6; index += 1) actors.push(await one.createActor());
+        // Another process, which only reads them, as one who browses the dashboard does.
+        const two = w.engine([], { options: { maxHotActors: 2 } });
+        for (const actor of actors) {
+          await two.it.getActor(actor.id);
+          await two.it.conversation(actor.id);
+          expect(two.it.hot).toBeLessThanOrEqual(2);
+        }
+      });
     });
 
     describe('a restart', () => {
