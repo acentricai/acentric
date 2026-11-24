@@ -9,7 +9,7 @@ import type {
   SendInputRequest,
   UpdateActorRequest,
 } from '@acentric/protocol';
-import { fillPath, isId, routes } from '@acentric/protocol';
+import { fillPath, routes } from '@acentric/protocol';
 
 import { api } from '../api.ts';
 
@@ -26,9 +26,6 @@ export const engine = {
   // Agents
   agents: (signal?: AbortSignal) =>
     api.call('agents.list', { query: { limit: 200 }, ...signalOf(signal) }),
-  /** The agent of a name, if there is one. */
-  agentNamed: async (name: string) =>
-    (await api.call('agents.list', { query: { name, limit: 1 } })).items[0],
   agent: (id: string, signal?: AbortSignal) =>
     api.call('agents.get', { params: { agent: agentId(id) }, ...signalOf(signal) }),
   deleteAgent: (id: string) => api.call('agents.delete', { params: { agent: agentId(id) } }),
@@ -111,26 +108,6 @@ export const engine = {
   treeUsage: (id: string, signal?: AbortSignal) =>
     api.call('usage.get', { query: { root: actorId(id) }, ...signalOf(signal) }),
 };
-
-/**
- * Where `Go to` leads: an agent's page, or an actor's, found by its ID or its name. One that is
- * not found leads where its words would, and that page says it is not there.
- */
-export async function goToPath(target: { agent?: string; actor?: string }): Promise<string> {
-  const agentOf = async (given: string) =>
-    isId('agent', given) ? given : ((await engine.agentNamed(given))?.id ?? given);
-  if (target.agent === undefined) return `/actors/${encodeURIComponent(target.actor ?? '')}`;
-  const agent = await agentOf(target.agent).catch(() => target.agent ?? '');
-  if (target.actor === undefined) return `/agents/${encodeURIComponent(agent)}`;
-  let actor = target.actor;
-  if (!isId('actor', actor) && isId('agent', agent)) {
-    const named = await api
-      .call('actors.list', { query: { agent: agent as AgentId, name: actor, limit: 1 } })
-      .catch(() => undefined);
-    actor = named?.items[0]?.id ?? actor;
-  }
-  return `/actors/${encodeURIComponent(actor)}`;
-}
 
 /** Where an image or file a message names as a blob is read from: this site's own API. */
 export function blobUrl(actor: string, digest: string): string {

@@ -1388,39 +1388,6 @@ dialog.ac-dialog.prefs::backdrop {
   color: var(--line-field-focus);
 }
 
-/* Go to: the field style of the reference's search, quiet and compact, at the
-   bar's right. */
-.goto {
-  flex: none;
-  margin-left: auto;
-  height: var(--control-sm);
-  padding: 0 4px 0 10px;
-  gap: 6px;
-}
-
-.goto input {
-  width: 160px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.goto__key {
-  display: grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border: 1px solid var(--hairline);
-  border-radius: 5px;
-  color: var(--ink-muted);
-  font: 400 11px/1 var(--font-mono);
-  transition: opacity 150ms ease;
-}
-
-.goto:focus-within .goto__key {
-  opacity: 0;
-}
-
 .page {
   width: min(100%, calc(var(--content-max) + 2 * 40px));
   padding: 40px;
@@ -1501,10 +1468,6 @@ dialog.ac-dialog.prefs::backdrop {
 
   .topbar__side {
     display: none;
-  }
-
-  .goto input {
-    width: 96px;
   }
 
   .page {

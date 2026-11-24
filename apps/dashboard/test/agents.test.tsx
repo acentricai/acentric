@@ -6,7 +6,6 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { shortId } from '../src/format.ts';
-import { parseGoTo } from '../src/url.ts';
 import { actorFor, definitionOf, idOf } from './fake/agents.ts';
 import { open } from './render.tsx';
 import { fakeServer, machineOf } from './server.ts';
@@ -360,28 +359,5 @@ describe('an actor’s page', () => {
   it('says it is not there for an ID of none', async () => {
     open(`/actors/${idOf('act', 99)}`, withAgents().server);
     expect(await screen.findByText(/Nothing here/)).toBeTruthy();
-  });
-});
-
-describe('Go to', () => {
-  it('reads an agent, an agent’s actor, and an actor alone', () => {
-    expect(parseGoTo('orders')).toEqual({ agent: 'orders' });
-    expect(parseGoTo('orders/eu-desk')).toEqual({ agent: 'orders', actor: 'eu-desk' });
-    expect(parseGoTo('/act_1')).toEqual({ actor: 'act_1' });
-    expect(parseGoTo('  ')).toBeNull();
-    expect(parseGoTo('a/b/c')).toBeNull();
-  });
-
-  it('opens an agent by its name, and an actor of it by its name', async () => {
-    const { server, orders } = withAgents();
-    const page = open('/agents', server);
-    await screen.findByText('orders');
-    const goTo = screen.getByRole('textbox', { name: 'Go to' });
-    fireEvent.change(goTo, { target: { value: 'orders' } });
-    fireEvent.submit(goTo);
-    await waitFor(() => expect(page.where()).toBe(`/agents/${orders.id}`));
-    fireEvent.change(goTo, { target: { value: 'orders/eu-desk' } });
-    fireEvent.submit(goTo);
-    await waitFor(() => expect(page.where()).toBe(`/actors/${idOf('act', 1)}`));
   });
 });
