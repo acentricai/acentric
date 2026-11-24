@@ -638,6 +638,36 @@ export function operations(db: DatabaseSync) {
     statement(sql).get(...values) as T | undefined;
   const all = <T>(sql: string, ...values: SQLInputValue[]) => statement(sql).all(...values) as T[];
 
+  /** An agent's actors, and the subagents under them, of whatever agent, however deep. */
+  const treeOf = (id: AgentId): ActorId[] =>
+    all<{ id: ActorId }>(
+      `WITH RECURSIVE tree(id) AS (
+         SELECT id FROM actors WHERE agent_id = ?
+         UNION SELECT actors.id FROM actors JOIN tree ON actors.parent_id = tree.id
+       )
+       SELECT id FROM tree`,
+      id,
+    ).map((row) => row.id);
+
+  /** Actors, with everything of theirs: conversations, mailboxes, tasks, scripts, commands. */
+  const removeActors = (ids: readonly ActorId[]): void => {
+    if (ids.length === 0) return;
+    const these = JSON.stringify(ids);
+    for (const table of [
+      'messages',
+      'inputs',
+      'actor_blobs',
+      'tasks',
+      'scripts',
+      'script_calls',
+      'compactions',
+      'commands',
+    ]) {
+      run(`DELETE FROM ${table} WHERE actor_id IN (SELECT value FROM json_each(?))`, these);
+    }
+    run('DELETE FROM actors WHERE id IN (SELECT value FROM json_each(?))', these);
+  };
+
   /**
    * A page of rows read one more than was asked for, to know whether there is a next: the
    * items, and the cursor `key` gives of the last of them.
@@ -785,34 +815,20 @@ export function operations(db: DatabaseSync) {
       );
     },
 
+    agentTree(id: AgentId): ActorId[] {
+      return treeOf(id);
+    },
+
     deleteAgent(id: AgentId): { deployments: DeploymentId[]; actors: ActorId[] } | undefined {
+      // What its actors worked for goes with them: the subagents of other agents under them too.
+      const actors = treeOf(id);
       if (run('DELETE FROM agents WHERE id = ?', id) === 0) return undefined;
       const deployments = all<{ id: DeploymentId }>(
         'DELETE FROM deployments WHERE agent_id = ? RETURNING id',
         id,
       ).map((row) => row.id);
       run('DELETE FROM secrets WHERE agent_id = ?', id);
-      run('DELETE FROM messages WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
-      run('DELETE FROM inputs WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
-      run(
-        'DELETE FROM actor_blobs WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
-        id,
-      );
-      run('DELETE FROM tasks WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
-      run('DELETE FROM scripts WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
-      run(
-        'DELETE FROM script_calls WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
-        id,
-      );
-      run(
-        'DELETE FROM compactions WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)',
-        id,
-      );
-      run('DELETE FROM commands WHERE actor_id IN (SELECT id FROM actors WHERE agent_id = ?)', id);
-      const actors = all<{ id: ActorId }>(
-        'DELETE FROM actors WHERE agent_id = ? RETURNING id',
-        id,
-      ).map((row) => row.id);
+      removeActors(actors);
       // No machine is for an agent that is gone.
       for (const row of all<{ id: string; agents: string }>('SELECT id, agents FROM machines')) {
         const agents = JSON.parse(row.agents) as MachineAgents;
@@ -837,20 +853,7 @@ export function operations(db: DatabaseSync) {
         id,
       ).map((row) => row.id);
       if (ids.length === 0) return undefined;
-      const these = JSON.stringify(ids);
-      for (const table of [
-        'messages',
-        'inputs',
-        'actor_blobs',
-        'tasks',
-        'scripts',
-        'script_calls',
-        'compactions',
-        'commands',
-      ]) {
-        run(`DELETE FROM ${table} WHERE actor_id IN (SELECT value FROM json_each(?))`, these);
-      }
-      run('DELETE FROM actors WHERE id IN (SELECT value FROM json_each(?))', these);
+      removeActors(ids);
       return ids;
     },
 
