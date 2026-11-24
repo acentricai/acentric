@@ -56,8 +56,10 @@ export function useKeys() {
 
 function useAgents(enabled = true) {
   return useQuery({
+    // The Agents and Machines pages keep the same list: the server's page of it, as it is.
     queryKey: keyQueries.agents,
-    queryFn: async ({ signal }) => (await engine.agents(signal)).items,
+    queryFn: ({ signal }) => engine.agents(signal),
+    select: (page) => page.items,
     enabled,
   });
 }

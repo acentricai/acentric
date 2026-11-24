@@ -39,6 +39,24 @@ const offered = () =>
     .map((box) => box.closest('label')?.querySelector('code')?.textContent);
 
 describe('the API keys page', () => {
+  it('opens after the pages that read the agents too, as a fresh tab goes to it', async () => {
+    // The Agents, Keys and Machines pages read the same list of agents, kept once: each must
+    // read it as the others keep it.
+    const server = fakeServer();
+    server.person('ada@example.test', 'a-password-for-tests', true, 'owner');
+    server.areas.agents.agent('orders', 1);
+    const { where } = open('/agents', server);
+    expect(await screen.findByRole('link', { name: 'orders' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'API keys' }));
+    expect(await screen.findByText('No keys')).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'Machines' }));
+    await waitFor(() => expect(where()).toBe('/machines'));
+    expect(await screen.findByRole('heading', { name: 'Machines' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'Agents' }));
+    expect(await screen.findByRole('link', { name: 'orders' })).toBeTruthy();
+    expect(screen.queryByText('This page could not be opened')).toBeNull();
+  });
+
   it('makes a key of one agent, shows it once, and lists it by what it reaches', async () => {
     const server = signedIn();
     open('/keys', server);
