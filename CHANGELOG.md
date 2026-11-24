@@ -21,6 +21,14 @@ What changed in each version, for the people who run a server. What a version pr
   and its secret kept sealed. Once set, they take the place of `ACENTRIC_BACKUP_EVERY`,
   `ACENTRIC_BACKUP_KEEP` and `ACENTRIC_BACKUP_URL`, without a restart. The database gains a
   table for them: a backup is taken before it is changed, as ever.
+- **A picture of each person.** `PUT /v1/me/photo` gives the person signed in a picture of
+  them (a PNG, JPEG or WebP of 2 MiB at most, known by its bytes), `DELETE /v1/me/photo` takes
+  it away, and `GET /v1/users/{user}/photo` shows it to anyone signed in. A person's `photo`
+  says which one there is. **The database changes**, for a table of the pictures: the new
+  version backs it up first, as it does for any change of it.
+- **Settings, in the dashboard.** A tab at the foot of the sidebar opens them in a dialog of
+  their own. Its first section is your account: your picture, name, email and role, your
+  password, and where you are signed in.
 
 ## 0.16.1
 
