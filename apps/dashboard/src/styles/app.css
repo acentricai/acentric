@@ -843,6 +843,12 @@ dialog.ac-dialog.prefs::backdrop {
   justify-content: flex-end;
 }
 
+/* Whether the server is on the newest version, beside its own. */
+.tag--update {
+  background: var(--warn-wash);
+  color: var(--warn);
+}
+
 /* The versions after this one, each with its notes. */
 .prefs-releases {
   display: grid;

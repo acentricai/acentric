@@ -13,7 +13,7 @@ import { engine, queryClient } from '../engine/api.ts';
 import { date, longTime } from '../format.ts';
 import { Markdown } from '../markdown.tsx';
 import { may, useMe } from '../me.ts';
-import { Ago, Button, Dialog, Field, FormError, LoadError, Notice, Skeleton } from '../ui.tsx';
+import { Button, Dialog, Field, FormError, LoadError, Notice, Skeleton } from '../ui.tsx';
 
 /** What the updater is doing while it is asked again every few seconds. */
 const BUSY: readonly UpdaterState[] = ['downloading', 'waiting', 'updating'];
@@ -95,21 +95,20 @@ export function UpdatesSettings() {
             <div className="prefs-rows">
               <div className="prefs-row">
                 <span className="prefs-row__name">Current version</span>
-                <span className="prefs-row__plain">{data.current}</span>
+                <span className="prefs-row__form">
+                  {data.latest !== null ? (
+                    <span className="tag tag--update">Update available</span>
+                  ) : (
+                    data.check === 'ok' && <span className="tag">Up to date</span>
+                  )}
+                  <span className="prefs-row__plain">{data.current}</span>
+                </span>
               </div>
               {data.check !== 'off' && (
-                <>
-                  <div className="prefs-row">
-                    <span className="prefs-row__name">Latest version</span>
-                    <span className="prefs-row__plain">{data.latest ?? 'Up to date'}</span>
-                  </div>
-                  <div className="prefs-row">
-                    <span className="prefs-row__name">Last checked</span>
-                    <span className="prefs-row__plain">
-                      {data.checkedAt === null ? '—' : <Ago at={data.checkedAt} />}
-                    </span>
-                  </div>
-                </>
+                <div className="prefs-row">
+                  <span className="prefs-row__name">Latest version</span>
+                  <span className="prefs-row__plain">{data.latest ?? data.current}</span>
+                </div>
               )}
               {updater !== null && manages && (
                 <UpdateRow

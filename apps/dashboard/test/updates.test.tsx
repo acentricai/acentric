@@ -28,8 +28,10 @@ describe('the Updates section of Settings', () => {
   it('says the version, that it is up to date, and checks again when asked', async () => {
     const server = signedIn();
     const page = await section(server);
-    expect(await page.findByText('0.16.1')).toBeTruthy();
-    expect(page.getByText('Up to date')).toBeTruthy();
+    expect(await page.findByText('Up to date')).toBeTruthy();
+    // The latest is the version it is.
+    expect(page.getAllByText('0.16.1')).toHaveLength(2);
+    expect(page.queryByText('Last checked')).toBeNull();
     fireEvent.click(page.getByRole('button', { name: /Check now/ }));
     await waitFor(() => expect(server.areas.engine.updates.refreshed).toBe(1));
   });
@@ -51,6 +53,8 @@ describe('the Updates section of Settings', () => {
     };
     const page = await section(server);
     expect(await page.findByText('Version 0.17.0 is available')).toBeTruthy();
+    expect(page.getByText('Update available')).toBeTruthy();
+    expect(page.queryByText('Up to date')).toBeNull();
     const releases = within(page.getByLabelText('Releases'));
     expect(releases.getByText('Upgrading from 0.16.')).toBeTruthy();
     expect(releases.getByText('A thing that goes on.')).toBeTruthy();
