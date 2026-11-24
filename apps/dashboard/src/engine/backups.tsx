@@ -23,7 +23,10 @@ import {
 } from '../ui.tsx';
 import { engine, isApiError, queryClient } from './api.ts';
 
-export const backupQueries = { status: ['backups'] as const };
+export const backupQueries = {
+  status: ['backups'] as const,
+  settings: ['backups', 'settings'] as const,
+};
 
 /** How often, in words: every 24 hours, every 30 minutes. */
 export function everyText(ms: number): string {

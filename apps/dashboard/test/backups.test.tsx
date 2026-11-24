@@ -137,16 +137,51 @@ describe('the Backups section of Settings', () => {
     return within(dialog).getAllByRole('region', { name: 'Backups' })[0] as HTMLElement;
   };
 
-  it('says how the last went, takes one when asked, and lists it', async () => {
+  it('says when the next is taken and where they are, takes one when asked, and lists it', async () => {
     const server = signedIn();
     const page = within(await section(server));
-    expect(await page.findByText('No backup has been taken since the server started')).toBeTruthy();
+    expect(await page.findByText('Next backup')).toBeTruthy();
+    expect(page.getByText('Server')).toBeTruthy();
+    expect(page.queryByText('No backup has been taken since the server started')).toBeNull();
     expect(page.getByText('No backups yet')).toBeTruthy();
     fireEvent.click(page.getByRole('button', { name: /Back up now/ }));
-    expect(await page.findByText('The last backup was taken')).toBeTruthy();
     const table = within(page.getByRole('table', { name: 'Backups' }));
     await waitFor(() => expect(table.getAllByRole('row')).toHaveLength(2));
     expect(table.getByText('When asked')).toBeTruthy();
+    expect(page.queryByText('The last backup was taken')).toBeNull();
+  });
+
+  it('changes where they are stored, from the settings as they are', async () => {
+    const server = signedIn();
+    const page = within(await section(server));
+    fireEvent.click(await page.findByRole('button', { name: 'Change' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Backup settings' }));
+    expect(dialog.getByRole('button', { name: 'How often: Every day' })).toBeTruthy();
+    fireEvent.click(dialog.getByRole('radio', { name: 'Server and bucket' }));
+    const type = (label: RegExp, value: string) =>
+      fireEvent.change(dialog.getByLabelText(label), { target: { value } });
+    type(/Bucket URL/, 's3://acme/acentric');
+    type(/Access key ID/, 'AKIA');
+    type(/Secret access key/, 'shh');
+    fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+    expect(await page.findByText('Server and bucket')).toBeTruthy();
+    expect(server.areas.engine.backups.set).toMatchObject({
+      enabled: true,
+      bucket: { url: 's3://acme/acentric', accessKeyId: 'AKIA', secretAccessKey: 'shh' },
+    });
+
+    // Again: the secret set before is kept, for the same key.
+    fireEvent.click(page.getByRole('button', { name: 'Change' }));
+    const again = within(await screen.findByRole('dialog', { name: 'Backup settings' }));
+    expect((again.getByLabelText(/Bucket URL/) as HTMLInputElement).value).toBe(
+      's3://acme/acentric',
+    );
+    fireEvent.click(again.getByRole('button', { name: 'Backups kept: 3' }));
+    fireEvent.click(again.getByRole('menuitemradio', { name: '5' }));
+    fireEvent.click(again.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(server.areas.engine.backups.set).toMatchObject({ keep: 5 }));
+    const bucket = (server.areas.engine.backups.set as { bucket: Record<string, unknown> }).bucket;
+    expect(bucket).not.toHaveProperty('secretAccessKey');
   });
 
   it('says they are off, and turns them on, to the server alone', async () => {

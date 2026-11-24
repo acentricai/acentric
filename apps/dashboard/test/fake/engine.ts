@@ -80,6 +80,30 @@ export function engineArea(shared: Shared) {
 
   const answer = ({ method, path, body, query, person: by }: Call): Response | undefined => {
     // Backups
+    if (method === 'GET' && path === '/v1/backups/settings') {
+      const status = backups.status;
+      const set = backups.set as {
+        bucket: { url: string; accessKeyId: string; endpoint?: string; region?: string } | null;
+      } | null;
+      const bucket = set?.bucket ?? null;
+      return json(200, {
+        source: set === null ? 'environment' : 'api',
+        enabled: status !== null,
+        everyMs: status?.everyMs ?? 86_400_000,
+        keep: status?.keep ?? 3,
+        dir: '/data/backups',
+        bucket:
+          bucket === null
+            ? null
+            : {
+                url: bucket.url,
+                endpoint: bucket.endpoint ?? null,
+                region: bucket.region ?? null,
+                accessKeyId: bucket.accessKeyId,
+              },
+        changedAt: set === null ? null : NOW,
+      });
+    }
     if (method === 'PUT' && path === '/v1/backups/settings') {
       backups.set = body;
       const bucket = body['bucket'] as { url: string; accessKeyId: string } | null;

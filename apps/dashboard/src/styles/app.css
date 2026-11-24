@@ -817,6 +817,18 @@ dialog.ac-dialog.prefs::backdrop {
   margin-bottom: var(--space-5);
 }
 
+.prefs-table__cut {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.prefs-rows {
+  margin-bottom: var(--space-5);
+}
+
 .prefs-table__mono {
   font-family: var(--font-mono);
   font-size: 12.5px;
