@@ -22,31 +22,51 @@ export const updateQueries = { status: ['updates'] as const };
 
 export function UpdatesSettings() {
   const me = useMe();
+  // Once asked, until the updater says something new: what it said then, and when it was asked,
+  // so that it is not waited for long when it says nothing.
+  const [answer, setAnswer] = useState<{ readonly was: string; readonly since: number } | null>(
+    null,
+  );
   const status = useQuery({
     queryKey: updateQueries.status,
     queryFn: ({ signal }) => engine.updates(false, signal),
     // While the updater works, what it does is read again: and while the server restarts.
     refetchInterval: (query) => {
+      if (answer !== null) return 2000;
       const state = query.state.data?.updater?.state;
       return state !== undefined && BUSY.includes(state) ? 3000 : false;
     },
   });
+  // All the updater says, as one: that it said something else is that it answered.
+  const now = status.data?.updater;
+  const heard =
+    now == null ? '' : [now.state, now.version, now.at, now.changedAt, now.error].join('|');
+  if (answer !== null && (heard !== answer.was || Date.now() - answer.since > 60_000)) {
+    setAnswer(null);
+  }
+  // What the updater said before it was asked: it has answered once it says something else.
+  const asking = () => setAnswer({ was: heard, since: Date.now() });
+  const asked = (said: Updates) => queryClient.setQueryData(updateQueries.status, said);
   const check = useMutation({
     mutationFn: () => engine.updates(true),
     onSuccess: (said) => queryClient.setQueryData(updateQueries.status, said),
   });
   const data = status.data;
-  const [asking, setAsking] = useState<'now' | 'later' | null>(null);
+  const [dialog, setDialog] = useState<'now' | 'later' | null>(null);
   const ask = useMutation({
     mutationFn: (body: UpdateRequest) => engine.requestUpdate(body),
+    onMutate: asking,
+    onError: () => setAnswer(null),
     onSuccess: (said) => {
-      queryClient.setQueryData(updateQueries.status, said);
-      setAsking(null);
+      asked(said);
+      setDialog(null);
     },
   });
   const cancel = useMutation({
     mutationFn: () => engine.cancelUpdate(),
-    onSuccess: (said) => queryClient.setQueryData(updateQueries.status, said),
+    onMutate: asking,
+    onError: () => setAnswer(null),
+    onSuccess: asked,
   });
   const updater = data?.updater ?? null;
   const manages = me.data !== undefined && may(me.data, 'updates:manage');
@@ -112,10 +132,11 @@ export function UpdatesSettings() {
               {updater !== null && manages && (
                 <UpdateRow
                   data={data}
+                  answering={answer !== null || ask.isPending}
                   busy={cancel.isPending}
                   onAsk={(body) => ask.mutate(body)}
-                  onLater={() => setAsking('later')}
-                  onNow={() => setAsking('now')}
+                  onLater={() => setDialog('later')}
+                  onNow={() => setDialog('now')}
                   onCancel={() => cancel.mutate()}
                 />
               )}
@@ -148,7 +169,7 @@ export function UpdatesSettings() {
           </>
         )}
       </section>
-      {asking === 'now' && data?.next != null && (
+      {dialog === 'now' && data?.next != null && (
         <UpdateNowDialog
           version={data.next}
           busy={ask.isPending}
@@ -156,11 +177,11 @@ export function UpdatesSettings() {
           onUpdate={() => ask.mutate({ version: data.next as string, action: 'install' })}
           onClose={() => {
             ask.reset();
-            setAsking(null);
+            setDialog(null);
           }}
         />
       )}
-      {asking === 'later' && data?.next != null && (
+      {dialog === 'later' && data?.next != null && (
         <ScheduleDialog
           version={data.next}
           busy={ask.isPending}
@@ -168,7 +189,7 @@ export function UpdatesSettings() {
           onSchedule={(at) => ask.mutate({ version: data.next as string, action: 'install', at })}
           onClose={() => {
             ask.reset();
-            setAsking(null);
+            setDialog(null);
           }}
         />
       )}
@@ -179,6 +200,7 @@ export function UpdatesSettings() {
 /** What the updater is doing about the next version, and what may be asked of it. */
 function UpdateRow({
   data,
+  answering,
   busy,
   onAsk,
   onNow,
@@ -186,6 +208,8 @@ function UpdateRow({
   onCancel,
 }: {
   data: Updates;
+  /** Asked, and not yet answered by the updater. */
+  answering: boolean;
   busy: boolean;
   onAsk: (body: UpdateRequest) => void;
   onNow: () => void;
@@ -198,6 +222,14 @@ function UpdateRow({
   const of = updater.version;
   // What it did about another version than the next is past: the next is asked for afresh.
   const about = of !== null && of === next;
+  if (answering) {
+    return (
+      <div className="prefs-row">
+        <span className="prefs-row__name">Update</span>
+        <span className="prefs-row__plain">Asking the updater…</span>
+      </div>
+    );
+  }
   let said: string | null = null;
   let actions: 'ask' | 'downloaded' | 'cancel' | null = null;
   if (updater.state === 'downloading') said = `Downloading ${of ?? ''}…`;
