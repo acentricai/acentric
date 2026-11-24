@@ -1,8 +1,8 @@
 // The Account section of Settings, as rows of a name and what it is, beside each other: the
 // person signed in, their name and role, where they are signed in, and their password.
 
-import { PASSWORD_MIN, PHOTO_TYPES, type Session } from '@acentric/protocol';
-import { IconPencil, IconPhoto, IconTrash } from '@tabler/icons-react';
+import { PASSWORD_MIN, PHOTO_TYPES } from '@acentric/protocol';
+import { IconLogout, IconPencil, IconPhoto, IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -274,31 +274,11 @@ function SessionsGroup({ me }: { me: Me }) {
       api.call('sessions.revoke', { params: { session: session as never } }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: sessionsKey }),
   });
-  const others = (sessions.data?.items ?? []).filter((session) => session.id !== me.session);
-  // Every other session, one at a time: the server ends each as it is asked.
-  const endOthers = useMutation({
-    mutationFn: async (all: readonly Session[]) => {
-      for (const session of all) {
-        await api.call('sessions.revoke', { params: { session: session.id as never } });
-      }
-    },
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: sessionsKey }),
-  });
   return (
     <section className="prefs-group" aria-labelledby="prefs-sessions">
-      <div className="prefs-group__head">
-        <h3 className="prefs-group__title" id="prefs-sessions">
-          Where you are signed in
-        </h3>
-        <Button
-          size="sm"
-          busy={endOthers.isPending}
-          disabled={others.length === 0}
-          onClick={() => endOthers.mutate(others)}
-        >
-          Sign out everywhere else
-        </Button>
-      </div>
+      <h3 className="prefs-group__title" id="prefs-sessions">
+        Where you are signed in
+      </h3>
       {sessions.isPending ? (
         <Skeleton rows={2} label="Loading the sessions" />
       ) : sessions.isError ? (
@@ -336,15 +316,16 @@ function SessionsGroup({ me }: { me: Me }) {
                   </td>
                   <td className="prefs-table__action">
                     {!here && (
-                      <Button
-                        size="sm"
-                        variant="quiet"
-                        busy={end.isPending && end.variables === session.id}
+                      <button
+                        type="button"
+                        className="prefs-table__out"
+                        disabled={end.isPending && end.variables === session.id}
                         onClick={() => end.mutate(session.id)}
                         aria-label={`Sign out ${sessionName(session)}`}
+                        title="Sign out"
                       >
-                        Sign out
-                      </Button>
+                        <IconLogout size={16} stroke={1.75} aria-hidden="true" />
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -353,7 +334,7 @@ function SessionsGroup({ me }: { me: Me }) {
           </tbody>
         </table>
       )}
-      <FormError error={end.error ?? endOthers.error} />
+      <FormError error={end.error} />
     </section>
   );
 }
