@@ -12,5 +12,9 @@
 		# An actor's events stream as they come: nothing is held back to be sent together.
 		# Daemons' WebSockets pass as they are, and stay open.
 		flush_interval -1
+		# While the server restarts, as for a new version, a request waits for it, a while,
+		# rather than failing. Only one it never got is sent again.
+		lb_try_duration 60s
+		lb_try_interval 250ms
 	}
 }

@@ -79,6 +79,26 @@ Caddy answers 503 meanwhile. It is done at `acentric-server <version> listening`
 `docker compose ps` has the server healthy again. [What an upgrade looks
 like](../../VERSIONS.md#what-an-upgrade-looks-like) says what it writes, and how long it takes.
 
+### From the dashboard
+
+With `COMPOSE_PROFILES=updater` in `.env`, and `docker compose up -d`, an updater runs beside the
+server (`updater.sh`), and the dashboard's Settings, Updates, offers the next version: to
+download, or to take now or at a time. The updater downloads its image, checks its signature
+against this repository's release workflow, sets `ACENTRIC_VERSION` in `.env`, and starts the
+server on it. When the new version does not become healthy, it puts back the one before. Caddy
+holds requests for the seconds the server restarts, rather than failing them.
+
+It takes one version at a time, as VERSIONS.md says: a patch, or the next minor. It does not
+take this folder's own changes, when a version's notes say the recipe changed: take those as
+above.
+
+The updater has Docker's socket, which is as much as this machine's root. It runs nothing but
+`updater.sh`, from this folder, and takes nothing but a newer version of the server's image,
+signed by the release workflow, whatever the server asks. Without the profile, it is not
+started.
+
+### Going back
+
 To go back, put back the backup it took before it changed the database, with the version you
 had. Its name ends `-before-upgrade-<new version>.tar`, in `/backups`
 (`docker compose exec server ls /backups`):
