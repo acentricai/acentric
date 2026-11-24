@@ -57,8 +57,32 @@ One in the bucket is put back by its URL, in place of `< file`:
 
 ## Upgrading
 
-Set the new `ACENTRIC_VERSION` in `.env`, and `docker compose up -d`: the new version backs the
-database up before it changes it. [VERSIONS.md](../../VERSIONS.md) says what a version promises.
+Read the new version's notes in [CHANGELOG.md](../../CHANGELOG.md), and which versions it goes
+to at once ([VERSIONS.md](../../VERSIONS.md#from-which-version-to-which)). When its notes say
+this recipe changed, take this folder from its tag, keeping `.env` and `secrets/`. Then set the
+new `ACENTRIC_VERSION` in `.env`, and:
+
+```sh
+docker compose pull server
+docker compose up -d
+docker compose logs -f server
+```
+
+A version that changes the database backs it up first, then changes it: its log says each, and
+Caddy answers 503 meanwhile. It is done at `acentric-server <version> listening`, and
+`docker compose ps` has the server healthy again. [What an upgrade looks
+like](../../VERSIONS.md#what-an-upgrade-looks-like) says what it writes, and how long it takes.
+
+To go back, put back the backup it took before it changed the database, with the version you
+had. Its name ends `-before-upgrade-<new version>.tar`, in `/backups`
+(`docker compose exec server ls /backups`):
+
+```sh
+docker compose stop server
+# Set ACENTRIC_VERSION in .env back to the version you had, then:
+docker compose run --rm --no-deps -T server acentric-server restore /backups/<name>.tar
+docker compose up -d
+```
 
 ## Other ports
 
