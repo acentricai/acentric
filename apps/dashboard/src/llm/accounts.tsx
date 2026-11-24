@@ -88,23 +88,6 @@ export function AccountsPage() {
           },
           { name: 'Provider', cell: (p) => <span>{providerName(p.provider)}</span> },
           {
-            name: 'Agents',
-            cell: (p) => {
-              const given = agentsOf(p, names);
-              return given.length === 0 ? (
-                <span className="ac-table__muted">
-                  {p.default ? 'Every agent given none' : '—'}
-                </span>
-              ) : (
-                <span title={given.join(', ')}>
-                  {displayText(given.slice(0, 3).join(', '))}
-                  {given.length > 3 ? ` and ${String(given.length - 3)} more` : ''}
-                  {p.default ? ', and every agent given none' : ''}
-                </span>
-              );
-            },
-          },
-          {
             name: 'Last 30 days',
             className: 'ac-table__num',
             cell: (p) => <span className="ac-num">{dollars(costOf.get(p.id) ?? 0)}</span>,

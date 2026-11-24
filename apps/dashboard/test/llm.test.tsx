@@ -63,7 +63,7 @@ describe('the LLM providers section', () => {
 });
 
 describe('the Accounts page', () => {
-  it('lists the accounts: the default, the provider, the agents given each, and its spend', async () => {
+  it('lists the accounts: the default, the provider, and its spend', async () => {
     const server = signedIn();
     server.areas.llm.accounts.push(
       accountOf(1, { name: 'main', default: true, agents: [ORDERS] }),
@@ -79,19 +79,10 @@ describe('the Accounts page', () => {
     }));
     open('/llm-providers', server);
     await screen.findByText('main');
-    expect(cells(rowOf('main')).slice(0, 4)).toEqual([
-      'maindefault',
-      'Anthropic',
-      'orders, and every agent given none',
-      '$3.50',
-    ]);
-    expect(cells(rowOf('spare')).slice(0, 4)).toEqual([
-      'sparedefault',
-      'OpenAI',
-      'Every agent given none',
-      '$0.00',
-    ]);
-    expect(cells(rowOf('side')).slice(0, 4)).toEqual(['side', 'Anthropic', '—', '$0.00']);
+    expect(screen.queryByRole('columnheader', { name: 'Agents' })).toBeNull();
+    expect(cells(rowOf('main')).slice(0, 3)).toEqual(['maindefault', 'Anthropic', '$3.50']);
+    expect(cells(rowOf('spare')).slice(0, 3)).toEqual(['sparedefault', 'OpenAI', '$0.00']);
+    expect(cells(rowOf('side')).slice(0, 3)).toEqual(['side', 'Anthropic', '$0.00']);
     // The default is not made the default again.
     expect(within(await menu('main')).queryByRole('menuitem', { name: 'Make default' })).toBeNull();
   });
