@@ -338,3 +338,61 @@ describe('the Audit log page', () => {
     expect(detailText(null)).toBe('');
   });
 });
+
+describe('the Audit log section of Settings', () => {
+  const opened = async (count: number) => {
+    const server = signedIn();
+    for (let n = 1; n <= count; n += 1) {
+      server.areas.engine.audit.push(
+        eventOf(n, {
+          action: n % 2 === 0 ? 'key.create' : 'user.sign_in',
+          by: { type: 'user', id: 'usr_1' as never },
+          target: n % 2 === 0 ? { type: 'agent', id: ORDERS } : null,
+          detail: n % 2 === 0 ? { label: `key ${String(n)}` } : null,
+        }),
+      );
+    }
+    // The agents of `signedIn` are as the keys page reads them: it is opened from there.
+    open('/keys', server);
+    await screen.findByText('No keys');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const settings = await screen.findByRole('dialog', { name: 'Settings' });
+    const sections = within(settings).getByRole('navigation', { name: 'Settings' });
+    fireEvent.click(within(sections).getByRole('button', { name: 'Audit log' }));
+    return within(settings).getAllByRole('region', { name: 'Audit log' })[0] as HTMLElement;
+  };
+  const whats = (page: HTMLElement) =>
+    within(within(page).getByRole('table', { name: 'Audit log' }))
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[2]?.textContent);
+
+  it('lists what was done newest first, and is narrowed to one kind', async () => {
+    const page = await opened(4);
+    await waitFor(() =>
+      expect(whats(page)).toEqual(['Key made', 'Signed in', 'Key made', 'Signed in']),
+    );
+    expect(within(page).queryByText('label: key 4')).toBeNull();
+    // A row opens all the event says.
+    fireEvent.click(within(page).getAllByRole('row')[1] as HTMLElement);
+    const event = within(await screen.findByRole('dialog', { name: 'Key made' }));
+    expect(event.getByText('key.create')).toBeTruthy();
+    expect(event.getByText('Label')).toBeTruthy();
+    expect(event.getByText('key 4')).toBeTruthy();
+    fireEvent.click(event.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Key made' })).toBeNull());
+    fireEvent.click(within(page).getByRole('button', { name: 'Action: All actions' }));
+    fireEvent.click(within(page).getByRole('menuitemradio', { name: 'Key made' }));
+    await waitFor(() => expect(whats(page)).toEqual(['Key made', 'Key made']));
+    fireEvent.click(within(page).getByRole('button', { name: 'Action: Key made' }));
+    fireEvent.click(within(page).getByRole('menuitemradio', { name: 'Agent deleted' }));
+    expect(await within(page).findByText('Nothing of this kind')).toBeTruthy();
+  });
+
+  it('is read a page at a time', async () => {
+    const page = await opened(60);
+    await waitFor(() => expect(whats(page)).toHaveLength(50));
+    fireEvent.click(within(page).getByRole('button', { name: 'Older' }));
+    await waitFor(() => expect(whats(page)).toHaveLength(10));
+  });
+});

@@ -825,6 +825,64 @@ dialog.ac-dialog.prefs::backdrop {
   vertical-align: bottom;
 }
 
+/* A section's filter: as small as the buttons beside a heading, its list opening leftwards. */
+.prefs-filter .dropdown__button {
+  min-height: var(--control-sm);
+  padding: 0 8px 0 11px;
+  font-size: 13px;
+}
+
+.prefs-filter .pop.dropdown__pop {
+  right: 0;
+  left: auto;
+  transform-origin: top right;
+}
+
+/* Newer and Older, at the foot of a section, on the right. */
+.prefs-pager .table-more {
+  justify-content: flex-end;
+}
+
+/* A row that opens what it is. */
+.prefs-table__open {
+  cursor: pointer;
+}
+
+.prefs-table__open:hover td {
+  background: var(--hover);
+}
+
+.prefs-table__open:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* An event of the audit log, all of it. */
+.prefs-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 20px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.prefs-facts dt {
+  color: var(--ink-muted);
+}
+
+.prefs-facts dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.prefs-facts pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+}
+
 .prefs-rows {
   margin-bottom: var(--space-5);
 }

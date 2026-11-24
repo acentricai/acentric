@@ -64,7 +64,7 @@ export const ACTIONS: readonly { readonly value: string; readonly label: string 
 ];
 
 /** The names of what the log speaks of, by ID: of those the person may list. */
-function useNames(): ReadonlyMap<string, string> {
+export function useNames(): ReadonlyMap<string, string> {
   const me = useMe();
   const people = me.data !== undefined && may(me.data, 'users:manage');
   const keys = me.data !== undefined && may(me.data, 'keys:manage');
@@ -90,12 +90,12 @@ function useNames(): ReadonlyMap<string, string> {
 }
 
 /** One the log names: by its name where it is known, else by its ID. */
-function Named({ id, names }: { id: string; names: ReadonlyMap<string, string> }) {
+export function Named({ id, names }: { id: string; names: ReadonlyMap<string, string> }) {
   const name = names.get(id);
   return name === undefined ? <Id value={id} /> : <span title={id}>{name}</span>;
 }
 
-function Who({ by, names }: { by: PrincipalRef; names: ReadonlyMap<string, string> }) {
+export function Who({ by, names }: { by: PrincipalRef; names: ReadonlyMap<string, string> }) {
   if (by.type === 'system') return <span className="ac-table__muted">The server</span>;
   return (
     <span>
