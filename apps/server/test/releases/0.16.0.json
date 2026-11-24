@@ -52,12 +52,8 @@
       "sha256": "d28fe05a27ee94493d97354e92bd74f1ce84648ad0bfb8f744b038c40db4f5b6"
     }
   ],
-  "accounts": [
-    "main"
-  ],
-  "machines": [
-    "build-box"
-  ],
+  "accounts": ["main"],
+  "machines": ["build-box"],
   "invites": 1,
   "audit": 8
 }
