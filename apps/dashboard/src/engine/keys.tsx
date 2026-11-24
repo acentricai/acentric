@@ -8,7 +8,7 @@ import { useId, useState } from 'react';
 import type { CreateKeyResponse, Key, Permission, Scope } from '@acentric/protocol';
 
 import { api } from '../api.ts';
-import { fullTime, NOTHING } from '../format.ts';
+import { fullTime, longTime, NOTHING } from '../format.ts';
 import { useMe, type Me } from '../me.ts';
 import {
   Ago,
@@ -26,8 +26,6 @@ import { engine, queryClient } from './api.ts';
 import { grantable, reachText, SCOPES, type ScopeType } from './scopes.ts';
 
 import './keys.css';
-
-export const SHOWN_ONCE = 'Key';
 
 const LIST_REFRESH = 10_000;
 
@@ -438,33 +436,29 @@ export function NewKeyDialog({
 
 /** The new key, this once. */
 export function KeyShown({ made, onDone }: { made: CreateKeyResponse; onDone: () => void }) {
-  const line = `export ENGINE_API_KEY=${made.token}`;
+  const expires = made.key.expiresAt;
   return (
     <Dialog
-      title={made.key.label}
+      title="Save your API key"
       onClose={onDone}
-      wide
       footer={
-        <Button variant="primary" onClick={onDone} data-autofocus>
-          Done
-        </Button>
+        <>
+          <CopyButton value={made.token} what="key" label="Copy key" />
+          <Button variant="primary" onClick={onDone} data-autofocus>
+            Done
+          </Button>
+        </>
       }
     >
-      <div className="ac-field">
-        <span className="ac-field__label">{SHOWN_ONCE}</span>
-        <div className="secret-once">
-          <code className="secret-once__value">{made.token}</code>
-          <CopyButton value={made.token} what="key" text />
-        </div>
+      <div className="key-shown__text">
+        {expires !== null && (
+          <p>
+            This key expires on <strong>{longTime(expires)}</strong>.
+          </p>
+        )}
+        <p>Keep a record of the key below. You won’t be able to view it again.</p>
       </div>
-      <div className="ac-field">
-        <span className="ac-field__label">Environment</span>
-        <div className="secret-once">
-          <code className="secret-once__value">{line}</code>
-          <CopyButton value={line} what="line" text />
-        </div>
-      </div>
-      <p className="note">It is not shown again.</p>
+      <code className="key-shown__value">{made.token}</code>
     </Dialog>
   );
 }

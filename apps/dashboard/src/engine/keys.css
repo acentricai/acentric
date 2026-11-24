@@ -78,6 +78,33 @@
   overflow-wrap: anywhere;
 }
 
+/* The key, made: shown once, to keep. */
+.key-shown__text {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--ink-muted);
+}
+
+.key-shown__text p {
+  margin: 0;
+}
+
+.key-shown__text strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.key-shown__value {
+  display: block;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 /* The reference skeleton's widths, without inline style attributes. */
 .keys-skeleton .skeleton__line:nth-child(4n + 1) {
   width: 92%;

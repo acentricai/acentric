@@ -238,7 +238,7 @@ describe('the API keys section of Settings', () => {
     const making = await screen.findByRole('dialog', { name: 'New key' });
     fireEvent.change(within(making).getByLabelText('Name'), { target: { value: 'ci' } });
     fireEvent.click(within(making).getByRole('button', { name: 'New key' }));
-    const shown = await screen.findByRole('dialog', { name: 'ci' });
+    const shown = await screen.findByRole('dialog', { name: 'Save your API key' });
     fireEvent.click(within(shown).getByRole('button', { name: 'Done' }));
     const keys = await within(page).findByRole('table', { name: 'Keys' });
     expect(await within(keys).findByText('ci')).toBeTruthy();
