@@ -11,14 +11,15 @@ image has them.
 
 ## The server
 
-| Setting               | Without it                  | What it is                                                                                                                                                                  |
-| --------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ACENTRIC_PUBLIC_URL` | where it listens            | Where people reach the server, such as `https://engine.example.com`: what the links it makes, and the scripts that install the command and the machine program, start with. |
-| `ACENTRIC_PORT`       | 4000                        | The port of its API and dashboard. 0 takes any free one.                                                                                                                    |
-| `ACENTRIC_HOST`       | 127.0.0.1                   | The address it listens on: 127.0.0.1 is this machine alone, 0.0.0.0 every address it has.                                                                                   |
-| `ACENTRIC_DATA`       | `./data`                    | The folder of its database, and of conversations' images and files (`blobs`). On a disk of the machine or a block volume: never a network file system.                      |
-| `ACENTRIC_DASHBOARD`  | none: the image has its own | The folder of the dashboard's build, which the server serves at every path that is not the API's. Without it, the links the server makes have no page behind them.          |
-| `ACENTRIC_DOWNLOADS`  | none: the image has its own | The folder of what the server hands out: the `acentric` command at `/install-cli.sh`, and the machine program at `/install.sh`.                                             |
+| Setting                 | Without it                  | What it is                                                                                                                                                                                                                                        |
+| ----------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ACENTRIC_PUBLIC_URL`   | where it listens            | Where people reach the server, such as `https://engine.example.com`: what the links it makes, and the scripts that install the command and the machine program, start with.                                                                       |
+| `ACENTRIC_PORT`         | 4000                        | The port of its API and dashboard. 0 takes any free one.                                                                                                                                                                                          |
+| `ACENTRIC_HOST`         | 127.0.0.1                   | The address it listens on: 127.0.0.1 is this machine alone, 0.0.0.0 every address it has.                                                                                                                                                         |
+| `ACENTRIC_DATA`         | `./data`                    | The folder of its database, and of conversations' images and files (`blobs`). On a disk of the machine or a block volume: never a network file system.                                                                                            |
+| `ACENTRIC_DASHBOARD`    | none: the image has its own | The folder of the dashboard's build, which the server serves at every path that is not the API's. Without it, the links the server makes have no page behind them.                                                                                |
+| `ACENTRIC_DOWNLOADS`    | none: the image has its own | The folder of what the server hands out: the `acentric` command at `/install-cli.sh`, and the machine program at `/install.sh`.                                                                                                                   |
+| `ACENTRIC_UPDATE_CHECK` | on                          | Whether the server asks GitHub's releases of the engine for a newer version, every few hours while someone looks, for the dashboard and `GET /v1/updates`. `off` asks nothing. Taking a version is still done as [VERSIONS.md](VERSIONS.md) says. |
 
 ## Keys
 

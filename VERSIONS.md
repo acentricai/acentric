@@ -61,6 +61,10 @@ provenance), which `docker buildx imagetools inspect` shows.
 - **The `acentric` command** sees when its engine has another version, offers to take it, and
   `acentric update` takes it.
 
+The server says when there is a newer version: `GET /v1/updates` lists those after it with their
+notes, from GitHub's releases, and which to take next by the rules below
+(`ACENTRIC_UPDATE_CHECK=off` asks nothing).
+
 ## From which version to which
 
 - **To a newer patch of the same minor** (0.15.0 to 0.15.2): always. Nothing else is done.

@@ -5,6 +5,9 @@ What changed in each version, for the people who run a server. What a version pr
 
 ## Unreleased
 
+- **Added:** `GET /v1/updates` says the server's version and the versions after it, with their
+  notes, as GitHub's releases say, and which to take next: a patch, or the next minor. The
+  server asks every few hours while someone looks. `ACENTRIC_UPDATE_CHECK=off` asks nothing.
 - **Added:** backups may be set through the API, `PUT /v1/backups/settings`: on or off, how
   often, how many are kept, and a bucket reached with an access key of its own, checked first
   and its secret kept sealed. Once set, they take the place of `ACENTRIC_BACKUP_EVERY`,
