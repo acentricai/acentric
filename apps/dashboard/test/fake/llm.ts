@@ -1,6 +1,7 @@
 // The fake server's routes of the dashboard's LLM providers area: model accounts, and usage. An
 // account's key is "checked" as a provider would: one that starts `bad` is refused.
 
+import { NAME_PATTERN } from '@acentric/protocol';
 import type { Account, UsageReport, UsageTotals } from '@acentric/protocol';
 
 import { json, refused, type Area, type Call, type Shared } from './area.ts';
@@ -48,6 +49,17 @@ export function llmArea(_shared: Shared) {
     }
     if (method === 'POST' && path === '/v1/accounts') {
       const provider = String(body['provider']);
+      if (!NAME_PATTERN.test(String(body['name']))) {
+        return refused(400, 'invalid_request', 'The body is not what this takes', {
+          issues: [
+            {
+              message:
+                'A name is lowercase letters, digits, - and _, starting with a letter or digit, 63 at most',
+              path: ['name'],
+            },
+          ],
+        });
+      }
       if (String(body['apiKey']).startsWith('bad')) {
         return refused(400, 'invalid_credential', `${provider} did not take the key`);
       }
