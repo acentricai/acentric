@@ -12,11 +12,12 @@ A server backs itself up:
 - every `ACENTRIC_BACKUP_EVERY` (`24h` without it; `6h`, `30m`, `7d`…);
 - before a new version changes its database, as it starts. If that backup fails, the database is
   not changed and the server does not start;
-- when someone asks, with **Back up now** on the dashboard's Backups page, or `POST /v1/backups`.
+- when someone asks, with **Back up now** in the Backups section of the dashboard's Settings, or
+  `POST /v1/backups`.
 
 Each goes in `ACENTRIC_BACKUP_DIR`, `<ACENTRIC_DATA>/backups` without it, as
 `acentric-<time>-<kind>-<version>.tar`. The newest `ACENTRIC_BACKUP_KEEP` (3) of each kind are
-kept. `ACENTRIC_BACKUP_EVERY=off` turns both kinds off. The Backups page, and `GET /v1/backups`,
+kept. `ACENTRIC_BACKUP_EVERY=off` turns both kinds off. Settings' Backups section, and `GET /v1/backups`,
 say what became of the last one, and each backup taken or failed is in the audit log.
 
 **Where they go is what they survive.** Beside the data, on its disk, they are there after a bad
@@ -39,8 +40,8 @@ folder as `s3:prefix`), `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`,
 `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`.
 
 A backup that is in the server's folder and could not be copied is one that failed: the
-Backups page says so, with why, and so does the audit log. The page lists the bucket's
-backups too, and whether the bucket is reached. Versioning on the bucket, with older versions
+Backups section of Settings says so, with why, and so does the audit log. It lists the
+bucket's backups too, and whether the bucket is reached. Versioning on the bucket, with older versions
 expiring after some days, keeps a backup a while after the server removed it, and from a
 server that was told to remove them.
 

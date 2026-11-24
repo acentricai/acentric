@@ -80,7 +80,7 @@ sudo docker run --rm --env-file /etc/acentric/acentric.env --volume acentric-dat
 sudo systemctl start acentric
 ```
 
-The names are in `aws s3 ls "$(terraform output -raw backup_url)/"`, and on the Backups page.
+The names are in `aws s3 ls "$(terraform output -raw backup_url)/"`, and in the Backups section of the dashboard's Settings.
 A lost volume is made again from its newest snapshot, or the instance is made with a new one
 and the newest backup in the bucket put back on it.
 

@@ -45,14 +45,14 @@ made from.
 
 1. Start it as its recipe says. Its log has a **setup link**: whoever opens it first becomes
    the owner, with an email and a password. It works once, for a week.
-2. The owner adds people from the dashboard's People page, by invite links: the server sends no
-   email.
+2. The owner adds people from the People section of the dashboard's Settings, by invite links:
+   the server sends no email.
 3. Install the `acentric` command from the server (`curl -fsSL <url>/install-cli.sh | sh`),
    `acentric login` with the admin key, and add a model account
    (`acentric accounts add <provider> <name>`): the [README](../README.md#using-it) goes on from
    there.
-4. Check its backups: the dashboard's Backups page says where they go and whether the bucket is
-   reached. **Back up now** takes one.
+4. Check its backups: the Backups section of the dashboard's Settings says where they go and
+   whether the bucket is reached. **Back up now** takes one.
 
 With no admin key, a server makes one as it first starts and writes it to
 `/data/first-admin-key`, for its user alone: copy it somewhere safe and remove the file.

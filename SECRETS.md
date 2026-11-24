@@ -59,5 +59,5 @@ backups.
 ## Changing the admin key
 
 Give the server another `ACENTRIC_ADMIN_KEY`, and start it again: the old one works no more.
-A key made with the API, the first key among them, is revoked on the dashboard's API keys
-page, or by `DELETE /v1/keys/{key}`.
+A key made with the API, the first key among them, is revoked in the API keys section of
+the dashboard's Settings, or by `DELETE /v1/keys/{key}`.
