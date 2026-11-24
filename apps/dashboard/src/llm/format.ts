@@ -85,15 +85,6 @@ export function rangeStart(days: number, now = Date.now()): number {
   return at.getTime();
 }
 
-/** A change from what was to what is: `+12%`, `−8%`; undefined when there was nothing before. */
-export function change(now: number, before: number): string | undefined {
-  if (before === 0) return undefined;
-  const share = (now - before) / before;
-  const rounded = Math.round(share * 100);
-  if (rounded === 0) return '0%';
-  return `${rounded > 0 ? '+' : '−'}${String(Math.abs(rounded))}%`;
-}
-
 /** How long a call took: `840 ms`, `2.4 s`, `1.2 min`. */
 export function duration(ms: number | null): string {
   if (ms === null) return '—';

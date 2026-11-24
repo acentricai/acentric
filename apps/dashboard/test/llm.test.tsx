@@ -299,16 +299,17 @@ describe('the Usage page', () => {
         row.querySelector('.usage-bars__value')?.textContent,
       ]);
 
-  it('shows the totals of the range beside those of the range before', async () => {
+  it('shows the totals of the range, and nothing of the range before', async () => {
     open('/usage', withUsage());
-    await screen.findByText('+200% on the 30 days before');
+    await screen.findByText('1 failed (25%)');
     expect(tiles()).toEqual([
-      ['Spend', '$6.00', '+200% on the 30 days before'],
-      ['Model calls', '4', '+300% on the 30 days before', '1 failed (25%)'],
-      ['Tokens', '1,390', '+1290% on the 30 days before', '1,040 in · 350 out'],
-      ['Cache hits', '58%', '+58 pts on the 30 days before'],
+      ['Spend', '$6.00'],
+      ['Model calls', '4', '1 failed (25%)'],
+      ['Tokens', '1,390', '1,040 in · 350 out'],
+      ['Cache hits', '58%'],
       ['Typical call', '1 s', '1.2 s for the slowest 5%'],
     ]);
+    expect(asked.some((query) => query.includes('to='))).toBe(false);
   });
 
   it('draws each day by provider, in the viewer’s time zone, as spend, tokens or calls', async () => {
@@ -392,15 +393,13 @@ describe('the Usage page', () => {
     ]);
   });
 
-  it('reads each range asked for, and all time has no range before', async () => {
+  it('reads each range asked for', async () => {
     open('/usage', withUsage());
-    await screen.findByText('+200% on the 30 days before');
+    await screen.findByText('1 failed (25%)');
     fireEvent.click(screen.getByRole('radio', { name: '7 days' }));
     await waitFor(() => expect(asked).toContain(`from=${String(rangeStart(7))}&by=provider`));
-    expect(await screen.findByText('+200% on the 7 days before')).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: 'All time' }));
     await waitFor(() => expect(asked).toContain('by=provider'));
-    await waitFor(() => expect(screen.queryByText(/days before/)).toBeNull());
   });
 
   it('says so when there were no model calls', async () => {
