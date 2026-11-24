@@ -92,7 +92,7 @@ body {
   flex-direction: column;
   height: 100dvh;
   min-width: 0;
-  border-right: 1px solid var(--hairline);
+  border-right: 1px solid var(--divider);
   background: var(--panel);
 }
 
@@ -103,7 +103,7 @@ body {
   gap: 4px;
   height: var(--bar-h);
   padding: 0 10px 0 16px;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--divider);
 }
 
 /* The mark sits where the rail centres it, so collapsing never moves it. */
@@ -134,101 +134,6 @@ body {
   }
 }
 
-.side__slash {
-  flex: none;
-  margin: 0 2px 0 6px;
-  color: var(--line-field-focus);
-  font-size: 18px;
-  font-weight: 300;
-  transition: opacity 200ms ease;
-}
-
-.side[data-collapsed] .side__slash,
-.side[data-collapsed] .org {
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 150ms ease,
-    visibility 0s linear 150ms;
-}
-
-/* ---------- Organization switcher ---------- */
-
-.org {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  transition: opacity 200ms ease 100ms;
-}
-
-.org__button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  height: 32px;
-  padding: 0 6px 0 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--ink);
-  font: 500 14px/20px var(--font-sans);
-  cursor: pointer;
-  transition: background-color 150ms ease;
-}
-
-.org__button:hover,
-.org__button[aria-expanded='true'] {
-  background: var(--hover);
-}
-
-/* The engine's name, where an org switcher would be: not a control. */
-.org__button--static,
-.org__button--static:hover {
-  background: transparent;
-  cursor: default;
-}
-
-.org__button:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
-.org__name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.org__chevron {
-  flex: none;
-  color: var(--ink-muted);
-}
-
-.org__avatar {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--stone);
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.org__avatar--add {
-  border: 1px dashed var(--line-field-focus);
-  background: transparent;
-  color: var(--ink-muted);
-}
-
-.org__pop {
-  top: calc(100% + 6px);
-  left: -40px;
-}
-
 /* ---------- Navigation ---------- */
 
 .nav {
@@ -247,7 +152,7 @@ body {
 
 .nav__separator {
   height: 1px;
-  background: var(--hairline);
+  background: var(--divider);
 }
 
 .nav__label {
@@ -505,8 +410,6 @@ dialog.ac-dialog.prefs {
   padding: 0;
   overflow: hidden;
   animation: dialog-in 220ms var(--ease-out) both;
-  /* Its dividers, fainter than the page's. */
-  --prefs-line: color-mix(in srgb, var(--hairline) 55%, transparent);
 }
 
 dialog.ac-dialog.prefs::backdrop {
@@ -527,7 +430,7 @@ dialog.ac-dialog.prefs::backdrop {
   justify-content: space-between;
   gap: var(--space-3);
   padding: 6px 10px 6px 18px;
-  border-bottom: 1px solid var(--prefs-line);
+  border-bottom: 1px solid var(--divider);
 }
 
 .prefs__title {
@@ -550,7 +453,7 @@ dialog.ac-dialog.prefs::backdrop {
   min-height: 0;
   padding: 16px;
   overflow-y: auto;
-  border-right: 1px solid var(--prefs-line);
+  border-right: 1px solid var(--divider);
   background: var(--panel);
 }
 
@@ -685,7 +588,7 @@ dialog.ac-dialog.prefs::backdrop {
   gap: var(--space-5);
   min-height: 52px;
   padding: 10px 0;
-  border-bottom: 1px solid var(--prefs-line);
+  border-bottom: 1px solid var(--divider);
 }
 
 .prefs-row__text {
@@ -857,7 +760,7 @@ dialog.ac-dialog.prefs::backdrop {
 
 .prefs-release {
   padding-bottom: var(--space-5);
-  border-bottom: 1px solid var(--prefs-line);
+  border-bottom: 1px solid var(--divider);
 }
 
 .prefs-release__head {
@@ -1006,7 +909,7 @@ dialog.ac-dialog.prefs::backdrop {
 
 .prefs-table th {
   padding: 8px 12px 8px 0;
-  border-bottom: 1px solid var(--prefs-line);
+  border-bottom: 1px solid var(--divider);
   color: var(--ink-muted);
   font-size: 13px;
   font-weight: 400;
@@ -1016,7 +919,7 @@ dialog.ac-dialog.prefs::backdrop {
 .prefs-table td {
   height: 44px;
   padding: 0 12px 0 0;
-  border-bottom: 1px solid var(--prefs-line);
+  border-bottom: 1px solid var(--divider);
   color: var(--ink-secondary);
   white-space: nowrap;
 }
@@ -1145,7 +1048,7 @@ dialog.ac-dialog.prefs::backdrop {
 
   .prefs__side {
     border-right: 0;
-    border-bottom: 1px solid var(--prefs-line);
+    border-bottom: 1px solid var(--divider);
   }
 
   .prefs__page {
@@ -1187,7 +1090,7 @@ dialog.ac-dialog.prefs::backdrop {
   position: relative;
   flex: none;
   padding: 8px;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--divider);
 }
 
 .me {
@@ -1332,7 +1235,7 @@ dialog.ac-dialog.prefs::backdrop {
 .pop__rule {
   height: 1px;
   margin: 4px -6px;
-  background: var(--hairline);
+  background: var(--divider);
 }
 
 /* Light and dark as icons, in the segmented style. */
@@ -1417,7 +1320,7 @@ dialog.ac-dialog.prefs::backdrop {
   gap: 10px;
   height: var(--bar-h);
   padding: 0 24px 0 12px;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--divider);
   background: var(--ground);
 }
 
@@ -1457,7 +1360,7 @@ dialog.ac-dialog.prefs::backdrop {
 .topbar__rule {
   width: 1px;
   height: 16px;
-  background: var(--hairline);
+  background: var(--divider);
 }
 
 .crumbs {

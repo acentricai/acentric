@@ -37,14 +37,6 @@ export function Sidebar({ me, collapsed }: { me: Me | undefined; collapsed: bool
         <Link to="/" className="side__brand" aria-label="Acentric">
           <img src="/acentric-mark-cropped.png" alt="" className="side__mark" />
         </Link>
-        <span className="side__slash" aria-hidden="true">
-          /
-        </span>
-        <div className="org">
-          <span className="org__button org__button--static">
-            <span className="org__name">Engine</span>
-          </span>
-        </div>
       </div>
       <Navigation sections={sections} collapsed={collapsed} />
       <SettingsButton collapsed={collapsed} />

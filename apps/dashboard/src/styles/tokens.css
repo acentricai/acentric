@@ -8,6 +8,8 @@
   --wash: #f5f5f3;
   --stone: #f1f1ef;
   --hairline: #e8e8e8;
+  /* Dividers: between the sidebar and the page, and within them. Fainter than a box's edge. */
+  --divider: color-mix(in srgb, var(--hairline) 55%, transparent);
   --line-control: #8e8e8e;
   --ink: #171717;
   --ink-secondary: #3f3f3f;

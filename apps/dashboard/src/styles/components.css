@@ -531,7 +531,7 @@ select.ac-input {
 .ac-table th {
   height: 36px;
   padding: 0 var(--space-3);
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--divider);
   color: var(--ink-muted);
   font-size: 12px;
   font-weight: 500;
@@ -543,7 +543,7 @@ select.ac-input {
 .ac-table td {
   height: var(--row-height);
   padding: 10px var(--space-3);
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--divider);
   color: var(--ink);
   vertical-align: middle;
 }
@@ -784,7 +784,7 @@ select.ac-input {
   gap: var(--space-3);
   align-items: baseline;
   padding: 7px 0;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--divider);
 }
 
 .ac-stream__pos {
@@ -1538,7 +1538,7 @@ tr:hover .row-action,
   display: flex;
   gap: 4px;
   overflow-x: auto;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--divider);
   scrollbar-width: none;
 }
 
