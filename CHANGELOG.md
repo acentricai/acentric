@@ -27,8 +27,19 @@ What changed in each version, for the people who run a server. What a version pr
   says which one there is. **The database changes**, for a table of the pictures: the new
   version backs it up first, as it does for any change of it.
 - **Settings, in the dashboard.** A tab at the foot of the sidebar opens them in a dialog of
-  their own. Its first section is your account: your picture, name, email and role, your
-  password, and where you are signed in.
+  their own, with what were the Account page and the Engine section's pages, which go:
+  - **Account:** your picture, name, email and role, and where you are signed in, each signed
+    out from its row. Your password is changed with a reset link, as an admin gives one.
+  - **People:** the members, their roles and whether they can sign in, and Invite, which makes
+    a link. Invites are no longer listed.
+  - **API keys:** each key gets every permission its reach allows that you hold: one agent, one
+    actor (from every actor), or the whole engine. A new key is shown once, to copy.
+  - **Backups:** when the next is taken, where they are stored, Back up now, and the backups;
+    turning them on or off, how often, how many, and a bucket, from the dashboard.
+  - **Audit log:** narrowed by action, a page at a time, each event opened whole.
+  - **Updates:** the version, whether there is a newer one, and each one's notes; where an
+    updater runs, Download, then Update now or Schedule. While the server takes a version,
+    every page says it is updating, and the dashboard opens at its home once it answers.
 
 ## 0.16.1
 
