@@ -188,6 +188,22 @@ export class MemoryStore implements Store {
     return copy(pageOf(all, (deployment) => ordered(deployment.version), page));
   }
 
+  async agentTree(id: AgentId): Promise<ActorId[]> {
+    const ids = [...this.#actors.values()]
+      .filter((kept) => kept.actor.agent === id)
+      .map((kept) => kept.actor.id);
+    const seen = new Set(ids);
+    for (let at = 0; at < ids.length; at += 1) {
+      for (const kept of this.#actors.values()) {
+        if (kept.actor.parent?.id === ids[at] && !seen.has(kept.actor.id)) {
+          seen.add(kept.actor.id);
+          ids.push(kept.actor.id);
+        }
+      }
+    }
+    return ids;
+  }
+
   async deleteAgent(
     id: AgentId,
   ): Promise<{ deployments: DeploymentId[]; actors: ActorId[] } | undefined> {
@@ -197,9 +213,7 @@ export class MemoryStore implements Store {
       .map(({ deployment }) => deployment.id);
     for (const deployment of deployments) this.#deployments.delete(deployment);
     for (const [key, secret] of this.#secrets) if (secret.agent === id) this.#secrets.delete(key);
-    const actors = [...this.#actors.values()]
-      .filter((kept) => kept.actor.agent === id)
-      .map((kept) => kept.actor.id);
+    const actors = await this.agentTree(id);
     for (const actor of actors) this.#forget(actor);
     for (const [machineId, machine] of this.#machines) {
       if (machine.agents === '*' || !machine.agents.includes(id)) continue;

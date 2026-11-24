@@ -801,10 +801,21 @@ export class Engine {
   async deleteAgent(id: AgentId): Promise<void> {
     if (this.#closing) throw new Unavailable();
     await this.getAgent(id);
-    // Nothing of the agent's goes on while it is taken away: what its actors are in is ended.
-    const hot = [...this.#drivers.values()].filter((driver) => driver.record.actor.agent === id);
-    await Promise.all(hot.map((driver) => driver.interrupt().catch(() => {})));
-    const gone = await this.#store.deleteAgent(id);
+    // Nothing of the agent's goes on while it is taken away, nor of the subagents under its
+    // actors, which go with them: no turn of theirs starts, and what one is in is ended.
+    const tree = await this.#store.agentTree(id);
+    for (const actor of tree) this.#stopping.add(actor);
+    let gone: Awaited<ReturnType<Store['deleteAgent']>>;
+    try {
+      const these = new Set(tree);
+      const hot = [...this.#drivers.values()].filter((driver) => these.has(driver.id));
+      await Promise.all(hot.map((driver) => driver.interrupt().catch(() => {})));
+      // One being read from the store now is had too, to be given up with the rest.
+      await Promise.all(tree.map((actor) => this.#loading.get(actor)?.catch(() => {})));
+      gone = await this.#store.deleteAgent(id);
+    } finally {
+      for (const actor of tree) this.#stopping.delete(actor);
+    }
     this.#agents.delete(id);
     if (gone === undefined) return;
     for (const actor of gone.actors) {

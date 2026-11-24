@@ -414,9 +414,12 @@ export interface Store {
   findDeployment(agent: AgentId, version: number): Promise<Deployment | undefined>;
   /** An agent's deployments, newest first, without their code. */
   listDeployments(agent: AgentId, page?: PageOf): Promise<Paged<Deployment>>;
+  /** An agent's actors, and every subagent under them, of whatever agent. */
+  agentTree(id: AgentId): Promise<ActorId[]>;
   /**
    * Removes an agent with everything of it: its deployments and their code, its secrets, and
-   * its actors with their conversations and their mailboxes. It is taken off every machine
+   * its actors with their conversations and their mailboxes, and the subagents under them, of
+   * whatever agent, with theirs: what they worked for is gone. It is taken off every machine
    * that names it. All of it, or none. It gives the deployments and the actors that went, or
    * undefined when there is no such agent.
    */
