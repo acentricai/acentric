@@ -5,8 +5,8 @@ import type { Account, Role } from '@acentric/protocol';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { rangeStart } from '../src/llm/format.ts';
-import { totalsOf } from './fake/llm.ts';
+import { rangeStart, TIME_ZONE } from '../src/llm/format.ts';
+import { reportOfCalls, totalsOf, type FakeCall } from './fake/llm.ts';
 import { open } from './render.tsx';
 import { fakeServer } from './server.ts';
 
@@ -213,92 +213,198 @@ describe('the Accounts page', () => {
 });
 
 describe('the Usage page', () => {
+  const DAY = 86_400_000;
+  const NOW = Date.now();
+  const A = `act_${'0'.repeat(25)}a`;
+  const B = `act_${'0'.repeat(25)}b`;
   /** Each usage query the page asked, as its address has it. */
   const asked: string[] = [];
   const withUsage = () => {
     asked.length = 0;
     const server = signedIn();
-    server.areas.llm.accounts.push(accountOf(1, { name: 'main', default: true }));
-    server.areas.llm.usageIs((query) => {
-      asked.push(query.toString());
-      const totals = totalsOf({
-        calls: 12_900,
-        failed: 3,
-        totalInput: 1000,
-        cacheRead: 620,
+    const calls: FakeCall[] = [
+      {
+        at: NOW,
+        agent: ORDERS,
+        actor: A,
+        provider: 'anthropic',
+        model: 'claude-x',
+        cost: 3,
+        input: 100,
+        cacheRead: 600,
         cacheWrite: 40,
-        output: 300,
+        output: 200,
         reasoning: 50,
-        cost: 4,
-        estimatedCost: 1,
-        unpriced: 2,
-        first: Date.now() - 86_400_000,
-      });
-      const by = query.get('by');
-      const groups =
-        by === 'agent'
-          ? [
-              { key: ORDERS, totals: totalsOf({ ...totals, cost: 3 }) },
-              { key: BILLING, totals: totalsOf({ calls: 1, cost: 1 }) },
-            ]
-          : by === 'account'
-            ? [{ key: accountOf(1).id, totals }]
-            : by === 'provider'
-              ? [
-                  { key: 'anthropic', totals },
-                  { key: 'fireworks', totals: totalsOf({ totalInput: 10, cacheRead: 0 }) },
-                ]
-              : by === 'day'
-                ? [{ key: new Date().toISOString().slice(0, 10), totals }]
-                : undefined;
-      return { totals, ...(groups === undefined ? {} : { groups }) };
-    });
+        durationMs: 800,
+      },
+      {
+        at: NOW,
+        agent: BILLING,
+        actor: B,
+        provider: 'openai',
+        model: 'gpt-x',
+        cost: 1,
+        input: 200,
+        output: 100,
+        durationMs: 1200,
+      },
+      {
+        at: NOW - DAY,
+        agent: ORDERS,
+        actor: A,
+        provider: 'anthropic',
+        model: 'claude-x',
+        cost: 2,
+        input: 100,
+        output: 50,
+        durationMs: 1000,
+      },
+      {
+        at: NOW - DAY,
+        agent: ORDERS,
+        actor: A,
+        provider: 'anthropic',
+        model: 'claude-x',
+        cost: 0,
+        failed: true,
+        durationMs: 50,
+      },
+      // Of the range before the 30 days.
+      {
+        at: NOW - 40 * DAY,
+        agent: ORDERS,
+        actor: A,
+        provider: 'anthropic',
+        model: 'claude-x',
+        cost: 2,
+        input: 100,
+      },
+    ];
+    const answer = (query: URLSearchParams) => {
+      asked.push(query.toString());
+      return reportOfCalls(calls, query);
+    };
+    server.areas.llm.usageIs(answer);
     return server;
   };
-
-  it('shows the totals of the range, the prompt cache of each provider, and what each agent spent', async () => {
-    open('/usage', withUsage());
-    await screen.findByText('$1.00 estimated · 2 calls of unknown price');
-    const tiles = [...document.querySelectorAll('.usage-tile')].map((tile) =>
+  const tiles = () =>
+    [...document.querySelectorAll('.usage-tile')].map((tile) =>
       [...tile.children].map((part) => part.textContent),
     );
-    expect(tiles).toEqual([
-      ['Spend', '$4.00', '$1.00 estimated · 2 calls of unknown price'],
-      ['Model calls', '12.9K', '3 failed'],
-      ['Input tokens', '1,000', '40 written to cache'],
-      ['Cache hits', '62%', '620 of 1,000 input tokens'],
-      ['Output tokens', '300', '50 reasoning'],
+  const bars = (label: string) =>
+    within(screen.getByRole('list', { name: label }))
+      .getAllByRole('listitem')
+      .map((row) => [
+        row.querySelector('.usage-bars__name')?.textContent,
+        row.querySelector('.usage-bars__value')?.textContent,
+      ]);
+
+  it('shows the totals of the range beside those of the range before', async () => {
+    open('/usage', withUsage());
+    await screen.findByText('+200% on the 30 days before');
+    expect(tiles()).toEqual([
+      ['Spend', '$6.00', '+200% on the 30 days before'],
+      ['Model calls', '4', '+300% on the 30 days before', '1 failed (25%)'],
+      ['Tokens', '1,390', '+1290% on the 30 days before', '1,040 in · 350 out'],
+      ['Cache hits', '58%', '+58 pts on the 30 days before'],
+      ['Typical call', '1 s', '1.2 s for the slowest 5%'],
     ]);
-    const cache = screen.getByRole('table', { name: 'Prompt cache by provider' });
-    expect(
-      within(cache)
-        .getAllByRole('row')
-        .slice(1)
-        .map((row) => within(row).getAllByRole('cell')[0]?.textContent),
-    ).toEqual(['Anthropic', 'Fireworks']);
-    const usage = await screen.findByRole('table', { name: 'Usage' });
-    // An agent is named, and links to its page.
-    const orders = within(usage).getByRole('link', { name: 'orders' });
-    expect(orders.getAttribute('href')).toBe(`/agents/${ORDERS}`);
-    expect(within(usage).getByRole('link', { name: 'billing' })).toBeTruthy();
   });
 
-  it('reads each range asked for, beside the heading, by agent alone', async () => {
-    const server = withUsage();
-    open('/usage', server);
-    await screen.findByRole('table', { name: 'Usage' });
-    expect(screen.queryByRole('button', { name: /^Group/ })).toBeNull();
-    const header = screen.getByRole('heading', { name: 'LLM Usage' }).closest('header');
-    expect(within(header as HTMLElement).getByRole('radio', { name: '30 days' })).toBeTruthy();
-    expect(asked).toContain(`from=${String(rangeStart(30))}&by=agent`);
+  it('draws each day by provider, in the viewer’s time zone, as spend, tokens or calls', async () => {
+    open('/usage', withUsage());
+    await screen.findByRole('heading', { name: 'Spend by day' });
+    expect(asked).toContain(
+      new URLSearchParams({
+        from: String(rangeStart(30)),
+        by: 'day',
+        split: 'provider',
+        tz: TIME_ZONE,
+      }).toString(),
+    );
+    const legend = await screen.findByRole('list', { name: 'Providers' });
+    expect(
+      within(legend)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Anthropic', 'OpenAI']);
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }));
+    const table = screen.getByRole('table', { name: 'Spend by day' });
+    const head = within(table)
+      .getAllByRole('columnheader')
+      .map((cell) => cell.textContent);
+    expect(head).toEqual(['Day', 'Anthropic', 'OpenAI', 'All']);
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(30);
+    expect(cells(rows[0] as HTMLElement).slice(1)).toEqual(['$3.00', '$1.00', '$4.00']);
+    expect(cells(rows[1] as HTMLElement).slice(1)).toEqual(['$2.00', '$0.00', '$2.00']);
+    fireEvent.click(screen.getByRole('radio', { name: 'Calls' }));
+    const calls = await screen.findByRole('table', { name: 'Calls by day' });
+    expect(cells(within(calls).getAllByRole('row')[2] as HTMLElement).slice(1)).toEqual([
+      '2',
+      '0',
+      '2',
+    ]);
+  });
+
+  it('shows what each provider, model and actor spent, and each agent', async () => {
+    open('/usage', withUsage());
+    await screen.findByRole('list', { name: 'Spend by provider' });
+    await waitFor(() =>
+      expect(bars('Spend by provider')).toEqual([
+        ['Anthropic', '$5.00'],
+        ['OpenAI', '$1.00'],
+      ]),
+    );
+    expect(bars('Spend by model')).toEqual([
+      ['claude-x', '$5.00'],
+      ['gpt-x', '$1.00'],
+    ]);
+    const actor = within(screen.getByRole('list', { name: 'Spend by actor' })).getAllByRole(
+      'link',
+    )[0];
+    expect(actor?.getAttribute('href')).toBe(`/actors/${A}`);
+    const agents = screen.getByRole('table', { name: 'Spend by agent' });
+    expect(within(agents).getByRole('link', { name: 'orders' }).getAttribute('href')).toBe(
+      `/agents/${ORDERS}`,
+    );
+    expect(cells(rowOf('orders'))).toEqual([
+      'orders',
+      '3',
+      '1',
+      '1,090',
+      '71%',
+      '800 ms',
+      '$1.67',
+      '$5.00',
+      '',
+    ]);
+    const tokens = screen.getByRole('list', { name: 'Tokens by kind' });
+    expect(
+      within(tokens)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'Input400 · 29%',
+      'Read from cache600 · 43%',
+      'Written to cache40 · 3%',
+      'Output350 · 25%',
+    ]);
+  });
+
+  it('reads each range asked for, and all time has no range before', async () => {
+    open('/usage', withUsage());
+    await screen.findByText('+200% on the 30 days before');
     fireEvent.click(screen.getByRole('radio', { name: '7 days' }));
-    await waitFor(() => expect(asked).toContain(`from=${String(rangeStart(7))}&by=agent`));
+    await waitFor(() => expect(asked).toContain(`from=${String(rangeStart(7))}&by=provider`));
+    expect(await screen.findByText('+200% on the 7 days before')).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: 'All time' }));
-    await waitFor(() => expect(asked).toContain('by=agent'));
+    await waitFor(() => expect(asked).toContain('by=provider'));
+    await waitFor(() => expect(screen.queryByText(/days before/)).toBeNull());
   });
 
   it('says so when there were no model calls', async () => {
     open('/usage', signedIn());
-    expect((await screen.findAllByText('No model calls in this range')).length).toBe(2);
+    expect((await screen.findAllByText('No model calls in this range')).length).toBe(5);
   });
 });

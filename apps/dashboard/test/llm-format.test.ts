@@ -4,10 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   cacheShare,
+  change,
   compact,
   dayLabel,
+  dayOf,
   daysBetween,
   dollars,
+  duration,
   percent,
   providerName,
   rangeStart,
@@ -39,12 +42,11 @@ describe('money and counts', () => {
 });
 
 describe('days', () => {
-  it('are the UTC days of a range, ending today, each named as the ledger names it', () => {
-    const now = Date.parse('2026-11-20T15:00:00Z');
+  it('are the viewer’s own days of a range, ending today, each named as the server names it', () => {
+    const now = new Date(2026, 10, 20, 15).getTime();
     const from = rangeStart(7, now);
-    expect(new Date(from).toISOString()).toBe('2026-11-14T00:00:00.000Z');
-    const days = daysBetween(from, now);
-    expect(days).toEqual([
+    expect(from).toBe(new Date(2026, 10, 14).getTime());
+    expect(daysBetween(from, now)).toEqual([
       '2026-11-14',
       '2026-11-15',
       '2026-11-16',
@@ -53,11 +55,26 @@ describe('days', () => {
       '2026-11-19',
       '2026-11-20',
     ]);
+    expect(dayOf(new Date(2026, 10, 20, 23, 59).getTime())).toBe('2026-11-20');
     expect(dayLabel('2026-11-04')).toBe('Nov 4');
     // Across a month's end.
     expect(
-      daysBetween(Date.parse('2026-10-30T00:00:00Z'), Date.parse('2026-11-01T01:00:00Z')),
+      daysBetween(new Date(2026, 9, 30).getTime(), new Date(2026, 10, 1, 1).getTime()),
     ).toEqual(['2026-10-30', '2026-10-31', '2026-11-01']);
+  });
+});
+
+describe('a change, and how long a call took', () => {
+  it('are written short', () => {
+    expect(change(6, 2)).toBe('+200%');
+    expect(change(1, 4)).toBe('−75%');
+    expect(change(5, 5)).toBe('0%');
+    expect(change(5, 0)).toBeUndefined();
+    expect(duration(null)).toBe('—');
+    expect(duration(840)).toBe('840 ms');
+    expect(duration(1000)).toBe('1 s');
+    expect(duration(2450)).toBe('2.5 s');
+    expect(duration(72_000)).toBe('1.2 min');
   });
 });
 

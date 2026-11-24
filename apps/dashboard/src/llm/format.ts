@@ -1,4 +1,5 @@
-// How money, tokens and days are written on these pages.
+// How money, tokens and days are written on these pages. Days are the viewer's own: of the time
+// zone the browser is in, which the server is asked to add usage up in.
 
 import type { UsageTotals } from '@acentric/protocol';
 
@@ -55,23 +56,50 @@ export function dayLabel(day: string): string {
   return `${MONTHS[Number(month) - 1] ?? month} ${Number(date)}`;
 }
 
-/** The days from `from` to `to` (UTC), each as the ledger names it. At most 400. */
+/** The time zone the browser is in, which days are of. */
+export const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** The day a time is in, here, as the server names one: `2026-11-20`. */
+export function dayOf(at: number): string {
+  const day = new Date(at);
+  const two = (value: number) => String(value).padStart(2, '0');
+  return `${String(day.getFullYear())}-${two(day.getMonth() + 1)}-${two(day.getDate())}`;
+}
+
+/** The days from `from` to `to`, here, each as the server names one. At most 400. */
 export function daysBetween(from: number, to: number): string[] {
   const out: string[] = [];
   const at = new Date(from);
-  at.setUTCHours(0, 0, 0, 0);
-  for (; at.getTime() <= to && out.length < 400; at.setUTCDate(at.getUTCDate() + 1)) {
-    out.push(at.toISOString().slice(0, 10));
+  at.setHours(0, 0, 0, 0);
+  for (; at.getTime() <= to && out.length < 400; at.setDate(at.getDate() + 1)) {
+    out.push(dayOf(at.getTime()));
   }
   return out;
 }
 
-/** UTC midnight `days - 1` days before today: the start of a range of `days` days ending today. */
+/** Midnight here `days - 1` days before `now`'s day: the start of a range of `days` days ending then. */
 export function rangeStart(days: number, now = Date.now()): number {
   const at = new Date(now);
-  at.setUTCHours(0, 0, 0, 0);
-  at.setUTCDate(at.getUTCDate() - (days - 1));
+  at.setHours(0, 0, 0, 0);
+  at.setDate(at.getDate() - (days - 1));
   return at.getTime();
+}
+
+/** A change from what was to what is: `+12%`, `−8%`; undefined when there was nothing before. */
+export function change(now: number, before: number): string | undefined {
+  if (before === 0) return undefined;
+  const share = (now - before) / before;
+  const rounded = Math.round(share * 100);
+  if (rounded === 0) return '0%';
+  return `${rounded > 0 ? '+' : '−'}${String(Math.abs(rounded))}%`;
+}
+
+/** How long a call took: `840 ms`, `2.4 s`, `1.2 min`. */
+export function duration(ms: number | null): string {
+  if (ms === null) return '—';
+  if (ms < 1000) return `${String(Math.round(ms))} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1).replace(/\.0$/, '')} s`;
+  return `${(ms / 60_000).toFixed(1).replace(/\.0$/, '')} min`;
 }
 
 /** Axis ticks from 0 to at least `max`, in three or four round steps. */

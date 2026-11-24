@@ -32,6 +32,101 @@ export function totalsOf(more: Partial<UsageTotals> = {}): UsageTotals {
   };
 }
 
+/** A call of a model the fake server adds up, as the server would. */
+export type FakeCall = {
+  readonly at: number;
+  readonly agent: string;
+  readonly actor: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly cost: number;
+  readonly input?: number;
+  readonly cacheRead?: number;
+  readonly cacheWrite?: number;
+  readonly output?: number;
+  readonly reasoning?: number;
+  readonly failed?: boolean;
+  readonly durationMs?: number;
+};
+
+/** The day of a time, in a time zone, as the server names one. */
+const dayIn = (at: number, tz: string) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(at);
+
+const middle = (sorted: readonly number[], share: number) =>
+  sorted.length === 0 ? null : (sorted[Math.max(0, Math.ceil(share * sorted.length) - 1)] ?? null);
+
+function callTotals(calls: readonly FakeCall[]): UsageTotals {
+  const answered = calls
+    .filter((call) => call.failed !== true)
+    .map((call) => call.durationMs ?? 1000)
+    .toSorted((a, b) => a - b);
+  const sum = (of: (call: FakeCall) => number) => calls.reduce((all, call) => all + of(call), 0);
+  return totalsOf({
+    calls: calls.length,
+    failed: calls.filter((call) => call.failed === true).length,
+    input: sum((call) => call.input ?? 0),
+    cacheRead: sum((call) => call.cacheRead ?? 0),
+    cacheWrite: sum((call) => call.cacheWrite ?? 0),
+    totalInput: sum((call) => (call.input ?? 0) + (call.cacheRead ?? 0) + (call.cacheWrite ?? 0)),
+    output: sum((call) => call.output ?? 0),
+    reasoning: sum((call) => call.reasoning ?? 0),
+    cost: sum((call) => call.cost),
+    durationMs: sum((call) => call.durationMs ?? 1000),
+    medianMs: middle(answered, 0.5),
+    p95Ms: middle(answered, 0.95),
+    first: calls.length === 0 ? null : Math.min(...calls.map((call) => call.at)),
+    last: calls.length === 0 ? null : Math.max(...calls.map((call) => call.at)),
+  });
+}
+
+/** What calls add up to for a query of usage: its filters, `by`, `split` and `tz`. */
+export function reportOfCalls(calls: readonly FakeCall[], query: URLSearchParams): UsageReport {
+  const from = Number(query.get('from') ?? 0);
+  const to = query.get('to') === null ? Infinity : Number(query.get('to'));
+  const left = calls.filter(
+    (call) =>
+      call.at >= from &&
+      call.at < to &&
+      (query.get('agent') === null || call.agent === query.get('agent')) &&
+      (query.get('provider') === null || call.provider === query.get('provider')) &&
+      (query.get('model') === null || call.model === query.get('model')),
+  );
+  const tz = query.get('tz') ?? 'UTC';
+  const keyOf = (call: FakeCall, by: string) =>
+    by === 'day'
+      ? dayIn(call.at, tz)
+      : by === 'root' || by === 'actor'
+        ? call.actor
+        : String(call[by as 'agent' | 'provider' | 'model']);
+  const grouped = (of: readonly FakeCall[], by: string) => {
+    const groups = new Map<string, FakeCall[]>();
+    for (const call of of)
+      groups.set(keyOf(call, by), [...(groups.get(keyOf(call, by)) ?? []), call]);
+    return [...groups]
+      .map(([key, them]) => ({ key, them, totals: callTotals(them) }))
+      .toSorted((a, b) => b.totals.cost - a.totals.cost || (a.key < b.key ? -1 : 1));
+  };
+  const by = query.get('by');
+  const split = query.get('split');
+  if (by === null) return { totals: callTotals(left) };
+  return {
+    totals: callTotals(left),
+    groups: grouped(left, by).map(({ key, them, totals }) => ({
+      key,
+      totals,
+      ...(split === null
+        ? {}
+        : { groups: grouped(them, split).map((part) => ({ key: part.key, totals: part.totals })) }),
+    })),
+  };
+}
+
 export function llmArea(_shared: Shared) {
   const accounts: Account[] = [];
   /** What usage is answered with, for the query asked: no calls unless a test says. */
@@ -123,6 +218,10 @@ export function llmArea(_shared: Shared) {
     /** Answers usage with this from now on. */
     usageIs(report: (query: URLSearchParams) => UsageReport) {
       usage = report;
+    },
+    /** Answers usage by adding these calls up, as the server would. */
+    callsAre(calls: readonly FakeCall[]) {
+      usage = (query) => reportOfCalls(calls, query);
     },
   } satisfies Area & Record<string, unknown>;
 }
