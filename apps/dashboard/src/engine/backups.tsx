@@ -65,7 +65,7 @@ export function whereText(backup: Backup): string {
 /** What a backup is, in words. */
 export function kindText(backup: Backup): string {
   if (backup.kind === 'scheduled') return 'Scheduled';
-  if (backup.kind === 'manual') return 'When asked';
+  if (backup.kind === 'manual') return 'Manual';
   return `Before the upgrade to ${backup.version}`;
 }
 

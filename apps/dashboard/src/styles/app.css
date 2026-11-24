@@ -906,9 +906,46 @@ dialog.ac-dialog.prefs::backdrop {
 
 /* On a screen with no hover, it is there. */
 @media (hover: none) {
-  .prefs-table__out {
+  .prefs-table__out,
+  .prefs-row__act {
     opacity: 1;
   }
+}
+
+/* What a row of Settings does, shown beside its value when the row is hovered. */
+.prefs-row__act {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+}
+
+.prefs-row:hover .prefs-row__act,
+.prefs-row__act:focus-visible,
+.prefs-row__act--shown {
+  opacity: 1;
+}
+
+.prefs-row__act:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.prefs-row__act:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.prefs-row__act:disabled {
+  cursor: default;
 }
 
 /* A row's ⋯ in Settings: the icon alone, with no box round it, and its menu as wide as its words. */

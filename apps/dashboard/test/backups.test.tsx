@@ -33,7 +33,7 @@ describe('the Backups page', () => {
     expect(await screen.findByText('The last backup was taken')).toBeTruthy();
     const table = within(screen.getByRole('table', { name: 'Backups' }));
     await waitFor(() => expect(table.getAllByRole('row')).toHaveLength(2));
-    expect(table.getByText('When asked')).toBeTruthy();
+    expect(table.getByText('Manual')).toBeTruthy();
     expect(table.getByText('5.0 MB')).toBeTruthy();
     expect(server.calls.some((call) => call.method === 'POST' && call.path === '/v1/backups')).toBe(
       true,
@@ -147,8 +147,20 @@ describe('the Backups section of Settings', () => {
     fireEvent.click(page.getByRole('button', { name: /Back up now/ }));
     const table = within(page.getByRole('table', { name: 'Backups' }));
     await waitFor(() => expect(table.getAllByRole('row')).toHaveLength(2));
-    expect(table.getByText('When asked')).toBeTruthy();
+    expect(table.getByText('Manual')).toBeTruthy();
     expect(page.queryByText('The last backup was taken')).toBeNull();
+  });
+
+  it('turns them off, once asked whether to', async () => {
+    const server = signedIn();
+    const page = within(await section(server));
+    fireEvent.click(await page.findByRole('button', { name: /Turn off/ }));
+    const asked = within(await screen.findByRole('dialog', { name: 'Turn off backups?' }));
+    fireEvent.click(asked.getByRole('button', { name: 'Turn off' }));
+    expect(await page.findByText('Backups are not yet enabled')).toBeTruthy();
+    expect(page.getByRole('button', { name: /Turn on/ })).toBeTruthy();
+    expect(page.queryByRole('button', { name: /Turn off/ })).toBeNull();
+    expect(server.areas.engine.backups.set).toMatchObject({ enabled: false });
   });
 
   it('changes where they are stored, from the settings as they are', async () => {
