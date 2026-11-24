@@ -495,9 +495,9 @@ body {
    sidebar, but for a gap round it. About four fifths of the window down. */
 dialog.ac-dialog.prefs {
   width: min(
-    1400px,
+    1160px,
     calc(100vw - 32px),
-    max(720px, calc(100vw - 2 * (var(--side-w, 240px) + 12px)))
+    max(560px, calc(100vw - 2 * (var(--side-w, 240px) + 12px)))
   );
   max-width: none;
   height: min(1000px, calc(100dvh - 32px), max(540px, 80dvh));
@@ -723,10 +723,12 @@ dialog.ac-dialog.prefs::backdrop {
 .prefs-photo__edit {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.45);
+  /* The picture dims under it, and the pencil is white on it, whatever the theme. */
+  background: rgba(0, 0, 0, 0.5);
   color: #fff;
   opacity: 0;
   transition: opacity 150ms var(--ease-out);
@@ -737,6 +739,18 @@ dialog.ac-dialog.prefs::backdrop {
 .prefs-photo .dropdown__button[aria-expanded='true'] .prefs-photo__edit,
 .prefs-photo__face[data-busy] .prefs-photo__edit {
   opacity: 1;
+}
+
+.prefs-photo__edit svg {
+  color: #fff;
+  stroke: #fff;
+}
+
+/* A dropdown turns its chevron when open: the pencil is no chevron, and stays as it is. */
+.prefs-photo .dropdown__button svg,
+.prefs-photo .dropdown__button[aria-expanded='true'] svg {
+  transform: none;
+  transition: none;
 }
 
 .prefs-photo .more-menu__pop {
