@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -292,5 +292,27 @@ describe('a server’s settings', () => {
     for (const [env, message] of wrong) {
       expect(() => readSettings(env), JSON.stringify(env)).toThrow(message);
     }
+  });
+});
+
+describe('SETTINGS.md', () => {
+  const source = readFileSync(new URL('../src/settings.ts', import.meta.url), 'utf8');
+  const doc = readFileSync(new URL('../../../SETTINGS.md', import.meta.url), 'utf8');
+  /** The settings the server reads: each name it is asked for by. */
+  const read = new Set(
+    [...source.matchAll(/(?:given|secret|list|wholeNumber|keptFor)\('(ACENTRIC_[A-Z_]+)'/g)].map(
+      (match) => match[1],
+    ),
+  );
+  /** The settings SETTINGS.md has a row of. */
+  const listed = new Set([...doc.matchAll(/^\| `(ACENTRIC_[A-Z_]+)`/gm)].map((match) => match[1]));
+
+  it('has a row for every setting the server reads', () => {
+    expect(read.size).toBeGreaterThan(20);
+    expect([...read].filter((name) => !listed.has(name))).toEqual([]);
+  });
+
+  it('has no row for a setting the server does not read', () => {
+    expect([...listed].filter((name) => !read.has(name))).toEqual([]);
   });
 });
