@@ -105,14 +105,14 @@ describe('the Accounts page', () => {
     const server = signedIn();
     open('/llm-providers', server);
     fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
-    const provider = within(dialog()).getByLabelText('Provider') as HTMLSelectElement;
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Provider: Anthropic' }));
     // ChatGPT is signed in, not given a key: it is not offered here.
-    expect([...provider.options].map((option) => option.textContent)).toEqual([
+    expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
       'Anthropic',
       'OpenAI',
       'Fireworks',
     ]);
-    fireEvent.change(provider, { target: { value: 'openai' } });
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'OpenAI' }));
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'work' } });
     fireEvent.change(within(dialog()).getByLabelText('API key'), {
       target: { value: 'bad-key' },
