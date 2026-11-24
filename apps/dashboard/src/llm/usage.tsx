@@ -132,7 +132,7 @@ export function UsagePage() {
             note={(group) => `${compact(group.calls)} calls`}
           />
         </Card>
-        <Card title="Top actors" hint="With their subagents">
+        <Card title="Top actors">
           <Bars
             label="Spend by actor"
             groups={roots.data?.groups}
@@ -149,7 +149,6 @@ export function UsagePage() {
             )}
             most={5}
             rest={false}
-            note={(group) => `${compact(group.calls)} calls`}
           />
         </Card>
       </div>
@@ -407,7 +406,8 @@ function Bars({
   groups: readonly Group[] | undefined;
   total: UsageTotals | undefined;
   name: (key: string) => ReactNode;
-  note: (group: Group) => string;
+  /** What is said under a group's bar, after its share: nothing under it without it. */
+  note?: (group: Group) => string;
   swatch?: (key: string) => string;
   most?: number;
   rest?: boolean;
@@ -425,12 +425,18 @@ function Bars({
   const shown = groups.slice(0, most);
   const others = groups.slice(most);
   const otherCost = others.reduce((sum, group) => sum + group.cost, 0);
-  const rows: { key: string; title: ReactNode; cost: number; note: string; fill?: string }[] = [
+  const rows: {
+    key: string;
+    title: ReactNode;
+    cost: number;
+    note?: string;
+    fill?: string;
+  }[] = [
     ...shown.map((group) => ({
       key: group.key,
       title: name(group.key),
       cost: group.cost,
-      note: note(group),
+      ...(note === undefined ? {} : { note: note(group) }),
       ...(swatch === undefined ? {} : { fill: swatch(group.key) }),
     })),
     ...(rest && others.length > 0
@@ -472,9 +478,11 @@ function Bars({
                 }
               />
             </span>
-            <span className="usage-bars__note">
-              {percent(share)} · {row.note}
-            </span>
+            {row.note !== undefined && (
+              <span className="usage-bars__note">
+                {percent(share)} · {row.note}
+              </span>
+            )}
           </li>
         );
       })}
