@@ -6,7 +6,11 @@ listens on `127.0.0.1:4000` only, for a proxy on the same machine to end HTTPS i
 
 ## Running it
 
+On the machine, this folder of the version you run, then the settings and the keys:
+
 ```sh
+git clone --depth 1 --branch v0.16.0 https://github.com/acentricai/acentric.git
+cd acentric/deploy/systemd
 sudo install -d -m 700 /etc/acentric /etc/acentric/secrets
 sudo install -m 600 acentric.env.example /etc/acentric/acentric.env   # then put the address in it
 openssl rand -hex 32 | sudo tee /etc/acentric/secrets/secret-key > /dev/null   # keep a copy elsewhere
@@ -16,7 +20,8 @@ sudo chmod 644 /etc/acentric/secrets/*
 
 The keys are files the server reads in its container, not settings of its environment, which
 `docker inspect` shows. `/etc/acentric/secrets` is root's alone; its files are readable, as the
-server's user in the container reads them.
+server's user in the container reads them. `acentric login` asks for the key in
+`/etc/acentric/secrets/admin-key`.
 
 By Docker:
 

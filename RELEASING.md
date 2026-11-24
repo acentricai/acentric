@@ -9,6 +9,8 @@ published to npm. What each version promises is in [VERSIONS.md](VERSIONS.md).
 1. **The version.** Set it in every `package.json` and in `Cargo.toml`'s `[workspace.package]`,
    then run `cargo update -p acentric-machine` and `pnpm install`. `pnpm versions` says
    whether they are one.
+   The recipes in `deploy/` name it too, for their images and the tag they are taken from
+   (`grep -rn <old version> deploy README.md`): set it there as well.
 2. **The notes.** Add a `## <version>` section at the top of `CHANGELOG.md`: what changed, in
    words for the people who run a server, and for a minor version what they must do.
 3. **Merge it** to `main` through a pull request, and wait for CI to pass on `main`.
