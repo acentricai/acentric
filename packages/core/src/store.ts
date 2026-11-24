@@ -365,6 +365,14 @@ export class EmailTaken extends Error {
 }
 
 /** A person as the store keeps them: with what tells their password is the one, never it. */
+/** A picture of a person, as the store keeps it. */
+export type StoredPhoto = {
+  readonly mediaType: string;
+  readonly bytes: Uint8Array;
+  /** What names this picture of them, and no other: the person's `photo`. */
+  readonly digest: string;
+};
+
 export type StoredUser = {
   readonly user: User;
   /** The hash of their password, with what it was made by. */
@@ -565,6 +573,12 @@ export interface Store {
   saveUser(user: StoredUser): Promise<void>;
   /** Removes a person and their sessions. */
   removeUser(id: UserId): Promise<void>;
+  /**
+   * Gives a person a picture, or with null takes theirs away, in the same write as their
+   * `photo`: they as they then are, or undefined when there is no such person.
+   */
+  setPhoto(user: UserId, photo: StoredPhoto | null): Promise<StoredUser | undefined>;
+  loadPhoto(user: UserId): Promise<StoredPhoto | undefined>;
 
   addSession(session: StoredSession): Promise<void>;
   loadSession(id: SessionId): Promise<StoredSession | undefined>;

@@ -26,9 +26,19 @@ export const userSchema = z
     createdAt: timestampSchema,
     /** Null for one who can sign in. One who is disabled cannot, and their keys do not work. */
     disabledAt: timestampSchema.nullable(),
+    /**
+     * Which picture of them there is, at `/v1/users/{user}/photo?v=<photo>`: it is another for
+     * each picture. Null for one with none.
+     */
+    photo: z.string().nullable(),
   })
   .meta({ id: 'User' });
 export type User = z.infer<typeof userSchema>;
+
+/** The most a picture of a person may be, in bytes. */
+export const PHOTO_BYTES = 2 * 1024 * 1024;
+/** What a picture of a person may be. */
+export const PHOTO_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 
 /** What of a person can be changed. Who may change a role is in `auth.ts`. */
 export const updateUserRequestSchema = z

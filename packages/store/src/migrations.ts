@@ -438,6 +438,15 @@ const MIGRATIONS: readonly string[] = [
     changed_by TEXT
   ) STRICT;
   `,
+  // 3: a picture of each person.
+  `
+  -- A picture of a person, kept with them: its bytes, and what they are.
+  CREATE TABLE user_photos (
+    user_id TEXT PRIMARY KEY,
+    media_type TEXT NOT NULL,
+    bytes BLOB NOT NULL
+  ) STRICT;
+  `,
 ];
 
 /** The version a database is at when it has had every migration. */

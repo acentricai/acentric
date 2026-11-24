@@ -42,6 +42,7 @@ import type {
   StoredUser,
   UsageFilter,
   UsageRecord,
+  StoredPhoto,
 } from '@acentric/core';
 import type {
   AccountId,
@@ -601,6 +602,14 @@ export class SqliteStore implements Store {
 
   removeUser(id: UserId): Promise<void> {
     return this.#write.ask('removeUser' satisfies Operation, id);
+  }
+
+  setPhoto(id: UserId, photo: StoredPhoto | null): Promise<StoredUser | undefined> {
+    return this.#write.ask('setPhoto' satisfies Operation, id, photo);
+  }
+
+  loadPhoto(id: UserId): Promise<StoredPhoto | undefined> {
+    return this.#read.ask('loadPhoto' satisfies Operation, id);
   }
 
   addSession(session: StoredSession): Promise<void> {

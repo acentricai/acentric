@@ -169,6 +169,8 @@ export const principalSchema = z
       permissions: z.array(permissionSchema),
       /** The session the request came with. */
       session: sessionIdSchema,
+      /** Which picture of them there is, as a person's `photo` says. None when it is absent. */
+      photo: z.string().nullable().optional(),
     }),
     z.object({
       type: z.literal('key'),

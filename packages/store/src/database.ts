@@ -39,6 +39,7 @@ import type {
   Turn,
   UsageFilter,
   UsageRecord,
+  StoredPhoto,
 } from '@acentric/core';
 import type {
   AccountId,
@@ -190,7 +191,9 @@ function keyOf(row: KeyRow): StoredKey {
 type UserRow = { user: string; password: string };
 
 function userOf(row: UserRow): StoredUser {
-  return { user: JSON.parse(row.user) as User, password: row.password };
+  // One kept before people had pictures has none.
+  const user = { photo: null, ...(JSON.parse(row.user) as Omit<User, 'photo'>) } as User;
+  return { user, password: row.password };
 }
 
 type SecretRow = { agent_id: string; name: string; sealed: string; updated_at: number };
@@ -603,6 +606,7 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'touchKey',
   'addUser',
   'saveUser',
+  'setPhoto',
   'removeUser',
   'addSession',
   'touchSession',
@@ -1223,6 +1227,37 @@ export function operations(db: DatabaseSync) {
     removeUser(id: UserId): void {
       run('DELETE FROM users WHERE id = ?', id);
       run('DELETE FROM sessions WHERE user_id = ?', id);
+      run('DELETE FROM user_photos WHERE user_id = ?', id);
+    },
+
+    setPhoto(id: UserId, photo: StoredPhoto | null): StoredUser | undefined {
+      const row = get<UserRow>('SELECT user, password FROM users WHERE id = ?', id);
+      if (row === undefined) return undefined;
+      const stored = userOf(row);
+      if (photo === null) run('DELETE FROM user_photos WHERE user_id = ?', id);
+      else {
+        run(
+          `INSERT INTO user_photos (user_id, media_type, bytes) VALUES (?, ?, ?)
+           ON CONFLICT (user_id) DO UPDATE SET media_type = excluded.media_type, bytes = excluded.bytes`,
+          id,
+          photo.mediaType,
+          photo.bytes,
+        );
+      }
+      const user = { ...stored.user, photo: photo?.digest ?? null };
+      run('UPDATE users SET user = ? WHERE id = ?', JSON.stringify(user), id);
+      return { ...stored, user };
+    },
+
+    loadPhoto(id: UserId): StoredPhoto | undefined {
+      const row = get<{ media_type: string; bytes: Uint8Array; user: string }>(
+        `SELECT user_photos.media_type, user_photos.bytes, users.user FROM user_photos
+         JOIN users ON users.id = user_photos.user_id WHERE user_photos.user_id = ?`,
+        id,
+      );
+      if (row === undefined) return undefined;
+      const { photo } = JSON.parse(row.user) as { photo?: string | null };
+      return { mediaType: row.media_type, bytes: row.bytes, digest: photo ?? '' };
     },
 
     addSession(stored: StoredSession): void {

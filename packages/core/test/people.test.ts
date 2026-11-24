@@ -87,6 +87,7 @@ describe('an engine with no person yet', () => {
       role: 'owner',
       permissions: [...ROLE_PERMISSIONS.owner],
       session: signedIn.session.id,
+      photo: null,
     });
     // Used once: it makes no second owner, and an engine with a person makes no such link.
     await expect(

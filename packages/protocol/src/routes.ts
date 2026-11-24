@@ -891,6 +891,25 @@ export const routes = defineRoutes({
     status: 200,
     errors: ['conflict'],
   },
+  'me.setPhoto': {
+    method: 'PUT',
+    path: '/v1/me/photo',
+    summary:
+      "Gives a person a picture of them: the request's body, the bytes of a PNG, JPEG or WebP of 2 MiB at most.",
+    auth: { on: 'any' },
+    response: userSchema,
+    status: 200,
+    errors: ['too_large'],
+  },
+  'me.removePhoto': {
+    method: 'DELETE',
+    path: '/v1/me/photo',
+    summary: 'Takes away the picture of a person.',
+    auth: { on: 'any' },
+    response: userSchema,
+    status: 200,
+    errors: [],
+  },
   'me.password': {
     method: 'POST',
     path: '/v1/me/password',
@@ -971,6 +990,17 @@ export const routes = defineRoutes({
     response: userSchema,
     status: 200,
     errors: ['not_found'],
+  },
+  'users.photo': {
+    method: 'GET',
+    path: '/v1/users/{user}/photo',
+    summary: 'Reads the bytes of the picture of a person, for anyone signed in.',
+    auth: { on: 'any' },
+    params: z.object({ user: userIdSchema }),
+    query: z.object({ v: z.string().max(64).optional() }),
+    status: 200,
+    errors: ['not_found'],
+    bytes: true,
   },
   'users.update': {
     method: 'PATCH',

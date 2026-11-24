@@ -14,8 +14,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { openWith, sealWith, sealedFor } from '@acentric/core';
 import type { SecretKeys } from '@acentric/core';
 import { createClient } from '@acentric/client';
-import { SqliteStore } from '@acentric/store';
 import type { ActorId } from '@acentric/protocol';
+import { SqliteStore } from '@acentric/store';
 
 import { restore } from '../src/backups/archive.ts';
 import { DataInUse } from '../src/backups/lock.ts';

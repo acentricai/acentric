@@ -446,3 +446,54 @@ describe('the audit log', () => {
     expect(ADMIN).not.toBe('');
   });
 });
+
+describe('a picture of a person', () => {
+  /** The first bytes of a PNG, and some more: what is looked at to know it is one. */
+  const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+
+  it('is given by its person, shown to anyone signed in, and taken away', async () => {
+    const world = await api();
+    const ada = await owner(world);
+    const auth = { authorization: `Bearer ${ada.token}` };
+    const put = (body: Uint8Array, type = 'image/png') =>
+      world.app.request(`${BASE}/v1/me/photo`, {
+        method: 'PUT',
+        headers: { ...auth, 'content-type': type },
+        body,
+      });
+
+    const given = await put(PNG);
+    expect(given.status).toBe(200);
+    const user = (await given.json()) as { photo: string | null };
+    expect(user.photo).toMatch(/^[0-9a-f]{16}$/);
+    expect((await ada.client.call('users.get', { params: { user: ada.id as never } })).photo).toBe(
+      user.photo,
+    );
+
+    const shown = await world.app.request(
+      `${BASE}/v1/users/${ada.id}/photo?v=${String(user.photo)}`,
+      { headers: auth },
+    );
+    expect(shown.status).toBe(200);
+    expect(shown.headers.get('content-type')).toBe('image/png');
+    expect(shown.headers.get('cache-control')).toContain('immutable');
+    expect(new Uint8Array(await shown.arrayBuffer())).toEqual(PNG);
+    // Not to one who is not signed in.
+    expect((await world.app.request(`${BASE}/v1/users/${ada.id}/photo`)).status).toBe(401);
+
+    // What it is, is what its bytes say: not what it is called.
+    const text = await put(new TextEncoder().encode('<svg onload="alert(1)"/>'), 'image/png');
+    expect(text.status).toBe(400);
+    const large = await put(new Uint8Array(2 * 1024 * 1024 + 1));
+    expect(large.status).toBe(413);
+
+    const removed = await world.app.request(`${BASE}/v1/me/photo`, {
+      method: 'DELETE',
+      headers: auth,
+    });
+    expect(((await removed.json()) as { photo: string | null }).photo).toBeNull();
+    expect(
+      (await world.app.request(`${BASE}/v1/users/${ada.id}/photo`, { headers: auth })).status,
+    ).toBe(404);
+  });
+});
