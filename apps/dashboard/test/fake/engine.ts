@@ -42,7 +42,12 @@ export function engineArea(shared: Shared) {
   const disabled = new Map<string, number>();
   const audit: AuditEvent[] = [];
   /** The server's backups, as GET /v1/backups says them; null for a server with them off. */
-  const backups: { status: Backups | null; fail: string | null } = {
+  const backups: {
+    status: Backups | null;
+    fail: string | null;
+    /** What PUT /v1/backups/settings was last given. */
+    set: Record<string, unknown> | null;
+  } = {
     status: {
       dir: '/data/backups',
       sameDisk: true,
@@ -54,6 +59,7 @@ export function engineArea(shared: Shared) {
       items: [],
     },
     fail: null,
+    set: null,
   };
   let made = 0;
 
@@ -74,6 +80,35 @@ export function engineArea(shared: Shared) {
 
   const answer = ({ method, path, body, query, person: by }: Call): Response | undefined => {
     // Backups
+    if (method === 'PUT' && path === '/v1/backups/settings') {
+      backups.set = body;
+      const bucket = body['bucket'] as { url: string; accessKeyId: string } | null;
+      backups.status =
+        body['enabled'] === true
+          ? {
+              dir: '/data/backups',
+              sameDisk: true,
+              everyMs: body['everyMs'] as number,
+              keep: body['keep'] as number,
+              next: NOW + 3_600_000,
+              last: null,
+              bucket: bucket === null ? null : { url: bucket.url, error: null },
+              items: [],
+            }
+          : null;
+      return json(200, {
+        source: 'api',
+        enabled: body['enabled'],
+        everyMs: body['everyMs'],
+        keep: body['keep'],
+        dir: '/data/backups',
+        bucket:
+          bucket === null
+            ? null
+            : { url: bucket.url, endpoint: null, region: null, accessKeyId: bucket.accessKeyId },
+        changedAt: NOW,
+      });
+    }
     if (path === '/v1/backups') {
       const status = backups.status;
       if (status === null) {

@@ -2,13 +2,26 @@
 // is wrong with where they go, Back up now, and the backups there are. It reads what the Backups
 // page reads.
 
-import { IconDatabaseExport } from '@tabler/icons-react';
+import { IconDatabaseExport, IconPower } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useId, useState } from 'react';
 
 import { engine, isApiError, queryClient } from '../engine/api.ts';
 import { backupQueries, inText, kindText, whereText } from '../engine/backups.tsx';
 import { date, fullTime, size } from '../format.ts';
-import { Ago, Button, FormError, LoadError, Notice, Skeleton, useNow } from '../ui.tsx';
+import {
+  Ago,
+  Button,
+  Dialog,
+  Dropdown,
+  Field,
+  FormError,
+  LoadError,
+  Notice,
+  Segmented,
+  Skeleton,
+  useNow,
+} from '../ui.tsx';
 
 function Next({ at }: { at: number }) {
   const now = useNow();
@@ -27,6 +40,7 @@ export function BackupsSettings() {
   });
   const off = isApiError(status.error, 503);
   const data = status.data;
+  const [turningOn, setTurningOn] = useState(false);
 
   return (
     <div className="prefs-page">
@@ -35,6 +49,12 @@ export function BackupsSettings() {
           <h3 className="prefs-group__title" id="prefs-backups">
             Backups
           </h3>
+          {off && (
+            <Button size="sm" onClick={() => setTurningOn(true)}>
+              <IconPower size={15} stroke={1.75} aria-hidden="true" />
+              Turn on
+            </Button>
+          )}
           {!off && (
             <Button
               size="sm"
@@ -126,6 +146,138 @@ export function BackupsSettings() {
           </>
         )}
       </section>
+      {turningOn && <TurnOnDialog onClose={() => setTurningOn(false)} />}
     </div>
+  );
+}
+
+const EVERY = [
+  { value: String(3_600_000), label: 'Every hour' },
+  { value: String(6 * 3_600_000), label: 'Every 6 hours' },
+  { value: String(12 * 3_600_000), label: 'Every 12 hours' },
+  { value: String(86_400_000), label: 'Every day' },
+  { value: String(7 * 86_400_000), label: 'Every week' },
+];
+const KEEP = ['1', '3', '5', '7', '14', '30'].map((value) => ({ value, label: value }));
+
+/** Turns the server's backups on: how often, how many, and a bucket they are copied to. */
+function TurnOnDialog({ onClose }: { onClose: () => void }) {
+  const formId = useId();
+  const [every, setEvery] = useState(String(86_400_000));
+  const [keep, setKeep] = useState('3');
+  const [where, setWhere] = useState<'server' | 'bucket'>('server');
+  const [url, setUrl] = useState('');
+  const [endpoint, setEndpoint] = useState('');
+  const [region, setRegion] = useState('');
+  const [keyId, setKeyId] = useState('');
+  const [secret, setSecret] = useState('');
+  const bucket = where === 'bucket';
+  const ready = !bucket || (url.trim() !== '' && keyId.trim() !== '' && secret !== '');
+  const turnOn = useMutation({
+    mutationFn: () =>
+      engine.setBackupSettings({
+        enabled: true,
+        everyMs: Number(every),
+        keep: Number(keep),
+        bucket: bucket
+          ? {
+              url: url.trim(),
+              ...(endpoint.trim() === '' ? {} : { endpoint: endpoint.trim() }),
+              ...(region.trim() === '' ? {} : { region: region.trim() }),
+              accessKeyId: keyId.trim(),
+              secretAccessKey: secret,
+            }
+          : null,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: backupQueries.status });
+      onClose();
+    },
+  });
+  const text = (
+    label: string,
+    value: string,
+    set: (value: string) => void,
+    more: { optional?: boolean; placeholder?: string; secret?: boolean } = {},
+  ) => (
+    <Field label={label} optional={more.optional ?? false}>
+      {(id) => (
+        <input
+          id={id}
+          className="ac-input"
+          type={more.secret === true ? 'password' : 'text'}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={more.placeholder}
+          required={more.optional !== true}
+          value={value}
+          onChange={(event) => set(event.target.value)}
+        />
+      )}
+    </Field>
+  );
+
+  return (
+    <Dialog
+      title="Turn on backups"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            type="submit"
+            form={formId}
+            variant="primary"
+            busy={turnOn.isPending}
+            disabled={!ready}
+          >
+            Turn on
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="dialog-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (ready && !turnOn.isPending) turnOn.mutate();
+        }}
+      >
+        <div className="ac-field">
+          <span className="ac-field__label">How often</span>
+          <Dropdown label="How often" value={every} options={EVERY} onChange={setEvery} />
+        </div>
+        <div className="ac-field">
+          <span className="ac-field__label">Backups kept</span>
+          <Dropdown label="Backups kept" value={keep} options={KEEP} onChange={setKeep} />
+        </div>
+        <div className="ac-field">
+          <span className="ac-field__label">Where</span>
+          <Segmented
+            label="Where"
+            value={where}
+            options={[
+              ['server', 'Server'],
+              ['bucket', 'Server and bucket'],
+            ]}
+            onChange={setWhere}
+          />
+        </div>
+        {bucket && (
+          <>
+            {text('Bucket URL', url, setUrl, { placeholder: 's3://bucket/folder' })}
+            {text('Endpoint', endpoint, setEndpoint, {
+              optional: true,
+              placeholder: 'https://…',
+            })}
+            {text('Region', region, setRegion, { optional: true, placeholder: 'us-east-1' })}
+            {text('Access key ID', keyId, setKeyId)}
+            {text('Secret access key', secret, setSecret, { secret: true })}
+          </>
+        )}
+        <FormError error={turnOn.error} />
+      </form>
+    </Dialog>
   );
 }

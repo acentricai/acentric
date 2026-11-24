@@ -1,7 +1,7 @@
 // The server's calls the Engine section's pages make: API keys, people and their invites, the
 // server's backups, and the audit log.
 
-import type { CreateKeyRequest, Role } from '@acentric/protocol';
+import type { CreateKeyRequest, Role, SetBackupSettingsRequest } from '@acentric/protocol';
 
 import { api } from '../api.ts';
 
@@ -48,6 +48,7 @@ export const engine = {
   // Backups
   backups: (signal?: AbortSignal) => api.call('backups.list', withSignal(signal)),
   takeBackup: () => api.call('backups.create'),
+  setBackupSettings: (body: SetBackupSettingsRequest) => api.call('backups.configure', { body }),
 
   // The audit log
   audit: (query: { action?: string; cursor?: string }, signal?: AbortSignal) =>

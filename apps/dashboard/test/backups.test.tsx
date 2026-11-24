@@ -149,12 +149,57 @@ describe('the Backups section of Settings', () => {
     expect(table.getByText('When asked')).toBeTruthy();
   });
 
-  it('says a server with them off takes none, and offers no button', async () => {
+  it('says they are off, and turns them on, to the server alone', async () => {
     const server = signedIn();
     server.areas.engine.backups.status = null;
     const page = within(await section(server));
     expect(await page.findByText('Backups are not yet enabled')).toBeTruthy();
     expect(page.queryByRole('button', { name: /Back up now/ })).toBeNull();
+    fireEvent.click(page.getByRole('button', { name: /Turn on/ }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Turn on backups' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Backups kept: 3' }));
+    fireEvent.click(dialog.getByRole('menuitemradio', { name: '7' }));
+    expect(dialog.queryByLabelText(/Bucket URL/)).toBeNull();
+    fireEvent.click(dialog.getByRole('button', { name: 'Turn on' }));
+    expect(await page.findByRole('button', { name: /Back up now/ })).toBeTruthy();
+    expect(page.queryByRole('button', { name: /Turn on/ })).toBeNull();
+    expect(server.areas.engine.backups.set).toEqual({
+      enabled: true,
+      everyMs: 86_400_000,
+      keep: 7,
+      bucket: null,
+    });
+  });
+
+  it('turns them on with a bucket, its key given', async () => {
+    const server = signedIn();
+    server.areas.engine.backups.status = null;
+    const page = within(await section(server));
+    fireEvent.click(await page.findByRole('button', { name: /Turn on/ }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Turn on backups' }));
+    fireEvent.click(dialog.getByRole('radio', { name: 'Server and bucket' }));
+    const turnOn = dialog.getByRole('button', { name: 'Turn on' }) as HTMLButtonElement;
+    expect(turnOn.disabled).toBe(true);
+    const type = (label: RegExp, value: string) =>
+      fireEvent.change(dialog.getByLabelText(label), { target: { value } });
+    type(/Bucket URL/, 's3://acme/acentric');
+    type(/Endpoint/, 'https://r2.example.test');
+    type(/Access key ID/, 'AKIA');
+    type(/Secret access key/, 'shh');
+    expect(turnOn.disabled).toBe(false);
+    fireEvent.click(turnOn);
+    expect(await page.findByRole('button', { name: /Back up now/ })).toBeTruthy();
+    expect(server.areas.engine.backups.set).toEqual({
+      enabled: true,
+      everyMs: 86_400_000,
+      keep: 3,
+      bucket: {
+        url: 's3://acme/acentric',
+        endpoint: 'https://r2.example.test',
+        accessKeyId: 'AKIA',
+        secretAccessKey: 'shh',
+      },
+    });
   });
 
   it('is not there for one who may not manage backups', async () => {
