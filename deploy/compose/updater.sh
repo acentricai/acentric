@@ -61,6 +61,10 @@ say() {
 # A value of the request, as it is written: name=value.
 asked() { sed -n "s/^$1=//p" "$dir/request" 2>/dev/null | head -n 1; }
 
+# Whether what is asked is still what was read, after a download: it may have been taken back,
+# or asked in place of, meanwhile.
+still() { [ -f "$dir/request" ] && [ "$(asked id)" = "$id" ]; }
+
 # The version the recipe runs, from its .env.
 current() { sed -n 's/^ACENTRIC_VERSION=//p' "$recipe/.env" | tail -n 1 | tr -d ' "'; }
 
@@ -139,7 +143,7 @@ while :; do
   fi
   id=$(asked id)
   if [ "$handled" = "$id" ]; then
-    rm -f "$dir/request"
+    still && rm -f "$dir/request"
     sleep "$poll"
     continue
   fi
@@ -158,6 +162,9 @@ while :; do
     handled=$id
   elif ! fetch "$version"; then
     handled=$id
+  elif ! still; then
+    # Taken back, or asked in place of, while it downloaded: what is asked now is read next.
+    [ -f "$dir/request" ] || { say cancelled "$version" 0 ''; handled=$id; }
   elif [ "$action" = download ]; then
     say downloaded "$version" 0 ''
     handled=$id
@@ -171,8 +178,9 @@ while :; do
     take "$version"
     handled=$id
   fi
-  # Done with, it is not done again: not when the updater starts again either.
-  if [ "$handled" = "$id" ]; then
+  # Done with, it is not done again: not when the updater starts again either. One asked in
+  # its place meanwhile is kept.
+  if [ "$handled" = "$id" ] && still; then
     rm -f "$dir/request"
   fi
   sleep "$poll"
