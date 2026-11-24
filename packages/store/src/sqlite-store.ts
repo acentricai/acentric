@@ -523,8 +523,10 @@ export class SqliteStore implements Store {
 
   // A key is read at every request it comes with: where it was written, so that one just
   // made, or just revoked, is so at once.
+  // Who a request is from is read where nothing waits for the disk: every request is, and the
+  // reader sees each write once it is stored, which is before it is answered.
   loadKey(id: KeyId): Promise<StoredKey | undefined> {
-    return this.#write.ask('loadKey' satisfies Operation, id);
+    return this.#read.ask('loadKey' satisfies Operation, id);
   }
 
   listKeys(): Promise<StoredKey[]> {
@@ -573,11 +575,11 @@ export class SqliteStore implements Store {
 
   // Who a request is from is read where it was written, so that it is never behind.
   loadUser(id: UserId): Promise<StoredUser | undefined> {
-    return this.#write.ask('loadUser' satisfies Operation, id);
+    return this.#read.ask('loadUser' satisfies Operation, id);
   }
 
   findUser(email: string): Promise<StoredUser | undefined> {
-    return this.#write.ask('findUser' satisfies Operation, email);
+    return this.#read.ask('findUser' satisfies Operation, email);
   }
 
   listUsers(): Promise<User[]> {
@@ -597,7 +599,7 @@ export class SqliteStore implements Store {
   }
 
   loadSession(id: SessionId): Promise<StoredSession | undefined> {
-    return this.#write.ask('loadSession' satisfies Operation, id);
+    return this.#read.ask('loadSession' satisfies Operation, id);
   }
 
   listSessions(user: UserId): Promise<Session[]> {

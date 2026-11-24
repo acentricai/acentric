@@ -44,7 +44,11 @@ if (port === null) throw new Error('This file is a thread of the store, and was 
 const settings = workerData as Settings;
 
 const db = open(settings.path, settings.readOnly, settings.fullFsync);
-if (!settings.readOnly) migrate(db);
+if (!settings.readOnly) {
+  migrate(db);
+  // What one table refers to in another is there: SQLite checks it only when it is asked to.
+  db.exec('PRAGMA foreign_keys = ON');
+}
 const ops = operations(db) as unknown as { [op: string]: (...args: never[]) => unknown };
 
 /** How many writes were stored, and in how many transactions. */
@@ -122,7 +126,18 @@ port.on('message', (first: Request) => {
     if (more === undefined) break;
     batch.push(more.message as Request);
   }
-  port.postMessage(run(batch));
+  // What was asked before the store was closed is done, and stored, before it closes: a close
+  // taken in the same batch as writes would close the database inside their transaction.
+  const closing = batch.findIndex((request) => request.op === 'close');
+  if (closing === -1) {
+    port.postMessage(run(batch));
+    return;
+  }
+  const replies = [...run(batch.slice(0, closing)), answer(batch[closing] as Request)];
+  for (const after of batch.slice(closing + 1)) {
+    replies.push(failed(after.id, new Error('The store is closed')));
+  }
+  port.postMessage(replies);
 });
 
 port.postMessage('ready');
