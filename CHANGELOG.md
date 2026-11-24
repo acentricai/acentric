@@ -5,6 +5,12 @@ What changed in each version, for the people who run a server. What a version pr
 
 ## Unreleased
 
+- **Added:** the next version is taken from the dashboard where an updater runs beside the
+  server: Compose's recipe has one, with `COMPOSE_PROFILES=updater`. It downloads the version's
+  image, checks its signature, takes it now or at a time, and puts back the one before when the
+  new one does not become healthy. `POST` and `DELETE /v1/updates/request` ask it, with the new
+  permission `updates:manage`, which owners and admins hold. Caddy, in the Compose and systemd
+  recipes, holds requests while the server restarts.
 - **Added:** `GET /v1/updates` says the server's version and the versions after it, with their
   notes, as GitHub's releases say, and which to take next: a patch, or the next minor. The
   server asks every few hours while someone looks. `ACENTRIC_UPDATE_CHECK=off` asks nothing.
