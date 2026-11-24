@@ -98,9 +98,7 @@ describe('the Accounts page', () => {
 
   it('says so when there are none', async () => {
     open('/llm-providers', signedIn());
-    expect(
-      await screen.findByText('No accounts. Every model call is made with one: add one to start.'),
-    ).toBeTruthy();
+    expect(await screen.findByText('No accounts yet')).toBeTruthy();
   });
 
   it('adds one by its API key, says why a key was refused, and makes the first the default', async () => {
