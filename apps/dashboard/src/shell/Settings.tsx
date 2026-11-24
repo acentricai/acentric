@@ -74,6 +74,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       aria-labelledby={title}
       tabIndex={-1}
       onCancel={(event) => {
+        // A file picker that was cancelled says so with a cancel of its own, which comes up
+        // here: only the dialog's own, as Escape, closes it.
+        if (event.target !== event.currentTarget) return;
         event.preventDefault();
         onClose();
       }}
