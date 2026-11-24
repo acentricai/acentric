@@ -63,7 +63,9 @@ provenance), which `docker buildx imagetools inspect` shows.
 
 The server says when there is a newer version: `GET /v1/updates` lists those after it with their
 notes, from GitHub's releases, and which to take next by the rules below
-(`ACENTRIC_UPDATE_CHECK=off` asks nothing).
+(`ACENTRIC_UPDATE_CHECK=off` asks nothing). Where an updater runs beside it, as Compose's recipe
+has one, the dashboard downloads that version and takes it, now or at a time
+([deploy/compose](deploy/compose/README.md#from-the-dashboard)).
 
 ## From which version to which
 
