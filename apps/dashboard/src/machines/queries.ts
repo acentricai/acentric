@@ -60,9 +60,10 @@ export function useSandboxes(providerId: string) {
 /** The agents there are, for choosing which may work on a machine. */
 export function useAgents() {
   return useQuery({
+    // The Agents and API keys pages keep the same list: the server's page of it, as it is.
     queryKey: keys.agents,
-    queryFn: async ({ signal }) =>
-      (await engine.agents(signal)).items.map((agent) => ({ id: agent.id, name: agent.name })),
+    queryFn: ({ signal }) => engine.agents(signal),
+    select: (page) => page.items.map((agent) => ({ id: agent.id, name: agent.name })),
   });
 }
 

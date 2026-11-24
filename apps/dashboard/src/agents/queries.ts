@@ -27,6 +27,7 @@ function keepWithinList<T>(key: QueryKey) {
 const list = { refetchInterval: LIST_REFRESH };
 
 export const keys = {
+  /** The server's page of agents, as it is: the API keys and Machines pages keep it too. */
   agents: ['agents', 'list'] as const,
   agent: (agent: string) => ['agent', agent] as const,
   deployments: (agent: string) => ['deployments', agent] as const,
