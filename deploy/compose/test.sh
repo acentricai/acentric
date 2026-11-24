@@ -21,7 +21,7 @@ url="https://localhost:$https_port"
 work=${WORK:-${TMPDIR:-/tmp}/acentric-recipe-test}
 project=acentric-recipe-test
 mkdir -p "$work"
-cp "$here/compose.yaml" "$here/Caddyfile" "$work/"
+cp "$here/compose.yaml" "$here/Caddyfile" "$here/updater.sh" "$work/"
 
 # The settings of a test server, from the recipe's example, as its README has them made.
 sed -e "s|^ACENTRIC_PUBLIC_URL=.*|ACENTRIC_PUBLIC_URL=$url|" "$here/.env.example" > "$work/.env"

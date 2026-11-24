@@ -37,16 +37,33 @@ services:
       ACENTRIC_RETAIN_ARCHIVED: ${ACENTRIC_RETAIN_ARCHIVED:-}
       ACENTRIC_RETAIN_AUDIT: ${ACENTRIC_RETAIN_AUDIT:-}
       ACENTRIC_RETAIN_USAGE: ${ACENTRIC_RETAIN_USAGE:-}
+      # What it shares with the updater, when that runs: what it is asked, and what it does.
+      ACENTRIC_UPDATER_DIR: /updates
     secrets: [secret-key, admin-key]
     volumes:
       # Everything the server keeps: its database, and conversations' images and files beside
       # it. One volume, on this machine's disk: never a network file system.
       - data:/data
       - backups:/backups
+      - updates:/updates
     # A turn that is going on is written down before the server stops.
     stop_grace_period: 60s
     # Only Caddy reaches it: it is on no port of this machine.
     expose: ['4000']
+
+  # Takes a newer version when asked to from the dashboard (Settings, Updates), with
+  # COMPOSE_PROFILES=updater in .env: see README.md. It has Docker's socket, which is as much as
+  # this machine's root, and runs updater.sh alone.
+  updater:
+    image: docker:29.2.1-cli
+    profiles: [updater]
+    restart: unless-stopped
+    command: ['sh', '/recipe/updater.sh']
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The recipe's folder: its .env, which says the version, and this file.
+      - .:/recipe
+      - updates:/updates
 
   caddy:
     image: caddy:2.11.8
@@ -83,5 +100,6 @@ secrets:
 volumes:
   data:
   backups:
+  updates:
   caddy-data:
   caddy-config:

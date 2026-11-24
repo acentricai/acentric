@@ -4,5 +4,9 @@ engine.example.com {
 	reverse_proxy 127.0.0.1:4000 {
 		# Actors' events are sent as they come; machines' WebSockets pass and stay open.
 		flush_interval -1
+		# While the server restarts, as for a new version, a request waits for it, a while,
+		# rather than failing. Only one it never got is sent again.
+		lb_try_duration 60s
+		lb_try_interval 250ms
 	}
 }
