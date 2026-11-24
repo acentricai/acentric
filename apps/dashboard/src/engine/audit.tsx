@@ -1,18 +1,14 @@
-// `/audit`: what was done to the engine, and by whom, newest first, a page at a time. A filter
-// under the heading narrows it to one kind of thing done. Who did it and what it was done to are
-// named where the person may read their names: an email, a key's label, an agent's name.
+// The audit log, as the Audit log section of Settings reads it: the kinds of thing done in words,
+// and who did it and what it was done to, named where the person may read their names: an email,
+// a key's label, an agent's name.
 
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 
-import type { AuditEvent, Json, PrincipalRef } from '@acentric/protocol';
+import type { PrincipalRef } from '@acentric/protocol';
 
-import { FilterChip } from '../machines/ui.tsx';
 import { may, useMe } from '../me.ts';
-import { Ago, Id, LoadError, PageHeader, Pager, Table } from '../ui.tsx';
+import { Id } from '../ui.tsx';
 import { engine } from './api.ts';
-
-import '../machines/machine-pane.css';
 
 export const auditQueries = {
   page: (action: string | undefined, cursor: string | undefined) =>
@@ -102,114 +98,5 @@ export function Who({ by, names }: { by: PrincipalRef; names: ReadonlyMap<string
       <Named id={by.id} names={names} />
       {by.type === 'key' && <span className="note"> key</span>}
     </span>
-  );
-}
-
-/** What else the log says of it, as `name: value` pairs. Never a secret: the server keeps none here. */
-export function detailText(detail: AuditEvent['detail']): string {
-  if (detail === null) return '';
-  const value = (each: Json): string => (typeof each === 'string' ? each : JSON.stringify(each));
-  return Object.entries(detail)
-    .map(([name, each]) => `${name}: ${value(each)}`)
-    .join(', ');
-}
-
-export function AuditPage({
-  action,
-  onAction = () => {},
-}: {
-  /** The kind of thing done the log is narrowed to. */
-  action?: string | undefined;
-  onAction?: (action: string | undefined) => void;
-}) {
-  // The cursors of the pages before this one, and this one's: the first page has none.
-  const [cursors, setCursors] = useState<readonly (string | undefined)[]>([undefined]);
-  const [narrowedTo, setNarrowedTo] = useState(action);
-  // A new filter starts at the first page.
-  if (narrowedTo !== action) {
-    setNarrowedTo(action);
-    setCursors([undefined]);
-  }
-  const cursor = cursors.at(-1);
-  const page = useQuery({
-    queryKey: auditQueries.page(action, cursor),
-    queryFn: ({ signal }) =>
-      engine.audit(
-        {
-          ...(action === undefined ? {} : { action }),
-          ...(cursor === undefined ? {} : { cursor }),
-        },
-        signal,
-      ),
-  });
-  const names = useNames();
-  const choices =
-    ACTIONS.some((each) => each.value === action) || action === undefined
-      ? ACTIONS
-      : [...ACTIONS, { value: action, label: action }];
-  const labelOf = (done: string) => ACTIONS.find((each) => each.value === done)?.label ?? done;
-  const next = page.data?.nextCursor ?? null;
-
-  return (
-    <div className="list-page audit-page">
-      <PageHeader title="Audit log" />
-      <div className="filter-bar rise">
-        <FilterChip
-          name="Action"
-          choices={choices}
-          chosen={action === undefined ? [] : [action]}
-          // One kind at a time: the server narrows the log to one.
-          onToggle={(value) => onAction(value === action ? undefined : value)}
-          onClear={() => onAction(undefined)}
-        />
-      </div>
-      {page.isError && (
-        <LoadError things="the audit log" error={page.error} onRetry={() => void page.refetch()} />
-      )}
-      <Table
-        label="Audit log"
-        loading={page.isPending}
-        rows={page.data?.items}
-        rowKey={(event) => event.id}
-        columns={[
-          {
-            name: 'When',
-            className: 'ac-table__muted',
-            cell: (event) => <Ago at={event.at} />,
-          },
-          { name: 'Who', cell: (event) => <Who by={event.by} names={names} /> },
-          {
-            name: 'What',
-            cell: (event) => <span title={event.action}>{labelOf(event.action)}</span>,
-          },
-          {
-            name: 'On',
-            cell: (event) =>
-              event.target === null ? (
-                <span className="ac-table__muted">—</span>
-              ) : (
-                <span>
-                  <span className="note">{event.target.type} </span>
-                  <Named id={event.target.id} names={names} />
-                </span>
-              ),
-          },
-          {
-            name: 'Detail',
-            className: 'ac-table__muted',
-            cell: (event) => <span className="mono">{detailText(event.detail)}</span>,
-          },
-        ]}
-      />
-      {page.data?.items.length === 0 && (
-        <p className="table-empty">
-          {action === undefined ? 'Nothing has been done yet.' : 'Nothing of this kind.'}
-        </p>
-      )}
-      <Pager
-        newer={cursors.length > 1 ? () => setCursors((was) => was.slice(0, -1)) : null}
-        older={next === null ? null : () => setCursors((was) => [...was, next])}
-      />
-    </div>
   );
 }

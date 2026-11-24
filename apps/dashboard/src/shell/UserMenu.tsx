@@ -1,7 +1,7 @@
 // The person signed in, at the foot of the sidebar: their email, and a menu with the account
 // page, the theme and signing out. Signing out ends this browser's session at the server.
 
-import { IconLogout, IconSelector, IconUserCircle } from '@tabler/icons-react';
+import { IconLogout, IconSelector } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
 
 import { Avatar } from '../avatar.tsx';
@@ -39,18 +39,6 @@ export function UserMenu({ me, collapsed }: { me: Me | undefined; collapsed: boo
         <div className="pop me__pop" role="menu" aria-label="Account">
           {/* The button shows the email unless the sidebar is collapsed to icons. */}
           {collapsed && <span className="pop__heading pop__heading--email">{email}</span>}
-          <button
-            type="button"
-            role="menuitem"
-            className="pop__item"
-            onClick={() => {
-              menu.close();
-              void navigate({ to: '/account' });
-            }}
-          >
-            <IconUserCircle size={16} stroke={1.75} aria-hidden="true" />
-            <span className="pop__text">Account</span>
-          </button>
           <div className="pop__row">
             <span className="pop__text">Theme</span>
             <ThemeToggle />

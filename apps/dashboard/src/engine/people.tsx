@@ -1,30 +1,22 @@
-// `/people`: the people of the engine, with their roles and whether they can sign in, and the
-// invites not yet used. An invite and a password reset are links the server makes and the person
-// passes on: the engine sends no email.
+// The people of the engine, as the People section of Settings changes them: roles, signing in,
+// invites and password resets. An invite and a password reset are links the server makes and
+// the person passes on: the engine sends no email.
 //
 // What the server refuses is not offered: only an owner changes an admin or an owner, or makes
 // one, and nobody changes their own role, disables themselves or removes themselves. That the
 // last owner who can sign in stays one is the server's to say, in its words.
 
-import {
-  IconKey,
-  IconPlus,
-  IconTrash,
-  IconUserCheck,
-  IconUserCog,
-  IconUserOff,
-} from '@tabler/icons-react';
+import { IconKey, IconTrash, IconUserCheck, IconUserCog, IconUserOff } from '@tabler/icons-react';
 import type { Icon } from '@tabler/icons-react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
 import { isAtLeast, ROLES } from '@acentric/protocol';
 import type { Invite, Role, User } from '@acentric/protocol';
 
 import { fullTime } from '../format.ts';
-import { useMe, type Me } from '../me.ts';
+import { type Me } from '../me.ts';
 import {
-  Ago,
   Button,
   Confirm,
   CopyButton,
@@ -32,14 +24,9 @@ import {
   Dropdown,
   Field,
   FormError,
-  Label,
-  LoadError,
   Menu,
   MenuItem,
   MenuRule,
-  PageHeader,
-  Status,
-  Table,
   errorText,
 } from '../ui.tsx';
 import { engine, linkTo, queryClient } from './api.ts';
@@ -85,146 +72,6 @@ const refresh = () => {
 export type PeopleAction =
   | { kind: 'role' | 'disable' | 'enable' | 'reset' | 'remove'; person: User }
   | { kind: 'revoke'; invite: Invite };
-
-export function PeoplePage() {
-  const me = useMe();
-  const people = useQuery({
-    queryKey: peopleQueries.people,
-    queryFn: ({ signal }) => engine.people(signal),
-  });
-  const invites = useQuery({
-    queryKey: peopleQueries.invites,
-    queryFn: ({ signal }) => engine.invites(signal),
-  });
-  const [inviting, setInviting] = useState(false);
-  const [action, setAction] = useState<PeopleAction | null>(null);
-  const close = () => setAction(null);
-  const emailOf = (id: string) => people.data?.items.find((one) => one.id === id)?.email;
-
-  return (
-    <div className="list-page people-page">
-      <PageHeader title="People" spaced>
-        <Button variant="primary" onClick={() => setInviting(true)}>
-          <IconPlus size={15} stroke={1.75} aria-hidden="true" />
-          Invite
-        </Button>
-      </PageHeader>
-      <section className="panel rise" aria-label="People">
-        {people.isError && (
-          <LoadError things="people" error={people.error} onRetry={() => void people.refetch()} />
-        )}
-        <Table
-          label="People"
-          className="members-table"
-          loading={people.isPending}
-          rows={people.data?.items}
-          rowKey={(person) => person.id}
-          columns={[
-            {
-              name: 'Person',
-              cell: (person) => (
-                <span>
-                  <span className="ac-table__name">{person.email}</span>
-                  {person.id === me.data?.user && <span className="note"> you</span>}
-                  {person.displayName !== null && (
-                    <span className="note"> · {person.displayName}</span>
-                  )}
-                </span>
-              ),
-            },
-            { name: 'Role', cell: (person) => <Label>{ROLE_NAMES[person.role]}</Label> },
-            {
-              name: 'Status',
-              cell: (person) =>
-                person.disabledAt === null ? (
-                  <Status word="Active" tone="idle" />
-                ) : (
-                  <Status word="Disabled" tone="closed" />
-                ),
-            },
-            {
-              name: 'Joined',
-              className: 'ac-table__muted',
-              cell: (person) => <Ago at={person.createdAt} />,
-            },
-            {
-              name: 'Actions',
-              hidden: true,
-              className: 'ac-table__num',
-              cell: (person) => <PersonMenu person={person} me={me.data} onAction={setAction} />,
-            },
-          ]}
-        />
-      </section>
-      <section className="panel rise" aria-label="Invites">
-        <div className="panel__head">
-          <h2 className="panel__title">Invites</h2>
-        </div>
-        {invites.isError && (
-          <LoadError
-            things="invites"
-            error={invites.error}
-            onRetry={() => void invites.refetch()}
-          />
-        )}
-        <Table
-          label="Invites"
-          loading={invites.isPending}
-          rows={invites.data?.items}
-          rowKey={(invite) => invite.id}
-          columns={[
-            { name: 'Role', cell: (invite) => <Label>{ROLE_NAMES[invite.role]}</Label> },
-            {
-              name: 'For',
-              cell: (invite) => invite.note ?? <span className="ac-table__muted">—</span>,
-            },
-            {
-              name: 'Made by',
-              className: 'ac-table__muted',
-              cell: (invite) =>
-                invite.createdBy.type === 'user'
-                  ? (emailOf(invite.createdBy.id) ?? invite.createdBy.id)
-                  : invite.createdBy.type === 'key'
-                    ? invite.createdBy.id
-                    : 'The server',
-            },
-            {
-              name: 'Expires',
-              className: 'ac-table__muted',
-              cell: (invite) => fullTime(invite.expiresAt),
-            },
-            {
-              name: 'Actions',
-              hidden: true,
-              className: 'ac-table__num',
-              cell: (invite) => (
-                <Button
-                  variant="quiet"
-                  size="sm"
-                  className="row-action"
-                  onClick={() => setAction({ kind: 'revoke', invite })}
-                >
-                  Revoke
-                </Button>
-              ),
-            },
-          ]}
-        />
-        {invites.data?.items.length === 0 && <p className="table-empty">No invites waiting.</p>}
-      </section>
-      {inviting && <InviteDialog me={me.data} onClose={() => setInviting(false)} />}
-      {action?.kind === 'role' && (
-        <RoleDialog me={me.data} person={action.person} onClose={close} />
-      )}
-      {(action?.kind === 'disable' || action?.kind === 'enable') && (
-        <SignInConfirm person={action.person} disable={action.kind === 'disable'} onClose={close} />
-      )}
-      {action?.kind === 'reset' && <ResetDialog person={action.person} onClose={close} />}
-      {action?.kind === 'remove' && <RemoveConfirm person={action.person} onClose={close} />}
-      {action?.kind === 'revoke' && <RevokeConfirm invite={action.invite} onClose={close} />}
-    </div>
-  );
-}
 
 /** An icon of a menu's item, the size the picture's menu has them. */
 const icon = (Glyph: Icon) => <Glyph size={16} stroke={1.75} aria-hidden="true" />;
@@ -522,28 +369,6 @@ export function RemoveConfirm({ person, onClose }: { person: User; onClose: () =
       pending={remove.isPending}
       error={remove.isError ? errorText(remove.error) : null}
       onConfirm={() => remove.mutate()}
-      onClose={onClose}
-    />
-  );
-}
-
-export function RevokeConfirm({ invite, onClose }: { invite: Invite; onClose: () => void }) {
-  const revoke = useMutation({
-    mutationFn: () => engine.revokeInvite(invite.id),
-    onSuccess: () => {
-      refresh();
-      onClose();
-    },
-  });
-  return (
-    <Confirm
-      title="Revoke this invite?"
-      sentence="Its link no longer works."
-      action="Revoke"
-      danger
-      pending={revoke.isPending}
-      error={revoke.isError ? errorText(revoke.error) : null}
-      onConfirm={() => revoke.mutate()}
       onClose={onClose}
     />
   );

@@ -1,29 +1,26 @@
 // The engine's API keys: those no wider than the person signed in, made and revoked here. A key
 // reaches the whole engine, one agent or one actor, with the permissions it was made with.
 
-import { IconAlertTriangle, IconPlus } from '@tabler/icons-react';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
-import type { CreateKeyResponse, Key, Permission, Scope } from '@acentric/protocol';
+import type { CreateKeyResponse, Key, Scope } from '@acentric/protocol';
 
 import { api } from '../api.ts';
-import { fullTime, longTime, NOTHING } from '../format.ts';
-import { useMe, type Me } from '../me.ts';
+import { longTime } from '../format.ts';
+import { type Me } from '../me.ts';
 import {
-  Ago,
   Button,
   CopyButton,
   Dialog,
   Dropdown,
   Field,
   FormError,
-  PageHeader,
   Segmented,
   errorText,
 } from '../ui.tsx';
 import { engine, queryClient } from './api.ts';
-import { grantable, reachText, SCOPES, type ScopeType } from './scopes.ts';
+import { grantable, SCOPES, type ScopeType } from './scopes.ts';
 
 import './keys.css';
 
@@ -87,156 +84,6 @@ export function useReachNames(rows: readonly Key[] | undefined): Map<string, str
     if (name !== undefined && name !== null) names.set(actor, name);
   });
   return names;
-}
-
-/** The start of a key, which is all of it that can be shown again: its ID. */
-export const maskOf = (key: Key) => `ak_${key.id.slice('key_'.length)}_…`;
-
-/** A key's permissions, as chips. */
-export function Permissions({ permissions }: { permissions: readonly Permission[] }) {
-  return (
-    <span className="chips">
-      {permissions.map((permission) => (
-        <span key={permission} className="chip chip--mono">
-          {permission}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-export function KeysPage() {
-  const me = useMe();
-  const keys = useKeys();
-  const [creating, setCreating] = useState(false);
-  const [made, setMade] = useState<CreateKeyResponse | null>(null);
-  const [revoking, setRevoking] = useState<Key | null>(null);
-  // Only IDs belong to row presentation; the secret stays in `made` exactly until its dialog is
-  // dismissed.
-  const [fresh, setFresh] = useState<string | null>(null);
-  const [revoked, setRevoked] = useState<ReadonlySet<string>>(new Set());
-
-  const rows = keys.data?.items;
-  const names = useReachNames(rows);
-  return (
-    <div className="list-page keys-page team">
-      <PageHeader title="API keys" spaced>
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          <IconPlus size={15} stroke={1.75} aria-hidden="true" />
-          New key
-        </Button>
-      </PageHeader>
-      <div className="rise">
-        {keys.isError && (
-          <div className="state-error" role="alert">
-            <IconAlertTriangle size={18} stroke={1.75} aria-hidden="true" />
-            <div>
-              <p className="state-error__title">API keys</p>
-              <FormError error={keys.error} />
-            </div>
-            <Button size="sm" onClick={() => void keys.refetch()}>
-              Retry
-            </Button>
-          </div>
-        )}
-        {keys.isPending ? (
-          <div className="skeleton keys-skeleton" role="status" aria-label="Loading API keys">
-            {Array.from({ length: 4 }, (_, i) => (
-              <span key={i} className="skeleton__line" />
-            ))}
-          </div>
-        ) : rows !== undefined ? (
-          <div className="ac-table-wrap">
-            <table className="ac-table keys-table" aria-label="Keys">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Key</th>
-                  <th scope="col">Reaches</th>
-                  <th scope="col">Permissions</th>
-                  <th scope="col">Expires</th>
-                  <th scope="col">Created</th>
-                  <th scope="col">Last used</th>
-                  <th scope="col" aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((key) => (
-                  <tr
-                    key={key.id}
-                    className={`${revoked.has(key.id) ? 'row--revoked' : ''} ${fresh === key.id && !revoked.has(key.id) ? 'row-in' : ''}`}
-                  >
-                    <td>
-                      <span className="ac-table__name">{key.label}</span>
-                    </td>
-                    <td>
-                      <code className="key-mask">{maskOf(key)}</code>
-                    </td>
-                    <td>
-                      <span className="mono">{reachText(key.scope, names)}</span>
-                    </td>
-                    <td>
-                      <Permissions permissions={key.permissions} />
-                    </td>
-                    <td>
-                      <span
-                        className="ac-table__muted"
-                        title={key.expiresAt === null ? undefined : fullTime(key.expiresAt)}
-                      >
-                        {key.expiresAt === null ? 'Never' : fullTime(key.expiresAt)}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="ac-table__muted">
-                        <Ago at={key.createdAt} />
-                      </span>
-                    </td>
-                    <td>
-                      <span className="ac-table__muted">
-                        {key.lastUsedAt === null ? NOTHING : <Ago at={key.lastUsedAt} />}
-                      </span>
-                    </td>
-                    <td className="ac-table__num">
-                      {!revoked.has(key.id) && (
-                        <Button
-                          variant="quiet"
-                          size="sm"
-                          className="row-action"
-                          onClick={() => setRevoking(key)}
-                        >
-                          Revoke
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {rows.length === 0 && <p className="table-empty">No keys</p>}
-          </div>
-        ) : null}
-      </div>
-      {creating && (
-        <NewKeyDialog
-          me={me.data}
-          onClose={() => setCreating(false)}
-          onMade={(result) => {
-            setCreating(false);
-            setMade(result);
-            setFresh(result.key.id);
-          }}
-        />
-      )}
-      {made !== null && <KeyShown made={made} onDone={() => setMade(null)} />}
-      {revoking !== null && (
-        <RevokeKeyDialog
-          target={revoking}
-          onClose={() => setRevoking(null)}
-          onRevoked={(key) => setRevoked((was) => new Set([...was, key.id]))}
-        />
-      )}
-    </div>
-  );
 }
 
 /** Asks before a key is revoked, and revokes it: what was made with it goes with it. */

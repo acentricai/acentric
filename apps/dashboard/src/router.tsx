@@ -11,7 +11,6 @@ import {
 import type { RouterHistory } from '@tanstack/react-router';
 
 import { isApiError, meQuery, queryClient } from './api.ts';
-import { AccountPage } from './pages/account.tsx';
 import { FailedPage } from './pages/failed.tsx';
 import { InvitePage } from './pages/invite.tsx';
 import { NotFoundPage } from './pages/not-found.tsx';
@@ -88,21 +87,15 @@ const people = createRoute({
   notFoundComponent: NotFound,
 });
 
-/** `/` is the first tab the person may see. */
+/** `/` is the first tab the person may see: for one who may see none, the shell alone. */
 const home = createRoute({
   getParentRoute: () => people,
   path: '/',
   beforeLoad: ({ context }) => {
     const tab = firstTab(context.me);
-    throw redirect({ to: tab?.path ?? '/account', replace: true });
+    if (tab !== undefined) throw redirect({ to: tab.path, replace: true });
   },
-});
-
-/** The person's own account: who they are, their password, where they are signed in. */
-const account = createRoute({
-  getParentRoute: () => people,
-  path: 'account',
-  component: AccountPage,
+  component: () => null,
 });
 
 const tree = root.addChildren([
@@ -110,7 +103,7 @@ const tree = root.addChildren([
   setup,
   invite,
   reset,
-  people.addChildren([home, account, ...SECTIONS.flatMap((section) => section.routes(people))]),
+  people.addChildren([home, ...SECTIONS.flatMap((section) => section.routes(people))]),
 ]);
 
 /** The dashboard's router: on the browser's history, or on another, for tests. */

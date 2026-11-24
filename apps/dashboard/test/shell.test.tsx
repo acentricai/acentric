@@ -11,6 +11,7 @@ import { queryClient } from '../src/api.ts';
 import type { Me } from '../src/me.ts';
 import { NOT_FOUND } from '../src/shell/NotFound.tsx';
 import { firstTab, tabAt, visibleSections } from '../src/shell/nav.ts';
+import { sessionOf } from './fake/account.ts';
 import { open } from './render.tsx';
 import { fakeServer } from './server.ts';
 
@@ -28,20 +29,11 @@ const tabs = (role: Role) =>
 
 describe('the sidebar', () => {
   it('has the sections a person’s role may use: machines, accounts and people for an admin or an owner', () => {
-    const all = [
-      'agents',
-      'machines',
-      'sandboxes',
-      'accounts',
-      'usage',
-      'keys',
-      'people',
-      'backups',
-      'audit',
-    ];
+    // The engine's own, and the account, are in Settings.
+    const all = ['agents', 'machines', 'sandboxes', 'accounts', 'usage'];
     expect(tabs('owner')).toEqual(all);
     expect(tabs('admin')).toEqual(all);
-    expect(tabs('member')).toEqual(['agents', 'usage', 'keys']);
+    expect(tabs('member')).toEqual(['agents', 'usage']);
     expect(tabs('viewer')).toEqual(['agents', 'usage']);
     expect(visibleSections(undefined)).toEqual([]);
     expect(firstTab(as('viewer'))?.path).toBe('/agents');
@@ -64,18 +56,7 @@ describe('the sidebar', () => {
       within(sidebar)
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual([
-      '/',
-      '/agents',
-      '/machines',
-      '/sandboxes',
-      '/llm-providers',
-      '/usage',
-      '/keys',
-      '/people',
-      '/backups',
-      '/audit',
-    ]);
+    ).toEqual(['/', '/agents', '/machines', '/sandboxes', '/llm-providers', '/usage']);
     expect(within(sidebar).getByText('ada@example.test')).toBeTruthy();
     expect(document.title).toBe('Agents | Acentric');
   });
@@ -164,6 +145,22 @@ describe('the Account section of Settings', () => {
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Sign out this browser' }));
     await waitFor(() => expect(page.where()).toMatch(/^\/sign-in/));
     expect(server.signedIn).toBeUndefined();
+  });
+
+  it('lists where the person is signed in, and signs out another of them', async () => {
+    const server = fakeServer();
+    server.person('ada@example.test', 'a-password-for-tests', true);
+    server.areas.account.sessions.push(sessionOf('ses_2', { client: 'cli' }));
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    const sessions = within(await within(dialog).findByRole('table', { name: 'Sessions' }));
+    await waitFor(() => expect(sessions.getAllByRole('row')).toHaveLength(3));
+    expect(sessions.getByText('This browser')).toBeTruthy();
+    fireEvent.click(sessions.getByRole('button', { name: 'Sign out The command' }));
+    await waitFor(() => expect(sessions.getAllByRole('row')).toHaveLength(2));
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
   });
 
   it('shows the name as it is, with nothing to change it', async () => {
