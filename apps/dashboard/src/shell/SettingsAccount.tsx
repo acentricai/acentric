@@ -4,6 +4,7 @@
 import { PASSWORD_MIN, PHOTO_TYPES } from '@acentric/protocol';
 import { IconLogout, IconPencil, IconPhoto, IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -12,6 +13,7 @@ import { Avatar, CHOSEN_BYTES, sendPhoto, squarePhoto } from '../avatar.tsx';
 import { fullTime } from '../format.ts';
 import { useMe, type Me } from '../me.ts';
 import { sessionName } from '../pages/account.tsx';
+import { signOut } from '../sign-out.ts';
 import { Button, FormError, LoadError, Menu, MenuItem, Skeleton } from '../ui.tsx';
 
 const ROLES: Record<Me['role'], string> = {
@@ -265,6 +267,7 @@ function PasswordGroup() {
 }
 
 function SessionsGroup({ me }: { me: Me }) {
+  const navigate = useNavigate();
   const sessions = useQuery({
     queryKey: sessionsKey,
     queryFn: ({ signal }) => api.call('sessions.list', { query: { limit: 100 }, signal }),
@@ -315,18 +318,23 @@ function SessionsGroup({ me }: { me: Me }) {
                     {session.lastUsedAt === null ? '—' : when(session.lastUsedAt)}
                   </td>
                   <td className="prefs-table__action">
-                    {!here && (
-                      <button
-                        type="button"
-                        className="prefs-table__out"
-                        disabled={end.isPending && end.variables === session.id}
-                        onClick={() => end.mutate(session.id)}
-                        aria-label={`Sign out ${sessionName(session)}`}
-                        title="Sign out"
-                      >
-                        <IconLogout size={16} stroke={1.75} aria-hidden="true" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="prefs-table__out"
+                      disabled={end.isPending && end.variables === session.id}
+                      onClick={() => {
+                        // This browser's is signing out: back to signing in.
+                        if (here) {
+                          void signOut().then(() => navigate({ to: '/sign-in', replace: true }));
+                        } else end.mutate(session.id);
+                      }}
+                      aria-label={
+                        here ? 'Sign out this browser' : `Sign out ${sessionName(session)}`
+                      }
+                      title="Sign out"
+                    >
+                      <IconLogout size={16} stroke={1.75} aria-hidden="true" />
+                    </button>
                   </td>
                 </tr>
               );

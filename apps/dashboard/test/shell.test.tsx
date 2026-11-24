@@ -107,6 +107,8 @@ describe('the sidebar', () => {
     expect(within(page).getByRole('table', { name: 'Sessions' })).toBeTruthy();
     // No signing out of all others: each other session is signed out from its own row.
     expect(within(page).queryByRole('button', { name: /everywhere/ })).toBeNull();
+    // This browser's too: it signs out here.
+    expect(within(page).getByRole('button', { name: 'Sign out this browser' })).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
@@ -150,6 +152,18 @@ describe('the Account section of Settings', () => {
     await waitFor(() => expect(ada.photo).toBeNull());
     fireEvent.click(within(dialog).getByRole('button', { name: 'Edit profile picture' }));
     expect(await within(dialog).findByRole('menuitem', { name: 'Upload photo' })).toBeTruthy();
+  });
+
+  it('signs this browser out from its own row, and goes to signing in', async () => {
+    const server = fakeServer();
+    server.person('ada@example.test', 'a-password-for-tests', true);
+    const page = open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Sign out this browser' }));
+    await waitFor(() => expect(page.where()).toMatch(/^\/sign-in/));
+    expect(server.signedIn).toBeUndefined();
   });
 
   it('shows the name as it is, with nothing to change it', async () => {
