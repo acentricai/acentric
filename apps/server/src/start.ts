@@ -254,8 +254,12 @@ export async function start(
         const problems: string[] = [];
         if (draining) problems.push('it is stopping');
         try {
-          // A query of the database, which has its own thread: one that answers at all.
-          await store.secretNames('agt_ready' as never);
+          // A query of each of the database's threads, the writer's and the reader's: that
+          // each answers at all.
+          await Promise.all([
+            store.secretNames('agt_ready' as never),
+            store.listAgents({ limit: 1 }),
+          ]);
         } catch (error) {
           problems.push(
             `its database does not answer: ${error instanceof Error ? error.message : String(error)}`,
