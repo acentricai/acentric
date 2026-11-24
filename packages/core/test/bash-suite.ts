@@ -157,7 +157,7 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
         expect(step?.instructions).toContain(
           '`bash` runs commands on your machine. It runs Linux (x64), and your working directory is ~/work.',
         );
-        expect(step?.instructions).not.toContain('view_image');
+        expect(step?.instructions).not.toContain('`show');
         expect(step?.instructions).toContain(
           '- `schedule` sends you a note later: for something the harness cannot tell you about',
         );
@@ -422,9 +422,7 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
       });
     });
 
-    describe('view_image', () => {
-      const view = (id: string, args: { [name: string]: Json }) =>
-        calls({ id, name: 'view_image', arguments: args });
+    describe('show', () => {
       /** A PNG of a size, as its file starts: enough to know it by. */
       const png = (width: number, height: number): Buffer => {
         const bytes = Buffer.alloc(64);
@@ -433,8 +431,9 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
         bytes.writeUInt32BE(height, 20);
         return bytes;
       };
+      const kept = (task: string, number: number) => `/tasks/act/${task}/images/${String(number)}`;
 
-      it('is offered to a model that takes images, on a machine, and to no other', async () => {
+      it('is told of to a model that takes images, on a machine, and to no other', async () => {
         const { one, actor } = await setup([says('Ready.')], { modelId: 'fake-eyes' });
         await one.say(actor.id, 'Hello.');
         await one.it.settled(actor.id);
@@ -443,94 +442,103 @@ export function bashSuite(name: string, open: () => Promise<Store>): void {
           'bash',
           'schedule',
           'stop',
-          'view_image',
         ]);
         expect(one.steps[0]?.instructions).toContain(
-          '- `view_image` shows you an image file from the machine.',
+          '- `show <file>...` in a command shows you images with its result',
         );
-        // The same model with no machine has no file to be shown.
-        await one.it.activate((await one.agent()).id, 1);
-        const plain = await one.createActor({ modelId: 'fake-eyes', version: 1 });
-        await one.say(plain.id, 'Hello.');
-        await one.it.settled(plain.id);
-        expect(one.steps[1]?.tools.map((tool) => tool.name)).toEqual([
-          'lookup_order',
-          'schedule',
-          'stop',
-        ]);
+        // The provider scales a large image itself: there is no limit of pixels to tell.
+        expect(one.steps[0]?.instructions).toContain('of at most 5.0 MB, and a command shows');
       });
 
-      it('shows the model an image from the machine, as the result of its call', async () => {
-        const { one, actor, daemon } = await setup(
-          [view('c1', { path: 'shots/home.png' }), says('A home page.')],
+      it('is not told of to a model that is not shown images', async () => {
+        const { one, actor } = await setup([says('Ready.')]);
+        await one.say(actor.id, 'Hello.');
+        await one.it.settled(actor.id);
+        expect(one.steps[0]?.instructions).toContain('# Your machine');
+        expect(one.steps[0]?.instructions).not.toContain('`show');
+      });
+
+      it('shows the model the images a command showed, after its output, in its result', async () => {
+        const { one, actor, daemon, ends } = await setup(
+          [bash('c1', { command: 'python plot.py && show plot.png' }), says('A rising line.')],
           { modelId: 'fake-eyes' },
         );
-        daemon.files.set('shots/home.png', png(1280, 720));
-        await one.say(actor.id, 'Look.');
+        daemon.files.set(kept('b1', 1), png(1280, 720));
+        ends({ tail: 'plotted\n', images: [{ path: kept('b1', 1), name: 'plot.png' }] });
+        await one.say(actor.id, 'Plot it.');
         await one.it.settled(actor.id);
-        expect(daemon.asked('read')).toEqual([
-          { path: 'shots/home.png', cwd: '~/work', max: 5 * 1024 * 1024 + 1 },
-        ]);
+        expect(daemon.asked('read')).toEqual([{ path: kept('b1', 1), max: 5 * 1024 * 1024 + 1 }]);
         const [result] = await results(actor.id);
         expect(result?.message).toMatchObject({
-          toolName: 'view_image',
+          toolName: 'bash',
           isError: false,
           content: [
+            { type: 'text', text: 'plotted\n' },
             {
               type: 'image',
-              source: {
-                type: 'base64',
-                mediaType: 'image/png',
-                data: png(1280, 720).toString('base64'),
-              },
+              source: { type: 'base64', mediaType: 'image/png' },
             },
           ],
         });
         // The model is sent it with its next call.
         expect(JSON.stringify(one.steps[1]?.messages.at(-1))).toContain('image/png');
+        expect(await one.it.tasks.get(actor.id, 'b1')).toMatchObject({
+          input: { images: 'fake' },
+        });
       });
 
-      it('answers with what is wrong when there is no image to show', async () => {
-        const { one, actor, daemon, machines, machine } = await setup(
-          [
-            view('c1', { path: 'notes.txt' }),
-            view('c2', { path: 'huge.png' }),
-            view('c3', { path: 'gone.png' }),
-            view('c4', { file: 'a.png' }),
-            view('c5', { path: 'a.png', scale: 2 }),
-            says('I see.'),
-            view('c6', { path: 'shot.png' }),
-            says('Away.'),
-          ],
+      it('says of each image that is not shown why, in its place', async () => {
+        const { one, actor, daemon, ends } = await setup(
+          [bash('c1', { command: 'show *' }), says('I see.')],
           { modelId: 'fake-eyes' },
         );
-        daemon.files.set('notes.txt', Buffer.from('not an image'));
-        daemon.files.set('huge.png', Buffer.concat([png(10, 10), Buffer.alloc(5 * 1024 * 1024)]));
+        const names = ['notes.txt', 'huge.png', 'gone.png', 'a.png', 'b.png', 'c.png'];
+        daemon.files.set(kept('b1', 1), Buffer.from('not an image'));
+        daemon.files.set(
+          kept('b1', 2),
+          Buffer.concat([png(10, 10), Buffer.alloc(5 * 1024 * 1024)]),
+        );
+        daemon.files.set(kept('b1', 4), png(10, 10));
+        daemon.files.set(kept('b1', 5), png(10, 10));
         daemon.refuse = (method, params) =>
-          method === 'read' && params['path'] === 'gone.png'
-            ? { code: 'not_found', message: 'There is no file gone.png' }
+          method === 'read' && params['path'] === kept('b1', 3)
+            ? { code: 'not_found', message: 'There is no file gone' }
             : undefined;
+        ends({
+          tail: '',
+          bytes: 0,
+          lines: 0,
+          images: names.map((file, index) => ({ path: kept('b1', index + 1), name: file })),
+        });
         await one.say(actor.id, 'Look at these.');
         await one.it.settled(actor.id);
-        const shown = await results(actor.id);
-        expect(shown.map(textOf)).toEqual([
-          'notes.txt is not a png, jpeg, gif or webp image',
-          'huge.png is 5.0 MB, and the largest image that can be shown is 5.0 MB',
-          'There is no file gone.png',
-          'path is the path of a file',
-          'scale is not known',
-        ]);
-        expect(shown.every((result) => (result.message as { isError?: boolean }).isError)).toBe(
-          true,
+        const [result] = await results(actor.id);
+        expect(textOf(result)).toBe(
+          [
+            '[notes.txt is not a png, jpeg, gif or webp image]',
+            '[huge.png is 5.0 MB, and the largest image that can be shown is 5.0 MB]',
+            '[gone.png could not be read: There is no file gone]',
+            '[image]',
+            '[image]',
+            '[c.png is not shown: a command shows at most 5]',
+          ].join('\n'),
         );
+        // Only the first five are read.
+        expect(daemon.asked('read')).toHaveLength(5);
+      });
 
-        daemon.drop();
-        await machines.whenOffline(machine);
-        await one.say(actor.id, 'And this.');
+      it('shows nothing to a model that is not shown images, and says so', async () => {
+        const { one, actor, daemon, ends } = await setup([
+          bash('c1', { command: 'show plot.png' }),
+          says('I cannot see it.'),
+        ]);
+        ends({ tail: '', bytes: 0, lines: 0, images: [{ path: kept('b1', 1), name: 'plot.png' }] });
+        await one.say(actor.id, 'Plot it.');
         await one.it.settled(actor.id);
-        expect(textOf((await results(actor.id)).at(-1))).toBe(
-          `Your machine, ${machine}, is not connected: the file could not be read.`,
+        expect(textOf((await results(actor.id))[0])).toBe(
+          '[plot.png is not shown: your model is not shown images]',
         );
+        expect(daemon.asked('read')).toEqual([]);
       });
     });
 

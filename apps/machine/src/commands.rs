@@ -11,6 +11,7 @@
 //! stop         what asked for it to be stopped, written before it is signalled
 //! ended.json   how it ended, kept until the engine has acknowledged it
 //! acked        the engine has acknowledged the ending
+//! images/      the images it showed with `show`: see `show.rs`
 //! ```
 //!
 //! A command does not run under the daemon. It runs under a small shell of its own, in its own
@@ -30,6 +31,7 @@ use crate::files::resolve;
 use crate::protocol::{
     EndStatus, Ended, ErrorCode, Ref, Refused, RunParams, RunningRef, StoppedBy, is_name,
 };
+use crate::show;
 use crate::sys;
 
 /// The shell a command runs under. `$1` is the command and `$2` its folder. It says which
@@ -97,6 +99,8 @@ pub struct Options {
     pub tail_bytes: u64,
     /// How long a command's folder is kept after its ending was acknowledged.
     pub keep_ms: u64,
+    /// The folder of the daemon's own programs, such as `show`: first on a command's `PATH`.
+    pub bin: Option<PathBuf>,
 }
 
 fn key_of(actor: &str, task: &str) -> String {
@@ -268,6 +272,16 @@ impl Commands {
             .open(&log)
             .map_err(|error| failed(error.to_string()))?;
 
+        // The daemon's own programs come before anything of the same name.
+        let path = params
+            .env
+            .get("PATH")
+            .or_else(|| environment.get("PATH"))
+            .map_or("/usr/bin:/bin", String::as_str);
+        let path = match &self.options.bin {
+            Some(bin) => format!("{}:{path}", bin.display()),
+            None => path.to_string(),
+        };
         let mut command = Command::new("/bin/sh");
         command
             .arg("-c")
@@ -284,6 +298,9 @@ impl Commands {
             .envs(FIXED)
             // `~` is the same directory for the command as it is for the engine.
             .env("HOME", &self.options.home)
+            .env("PATH", path)
+            // Where `show` keeps what it shows.
+            .env(show::FOLDER, &dir)
             .stdin(Stdio::null())
             .stdout(output)
             .stderr(Stdio::null());
@@ -460,6 +477,7 @@ impl Commands {
             bytes,
             lines,
             tail,
+            images: show::shown(&running.dir),
         };
         let written = serde_json::to_string(&ended).ok()?;
         write_whole(&running.dir.join("ended.json"), &written).ok()?;
@@ -565,6 +583,7 @@ impl Commands {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::Shown;
     use std::time::{Duration, Instant};
 
     struct Machine {
@@ -583,6 +602,7 @@ mod tests {
             output_limit: 256 << 20,
             tail_bytes: 64 << 10,
             keep_ms: 7 * 24 * 3_600_000,
+            bin: None,
         }
     }
 
@@ -706,6 +726,45 @@ mod tests {
         // What the actor gave is written nowhere on the machine.
         let meta = fs::read_to_string(machine.root.join("tasks/act_1/b1/meta.json")).unwrap();
         assert!(!meta.contains("the actor's"));
+    }
+
+    #[test]
+    fn a_command_has_the_daemons_programs_first_and_ends_with_the_images_it_showed() {
+        let mut machine = machine("programs");
+        let bin = machine.root.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let show = bin.join("show");
+        // Stands in for the daemon's own: it keeps what it is given as `show` does.
+        fs::write(
+            &show,
+            "#!/bin/sh\nmkdir -p \"$ACENTRIC_TASK_DIR/images\" && cp \"$1\" \"$ACENTRIC_TASK_DIR/images/1\" && printf %s \"$1\" > \"$ACENTRIC_TASK_DIR/images/1.name\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&show, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        machine.commands.options.bin = Some(bin.clone());
+        machine
+            .run(&run_of(
+                "b1",
+                "printf 'GIF89a' > chart.gif && show chart.gif && echo \"$ACENTRIC_TASK_DIR\" && command -v show && command -v sh",
+            ))
+            .unwrap();
+        let ended = machine.ended("b1");
+        let dir = machine.root.join("tasks/act_1/b1");
+        let lines: Vec<&str> = ended.tail.lines().collect();
+        assert_eq!(lines[0], dir.to_string_lossy());
+        assert_eq!(lines[1], show.to_string_lossy());
+        // The rest of PATH is the machine's, after the daemon's own.
+        assert_ne!(lines.get(2), None);
+        assert_eq!(
+            ended.images,
+            vec![Shown {
+                path: dir.join("images/1").to_string_lossy().into_owned(),
+                name: "chart.gif".into(),
+            }]
+        );
+        // A command that showed none says nothing of images.
+        machine.run(&run_of("b2", "echo plain")).unwrap();
+        assert!(machine.ended("b2").images.is_empty());
     }
 
     #[test]

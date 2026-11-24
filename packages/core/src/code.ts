@@ -50,7 +50,7 @@ import type { Mcp, McpCatalog, McpResult } from './mcp.ts';
 import type { ScriptCall, ScriptKept, Store } from './store.ts';
 import { TASK_IMAGES, imageMark, unmarked } from './tasks.ts';
 import type { TaskEnd, TaskKind } from './tasks.ts';
-import { IMAGE_BYTES, megabytes } from './view-image.ts';
+import { IMAGE_BYTES, megabytes } from './images.ts';
 
 /** How long a script may run when its call does not say, in seconds. */
 export const SCRIPT_TIMEOUT_S = 600;

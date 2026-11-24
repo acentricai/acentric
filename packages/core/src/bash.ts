@@ -10,15 +10,21 @@
 //   wrote nothing           (no output)
 //   too long to carry       its end, then [showing the last 412 lines of 14,210 · all of it: <log>]
 //   past its timeout        the output so far, then [stopped: timed out after 30s]
+//   ran `show chart.png`    the output, then the image
+//
+// A command shows the model an image with `show`, a program of the daemon's on its PATH. The
+// daemon keeps a copy of each and names it in the ending, and the image is read from the
+// machine and checked here, against the model it is shown to.
 
 import { posix } from 'node:path';
 
-import type { Json, JsonObject, MachineId } from '@acentric/protocol';
+import type { ImagePart, Json, JsonObject, MachineId, ShownImage } from '@acentric/protocol';
 
-import { MachineNotFound, MachineOffline } from './machines.ts';
+import { IMAGE_BYTES, imageOf } from './images.ts';
+import { MachineNotFound, MachineOffline, MachineRefused } from './machines.ts';
 import type { CommandEnd, Machines } from './machines.ts';
 import { SandboxAsleep } from './sandboxes.ts';
-import { span } from './tasks.ts';
+import { TASK_IMAGES, imageMark, span, unmarked } from './tasks.ts';
 import type { TaskEnd, TaskKind } from './tasks.ts';
 
 type Input = {
@@ -27,6 +33,11 @@ type Input = {
   /** Where it starts, with the actor's working directory already joined in. */
   readonly cwd: string;
   readonly timeout?: number;
+  /**
+   * The provider of the model, when the model is shown images: what the images a command
+   * shows are checked against. Without it, they are not shown.
+   */
+  readonly images?: string;
 };
 
 const count = (value: number): string => value.toLocaleString('en-US');
@@ -40,11 +51,20 @@ function linesOf(text: string): number {
 
 /**
  * How a command's ending reads in at most `most` characters of its output: the end of what it
- * wrote, cut at the start of a line, and then, each on a line of its own, that it was cut and
- * how it ended.
+ * wrote, cut at the start of a line, and then, each on a line of its own, that it was cut, the
+ * images it showed, and how it ended. `images` is a line for each image: its mark, or why it is
+ * not shown.
  */
-export function renderCommand(end: CommandEnd, log: string | undefined, most: number): string {
-  let shown = end.tail ?? '';
+export function renderCommand(
+  end: CommandEnd,
+  log: string | undefined,
+  most: number,
+  images: readonly string[] = [],
+): string {
+  // Its output is the command's: nothing in it is taken for an image's place.
+  let shown = images.length === 0 ? (end.tail ?? '') : unmarked(end.tail ?? '');
+  // The lines of its images are kept whole, and the output is cut to what is left.
+  if (images.length > 0) most = Math.max(0, most - images.join('\n').length - 1);
   // The machine sends the end of the output alone when there was more of it, from wherever
   // that falls.
   const cutByMachine = (end.bytes ?? 0) > Buffer.byteLength(shown);
@@ -68,6 +88,7 @@ export function renderCommand(end: CommandEnd, log: string | undefined, most: nu
       }]`,
     );
   }
+  parts.push(...images);
   const ran = span(end.ranMs ?? 0);
   switch (end.status) {
     case 'exited':
@@ -93,7 +114,12 @@ export function renderCommand(end: CommandEnd, log: string | undefined, most: nu
   return parts.join('\n');
 }
 
+/** What the images a command showed come to: a line for each, its mark or why it is not shown, and the images that are. */
+type ShownLines = { readonly lines: readonly string[]; readonly images: ImagePart[] };
+
 export type BashOptions = {
+  /** Whether a provider's model is shown images: a command's images are shown to one that is. */
+  readonly takesImages?: (provider: string, model: string) => boolean;
   /**
    * Before a command is started: has a machine that is a sandbox awake, and rejects with
    * `SandboxAsleep` when it cannot be had. See `sandboxes.ts`.
@@ -111,9 +137,52 @@ export function bashKind(machines: Machines, options: BashOptions = {}): TaskKin
   const logOf = (input: Input, ref: { actor: string; task: string }): string | undefined =>
     machines.logOf(input.machine, ref);
 
-  const endOf = (end: CommandEnd, log: string | undefined): TaskEnd => {
-    const render = (most: number): string => renderCommand(end, log, most);
-    const rendered = { text: end.tail ?? '', render };
+  /** Reads the images a command showed from its machine, and checks each for its model. */
+  const shownOf = async (input: Input, given: readonly ShownImage[]): Promise<ShownLines> => {
+    const lines: string[] = [];
+    const images: ImagePart[] = [];
+    for (const [index, one] of given.entries()) {
+      if (index >= TASK_IMAGES) {
+        lines.push(`[${one.name} is not shown: a command shows at most ${String(TASK_IMAGES)}]`);
+        continue;
+      }
+      if (input.images === undefined) {
+        lines.push(`[${one.name} is not shown: your model is not shown images]`);
+        continue;
+      }
+      let read;
+      try {
+        // One byte more than the most, so that a larger file is known to be one.
+        read = await machines.read(input.machine, { path: one.path, max: IMAGE_BYTES + 1 });
+      } catch (error) {
+        let why: string;
+        if (error instanceof MachineOffline) why = 'your machine is not connected';
+        else if (error instanceof MachineNotFound) why = 'your machine was removed';
+        else if (error instanceof MachineRefused || error instanceof SandboxAsleep) {
+          why = error.message;
+        } else throw error;
+        lines.push(`[${one.name} could not be read: ${why}]`);
+        continue;
+      }
+      const checked = imageOf(Buffer.from(read.data, 'base64'), one.name, input.images, read.size);
+      if ('why' in checked) {
+        lines.push(`[${checked.why}]`);
+        continue;
+      }
+      lines.push(imageMark(images.length));
+      images.push(checked.image);
+    }
+    return { lines, images };
+  };
+
+  const endOf = (end: CommandEnd, log: string | undefined, shown?: ShownLines): TaskEnd => {
+    const lines = shown?.lines ?? [];
+    const render = (most: number): string => renderCommand(end, log, most, lines);
+    const rendered = {
+      text: end.tail ?? '',
+      render,
+      ...(shown === undefined || shown.images.length === 0 ? {} : { images: shown.images }),
+    };
     switch (end.status) {
       case 'exited':
         // Whatever its exit status: the command ran, and what it says is its result.
@@ -155,7 +224,7 @@ export function bashKind(machines: Machines, options: BashOptions = {}): TaskKin
 
     available: (actor) => actor.machine !== null,
 
-    input(args: JsonObject, actor, limits): Json {
+    input(args: JsonObject, actor, limits, definition): Json {
       if (actor.machine === null) throw new Error('you have no machine');
       const { command, cwd, ...rest } = args;
       if (typeof command !== 'string' || command.trim() === '') {
@@ -177,6 +246,10 @@ export function bashKind(machines: Machines, options: BashOptions = {}): TaskKin
         command,
         cwd: startIn,
         ...(limits.timeout === undefined ? {} : { timeout: limits.timeout }),
+        ...(definition !== undefined &&
+        options.takesImages?.(definition.provider, actor.modelId) === true
+          ? { images: definition.provider }
+          : {}),
       };
       return input;
     },
@@ -243,7 +316,8 @@ export function bashKind(machines: Machines, options: BashOptions = {}): TaskKin
         const end = await machines.ended(ref, closing);
         // The engine is going away: the command goes on, and this is not what the task ends with.
         if (end === undefined) return { status: 'lost', text: '' };
-        return endOf(end, logOf(input, ref));
+        const shown = end.images.length === 0 ? undefined : await shownOf(input, end.images);
+        return endOf(end, logOf(input, ref), shown);
       } finally {
         stop.removeEventListener('abort', stopIt);
       }

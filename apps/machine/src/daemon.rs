@@ -68,6 +68,19 @@ impl Default for Times {
     }
 }
 
+/// Puts the daemon's own programs, for its commands to run, in a folder of their own: `show`,
+/// a link to this program. Made again each time the daemon starts, for a program that moved.
+/// None when it cannot be.
+fn programs(dir: &Path) -> Option<PathBuf> {
+    let program = std::env::current_exe().ok()?.canonicalize().ok()?;
+    let bin = dir.join("bin");
+    fs::create_dir_all(&bin).ok()?;
+    let show = bin.join("show");
+    let _ = fs::remove_file(&show);
+    std::os::unix::fs::symlink(&program, &show).ok()?;
+    Some(bin)
+}
+
 pub struct Options {
     /// The daemon's folder.
     pub dir: PathBuf,
@@ -271,7 +284,12 @@ impl Daemon {
                 )),
             }
         }
+        let bin = programs(&options.dir);
+        if bin.is_none() {
+            log("show could not be put in place: commands cannot show images");
+        }
         let commands = Commands::open(commands::Options {
+            bin,
             dir: options.dir.join("tasks"),
             home: options.home.clone(),
             stop_grace_ms: options.times.stop_grace_ms,

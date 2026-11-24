@@ -1088,6 +1088,7 @@ export class MemoryStore implements Store {
       bytes: null,
       lines: null,
       tail: null,
+      images: [],
       log: null,
       error: null,
       endedAt: null,

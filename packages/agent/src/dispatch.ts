@@ -27,7 +27,7 @@ export class InvalidAgent extends Error {
 }
 
 /** The engine's own tools, whose names an agent's tool cannot have. */
-const RESERVED = ['bash', 'view_image', 'code', 'stop', 'spawn_agent', 'message_agent', 'schedule'];
+const RESERVED = ['bash', 'code', 'stop', 'spawn_agent', 'message_agent', 'schedule'];
 
 const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 const INPUT_TYPE = /^[A-Za-z0-9_.-]{1,64}$/;

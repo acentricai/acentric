@@ -262,6 +262,50 @@ describe('the daemon, against a server', () => {
     expect(textOf((await conversation(actor.id)).at(-1))).toBe('I know where I am.');
   }, 60_000);
 
+  it('shows the model the images a command showed with `show`, with its result', async (context) => {
+    if (program === undefined) return context.skip();
+    const { actor } = await client.call('actors.create', {
+      params: { agent: agentId as never },
+      body: { modelId: 'fake-eyes', machine: { id: machineId, cwd: work } },
+    });
+    // A GIF of 1 pixel, as its file starts.
+    const dot = String.raw`printf 'GIF89a\001\000\001\000\000\000' > dot.gif`;
+    let shown: object | undefined;
+    plan = (step) => {
+      expect(step.instructions).toContain('- `show <file>...` in a command shows you images');
+      const asked = step.messages.filter((message) => message.role === 'tool_result');
+      if (asked.length === 0) {
+        return calls({
+          id: 'c1',
+          name: 'bash',
+          arguments: { command: `${dot} && show dot.gif && echo shown; show none.png` },
+        });
+      }
+      shown = asked[0];
+      return says('A dot.');
+    };
+    await turn(actor.id, 'Draw a dot, and look at it.');
+    // The model is sent the image itself, after what the command wrote.
+    expect(shown).toMatchObject({
+      content: [
+        { type: 'text', text: 'shown\nshow: there is no file none.png\n' },
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            mediaType: 'image/gif',
+            data: Buffer.from('GIF89a\x01\x00\x01\x00\x00\x00', 'latin1').toString('base64'),
+          },
+        },
+        { type: 'text', text: expect.stringMatching(/^\n\[exit 1 · \d+ms\]$/) },
+      ],
+    });
+    // Read as text, the image is left out from between them.
+    expect((await results(actor.id)).at(-1)).toMatch(
+      /^shown\nshow: there is no file none\.png\n\n\[exit 1 · \d+ms\]$/,
+    );
+  }, 60_000);
+
   it('lets a command go on in the background, tells of its ending, and stops one when asked', async (context) => {
     if (program === undefined) return context.skip();
     const { actor } = await client.call('actors.create', {

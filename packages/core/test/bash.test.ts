@@ -6,7 +6,8 @@ import { renderCommand } from '../src/bash.ts';
 import { familyOf } from '../src/families.ts';
 import type { CommandEnd } from '../src/machines.ts';
 import { instructionsOf, scaffoldOf } from '../src/scaffold.ts';
-import { imageSize, imageTypeOf, viewImage } from '../src/view-image.ts';
+import { imageOf, imageSize, imageTypeOf } from '../src/images.ts';
+import { imageMark } from '../src/tasks.ts';
 
 const ended = (more: Partial<CommandEnd> = {}): CommandEnd => ({
   actor: 'act_1',
@@ -23,6 +24,7 @@ const ended = (more: Partial<CommandEnd> = {}): CommandEnd => ({
   bytes: 3,
   lines: 1,
   tail: 'hi\n',
+  images: [],
   log: '/tasks/act_1/b1/output.log',
   error: null,
   startedAt: 0,
@@ -130,9 +132,12 @@ describe('the pieces of the scaffold', () => {
     const other = { ...onMachine, machine: { cwd: '/srv', os: 'freebsd', arch: null } };
     expect(scaffoldOf(other)).toContain('It runs freebsd, and your working directory is /srv.');
 
-    expect(scaffoldOf(onMachine)).not.toContain('view_image');
-    expect(scaffoldOf({ ...onMachine, tools: ['bash', 'stop', 'view_image'] })).toContain(
-      '- `view_image` shows you an image file from the machine.',
+    expect(scaffoldOf(onMachine)).not.toContain('`show');
+    expect(scaffoldOf({ ...onMachine, images: { side: 3000 } })).toContain(
+      '- `show <file>...` in a command shows you images with its result, such as `python plot.py && show plot.png`. An image is a png, jpeg, gif or webp file of at most 5.0 MB, at most 3000 pixels a side, and a command shows at most 5. You see each file as it was when `show` ran. You are told why of a file that cannot be shown.',
+    );
+    expect(scaffoldOf({ ...onMachine, images: { side: null } })).toContain(
+      'An image is a png, jpeg, gif or webp file of at most 5.0 MB, and a command shows at most 5.',
     );
     expect(scaffoldOf(onMachine)).not.toContain('`schedule`');
     expect(scaffoldOf({ ...onMachine, tools: ['bash', 'stop', 'schedule'] })).toContain(
@@ -205,29 +210,52 @@ describe('an image file', () => {
     expect(imageSize(png(1, 1).subarray(0, 12))).toBeUndefined();
   });
 
-  it('is kept from a model whose provider takes none so large, and it is told how to look at it', async () => {
-    const actor = { machine: { id: 'mch_1', cwd: '~', env: [] } } as never;
-    const machines = (image: Buffer) =>
-      ({
-        settled: async () => {},
-        read: async () => ({ size: image.length, from: 0, data: image.toString('base64') }),
-      }) as never;
-    const shown = (image: Buffer, provider: string) =>
-      viewImage(machines(image), () => true).run(
-        actor,
-        { provider } as never,
-        { path: 'big.png' },
-        { id: 'c1' },
-      );
-    expect(await shown(png(4000, 300), 'anthropic')).toEqual({
-      content:
-        'big.png is 4000×300 pixels, and the largest image this model can be shown is 3000 pixels a side. Make a smaller copy, and look at that.',
-      isError: true,
+  it('is kept from a model whose provider takes none so large, and it is told how to make one it takes', () => {
+    expect(imageOf(png(4000, 300), 'big.png', 'anthropic')).toEqual({
+      why: 'big.png is 4000×300 pixels, and the largest image this model can be shown is 3000 pixels a side. Make a smaller copy, and show that.',
     });
-    expect(await shown(png(3000, 3000), 'anthropic')).toMatchObject({
-      content: [{ type: 'image' }],
+    expect(imageOf(png(3000, 3000), 'big.png', 'anthropic')).toMatchObject({
+      image: { type: 'image', source: { type: 'base64', mediaType: 'image/png' } },
     });
     // A provider that scales a large image down itself is given it as it is.
-    expect(await shown(png(4000, 300), 'openai')).toMatchObject({ content: [{ type: 'image' }] });
+    expect(imageOf(png(4000, 300), 'big.png', 'openai')).toMatchObject({
+      image: { type: 'image' },
+    });
+  });
+
+  it('is shown only when it is an image of at most 5 MB, as large as the file is', () => {
+    expect(imageOf(Buffer.from('text'), 'notes.txt', 'openai')).toEqual({
+      why: 'notes.txt is not a png, jpeg, gif or webp image',
+    });
+    // Only the start of a file is read: it is as large as the machine said it is.
+    expect(imageOf(png(1, 1), 'huge.png', 'openai', 7 * 1024 * 1024)).toEqual({
+      why: 'huge.png is 7.0 MB, and the largest image that can be shown is 5.0 MB',
+    });
+  });
+});
+
+describe('how a command that showed images reads', () => {
+  it('is its output, then a line for each image, then how it ended', () => {
+    const lines = [imageMark(0), '[b.png is not shown: your model is not shown images]'];
+    expect(renderCommand(ended({ exit: 2 }), '~/log', 100, lines)).toBe(
+      `hi\n${imageMark(0)}\n[b.png is not shown: your model is not shown images]\n[exit 2 · 2s]`,
+    );
+    // A command that wrote nothing and showed an image is not said to have had no output.
+    expect(
+      renderCommand(ended({ tail: '', bytes: 0, lines: 0 }), '~/log', 100, [imageMark(0)]),
+    ).toBe(imageMark(0));
+  });
+
+  it('keeps its images when its output is cut, and takes nothing it wrote for one', () => {
+    const tail = `${imageMark(0)} written\n${'x'.repeat(200)}\nlast\n`;
+    const read = renderCommand(ended({ tail, bytes: tail.length, lines: 3 }), '~/log', 40, [
+      imageMark(0),
+    ]);
+    expect(
+      read.endsWith(`last\n[showing the last 1 lines of 3 · all of it: ~/log]\n${imageMark(0)}`),
+    ).toBe(true);
+    expect(
+      renderCommand(ended({ tail }), '~/log', 1000, [imageMark(0)]).startsWith('� written'),
+    ).toBe(true);
   });
 });

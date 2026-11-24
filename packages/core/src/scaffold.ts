@@ -16,6 +16,7 @@
 import { READ_LOGS, READ_RESULT } from './code.ts';
 import type { ModelFamily } from './families.ts';
 import { NOTICE_TAG } from './sent.ts';
+import { IMAGE_BYTES, megabytes } from './images.ts';
 import { TASK_IMAGES } from './tasks.ts';
 
 /** What of an actor decides what its model is told. */
@@ -35,6 +36,11 @@ export type Scaffolded = {
   readonly family?: ModelFamily;
   /** Whether another actor spawned it: it is told how a subagent works. */
   readonly spawned?: boolean;
+  /**
+   * Set when its model is shown images: it is told of `show`. `side` is the most pixels a side
+   * an image may have for its provider, null for no limit of the engine's.
+   */
+  readonly images?: { readonly side: number | null };
 };
 
 /**
@@ -85,7 +91,14 @@ const SYSTEMS: { readonly [os: string]: string } = {
   win32: 'Windows',
 };
 
-function machine(of: NonNullable<Scaffolded['machine']>, images: boolean): string {
+/** How a model that is shown images is told of `show`. */
+function show(images: NonNullable<Scaffolded['images']>): string {
+  const side = images.side === null ? '' : `, at most ${String(images.side)} pixels a side`;
+  return `
+- \`show <file>...\` in a command shows you images with its result, such as \`python plot.py && show plot.png\`. An image is a png, jpeg, gif or webp file of at most ${megabytes(IMAGE_BYTES)}${side}, and a command shows at most ${String(TASK_IMAGES)}. You see each file as it was when \`show\` ran. You are told why of a file that cannot be shown.`;
+}
+
+function machine(of: NonNullable<Scaffolded['machine']>, images: Scaffolded['images']): string {
   const system =
     of.os === null
       ? ''
@@ -100,7 +113,7 @@ function machine(of: NonNullable<Scaffolded['machine']>, images: boolean): strin
 - Long output is shown from its end. All of it is in the log the result names.
 - A background command writes to its log as it runs. Read it for something you need now, such as a server's ready line.
 - Independent commands can go in one answer, and run side by side.${
-    images ? '\n- `view_image` shows you an image file from the machine.' : ''
+    images === undefined ? '' : show(images)
   }`;
 }
 
@@ -156,7 +169,7 @@ export function scaffoldOf(actor: Scaffolded): string {
   if (commands || has('code')) {
     pieces.push(tasks(commands, has('code'), has('schedule'), actor.family));
   }
-  if (commands && actor.machine !== null) pieces.push(machine(actor.machine, has('view_image')));
+  if (commands && actor.machine !== null) pieces.push(machine(actor.machine, actor.images));
   if (has('code')) pieces.push(scripts(commands));
   if (has('spawn_agent')) pieces.push(SUBAGENTS);
   if (actor.spawned === true) pieces.push(SPAWNED);

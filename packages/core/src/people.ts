@@ -28,7 +28,7 @@ import type {
 import type { Audit } from './audit.ts';
 import { Conflict, EngineError } from './errors.ts';
 import { IdSource } from './ids.ts';
-import { imageTypeOf } from './view-image.ts';
+import { imageTypeOf } from './images.ts';
 import { Forbidden, SETTINGS_KEY, Unauthenticated, descendantsOf } from './keys.ts';
 import type { Store, StoredLink, StoredPhoto, StoredUser } from './store.ts';
 

@@ -8,6 +8,8 @@
 //!                       { server, id, token }. The file is removed
 //! acentric-machine connect
 //!                       connects, and stays connected until it is stopped
+//! show <file>...        run by a command, as the link the daemon puts on its PATH: the
+//!                       images are shown to the model with the command's result
 //! ```
 //!
 //! Its folder is `~/.acentric`, or MACHINE_DIR. MACHINE_SHELL names the shell whose
@@ -21,6 +23,7 @@ mod environment;
 mod files;
 mod identity;
 mod protocol;
+mod show;
 mod sys;
 mod tls;
 mod update;
@@ -128,6 +131,12 @@ fn connect() -> Result<bool, String> {
 }
 
 fn main() -> ExitCode {
+    // Run as `show`, by a command: see `show.rs`.
+    let called = std::env::args_os().next().unwrap_or_default();
+    if std::path::Path::new(&called).file_name() == Some(std::ffi::OsStr::new("show")) {
+        let files: Vec<String> = std::env::args().skip(1).collect();
+        return show::main(&files);
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     // Where its program is, read before anything replaces it: a system may say of a program
     // that was replaced only that it is gone.

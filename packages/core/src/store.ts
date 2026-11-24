@@ -34,6 +34,7 @@ import type {
   Role,
   Session,
   SessionId,
+  ShownImage,
   StoppedOnMachine,
   TaskStatus,
   TaskStoppedBy,
@@ -260,6 +261,8 @@ export type StoredCommand = {
   readonly lines: number | null;
   /** The end of what it wrote. */
   readonly tail: string | null;
+  /** The images it showed with `show`, in the order it showed them. */
+  readonly images: readonly ShownImage[];
   /** The file all of its output is in, on the machine. */
   readonly log: string | null;
   /** Why it failed or was lost. */
@@ -286,6 +289,7 @@ export type CommandPatch = Partial<
     | 'bytes'
     | 'lines'
     | 'tail'
+    | 'images'
     | 'log'
     | 'error'
     | 'endedAt'
