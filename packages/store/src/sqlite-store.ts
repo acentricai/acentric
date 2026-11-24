@@ -238,6 +238,10 @@ export class SqliteStore implements Store {
     return this.#write.ask('deleteAgent' satisfies Operation, id);
   }
 
+  agentTree(id: AgentId): Promise<ActorId[]> {
+    return this.#write.ask('agentTree' satisfies Operation, id);
+  }
+
   deleteActor(id: ActorId): Promise<ActorId[] | undefined> {
     return this.#write.ask('deleteActor' satisfies Operation, id);
   }

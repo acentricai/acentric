@@ -283,6 +283,21 @@ export function subagentsSuite(name: string, open: () => Promise<Store>): void {
         expect(down?.input?.type).toBe('agent');
       });
 
+      it('goes with its parent’s agent when that is deleted, though it is of another agent', async () => {
+        const made = await setup({ [LEAD]: [spawn('c1', { agent: 'helper', name: 'rev' })] });
+        await made.say('Make one.');
+        await quiet(made);
+        const rev = await child(made, 'rev');
+        await made.one.it.deleteAgent(made.actor.agent);
+        // Its parent's work is gone, and so is it: there is no one for it to answer.
+        expect(await store.loadActor(made.actor.id)).toBeUndefined();
+        expect(await store.loadActor(rev.id)).toBeUndefined();
+        // Its own agent is there still.
+        expect((await made.one.it.listAgents()).items.map((agent) => agent.name)).toContain(
+          'helper',
+        );
+      });
+
       it('sends nothing more of an answer when the turn is ended while an agent is created', async () => {
         let release: () => void = () => {};
         const held = new Promise<void>((resolve) => {

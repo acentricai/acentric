@@ -24,7 +24,13 @@ import type {
   UserMessage,
 } from '@acentric/protocol';
 
-import { ActorArchived, AgentNotFound, EngineError, InvalidConfiguration } from './errors.ts';
+import {
+  ActorArchived,
+  ActorNotFound,
+  AgentNotFound,
+  EngineError,
+  InvalidConfiguration,
+} from './errors.ts';
 import type { CallResult } from './executor.ts';
 import { issuesText } from './executor.ts';
 import { NameTaken } from './store.ts';
@@ -292,6 +298,10 @@ export function subagentTools(host: SubagentsHost): OwnTool[] {
         } catch (error) {
           if (error instanceof ActorArchived) {
             return failed('Your parent is archived: it takes nothing until it is unarchived');
+          }
+          // Deleted: an answer, not a failure of the turn, which a restart would make again.
+          if (error instanceof ActorNotFound) {
+            return failed('Your parent is gone: it was deleted, and takes nothing');
           }
           throw error;
         }
