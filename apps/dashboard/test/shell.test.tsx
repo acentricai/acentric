@@ -96,10 +96,40 @@ describe('the sidebar', () => {
 
     fireEvent.click(settings);
     const dialog = await screen.findByRole('dialog', { name: 'Settings' });
-    expect(within(dialog).getByRole('searchbox', { name: 'Search settings' })).toBeTruthy();
-    expect(within(dialog).getByRole('navigation', { name: 'Settings' })).toBeTruthy();
+    const sections = within(dialog).getByRole('navigation', { name: 'Settings' });
+    // Its first section is the account: who is signed in, and what changes it.
+    expect(
+      within(sections).getByRole('button', { name: 'Account' }).getAttribute('aria-current'),
+    ).toBe('page');
+    const page = within(dialog).getByRole('region', { name: 'Account' });
+    expect(await within(page).findByText('ada@example.test')).toBeTruthy();
+    expect(within(page).getByRole('textbox', { name: 'Name' })).toBeTruthy();
+    expect(within(page).getByRole('table', { name: 'Sessions' })).toBeTruthy();
+    // Its search finds the sections by name.
+    const search = within(dialog).getByRole('searchbox', { name: 'Search settings' });
+    fireEvent.change(search, { target: { value: 'nothing' } });
+    expect(within(sections).queryByRole('button', { name: 'Account' })).toBeNull();
+    fireEvent.change(search, { target: { value: 'acc' } });
+    expect(within(sections).getByRole('button', { name: 'Account' })).toBeTruthy();
+
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+  });
+});
+
+describe('the Account section of Settings', () => {
+  it('keeps a name as it is left, with no Save to press', async () => {
+    const server = fakeServer();
+    server.person('ada@example.test', 'a-password-for-tests', true);
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    const name = await within(dialog).findByRole('textbox', { name: 'Name' });
+    fireEvent.change(name, { target: { value: 'Ada Lovelace' } });
+    fireEvent.blur(name);
+    expect(await within(dialog).findByText('Saved')).toBeTruthy();
+    expect((name as HTMLInputElement).value).toBe('Ada Lovelace');
   });
 });
 
