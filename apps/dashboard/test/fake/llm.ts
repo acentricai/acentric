@@ -23,6 +23,8 @@ export function totalsOf(more: Partial<UsageTotals> = {}): UsageTotals {
     estimatedCost: 0,
     unpriced: 0,
     durationMs: 0,
+    medianMs: null,
+    p95Ms: null,
     first: null,
     last: null,
     ...more,

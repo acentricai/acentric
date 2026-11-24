@@ -396,7 +396,7 @@ describe('usage', () => {
     expect(await keys('provider')).toEqual([['fake', 4]]);
     expect(await keys('model')).toEqual([['fake-1', 4]]);
     expect(await keys('day')).toEqual([[new Date().toISOString().slice(0, 10), 4]]);
-    expect(await refusal(admin.call('usage.get', { query: { by: 'hour' as 'day' } }))).toEqual({
+    expect(await refusal(admin.call('usage.get', { query: { by: 'week' as 'day' } }))).toEqual({
       code: 'invalid_request',
       status: 400,
     });
@@ -428,6 +428,78 @@ describe('usage', () => {
 
     const without = await keyed({ scope: { type: 'engine' }, permissions: ['actors:read'] });
     expect(await refusal(without.client.call('usage.get'))).toEqual({
+      code: 'forbidden',
+      status: 403,
+    });
+  });
+
+  it('adds up each group by another, by hour, in a time zone, and by failure', async () => {
+    const { admin } = await spent();
+    const get = async (query: QueryGiven<'usage.get'>) => admin.call('usage.get', { query });
+    const { items } = await admin.call('usage.calls');
+    const hours = new Set(items.map((call) => new Date(call.at).toISOString().slice(0, 13)));
+    expect(new Set((await get({ by: 'hour' })).groups?.map((group) => group.key))).toEqual(hours);
+    const kolkata = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    expect(
+      new Set((await get({ by: 'day', tz: 'Asia/Kolkata' })).groups?.map((group) => group.key)),
+    ).toEqual(new Set(items.map((call) => kolkata.format(call.at))));
+    const byDay = await get({ by: 'day', split: 'provider' });
+    expect(byDay.groups?.flatMap((day) => day.groups ?? []).map((each) => each.key)).toEqual(
+      byDay.groups?.map(() => 'fake'),
+    );
+    const failure = items.find((call) => call.failure !== null)?.failure;
+    expect(
+      (await get({ by: 'failure' })).groups?.map((group) => [group.key, group.totals.calls]),
+    ).toEqual([
+      ['', 3],
+      [failure, 1],
+    ]);
+    expect((await get({ failed: 'true' })).totals).toMatchObject({ calls: 1, medianMs: null });
+    expect((await get({})).totals.medianMs).not.toBeNull();
+    expect(await refusal(get({ by: 'day', tz: 'Mars/Olympus' }))).toEqual({
+      code: 'invalid_request',
+      status: 400,
+    });
+  });
+
+  it('lists each call, newest first, a page at a time, of what a key reaches', async () => {
+    const { admin, keyed, orders, billing } = await spent();
+    const all = await admin.call('usage.calls');
+    expect(all.items).toHaveLength(4);
+    expect(all.nextCursor).toBeNull();
+    expect(all.items.map((call) => call.at)).toEqual(
+      all.items.map((call) => call.at).toSorted((a, b) => b - a),
+    );
+    const page = await admin.call('usage.calls', { query: { limit: 3 } });
+    expect(page.items).toEqual(all.items.slice(0, 3));
+    const next = await admin.call('usage.calls', {
+      query: { limit: 3, cursor: page.nextCursor ?? '' },
+    });
+    expect(next).toEqual({ items: all.items.slice(3), nextCursor: null });
+    expect(
+      (await admin.call('usage.calls', { query: { agent: billing.id } })).items.map(
+        (call) => call.agent,
+      ),
+    ).toEqual([billing.id]);
+
+    const ofBilling = await keyed({
+      scope: { type: 'agent', agent: billing.id },
+      permissions: ['usage:read'],
+    });
+    expect((await ofBilling.client.call('usage.calls')).items.map((call) => call.agent)).toEqual([
+      billing.id,
+    ]);
+    expect(await ofBilling.client.call('usage.calls', { query: { agent: orders.id } })).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+    const without = await keyed({ scope: { type: 'engine' }, permissions: ['actors:read'] });
+    expect(await refusal(without.client.call('usage.calls'))).toEqual({
       code: 'forbidden',
       status: 403,
     });

@@ -15,7 +15,7 @@ import { principalRefSchema } from '../auth.ts';
 import { accountIdSchema, actorIdSchema, agentIdSchema, userIdSchema } from '../ids.ts';
 import { modelIdSchema, providerIdSchema } from '../messages.ts';
 import { nameSchema } from '../names.ts';
-import { timestampSchema } from '../primitives.ts';
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, timestampSchema } from '../primitives.ts';
 
 /** A model account, without its credential: nothing gives that back. */
 export const accountSchema = z
@@ -93,6 +93,12 @@ export const usageTotalsSchema = z
     unpriced: total,
     /** How long the calls took, together, in milliseconds. */
     durationMs: total,
+    /**
+     * How long an answered call took: half took no longer than `medianMs`, and nineteen in
+     * twenty no longer than `p95Ms`. Null when no call was answered.
+     */
+    medianMs: total.nullable(),
+    p95Ms: total.nullable(),
     /** When the first of them was made, and the last. Null when there are none. */
     first: timestampSchema.nullable(),
     last: timestampSchema.nullable(),
@@ -100,8 +106,13 @@ export const usageTotalsSchema = z
   .meta({ id: 'UsageTotals' });
 export type UsageTotals = z.infer<typeof usageTotalsSchema>;
 
-/** What usage can be added up by. `day` is a day in UTC, as `2026-11-22`. */
-/** `root` is the actor at the top of a tree of subagents: what it and all under it used. */
+/**
+ * What usage can be added up by. `day` is a day, as `2026-11-22`, and `hour` an hour of one, as
+ * `2026-11-22T13`: in UTC, or in the time zone asked for. `root` is the actor at the top of a
+ * tree of subagents: what it and all under it used. `failure` is the kind of failure of a call
+ * that failed, and empty for one that was answered. `kind` is `turn` or `compaction`. `version`
+ * is the version of its agent a call was made on: of use with an agent asked for.
+ */
 export const USAGE_GROUPS = [
   'agent',
   'actor',
@@ -110,6 +121,10 @@ export const USAGE_GROUPS = [
   'provider',
   'model',
   'day',
+  'hour',
+  'failure',
+  'kind',
+  'version',
 ] as const;
 export type UsageGroup = (typeof USAGE_GROUPS)[number];
 
@@ -117,8 +132,22 @@ export type UsageGroup = (typeof USAGE_GROUPS)[number];
 export const USAGE_KINDS = ['turn', 'compaction'] as const;
 export type UsageKind = (typeof USAGE_KINDS)[number];
 
-/** Which calls are added up, and by what. Each filter narrows them. */
-export const usageQuerySchema = z.object({
+/** A time zone, as the IANA database names it: `Asia/Kolkata`, `UTC`. */
+export const timeZoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine((zone) => {
+    try {
+      return new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone !== '';
+    } catch {
+      return false;
+    }
+  }, 'A time zone is one the IANA database names, such as Asia/Kolkata or UTC')
+  .meta({ examples: ['Asia/Kolkata'] });
+
+/** Which calls a query is of. Each filter narrows them. */
+const usageFilterSchema = z.object({
   /** From this time on. */
   from: z.coerce.number().int().nonnegative().optional(),
   /** Up to, and not at, this time. */
@@ -132,16 +161,77 @@ export const usageQuerySchema = z.object({
   model: modelIdSchema.optional(),
   /** The calls of turns, or those that compacted a conversation. Both without it. */
   kind: z.enum(USAGE_KINDS).optional(),
+  /** The calls that failed, with `true`; those that were answered, with `false`. */
+  failed: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
+});
+
+/** Which calls are added up, and by what. */
+export const usageQuerySchema = usageFilterSchema.extend({
   /** With it, the totals of each group as well, the one that cost most first. */
   by: z.enum(USAGE_GROUPS).optional(),
+  /** With `by`, each group's totals by this as well: such as each day's by provider. */
+  split: z.enum(USAGE_GROUPS).optional(),
+  /** The time zone days and hours are of. UTC without it. */
+  tz: timeZoneSchema.optional(),
 });
 export type UsageQuery = z.infer<typeof usageQuerySchema>;
+
+/** What the calls of one group add up to, and with `split`, its own groups. */
+const usageGroupSchema = z.object({
+  key: z.string(),
+  totals: usageTotalsSchema,
+  /** For a query with `split`: this group's calls, by what `split` names, as `groups` are. */
+  groups: z.array(z.object({ key: z.string(), totals: usageTotalsSchema })).optional(),
+});
 
 export const usageReportSchema = z
   .object({
     totals: usageTotalsSchema,
     /** For a query with `by`: each group by what it is of, such as an agent's ID or a day. */
-    groups: z.array(z.object({ key: z.string(), totals: usageTotalsSchema })).optional(),
+    groups: z.array(usageGroupSchema).optional(),
   })
   .meta({ id: 'UsageReport' });
 export type UsageReport = z.infer<typeof usageReportSchema>;
+
+/** Which calls are listed: the filters of usage, and a page of them. */
+export const usageCallsQuerySchema = usageFilterSchema.extend({
+  limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
+  cursor: z.string().min(1).optional(),
+});
+export type UsageCallsQuery = z.infer<typeof usageCallsQuerySchema>;
+
+/** One call of a model, as it was written down. */
+export const usageCallSchema = z
+  .object({
+    at: timestampSchema,
+    actor: actorIdSchema,
+    /** The actor at the top of its tree of subagents: itself, for one created from outside. */
+    root: actorIdSchema,
+    agent: agentIdSchema,
+    /** The version of its agent the call was made on. */
+    version: z.number().int().nonnegative(),
+    /** The model account it was made with. Null when none says which. */
+    account: accountIdSchema.nullable(),
+    provider: providerIdSchema,
+    model: modelIdSchema,
+    kind: z.enum(USAGE_KINDS),
+    /** The kind of failure, for a call that failed. */
+    failure: z.string().nullable(),
+    totalInput: total,
+    input: total,
+    cacheRead: total,
+    cacheWrite: total,
+    output: total,
+    reasoning: total,
+    webSearches: total,
+    /** In US dollars. Null when it is not known. */
+    cost: z.number().nonnegative().nullable(),
+    /** Whether the provider reported the cost, or it was estimated from prices. */
+    costSource: z.enum(['reported', 'estimated']).nullable(),
+    durationMs: total,
+  })
+  .meta({ id: 'UsageCall' });
+export type UsageCall = z.infer<typeof usageCallSchema>;

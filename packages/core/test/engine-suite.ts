@@ -372,7 +372,7 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         await one.say(actor.id, 'What happened to order 4411?');
         await one.it.settled(actor.id);
 
-        const report = await one.it.usage({}, 'actor');
+        const report = await one.it.usage({}, { by: 'actor' });
         expect(report.totals).toMatchObject({
           calls: 3,
           failed: 1,
@@ -388,10 +388,10 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         expect(report.groups?.map((group) => [group.key, group.totals.calls])).toEqual([
           [actor.id, 3],
         ]);
-        expect((await one.it.usage({}, 'model')).groups?.[0]?.key).toBe('fake-1');
-        expect((await one.it.usage({}, 'provider')).groups?.[0]?.key).toBe('fake');
+        expect((await one.it.usage({}, { by: 'model' })).groups?.[0]?.key).toBe('fake-1');
+        expect((await one.it.usage({}, { by: 'provider' })).groups?.[0]?.key).toBe('fake');
         // The engine was given a runner, and no account.
-        expect((await one.it.usage({}, 'account')).groups?.[0]?.key).toBe('');
+        expect((await one.it.usage({}, { by: 'account' })).groups?.[0]?.key).toBe('');
       });
 
       it('is of the model account the call was made with', async () => {
@@ -407,7 +407,7 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         await one.say(actor.id, 'Hello?');
         await one.it.settled(actor.id);
         expect((await one.it.usage({ account })).totals).toMatchObject({ calls: 1, output: 5 });
-        expect((await one.it.usage({}, 'account')).groups?.[0]?.key).toBe(account);
+        expect((await one.it.usage({}, { by: 'account' })).groups?.[0]?.key).toBe(account);
       });
 
       it('has nothing of a turn whose model could not be had: no provider was asked', async () => {

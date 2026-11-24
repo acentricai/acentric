@@ -642,10 +642,10 @@ export function subagentsSuite(name: string, open: () => Promise<Store>): void {
           worker.id,
           made.actor.id,
         ]);
-        const byRoot = await made.one.it.usage({}, 'root');
+        const byRoot = await made.one.it.usage({}, { by: 'root' });
         expect(byRoot.groups?.map((group) => group.key)).toEqual([made.actor.id]);
         expect(byRoot.groups?.[0]?.totals.calls).toBe(byRoot.totals.calls);
-        const byActor = await made.one.it.usage({ root: made.actor.id }, 'actor');
+        const byActor = await made.one.it.usage({ root: made.actor.id }, { by: 'actor' });
         expect(byActor.groups?.map((group) => group.key).toSorted()).toEqual(
           [made.actor.id, worker.id, reviewer.id].toSorted(),
         );

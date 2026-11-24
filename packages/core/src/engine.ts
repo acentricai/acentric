@@ -40,7 +40,8 @@ import type {
   PrincipalRef,
   Reasoning,
   SystemMessage,
-  UsageGroup,
+  Page,
+  UsageCall,
   UsageReport,
   UserMessage,
 } from '@acentric/protocol';
@@ -95,7 +96,7 @@ import { SecretsUnavailable, sealedFor } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import type { ActorsQuery, PageOf, Paged, Stopping, Store } from './store.ts';
 import type { StoredCompaction } from './state.ts';
-import type { UsageFilter } from './usage.ts';
+import type { UsageCallsAsked, UsageFilter, UsageGrouping } from './usage.ts';
 import { viewImage } from './view-image.ts';
 
 /**
@@ -1040,8 +1041,13 @@ export class Engine {
    * What the calls of models add up to: all of them, or those a filter leaves, and by a group
    * as well when one is asked for. It stays when what it was used by is gone.
    */
-  usage(filter?: UsageFilter, by?: UsageGroup): Promise<UsageReport> {
-    return this.#store.usage(filter, by);
+  usage(filter?: UsageFilter, grouping?: UsageGrouping): Promise<UsageReport> {
+    return this.#store.usage(filter, grouping);
+  }
+
+  /** A page of the calls of models a filter leaves, newest first. */
+  usageCalls(asked: UsageCallsAsked): Promise<Page<UsageCall>> {
+    return this.#store.usageCalls(asked);
   }
 
   /**

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { makeId } from '@acentric/protocol';
 import type {
+  UsageGroup,
   Actor,
   Agent,
   AgentDefinition,
@@ -1263,6 +1264,8 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
             estimatedCost: 0,
             unpriced: 0,
             durationMs: 0,
+            medianMs: null,
+            p95Ms: null,
             first: null,
             last: null,
           },
@@ -1303,6 +1306,9 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           estimatedCost: 0.25,
           unpriced: 1,
           durationMs: 950,
+          // Of the answered calls, 100, 400 and 400 ms: the failed one is not of them.
+          medianMs: 400,
+          p95Ms: 400,
           first: NOW,
           last: NOW + 3000,
         });
@@ -1344,8 +1350,11 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         expect(await calls({ from: NOW + DAY, to: NOW + 2 * DAY })).toBe(2);
         expect(await calls({ agent: orders, model: 'fake-1', from: NOW + DAY })).toBe(1);
 
-        const groups = async (by: Parameters<Store['usage']>[1], filter = {}) =>
-          (await store.usage(filter, by)).groups?.map((group) => [group.key, group.totals.calls]);
+        const groups = async (by: UsageGroup, filter = {}) =>
+          (await store.usage(filter, { by })).groups?.map((group) => [
+            group.key,
+            group.totals.calls,
+          ]);
         // What cost most first, and then by what it is of.
         expect(await groups('agent')).toEqual([
           [orders, 3],
@@ -1374,7 +1383,126 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           [day(0), 1],
           [day(2), 1],
         ]);
-        expect((await store.usage({ agent: orders }, 'agent')).totals.calls).toBe(3);
+        expect((await store.usage({ agent: orders }, { by: 'agent' })).totals.calls).toBe(3);
+      });
+
+      it('adds up each group by another, by hour, in a time zone, by failure, kind and version', async () => {
+        const actor = await create();
+        const HOUR = 3_600_000;
+        await record(actor, [
+          usedBy(actor, { durationMs: 100 }),
+          usedBy(actor, { at: NOW + HOUR, provider: 'other', durationMs: 300, version: 2 }),
+          usedBy(actor, { at: NOW + HOUR, kind: 'compaction', durationMs: 200 }),
+          usedBy(actor, { at: NOW + 2 * HOUR, usage: null, failure: 'overloaded', durationMs: 9 }),
+        ]);
+        const report = async (grouping: Parameters<Store['usage']>[1]) =>
+          (await store.usage({}, grouping)).groups?.map((group) => [
+            group.key,
+            group.totals.calls,
+            ...(group.groups === undefined
+              ? []
+              : [group.groups.map((each) => [each.key, each.totals.calls])]),
+          ]);
+        const hour = (at: number) => new Date(at).toISOString().slice(0, 13);
+        expect((await report({ by: 'hour' }))?.toSorted()).toEqual(
+          [
+            [hour(NOW), 1],
+            [hour(NOW + HOUR), 2],
+            [hour(NOW + 2 * HOUR), 1],
+          ].toSorted(),
+        );
+        // Each hour by provider, what cost most first.
+        expect(
+          (await report({ by: 'hour', split: 'provider' }))?.find(
+            ([key]) => key === hour(NOW + HOUR),
+          ),
+        ).toEqual([
+          hour(NOW + HOUR),
+          2,
+          [
+            ['fake', 1],
+            ['other', 1],
+          ],
+        ]);
+        // A day of a time zone is that zone's.
+        const kolkata = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        });
+        const days = new Set([NOW, NOW + HOUR, NOW + 2 * HOUR].map((at) => kolkata.format(at)));
+        expect(
+          new Set((await report({ by: 'day', tz: 'Asia/Kolkata' }))?.map(([key]) => key)),
+        ).toEqual(days);
+        expect(await report({ by: 'failure' })).toEqual([
+          ['', 3],
+          ['overloaded', 1],
+        ]);
+        expect((await report({ by: 'kind' }))?.toSorted()).toEqual([
+          ['compaction', 1],
+          ['turn', 3],
+        ]);
+        expect((await report({ by: 'version' }))?.toSorted()).toEqual([
+          ['1', 3],
+          ['2', 1],
+        ]);
+        // How long answered calls took: the failed one is not of them.
+        expect((await store.usage()).totals).toMatchObject({ medianMs: 200, p95Ms: 300 });
+        expect((await store.usage({ failed: true })).totals).toMatchObject({
+          calls: 1,
+          medianMs: null,
+          p95Ms: null,
+        });
+        expect((await store.usage({ failed: false })).totals.calls).toBe(3);
+      });
+
+      it('lists each call, newest first, a page at a time', async () => {
+        const actor = await create();
+        const other = await create();
+        await record(actor, [
+          usedBy(actor),
+          usedBy(actor, { at: NOW + 1, usage: null, failure: 'overloaded' }),
+          usedBy(actor, { at: NOW + 2, model: 'fake-2' }),
+        ]);
+        await record(other, [usedBy(other, { at: NOW + 3 })]);
+        const first = await store.usageCalls({ limit: 3 });
+        expect(first.items.map((call) => call.at)).toEqual([NOW + 3, NOW + 2, NOW + 1]);
+        expect(first.items[0]).toMatchObject({
+          actor: other.id,
+          root: other.id,
+          agent: other.agent,
+          version: 1,
+          kind: 'turn',
+          failure: null,
+          totalInput: 100,
+          cacheRead: 70,
+          output: 30,
+          cost: 0.25,
+          costSource: 'estimated',
+          durationMs: 400,
+        });
+        expect(first.items[2]).toMatchObject({
+          failure: 'overloaded',
+          cost: null,
+          costSource: null,
+        });
+        expect(first.nextCursor).not.toBeNull();
+        const rest = await store.usageCalls({ limit: 3, cursor: first.nextCursor ?? '' });
+        expect(rest.items.map((call) => call.at)).toEqual([NOW]);
+        expect(rest.nextCursor).toBeNull();
+        // Narrowed as usage is.
+        expect((await store.usageCalls({ limit: 10, actor: actor.id })).items).toHaveLength(3);
+        expect(
+          (await store.usageCalls({ limit: 10, failed: true })).items.map((call) => call.at),
+        ).toEqual([NOW + 1]);
+        expect((await store.usageCalls({ limit: 10, model: 'fake-2' })).items).toHaveLength(1);
+        const one = await store.usageCalls({ limit: 1, actor: actor.id });
+        expect(
+          (
+            await store.usageCalls({ limit: 5, actor: actor.id, cursor: one.nextCursor ?? '' })
+          ).items.map((call) => call.at),
+        ).toEqual([NOW + 1, NOW]);
       });
 
       it('stays when what it names is gone', async () => {
