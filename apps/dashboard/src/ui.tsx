@@ -867,6 +867,7 @@ export function Dropdown<T extends string>({
   label,
   onChange,
   placeholder,
+  empty,
 }: {
   value: T;
   options: ReadonlyArray<DropdownOption<T>>;
@@ -875,8 +876,25 @@ export function Dropdown<T extends string>({
   onChange: (value: T) => void;
   /** What it shows while none of the options is chosen. */
   placeholder?: string;
+  /** What it says when there is nothing to choose: it then opens no list. */
+  empty?: string;
 }) {
   const current = options.find((option) => option.value === value);
+  if (options.length === 0 && empty !== undefined && placeholder !== 'Loading…') {
+    return (
+      <div className="dropdown">
+        <button
+          type="button"
+          className="dropdown__button"
+          disabled
+          aria-label={`${label}: ${empty}`}
+        >
+          <span className="dropdown__value dropdown__value--none">{empty}</span>
+          <IconChevronDown size={14} stroke={1.75} aria-hidden="true" />
+        </button>
+      </div>
+    );
+  }
   return (
     <Menu
       label={`${label}: ${current?.label ?? placeholder ?? ''}`}

@@ -22,6 +22,9 @@ export const engine = {
   // What a key's scope is chosen from
   agents: (signal?: AbortSignal) =>
     api.call('agents.list', { query: { limit: ALL }, ...withSignal(signal) }),
+  /** Every actor, of every agent, as many as a page holds: a key of one actor is for one. */
+  allActors: (signal?: AbortSignal) =>
+    api.call('actors.list', { query: { limit: ALL }, ...withSignal(signal) }),
   actorsOf: (agent: string, signal?: AbortSignal) =>
     api.call('actors.list', {
       query: { agent: agent as never, limit: ALL },
