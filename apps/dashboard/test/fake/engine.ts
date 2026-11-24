@@ -63,7 +63,12 @@ export function engineArea(shared: Shared) {
     set: null,
   };
   /** What GET /v1/updates says, and how often it was asked to ask again. */
-  const updates: { status: Updates; refreshed: number } = {
+  const updates: {
+    status: Updates;
+    refreshed: number;
+    /** Whether the updater says nothing of what it is asked: as before it has seen it. */
+    silent: boolean;
+  } = {
     status: {
       current: '0.16.1',
       check: 'ok',
@@ -75,6 +80,7 @@ export function engineArea(shared: Shared) {
       updater: null,
     },
     refreshed: 0,
+    silent: false,
   };
   let made = 0;
 
@@ -97,6 +103,9 @@ export function engineArea(shared: Shared) {
     // Updates
     if (method === 'GET' && path === '/v1/updates') {
       if (query.get('refresh') === 'true') updates.refreshed += 1;
+      return json(200, updates.status);
+    }
+    if (method === 'POST' && path === '/v1/updates/request' && updates.silent) {
       return json(200, updates.status);
     }
     if (method === 'POST' && path === '/v1/updates/request') {

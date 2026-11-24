@@ -24,9 +24,14 @@ export function UpdatesSettings() {
   const me = useMe();
   // Once asked, until the updater says something new: what it said then, and when it was asked,
   // so that it is not waited for long when it says nothing.
-  const [answer, setAnswer] = useState<{ readonly was: string; readonly since: number } | null>(
-    null,
-  );
+  const [answer, setAnswer] = useState<{
+    readonly was: string;
+    readonly since: number;
+    /** What it was asked, as the row says it meanwhile. */
+    readonly doing: string;
+  } | null>(null);
+  // It was asked, and said nothing for a minute.
+  const [unanswered, setUnanswered] = useState(false);
   const status = useQuery({
     queryKey: updateQueries.status,
     queryFn: ({ signal }) => engine.updates(false, signal),
@@ -41,11 +46,16 @@ export function UpdatesSettings() {
   const now = status.data?.updater;
   const heard =
     now == null ? '' : [now.state, now.version, now.at, now.changedAt, now.error].join('|');
-  if (answer !== null && (heard !== answer.was || Date.now() - answer.since > 60_000)) {
+  if (answer !== null && heard !== answer.was) setAnswer(null);
+  else if (answer !== null && Date.now() - answer.since > 60_000) {
     setAnswer(null);
+    setUnanswered(true);
   }
   // What the updater said before it was asked: it has answered once it says something else.
-  const asking = () => setAnswer({ was: heard, since: Date.now() });
+  const asking = (doing: string) => {
+    setUnanswered(false);
+    setAnswer({ was: heard, since: Date.now(), doing });
+  };
   const asked = (said: Updates) => queryClient.setQueryData(updateQueries.status, said);
   const check = useMutation({
     mutationFn: () => engine.updates(true),
@@ -55,7 +65,14 @@ export function UpdatesSettings() {
   const [dialog, setDialog] = useState<'now' | 'later' | null>(null);
   const ask = useMutation({
     mutationFn: (body: UpdateRequest) => engine.requestUpdate(body),
-    onMutate: asking,
+    onMutate: (body) =>
+      asking(
+        body.action === 'download'
+          ? `Downloading ${body.version}…`
+          : body.at == null
+            ? `Updating to ${body.version}…`
+            : 'Scheduling…',
+      ),
     onError: () => setAnswer(null),
     onSuccess: (said) => {
       asked(said);
@@ -64,7 +81,7 @@ export function UpdatesSettings() {
   });
   const cancel = useMutation({
     mutationFn: () => engine.cancelUpdate(),
-    onMutate: asking,
+    onMutate: () => asking('Cancelling…'),
     onError: () => setAnswer(null),
     onSuccess: asked,
   });
@@ -96,8 +113,9 @@ export function UpdatesSettings() {
           />
         ) : (
           <>
-            {(data.check !== 'ok' || updater?.state === 'failed') && (
+            {(data.check !== 'ok' || updater?.state === 'failed' || unanswered) && (
               <div className="prefs-notices">
+                {unanswered && <Notice tone="warn" title="The updater did not answer" />}
                 {updater?.state === 'failed' && (
                   <Notice tone="danger" title={`The update to ${updater.version ?? 'it'} failed`}>
                     {updater.error}
@@ -132,7 +150,7 @@ export function UpdatesSettings() {
               {updater !== null && manages && (
                 <UpdateRow
                   data={data}
-                  answering={answer !== null || ask.isPending}
+                  answering={answer?.doing ?? null}
                   busy={cancel.isPending}
                   onAsk={(body) => ask.mutate(body)}
                   onLater={() => setDialog('later')}
@@ -208,8 +226,8 @@ function UpdateRow({
   onCancel,
 }: {
   data: Updates;
-  /** Asked, and not yet answered by the updater. */
-  answering: boolean;
+  /** What it was asked, while the updater has not answered: null once it has. */
+  answering: string | null;
   busy: boolean;
   onAsk: (body: UpdateRequest) => void;
   onNow: () => void;
@@ -222,11 +240,11 @@ function UpdateRow({
   const of = updater.version;
   // What it did about another version than the next is past: the next is asked for afresh.
   const about = of !== null && of === next;
-  if (answering) {
+  if (answering !== null) {
     return (
       <div className="prefs-row">
         <span className="prefs-row__name">Update</span>
-        <span className="prefs-row__plain">Asking the updater…</span>
+        <span className="prefs-row__plain">{answering}</span>
       </div>
     );
   }
