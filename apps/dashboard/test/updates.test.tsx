@@ -71,6 +71,80 @@ describe('the Updates section of Settings', () => {
     expect(page.getByText(/GitHub answered 403/)).toBeTruthy();
   });
 
+  const withNext = (server: ReturnType<typeof signedIn>) => {
+    server.areas.engine.updates.status = {
+      ...server.areas.engine.updates.status,
+      latest: '0.17.0',
+      next: '0.17.0',
+      updater: { state: 'idle', version: null, at: null, error: null, changedAt: null },
+    };
+    return server;
+  };
+  const update = (page: ReturnType<typeof within>) =>
+    within(
+      page
+        .getByText('Update', { selector: '.prefs-row__name' })
+        .closest('.prefs-row') as HTMLElement,
+    );
+  const loaded = (page: ReturnType<typeof within>) =>
+    page.findByText('Update', { selector: '.prefs-row__name' });
+
+  it('downloads the next version where an updater runs, then takes it once asked whether to', async () => {
+    const server = withNext(signedIn());
+    const page = await section(server);
+    await loaded(page);
+    fireEvent.click(update(page).getByRole('button', { name: 'Download' }));
+    expect(await page.findByText('0.17.0 downloaded')).toBeTruthy();
+    expect(update(page).queryByRole('button', { name: 'Download' })).toBeNull();
+    fireEvent.click(update(page).getByRole('button', { name: 'Update now' }));
+    const asked = within(await screen.findByRole('dialog', { name: 'Update to 0.17.0 now?' }));
+    fireEvent.click(asked.getByRole('button', { name: 'Update now' }));
+    expect(await page.findByText('Updating to 0.17.0…')).toBeTruthy();
+  });
+
+  it('takes it at a time, and takes that back', async () => {
+    const server = withNext(signedIn());
+    const page = await section(server);
+    await loaded(page);
+    fireEvent.click(update(page).getByRole('button', { name: 'Schedule' }));
+    const dialog = within(
+      await screen.findByRole('dialog', { name: 'Schedule the update to 0.17.0' }),
+    );
+    fireEvent.change(dialog.getByLabelText('When'), { target: { value: '2099-01-01T03:00' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
+    expect(await page.findByText(/^0\.17\.0 at /)).toBeTruthy();
+    expect(server.areas.engine.updates.status.updater?.at).toBe(
+      new Date('2099-01-01T03:00').getTime(),
+    );
+    fireEvent.click(update(page).getByRole('button', { name: 'Cancel' }));
+    expect(await update(page).findByRole('button', { name: 'Download' })).toBeTruthy();
+  });
+
+  it('offers nothing to take where no updater runs', async () => {
+    const server = withNext(signedIn());
+    server.areas.engine.updates.status = { ...server.areas.engine.updates.status, updater: null };
+    const page = await section(server);
+    expect(await page.findByText('Version 0.17.0 is available')).toBeTruthy();
+    expect(page.queryByRole('button', { name: 'Update now' })).toBeNull();
+  });
+
+  it('says why an update failed', async () => {
+    const server = withNext(signedIn());
+    server.areas.engine.updates.status = {
+      ...server.areas.engine.updates.status,
+      updater: {
+        state: 'failed',
+        version: '0.17.0',
+        at: null,
+        error: 'it did not become healthy, and 0.16.1 is back',
+        changedAt: null,
+      },
+    };
+    const page = await section(server);
+    expect(await page.findByText('The update to 0.17.0 failed')).toBeTruthy();
+    expect(page.getByText(/0\.16\.1 is back/)).toBeTruthy();
+  });
+
   it('is not there for one who does not run the server', async () => {
     const dialog = await settings(signedIn('member'));
     expect(within(dialog).queryByRole('button', { name: 'Updates' })).toBeNull();
