@@ -28,6 +28,13 @@ import { backUpBeforeUpgrade } from '../src/start.ts';
 import { fakeS3 } from './fake-s3.ts';
 import type { FakeS3 } from './fake-s3.ts';
 
+/** This server's version, which its backups are named for. */
+const VERSION = (
+  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+    version: string;
+  }
+).version;
+
 const REPO = join(import.meta.dirname, '..', '..', '..');
 const BIN = join(REPO, 'apps', 'server', 'dist', 'bin.js');
 const ADMIN = 'test-admin-key-of-24-chars-or-more';
@@ -249,7 +256,7 @@ describe('the backup commands', () => {
       writeFileSync(file, taken.out);
       const checked = await run(['check-backup'], data, file);
       expect(checked.code).toBe(0);
-      expect(checked.err).toContain('a whole manual backup of 0.15.0');
+      expect(checked.err).toContain(`a whole manual backup of ${VERSION}`);
       // Not while a server runs on the data.
       const refused = await run(['restore', file], data);
       expect(refused.code).toBe(1);
@@ -258,7 +265,7 @@ describe('the backup commands', () => {
     }
     const restored = await run(['restore'], data, file);
     expect(restored.code).toBe(0);
-    expect(restored.err).toContain(`restored the backup of 0.15.0`);
+    expect(restored.err).toContain(`restored the backup of ${VERSION}`);
     expect(restored.err).toContain('what was there before is in');
     // And a server starts on what was put back.
     await (await serve(data)).close();
