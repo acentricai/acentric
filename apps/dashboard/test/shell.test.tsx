@@ -106,12 +106,6 @@ describe('the sidebar', () => {
     expect(await within(page).findByText('ada@example.test')).toBeTruthy();
     expect(within(page).getByRole('textbox', { name: 'Name' })).toBeTruthy();
     expect(within(page).getByRole('table', { name: 'Sessions' })).toBeTruthy();
-    // Its search finds the sections by name.
-    const search = within(dialog).getByRole('searchbox', { name: 'Search settings' });
-    fireEvent.change(search, { target: { value: 'nothing' } });
-    expect(within(sections).queryByRole('button', { name: 'Account' })).toBeNull();
-    fireEvent.change(search, { target: { value: 'acc' } });
-    expect(within(sections).getByRole('button', { name: 'Account' })).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();

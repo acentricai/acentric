@@ -1,6 +1,5 @@
 // Settings: a tab at the foot of the sidebar, above the account, that opens a large dialog with
-// a sidebar of its own: its sections, found by its search, and the page beside it that the one
-// chosen shows.
+// a sidebar of its own: its sections, and the page beside it that the one chosen shows.
 
 import { IconSettings, IconUser, IconX } from '@tabler/icons-react';
 import type { Icon } from '@tabler/icons-react';
@@ -47,7 +46,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
   const title = useId();
-  const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState(SECTIONS[0]?.id ?? '');
 
   useEffect(() => {
@@ -57,7 +55,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       if (typeof dialog.showModal === 'function') dialog.showModal();
       else dialog.setAttribute('open', '');
     }
-    dialog?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+    dialog?.querySelector<HTMLElement>('.prefs__item[aria-current="page"]')?.focus();
     document.body.dataset['dialog'] = 'open';
     return () => {
       delete document.body.dataset['dialog'];
@@ -66,9 +64,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  const found = SECTIONS.filter((section) =>
-    section.name.toLowerCase().includes(query.trim().toLowerCase()),
-  );
   const shown = SECTIONS.find((section) => section.id === chosen);
   const Page = shown?.page;
 
@@ -98,17 +93,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </header>
         <div className="prefs__body">
           <nav className="prefs__side" aria-label="Settings">
-            <input
-              type="search"
-              className="prefs__search"
-              placeholder="Search"
-              aria-label="Search settings"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              data-autofocus
-            />
             <ul className="prefs__list">
-              {found.map((section) => {
+              {SECTIONS.map((section) => {
                 const Glyph = section.icon;
                 return (
                   <li key={section.id}>
@@ -125,7 +111,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 );
               })}
             </ul>
-            {found.length === 0 && <p className="prefs__none">Nothing is called that.</p>}
           </nav>
           <section className="prefs__page" aria-label={shown?.name ?? 'Settings'}>
             {Page !== undefined && <Page />}
