@@ -754,7 +754,9 @@ dialog.ac-dialog.prefs::backdrop {
 }
 
 .prefs-photo .more-menu__pop {
-  min-width: 190px;
+  /* As wide as what it says, and no wider. */
+  width: max-content;
+  min-width: 0;
 }
 
 .prefs-photo__file {

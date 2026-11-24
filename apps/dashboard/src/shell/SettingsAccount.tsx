@@ -187,11 +187,7 @@ function NameRow({ me }: { me: Me }) {
     if (!unchanged && !save.isPending) save.mutate();
   };
   return (
-    <Row
-      name="Name"
-      note="What others see you as. Your email is shown when you give none."
-      label="prefs-name"
-    >
+    <Row name="Name" label="prefs-name">
       <form
         className="prefs-row__form"
         onSubmit={(event) => {
