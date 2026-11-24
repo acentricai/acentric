@@ -167,7 +167,7 @@ export function AccountsPage() {
       />
       {rows?.length === 0 && <p className="table-empty">No accounts yet</p>}
       <FormError error={makeDefault.error} />
-      {adding && <AddDialog existing={rows ?? []} onClose={() => setAdding(false)} />}
+      {adding && <AddDialog onClose={() => setAdding(false)} />}
       {action?.kind === 'rename' && (
         <RenameDialog
           key={action.provider.id}
@@ -189,22 +189,21 @@ export function AccountsPage() {
   );
 }
 
-/** `POST /v1/accounts`, the key checked with the provider first and not shown again. */
-function AddDialog({ existing, onClose }: { existing: readonly Account[]; onClose: () => void }) {
+/**
+ * `POST /v1/accounts`, the key checked with the provider first and not shown again. The first of
+ * a provider is its default; another is made it from the list.
+ */
+function AddDialog({ onClose }: { onClose: () => void }) {
   const [provider, setProvider] = useState<KeyProvider>('anthropic');
   const [name, setName] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [makeDefault, setMakeDefault] = useState(false);
   const form = useId();
-  // The first of a provider is its default whatever is ticked.
-  const first = !existing.some((each) => each.provider === provider);
   const add = useMutation({
     mutationFn: () =>
       engine.addAccount({
         provider,
         name: name.trim(),
         apiKey: apiKey.trim(),
-        ...(makeDefault && !first ? { default: true } : {}),
       }),
     onSuccess: () => {
       refresh();
@@ -290,27 +289,6 @@ function AddDialog({ existing, onClose }: { existing: readonly Account[]; onClos
             />
           )}
         </Field>
-        {first ? (
-          <p className="note">
-            The first {providerName(provider)} account is its default: every agent given none uses
-            it.
-          </p>
-        ) : (
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={makeDefault}
-              disabled={add.isPending}
-              onChange={(e) => setMakeDefault(e.target.checked)}
-            />
-            <span>Make it the default for {providerName(provider)}</span>
-          </label>
-        )}
-        <p className="note" role={add.isPending ? 'status' : undefined}>
-          {add.isPending
-            ? `Checking the key with ${providerName(provider)}…`
-            : 'The key is checked with the provider, kept sealed, and not shown again.'}
-        </p>
       </form>
       <FormError error={add.error} />
     </Dialog>
