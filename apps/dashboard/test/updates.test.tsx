@@ -109,6 +109,16 @@ describe('the Updates section of Settings', () => {
     expect(await page.findByText('Updating to 0.17.0…')).toBeTruthy();
   });
 
+  it('says it is downloading while the updater has not answered', async () => {
+    const server = withNext(signedIn());
+    server.areas.engine.updates.silent = true;
+    const page = await section(server);
+    await loaded(page);
+    fireEvent.click(update(page).getByRole('button', { name: 'Download' }));
+    expect(await page.findByText('Downloading 0.17.0…')).toBeTruthy();
+    expect(update(page).queryByRole('button')).toBeNull();
+  });
+
   it('takes it at a time, and takes that back', async () => {
     const server = withNext(signedIn());
     const page = await section(server);
