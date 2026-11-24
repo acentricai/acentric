@@ -113,8 +113,8 @@ export class Accounts {
       },
       sealed: this.#seal(id, credential),
     };
+    // The store makes it the only default of its provider, in the same write.
     await this.#store.addAccount(stored);
-    if (isDefault) await this.#onlyDefault(stored, others);
     await this.#audit?.record({
       by,
       action: 'account.create',
@@ -158,13 +158,8 @@ export class Accounts {
       },
       sealed,
     };
+    // The store makes it the only default of its provider, in the same write.
     await this.#store.saveAccount(stored);
-    if (changes.default === true && !before.account.default) {
-      const others = (await this.#store.listAccounts()).filter(
-        ({ account }) => account.provider === stored.account.provider && account.id !== id,
-      );
-      await this.#onlyDefault(stored, others);
-    }
     await this.#audit?.record({
       by,
       action: 'account.update',
@@ -282,14 +277,6 @@ export class Accounts {
   }
 
   /** Makes an account its provider's only default. */
-  async #onlyDefault(stored: StoredAccount, others: readonly StoredAccount[]): Promise<void> {
-    for (const other of others) {
-      if (other.account.default && other.account.id !== stored.account.id) {
-        await this.#store.saveAccount({ ...other, account: { ...other.account, default: false } });
-      }
-    }
-  }
-
   /** Asks a provider whether it takes a credential, and refuses the account when it does not. */
   async #check(providerId: string, credential: Credential): Promise<void> {
     if (!this.#providers.has(providerId)) {
