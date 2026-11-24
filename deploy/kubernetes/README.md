@@ -99,6 +99,34 @@ kubectl -n acentric run acentric-restore --rm -i --restart=Never \
 kubectl -n acentric scale statefulset/acentric --replicas=1
 ```
 
+## Upgrading
+
+Read the new version's notes in [CHANGELOG.md](../../CHANGELOG.md), and which versions it goes
+to at once ([VERSIONS.md](../../VERSIONS.md#from-which-version-to-which)). Then set the new
+version in your `kustomization.yaml`, in the resource's `?ref=` and in `newTag` alike, so that
+the recipe and the image are of one version, and:
+
+```sh
+kubectl apply -k .
+kubectl -n acentric rollout status statefulset/acentric --timeout=30m
+kubectl -n acentric logs -f acentric-0
+```
+
+The StatefulSet stops the server, and starts the new version on its volume. A version that
+changes the database backs it up first, then changes it: its log says each. Meanwhile the pod
+is live and not ready, so the Service sends it nothing and the probes leave it be, however long
+it takes. It is done when the pod is ready, and its log says `acentric-server <version>
+listening`. [What an upgrade looks like](../../VERSIONS.md#what-an-upgrade-looks-like) says what
+it writes, and how long it takes.
+
+To go back, put back the backup it took before it changed the database, with the version you
+had. Its name ends `-before-upgrade-<new version>.tar`, on the volume `backups-acentric-0`
+(`kubectl -n acentric exec acentric-0 -- ls /backups`), or in the bucket. Set the version back
+in `kustomization.yaml` and apply it; the pod of that version does not start on the changed
+database, and says so. Then put the backup back as above, with the image of the version you
+had: by its URL in the bucket, or with the claim `backups-acentric-0` mounted at `/backups` in
+the restore's pod and the backup's path after `restore` in place of stdin.
+
 ## What is in front
 
 Whatever ends HTTPS must:

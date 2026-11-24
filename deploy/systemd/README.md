@@ -69,9 +69,29 @@ sudo systemctl start acentric
 
 ## Upgrading
 
-Set the new version (`ACENTRIC_VERSION` in `/etc/acentric/acentric.env` for Docker, `Image=` in
-`acentric.container` for Podman), and `sudo systemctl restart acentric`: the new version backs the
-database up before it changes it.
+Read the new version's notes in [CHANGELOG.md](../../CHANGELOG.md), and which versions it goes
+to at once ([VERSIONS.md](../../VERSIONS.md#from-which-version-to-which)). When its notes say
+this recipe changed, install its files from its tag again, keeping `/etc/acentric`. Then set the
+new version, `ACENTRIC_VERSION` in `/etc/acentric/acentric.env` for Docker, or `Image=` in
+`acentric.container` for Podman (and `sudo systemctl daemon-reload`), and:
+
+```sh
+sudo docker pull ghcr.io/acentricai/acentric-server:<version>   # or podman
+sudo systemctl restart acentric
+sudo journalctl -u acentric -f
+```
+
+A version that changes the database backs it up first, then changes it: its log says each, and
+the server answers 503 meanwhile. It is done at `acentric-server <version> listening`, when
+`curl -s 127.0.0.1:4000/health` answers `"ok":true` with the new version. [What an upgrade
+looks like](../../VERSIONS.md#what-an-upgrade-looks-like) says what it writes, and how long it
+takes.
+
+To go back, put back the backup it took before it changed the database, with the version you
+had. Its name ends `-before-upgrade-<new version>.tar`, in `/backups`
+(`sudo docker exec acentric ls /backups`). Stop the service, set the version back, and put it
+back as above, with `--volume acentric-backups:/backups` and its path after `restore` in place
+of `< file`, and the image of the version you had; then start the service.
 
 ## Tested
 

@@ -48,9 +48,23 @@ a backend of S3 with encryption, or Terraform Cloud, rather than a file on a lap
 
 ## Upgrading
 
+Read the new version's notes in [CHANGELOG.md](../../../CHANGELOG.md), and which versions it
+goes to at once ([VERSIONS.md](../../../VERSIONS.md#from-which-version-to-which)). When its notes
+say this recipe changed, take this folder from its tag, keeping `terraform.tfvars` and the
+state.
+
 Set `acentric_version`, and `terraform apply`. The instance is made again with it: it is
 stopped first, so that the server stops as it does, its volume goes to the new one, and the new
-version backs the database up before it changes it. The server is away for a few minutes.
+version backs the database up before it changes it, to its backups' folder and the bucket. The
+server is away for a few minutes, and more for a large database ([What an upgrade looks
+like](../../../VERSIONS.md#what-an-upgrade-looks-like)). It is done when
+`curl -s "$(terraform output -raw url)/health"` answers `"ok":true` with the new version; on the
+instance, `sudo journalctl -u acentric -f` says what it is doing.
+
+To go back, set `acentric_version` back and `terraform apply`: the version you had does not
+start on the changed database, and says so. Then, on the instance, put back the backup taken
+before the upgrade, whose name ends `-before-upgrade-<new version>.tar`, as below, by its URL in
+the bucket.
 
 ## Putting a backup back
 
