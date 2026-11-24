@@ -22,9 +22,24 @@ export function whenSignedOut(then: () => void): void {
  */
 const ANSWERS_SIGNED_OUT = ['/v1/me', '/v1/sign-in', '/v1/me/password'];
 
+/**
+ * The server was not reached at all: `fetch` itself failed, as it does with no network. Told apart
+ * from an error of the page's own, which is not the server's.
+ */
+export class Unreachable extends Error {
+  override readonly name = 'Unreachable';
+}
+
 /** `fetch`, telling the page when the server answers that no one is signed in. */
 const watched: typeof fetch = async (input, init) => {
-  const response = await fetch(input, init);
+  let response: Response;
+  try {
+    response = await fetch(input, init);
+  } catch (error) {
+    // A call the page stopped is not the server's failure.
+    if (init?.signal?.aborted === true) throw error;
+    throw new Unreachable('The server could not be reached.', { cause: error });
+  }
   if (response.status === 401) {
     const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
     if (!ANSWERS_SIGNED_OUT.includes(path)) onSignedOut();
@@ -37,8 +52,9 @@ export const api = createClient({ baseUrl: window.location.origin, fetch: watche
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // A refusal is the answer: only a failure to reach the server is tried again.
-      retry: (failures, error) => !(error instanceof ApiError) && failures < 2,
+      // A refusal is the answer, and an error of the page's own is not mended by asking again:
+      // only a failure to reach the server is tried again.
+      retry: (failures, error) => error instanceof Unreachable && failures < 2,
       refetchOnWindowFocus: false,
     },
   },
@@ -66,13 +82,12 @@ export function isApiError(error: unknown, status?: number, code?: string): erro
 
 /** Whether a read failed for now, and is worth trying again soon: the server was not reached, or was busy. */
 export const isTransientRead = (error: unknown): boolean =>
-  error instanceof TypeError ||
+  error instanceof Unreachable ||
   (error instanceof ApiError && (error.status === 429 || error.status >= 500));
 
 /** A failed call, in words a person reads. */
 export function errorText(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  // `fetch` rejects with a TypeError when the server cannot be reached at all.
-  if (error instanceof TypeError) return 'The server could not be reached.';
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof ApiError || error instanceof Unreachable) return error.message;
+  // Anything else is the page's own error, not the server's: said as it is, to be reported.
+  return `The page failed: ${error instanceof Error ? error.message : String(error)}`;
 }
