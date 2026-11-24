@@ -132,7 +132,12 @@ export async function start(
     const current = more.schema ?? SCHEMA_VERSION;
     if (settings.port !== 0 && schema !== undefined && schema < current) {
       logger.info(`upgrading the database to ${more.version}: the server answers once it has`);
-      holding = await holdPort({ host: settings.host, port: settings.port, version: more.version });
+      holding = await holdPort({
+        host: settings.host,
+        port: settings.port,
+        version: more.version,
+        ...(settings.dashboard === undefined ? {} : { dashboard: settings.dashboard }),
+      });
     }
     await backUpBeforeUpgrade(settings, more.version, current, logger);
   } catch (error) {
