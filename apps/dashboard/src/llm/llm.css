@@ -61,7 +61,9 @@
 
 .usage-panel__foot {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: var(--space-3);
   margin-top: var(--space-2);
 }
 
@@ -138,6 +140,141 @@
   background: var(--series-0);
 }
 
+/* A day's column, by provider: a 2px gap of the surface between parts, rounded at the top. */
+.usage-chart__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(24px, 70%);
+  overflow: hidden;
+  border-radius: 4px 4px 0 0;
+}
+
+.usage-chart__part {
+  flex-basis: 0;
+  min-height: 1px;
+}
+
+.usage-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.usage-tooltip__value {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A series' mark beside its name: in a legend, a tooltip, or a list. */
+.usage-swatch {
+  flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 auto 0 0;
+  padding: 0;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  list-style: none;
+}
+
+.usage-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.usage-legend--values {
+  margin-top: var(--space-3);
+}
+
+.usage-legend__value {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Three parts of the whole beside each other: by provider, by model, the actors that cost most. */
+.usage-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.usage-card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+}
+
+.usage-bars {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.usage-bars__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px var(--space-2);
+  font-size: 13px;
+}
+
+.usage-bars__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-bars__value {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-share.usage-bars__share {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.usage-bars__note {
+  grid-column: 1 / -1;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+/* The tokens of the range by kind, as one bar, a 2px gap of the surface between parts. */
+.usage-split {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.usage-split__part {
+  flex-basis: 0;
+  min-width: 2px;
+}
+
 .usage-chart__label {
   position: absolute;
   top: calc(100% + 6px);
@@ -206,6 +343,10 @@
 @media (max-width: 1100px) {
   .usage-tiles {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .usage-cards {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

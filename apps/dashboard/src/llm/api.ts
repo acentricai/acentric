@@ -11,7 +11,8 @@ import type {
 
 import { api } from '../api.ts';
 
-export type Group = { readonly key: string } & UsageTotals;
+/** A group's totals beside its key, and with `split`, its own groups as `parts`. */
+export type Group = { readonly key: string; readonly parts?: readonly Group[] } & UsageTotals;
 
 /** The usage a page shows: the totals, and with `by`, each group's. */
 export type UsageAnswer = { readonly total: UsageTotals; readonly groups?: readonly Group[] };
@@ -24,7 +25,15 @@ async function usageOf(report: Promise<UsageReport>): Promise<UsageAnswer> {
     total: totals,
     ...(groups === undefined
       ? {}
-      : { groups: groups.map((group) => ({ key: group.key, ...group.totals })) }),
+      : {
+          groups: groups.map((group) => ({
+            key: group.key,
+            ...group.totals,
+            ...(group.groups === undefined
+              ? {}
+              : { parts: group.groups.map((part) => ({ key: part.key, ...part.totals })) }),
+          })),
+        }),
   };
 }
 
