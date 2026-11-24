@@ -569,8 +569,15 @@ export const handlers: Handlers = {
         'A file is written 8 MiB at a time at most: write the rest with `from`',
       );
     if (Number(request.headers.get('content-length') ?? 0) > FILE_BYTES) throw tooLarge();
-    const bytes = Buffer.from(await request.arrayBuffer());
-    if (bytes.length > FILE_BYTES) throw tooLarge();
+    // Counted as it comes: a body sent in chunks says no length, and is not read past the most.
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for await (const chunk of request.body ?? []) {
+      size += chunk.byteLength;
+      if (size > FILE_BYTES) throw tooLarge();
+      chunks.push(chunk);
+    }
+    const bytes = Buffer.concat(chunks);
     try {
       await ready(engine, params.machine, request.signal);
       return await machines.write(params.machine, {
