@@ -5,7 +5,7 @@
 
 import { IconExternalLink, IconRefresh } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 
 import type { UpdateRequest, Updates, UpdaterState } from '@acentric/protocol';
 
@@ -13,6 +13,7 @@ import { engine, queryClient } from '../engine/api.ts';
 import { date, longTime } from '../format.ts';
 import { Markdown } from '../markdown.tsx';
 import { may, useMe } from '../me.ts';
+import { startUpdating } from '../updating.tsx';
 import { Button, Dialog, Field, FormError, LoadError, Notice, Skeleton } from '../ui.tsx';
 
 /** What the updater is doing while it is asked again every few seconds. */
@@ -86,6 +87,10 @@ export function UpdatesSettings() {
     onSuccess: asked,
   });
   const updater = data?.updater ?? null;
+  // Taking a version, the server restarts: every page says it is updating meanwhile.
+  useEffect(() => {
+    if (updater?.state === 'updating') startUpdating();
+  }, [updater?.state]);
   const manages = me.data !== undefined && may(me.data, 'updates:manage');
 
   return (
