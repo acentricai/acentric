@@ -58,6 +58,7 @@ import type {
   StoredKey,
   StoredLink,
   StoredSession,
+  StoredPhoto,
   StoredUser,
 } from './store.ts';
 
@@ -108,6 +109,7 @@ export class MemoryStore implements Store {
   readonly #secrets = new Map<string, SealedSecret>();
   readonly #keys = new Map<KeyId, StoredKey>();
   readonly #users = new Map<UserId, StoredUser>();
+  readonly #photos = new Map<UserId, StoredPhoto>();
   readonly #sessions = new Map<SessionId, StoredSession>();
   readonly #links = new Map<InviteId, StoredLink>();
   readonly #audit: AuditEvent[] = [];
@@ -472,7 +474,23 @@ export class MemoryStore implements Store {
 
   async removeUser(id: UserId): Promise<void> {
     this.#users.delete(id);
+    this.#photos.delete(id);
     await this.removeSessions(id);
+  }
+
+  async setPhoto(id: UserId, photo: StoredPhoto | null): Promise<StoredUser | undefined> {
+    const stored = this.#users.get(id);
+    if (stored === undefined) return undefined;
+    if (photo === null) this.#photos.delete(id);
+    else this.#photos.set(id, { ...photo, bytes: Uint8Array.from(photo.bytes) });
+    const changed = { ...stored, user: { ...stored.user, photo: photo?.digest ?? null } };
+    this.#users.set(id, changed);
+    return copy(changed);
+  }
+
+  async loadPhoto(id: UserId): Promise<StoredPhoto | undefined> {
+    const photo = this.#photos.get(id);
+    return photo === undefined ? undefined : { ...photo, bytes: Uint8Array.from(photo.bytes) };
   }
 
   async addSession(stored: StoredSession): Promise<void> {

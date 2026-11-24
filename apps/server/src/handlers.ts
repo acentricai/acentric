@@ -15,7 +15,7 @@ import type {
   StoredCommand,
   UsageFilter,
 } from '@acentric/core';
-import { FILE_BYTES, idsOf } from '@acentric/protocol';
+import { FILE_BYTES, PHOTO_BYTES, idsOf } from '@acentric/protocol';
 import type {
   Actor,
   Agent,
@@ -770,6 +770,40 @@ export const handlers: Handlers = {
     return new Reply(undefined, { 'set-cookie': sessionCookie(request) });
   },
   'me.update': ({ principal, body }, { people }) => people.updateMe(personOf(principal), body),
+  'me.setPhoto': async ({ principal, request }, { people }) => {
+    const tooLarge = () =>
+      new ApiFailure('too_large', `A picture is ${String(PHOTO_BYTES / 1024 / 1024)} MiB at most`);
+    if (Number(request.headers.get('content-length') ?? 0) > PHOTO_BYTES) throw tooLarge();
+    // Counted as it comes, as a file sent to a machine is.
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for await (const chunk of request.body ?? []) {
+      size += chunk.byteLength;
+      if (size > PHOTO_BYTES) throw tooLarge();
+      chunks.push(chunk);
+    }
+    return people.setPhoto(personOf(principal), new Uint8Array(Buffer.concat(chunks)));
+  },
+  'me.removePhoto': ({ principal }, { people }) => people.setPhoto(personOf(principal), null),
+  'users.photo': async ({ params }, { people }) => {
+    const photo = await people.photo(params.user);
+    if (photo === undefined) throw new ApiFailure('not_found', `${params.user} has no picture`);
+    const { bytes } = photo;
+    return new Response(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), {
+      status: 200,
+      headers: {
+        // What it is was found from its bytes when it was given.
+        'content-type': photo.mediaType,
+        'content-length': String(bytes.byteLength),
+        'content-disposition': 'inline',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
+        // Asked for by the picture it is (`?v=`): another picture is another address.
+        'cache-control': 'private, max-age=31536000, immutable',
+        etag: `"${photo.digest}"`,
+      },
+    });
+  },
   'me.password': async ({ principal, body }, { people }) => {
     await people.changePassword(personOf(principal), body);
     return undefined;

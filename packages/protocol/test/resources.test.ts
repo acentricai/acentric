@@ -385,6 +385,7 @@ describe('people and keys', () => {
       role: 'owner',
       createdAt: NOW,
       disabledAt: null,
+      photo: null,
     };
     expect(userSchema.parse(user)).toEqual(user);
     expect(userSchema.safeParse({ ...user, role: 'root' }).success).toBe(false);

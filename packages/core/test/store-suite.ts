@@ -849,6 +849,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           role: 'member',
           createdAt: NOW,
           disabledAt: null,
+          photo: null,
           ...more,
         },
         password: `hash-of-${email}`,
@@ -897,6 +898,29 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         // One who is gone is not brought back by being saved.
         await store.saveUser(changed);
         expect(await store.listUsers()).toEqual([ada.user]);
+      });
+
+      it('have a picture each, given, read and taken away with them', async () => {
+        const ada = personOf('ada@example.com');
+        await store.addUser(ada);
+        const photo = {
+          mediaType: 'image/png',
+          bytes: Uint8Array.from([1, 2, 3]),
+          digest: 'aaaaaaaaaaaaaaaa',
+        };
+        expect((await store.setPhoto(ada.user.id, photo))?.user.photo).toBe(photo.digest);
+        expect((await store.loadUser(ada.user.id))?.user.photo).toBe(photo.digest);
+        expect(await store.loadPhoto(ada.user.id)).toEqual(photo);
+        const again = { ...photo, bytes: Uint8Array.from([4]), digest: 'bbbbbbbbbbbbbbbb' };
+        await store.setPhoto(ada.user.id, again);
+        expect(await store.loadPhoto(ada.user.id)).toEqual(again);
+        expect((await store.setPhoto(ada.user.id, null))?.user.photo).toBeNull();
+        expect(await store.loadPhoto(ada.user.id)).toBeUndefined();
+
+        await store.setPhoto(ada.user.id, photo);
+        await store.removeUser(ada.user.id);
+        expect(await store.loadPhoto(ada.user.id)).toBeUndefined();
+        expect(await store.setPhoto(ada.user.id, photo)).toBeUndefined();
       });
 
       it('have each their own email', async () => {

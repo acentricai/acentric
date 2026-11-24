@@ -12,7 +12,7 @@
 
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 
-import { ROLE_PERMISSIONS, isAtLeast } from '@acentric/protocol';
+import { PHOTO_BYTES, PHOTO_TYPES, ROLE_PERMISSIONS, isAtLeast } from '@acentric/protocol';
 import type {
   Invite,
   InviteId,
@@ -28,8 +28,9 @@ import type {
 import type { Audit } from './audit.ts';
 import { Conflict, EngineError } from './errors.ts';
 import { IdSource } from './ids.ts';
+import { imageTypeOf } from './view-image.ts';
 import { Forbidden, SETTINGS_KEY, Unauthenticated, descendantsOf } from './keys.ts';
-import type { Store, StoredLink, StoredUser } from './store.ts';
+import type { Store, StoredLink, StoredPhoto, StoredUser } from './store.ts';
 
 /** The email and the password are not a person's who can sign in. */
 export class InvalidCredentials extends EngineError {
@@ -60,6 +61,12 @@ export class TooManyAttempts extends EngineError {
     );
     this.retryAfterMs = retryAfterMs;
   }
+}
+
+/** A picture that is not one: not a PNG, JPEG or WebP, or too large. */
+export class InvalidPhoto extends EngineError {
+  override readonly name = 'InvalidPhoto';
+  readonly code = 'invalid_request';
 }
 
 export class PersonNotFound extends EngineError {
@@ -304,6 +311,7 @@ export class People {
       role: user.role,
       permissions: [...ROLE_PERMISSIONS[user.role]],
       session: id,
+      photo: user.photo,
     };
   }
 
@@ -475,6 +483,35 @@ export class People {
     const user = { ...stored.user, displayName: changes.displayName };
     await this.#store.saveUser({ ...stored, user });
     return user;
+  }
+
+  /**
+   * Gives the person signed in a picture of them, or with null takes theirs away. What it is
+   * is said by its bytes, not by what the request says it is: a PNG, JPEG or WebP, and no more
+   * than `PHOTO_BYTES`.
+   */
+  async setPhoto(principal: UserPrincipal, bytes: Uint8Array | null): Promise<User> {
+    await this.#person(principal.user);
+    let photo: StoredPhoto | null = null;
+    if (bytes !== null) {
+      if (bytes.byteLength > PHOTO_BYTES) {
+        throw new InvalidPhoto(`A picture is ${String(PHOTO_BYTES / 1024 / 1024)} MiB at most`);
+      }
+      const mediaType = imageTypeOf(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+      if (mediaType === undefined || !(PHOTO_TYPES as readonly string[]).includes(mediaType)) {
+        throw new InvalidPhoto('A picture is a PNG, JPEG or WebP');
+      }
+      const digest = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+      photo = { mediaType, bytes, digest };
+    }
+    const stored = await this.#store.setPhoto(principal.user, photo);
+    if (stored === undefined) throw new Unauthenticated('The person signed in is gone');
+    return stored.user;
+  }
+
+  /** The picture of a person, for anyone signed in: undefined for one with none. */
+  photo(user: UserId): Promise<StoredPhoto | undefined> {
+    return this.#store.loadPhoto(user);
   }
 
   /**
@@ -651,6 +688,7 @@ export class People {
       role: link.role ?? 'member',
       createdAt: now,
       disabledAt: null,
+      photo: null,
     };
     const addUser = { user, password: await this.#hash(given.password) };
     if ((await this.#store.redeemLink(link.id, { addUser })) === 'gone') throw new InvalidLink();

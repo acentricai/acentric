@@ -7047,6 +7047,164 @@
         }
       }
     },
+    "/v1/me/photo": {
+      "put": {
+        "operationId": "me.setPhoto",
+        "summary": "Gives a person a picture of them: the request's body, the bytes of a PNG, JPEG or WebP of 2 MiB at most.",
+        "tags": [
+          "me"
+        ],
+        "x-acentric-auth": {
+          "on": "any"
+        },
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Failed: too_large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "me.removePhoto",
+        "summary": "Takes away the picture of a person.",
+        "tags": [
+          "me"
+        ],
+        "x-acentric-auth": {
+          "on": "any"
+        },
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me/password": {
       "post": {
         "operationId": "me.password",
@@ -7969,6 +8127,115 @@
           },
           "409": {
             "description": "Failed: conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/{user}/photo": {
+      "get": {
+        "operationId": "users.photo",
+        "summary": "Reads the bytes of the picture of a person, for anyone signed in.",
+        "tags": [
+          "users"
+        ],
+        "x-acentric-auth": {
+          "on": "any"
+        },
+        "parameters": [
+          {
+            "name": "user",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind user, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^usr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "usr_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The bytes.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -13269,6 +13536,12 @@
                 "examples": [
                   "ses_01jd3m5kq8f4xv9t6w2rhb0c7n"
                 ]
+              },
+              "photo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -14920,6 +15193,12 @@
                 "type": "null"
               }
             ]
+          },
+          "photo": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -14928,7 +15207,8 @@
           "displayName",
           "role",
           "createdAt",
-          "disabledAt"
+          "disabledAt",
+          "photo"
         ]
       },
       "UserPage": {
