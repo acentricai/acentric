@@ -7,8 +7,9 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
 import { engine, isApiError, queryClient } from '../engine/api.ts';
-import { backupQueries, inText, kindText, whereText } from '../engine/backups.tsx';
-import { date, fullTime, size } from '../format.ts';
+import { backupQueries, everyText, inText, kindText, whereText } from '../engine/backups.tsx';
+import type { BackupSettings } from '@acentric/protocol';
+import { date, fullTime, longTime, size } from '../format.ts';
 import {
   Ago,
   Button,
@@ -23,9 +24,10 @@ import {
   useNow,
 } from '../ui.tsx';
 
+/** When the next is taken, as a time, and how soon on hover. */
 function Next({ at }: { at: number }) {
   const now = useNow();
-  return <span title={fullTime(at)}>{inText(at, now)}</span>;
+  return <span title={inText(at, now)}>{longTime(at)}</span>;
 }
 
 export function BackupsSettings() {
@@ -41,6 +43,7 @@ export function BackupsSettings() {
   const off = isApiError(status.error, 503);
   const data = status.data;
   const [turningOn, setTurningOn] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   return (
     <div className="prefs-page">
@@ -80,41 +83,41 @@ export function BackupsSettings() {
           />
         ) : (
           <>
-            <div className="prefs-notices">
-              {data.last === null ? (
-                <Notice title="No backup has been taken since the server started">
-                  {data.next !== null && (
-                    <>
-                      The next is taken <Next at={data.next} />.
-                    </>
-                  )}
-                </Notice>
-              ) : data.last.ok ? (
-                <Notice title="The last backup was taken">
-                  <Ago at={data.last.at} />.
-                  {data.next !== null && (
-                    <>
-                      {' '}
-                      The next is taken <Next at={data.next} />.
-                    </>
-                  )}
-                </Notice>
-              ) : (
-                <Notice tone="danger" title="The last backup failed">
-                  <Ago at={data.last.at} />: {data.last.error}
-                </Notice>
-              )}
-              {data.bucket?.error != null && (
-                <Notice tone="danger" title="The bucket backups are copied to is not reached">
-                  {data.bucket.error}
-                </Notice>
-              )}
-              {data.sameDisk && data.bucket === null && (
-                <Notice tone="warn" title="The backups are on the disk of what they back up">
-                  They are lost with it. Set ACENTRIC_BACKUP_URL to a bucket they are copied to as
-                  well, or ACENTRIC_BACKUP_DIR to a folder of another disk.
-                </Notice>
-              )}
+            {(data.last?.ok === false || data.bucket?.error != null) && (
+              <div className="prefs-notices">
+                {data.last?.ok === false && (
+                  <Notice tone="danger" title="The last backup failed">
+                    <Ago at={data.last.at} />: {data.last.error}
+                  </Notice>
+                )}
+                {data.bucket?.error != null && (
+                  <Notice tone="danger" title="The bucket backups are copied to is not reached">
+                    {data.bucket.error}
+                  </Notice>
+                )}
+              </div>
+            )}
+            <div className="prefs-rows">
+              <div className="prefs-row">
+                <span className="prefs-row__name">Next backup</span>
+                <span className="prefs-row__plain">
+                  {data.next === null ? '—' : <Next at={data.next} />}
+                </span>
+              </div>
+              <div className="prefs-row">
+                <span className="prefs-row__name">Stored on</span>
+                <span className="prefs-row__form">
+                  <span
+                    className="prefs-row__plain"
+                    title={data.bucket === null ? undefined : data.bucket.url}
+                  >
+                    {data.bucket === null ? 'Server' : 'Server and bucket'}
+                  </span>
+                  <Button size="sm" onClick={() => setEditing(true)}>
+                    Change
+                  </Button>
+                </span>
+              </div>
             </div>
             <table className="prefs-table" aria-label="Backups">
               <thead>
@@ -130,7 +133,7 @@ export function BackupsSettings() {
                 {data.items.map((backup) => (
                   <tr key={backup.name}>
                     <td>
-                      <span className="prefs-table__mono" title={backup.name}>
+                      <span className="prefs-table__mono prefs-table__cut" title={backup.name}>
                         {backup.name}
                       </span>
                     </td>
@@ -146,7 +149,8 @@ export function BackupsSettings() {
           </>
         )}
       </section>
-      {turningOn && <TurnOnDialog onClose={() => setTurningOn(false)} />}
+      {turningOn && <SettingsDialog onClose={() => setTurningOn(false)} />}
+      {editing && <EditSettings onClose={() => setEditing(false)} />}
     </div>
   );
 }
@@ -160,19 +164,53 @@ const EVERY = [
 ];
 const KEEP = ['1', '3', '5', '7', '14', '30'].map((value) => ({ value, label: value }));
 
-/** Turns the server's backups on: how often, how many, and a bucket they are copied to. */
-function TurnOnDialog({ onClose }: { onClose: () => void }) {
+/** The settings as they are, read first, to change them. */
+function EditSettings({ onClose }: { onClose: () => void }) {
+  const settings = useQuery({
+    queryKey: backupQueries.settings,
+    queryFn: ({ signal }) => engine.backupSettings(signal),
+  });
+  if (settings.data === undefined) {
+    return settings.isError ? (
+      <Dialog title="Backup settings" onClose={onClose}>
+        <LoadError
+          things="the backup settings"
+          error={settings.error}
+          onRetry={() => void settings.refetch()}
+        />
+      </Dialog>
+    ) : null;
+  }
+  return <SettingsDialog current={settings.data} onClose={onClose} />;
+}
+
+/** An option for a value the list does not have: as it was set. */
+const withValue = (
+  options: readonly { readonly value: string; readonly label: string }[],
+  value: string,
+  label: string,
+) => (options.some((option) => option.value === value) ? options : [...options, { value, label }]);
+
+/**
+ * How the server backs itself up: how often, how many, and a bucket they are copied to. Without
+ * `current`, it turns them on.
+ */
+function SettingsDialog({ current, onClose }: { current?: BackupSettings; onClose: () => void }) {
   const formId = useId();
-  const [every, setEvery] = useState(String(86_400_000));
-  const [keep, setKeep] = useState('3');
-  const [where, setWhere] = useState<'server' | 'bucket'>('server');
-  const [url, setUrl] = useState('');
-  const [endpoint, setEndpoint] = useState('');
-  const [region, setRegion] = useState('');
-  const [keyId, setKeyId] = useState('');
+  const was = current?.bucket ?? null;
+  const [every, setEvery] = useState(String(current?.everyMs ?? 86_400_000));
+  const [keep, setKeep] = useState(String(current?.keep ?? 3));
+  const [where, setWhere] = useState<'server' | 'bucket'>(was === null ? 'server' : 'bucket');
+  const [url, setUrl] = useState(was?.url ?? '');
+  const [endpoint, setEndpoint] = useState(was?.endpoint ?? '');
+  const [region, setRegion] = useState(was?.region ?? '');
+  const [keyId, setKeyId] = useState(was?.accessKeyId ?? '');
   const [secret, setSecret] = useState('');
   const bucket = where === 'bucket';
-  const ready = !bucket || (url.trim() !== '' && keyId.trim() !== '' && secret !== '');
+  // The secret set before is kept for the same key.
+  const secretKept = was !== null && was.accessKeyId !== null && keyId.trim() === was.accessKeyId;
+  const ready =
+    !bucket || (url.trim() !== '' && keyId.trim() !== '' && (secret !== '' || secretKept));
   const turnOn = useMutation({
     mutationFn: () =>
       engine.setBackupSettings({
@@ -185,12 +223,15 @@ function TurnOnDialog({ onClose }: { onClose: () => void }) {
               ...(endpoint.trim() === '' ? {} : { endpoint: endpoint.trim() }),
               ...(region.trim() === '' ? {} : { region: region.trim() }),
               accessKeyId: keyId.trim(),
-              secretAccessKey: secret,
+              ...(secret === '' ? {} : { secretAccessKey: secret }),
             }
           : null,
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: backupQueries.status });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: backupQueries.status }),
+        queryClient.invalidateQueries({ queryKey: backupQueries.settings }),
+      ]);
       onClose();
     },
   });
@@ -198,7 +239,7 @@ function TurnOnDialog({ onClose }: { onClose: () => void }) {
     label: string,
     value: string,
     set: (value: string) => void,
-    more: { optional?: boolean; placeholder?: string; secret?: boolean } = {},
+    more: { optional?: boolean; placeholder?: string; secret?: boolean; required?: boolean } = {},
   ) => (
     <Field label={label} optional={more.optional ?? false}>
       {(id) => (
@@ -209,7 +250,7 @@ function TurnOnDialog({ onClose }: { onClose: () => void }) {
           autoComplete="off"
           spellCheck={false}
           placeholder={more.placeholder}
-          required={more.optional !== true}
+          required={more.required ?? more.optional !== true}
           value={value}
           onChange={(event) => set(event.target.value)}
         />
@@ -219,7 +260,7 @@ function TurnOnDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog
-      title="Turn on backups"
+      title={current === undefined ? 'Turn on backups' : 'Backup settings'}
       onClose={onClose}
       footer={
         <>
@@ -231,7 +272,7 @@ function TurnOnDialog({ onClose }: { onClose: () => void }) {
             busy={turnOn.isPending}
             disabled={!ready}
           >
-            Turn on
+            {current === undefined ? 'Turn on' : 'Save'}
           </Button>
         </>
       }
@@ -246,11 +287,21 @@ function TurnOnDialog({ onClose }: { onClose: () => void }) {
       >
         <div className="ac-field">
           <span className="ac-field__label">How often</span>
-          <Dropdown label="How often" value={every} options={EVERY} onChange={setEvery} />
+          <Dropdown
+            label="How often"
+            value={every}
+            options={withValue(EVERY, every, everyText(Number(every)))}
+            onChange={setEvery}
+          />
         </div>
         <div className="ac-field">
           <span className="ac-field__label">Backups kept</span>
-          <Dropdown label="Backups kept" value={keep} options={KEEP} onChange={setKeep} />
+          <Dropdown
+            label="Backups kept"
+            value={keep}
+            options={withValue(KEEP, keep, keep)}
+            onChange={setKeep}
+          />
         </div>
         <div className="ac-field">
           <span className="ac-field__label">Where</span>
@@ -273,7 +324,10 @@ function TurnOnDialog({ onClose }: { onClose: () => void }) {
             })}
             {text('Region', region, setRegion, { optional: true, placeholder: 'us-east-1' })}
             {text('Access key ID', keyId, setKeyId)}
-            {text('Secret access key', secret, setSecret, { secret: true })}
+            {text('Secret access key', secret, setSecret, {
+              secret: true,
+              ...(secretKept ? { placeholder: '••••••••', required: false } : {}),
+            })}
           </>
         )}
         <FormError error={turnOn.error} />
