@@ -169,6 +169,36 @@ describe('signing in', () => {
     }
   });
 
+  it('is tried no more than five times by tries all at once', async () => {
+    const { people, owner } = world();
+    await owner();
+    const tries = await Promise.allSettled(
+      Array.from({ length: 12 }, () =>
+        people.signIn({ email: 'ada@example.com', password: 'wrong', client: 'cli' }),
+      ),
+    );
+    const codes = tries.map((one) =>
+      one.status === 'rejected' ? (one.reason as { code: string }).code : 'signed in',
+    );
+    expect(codes.filter((code) => code === 'invalid_credentials')).toHaveLength(5);
+    expect(codes.filter((code) => code === 'rate_limited')).toHaveLength(7);
+  });
+
+  it('forgets failures a day after the last of them', async () => {
+    const { people, owner, advance } = world();
+    await owner();
+    const signIn = (password: string) =>
+      people.signIn({ email: 'ada@example.com', password, client: 'cli' });
+    for (let round = 0; round < 2; round += 1) {
+      // Four typos, a day and more apart from the next four: never five in a row.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await expect(signIn('wrong')).rejects.toMatchObject({ code: 'invalid_credentials' });
+      }
+      advance(25 * 60 * 60_000);
+    }
+    expect((await signIn(PASSWORD)).user.email).toBe('ada@example.com');
+  });
+
   it('is refused for a while after it failed five times, whatever is given then', async () => {
     const { people, owner, advance } = world();
     await owner();
