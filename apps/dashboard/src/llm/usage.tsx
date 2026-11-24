@@ -68,7 +68,7 @@ export function UsagePage() {
   const error = daily.error ?? groups.error ?? byProvider.error;
   return (
     <div className="list-page llm-page usage-page">
-      <PageHeader title="Usage" spaced />
+      <PageHeader title="LLM Usage" spaced />
       <div className="usage-filters rise">
         <Segmented label="Range" value={range} options={RANGES} onChange={setRange} />
         <Dropdown label="Group" value={by} options={GROUPS} onChange={setBy} />
