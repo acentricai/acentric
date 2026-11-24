@@ -20,7 +20,7 @@ import { useMe } from '../me.ts';
 import { Button, LoadError, Skeleton } from '../ui.tsx';
 
 /** How many letters of a name are shown. */
-const NAME_LETTERS = 24;
+const NAME_LETTERS = 12;
 
 /**
  * A long name as its first words that fit in so many letters, then `…`: the first word cut
