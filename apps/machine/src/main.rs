@@ -7,7 +7,13 @@
 //!                       the same, from a file an engine put in a sandbox it made:
 //!                       { server, id, token }. The file is removed
 //! acentric-machine connect
-//!                       connects, and stays connected until it is stopped
+//!                       connects in the background, as a service of its user's that starts
+//!                       again at login and whenever it stops (see `service.rs`), when typed
+//!                       at a terminal or with --background. Run by no one at a terminal, as
+//!                       by a service or a sandbox's start-up, or with --foreground, it is the
+//!                       daemon itself: connected until it is stopped
+//! acentric-machine disconnect
+//!                       stops the service and removes it; the enrolment is kept
 //! show <file>...        run by a command, as the link the daemon puts on its PATH: the
 //!                       images are shown to the model with the command's result
 //! ```
@@ -23,12 +29,14 @@ mod environment;
 mod files;
 mod identity;
 mod protocol;
+mod service;
 mod show;
 mod sys;
 mod tls;
 mod update;
 
-use std::path::PathBuf;
+use std::io::IsTerminal;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use serde::Deserialize;
@@ -130,6 +138,51 @@ fn connect() -> Result<bool, String> {
     Ok(daemon.run())
 }
 
+/// Whether `connect` makes a service: asked with --background, or typed at a terminal without
+/// --foreground. A service runs it with --foreground, and one made before with nothing, and
+/// neither at a terminal.
+fn in_service(args: &[String]) -> bool {
+    let has = |flag: &str| args.iter().any(|arg| arg == flag);
+    has("--background") || (!has("--foreground") && std::io::stdin().is_terminal())
+}
+
+/// The daemon, here, until it is stopped: as a new program when its own was replaced.
+fn run_here(program: &Result<PathBuf, std::io::Error>, args: &[String]) -> Result<(), String> {
+    match connect()? {
+        false => Ok(()),
+        // Its program was replaced: it becomes the new one, as the same process.
+        true => match program {
+            Ok(program) => Err(format!(
+                "The new program could not be started: {}",
+                sys::become_program(program, args)
+            )),
+            Err(error) => Err(error.to_string()),
+        },
+    }
+}
+
+/// `connect` at a terminal: the daemon as a service, or here where the system keeps none.
+fn in_background(program: &Path, args: &[String]) -> Result<(), String> {
+    if !folder().join("machine.json").exists() {
+        return Err("This machine has not enrolled: run `acentric-machine enrol` with the command the engine gave for it, first".into());
+    }
+    match service::connect(program, &folder(), &home())? {
+        service::Connected::Service(said) => {
+            println!(
+                "{said}
+`acentric-machine disconnect` disconnects it."
+            );
+            Ok(())
+        }
+        service::Connected::NoServiceManager => {
+            println!(
+                "This system keeps no service of its user's: connected here, until it is stopped."
+            );
+            run_here(&Ok(program.to_path_buf()), args)
+        }
+    }
+}
+
 fn main() -> ExitCode {
     // Run as `show`, by a command: see `show.rs`.
     let called = std::env::args_os().next().unwrap_or_default();
@@ -147,18 +200,13 @@ fn main() -> ExitCode {
     let done = match command {
         "enrol" => enrol(rest),
         "provision" => provision(rest),
-        "connect" => match connect() {
-            Ok(false) => Ok(()),
-            // Its program was replaced: it becomes the new one, as the same process.
-            Ok(true) => match &program {
-                Ok(program) => Err(format!(
-                    "The new program could not be started: {}",
-                    sys::become_program(program, &args)
-                )),
-                Err(error) => Err(error.to_string()),
-            },
-            Err(why) => Err(why),
+        // In the background, as a service: at a terminal, or asked to. Else the daemon itself.
+        "connect" if in_service(rest) => match &program {
+            Ok(program) => in_background(program, &args),
+            Err(error) => Err(error.to_string()),
         },
+        "connect" => run_here(&program, &args),
+        "disconnect" => service::disconnect(&home()).map(|said| println!("{said}")),
         // What the user's shell runs, so that the daemon can read its environment.
         "print-environment" => {
             print!("{}", environment::print());
@@ -168,7 +216,7 @@ fn main() -> ExitCode {
             println!("{}", version_line());
             Ok(())
         }
-        _ => Err("acentric-machine takes enrol, provision or connect".into()),
+        _ => Err("acentric-machine takes enrol, connect, disconnect or provision".into()),
     };
     match done {
         Ok(()) => ExitCode::SUCCESS,
@@ -188,6 +236,20 @@ mod tests {
         let line = version_line();
         let version = line.strip_prefix("acentric-machine ");
         assert!(version.is_some_and(|version| !version.is_empty()));
+    }
+
+    #[test]
+    fn connect_makes_a_service_when_asked_or_typed_at_a_terminal() {
+        let args = |given: &[&str]| {
+            given
+                .iter()
+                .map(|arg| (*arg).to_string())
+                .collect::<Vec<_>>()
+        };
+        // Tests run with no terminal, as a service and a sandbox's start-up do.
+        assert!(!in_service(&args(&[])));
+        assert!(!in_service(&args(&["--foreground"])));
+        assert!(in_service(&args(&["--background"])));
     }
 
     #[test]

@@ -1,29 +1,28 @@
 #!/bin/sh
-# Installs the machine program from the engine that serves this script, enrols this machine with
-# it, and keeps it connected as a service that starts again on its own. The engine puts its own
-# address in SERVER, below, when it serves it, and `acentric machines add` gives the
-# command:
-#
-#   curl -fsSL https://<engine>/install.sh | sh -s -- --id <machine> --token <token>
-#
-# Run again with no token, it updates the program to the engine's and restarts the service:
+# Installs the machine program, `acentric-machine`, from the engine that serves this script. The
+# engine puts its own address in SERVER, below, when it serves it. Then, with what the engine
+# gave for the machine:
 #
 #   curl -fsSL https://<engine>/install.sh | sh
+#   acentric-machine enrol --server https://<engine> --id <machine> --token <token>
+#   acentric-machine connect          # in the background; `acentric-machine disconnect` stops it
 #
-#   --id, --token   enrol as this machine, with the token the engine gave for it
-#   --no-service    install and enrol only: run `machine connect` yourself
-#   --uninstall     stop the service and remove the program; the enrolment is kept
+# Run again, it updates the program to the engine's, and a machine that is connected takes it.
 #
-# It needs curl. The program is one file, built for this system. Everything goes in ~/.acentric
-# (MACHINE_DIR), and nothing needs root.
+#   --id, --token   enrol as this machine as well, with the token the engine gave for it, and
+#                   connect it, unless --no-service
+#   --no-service    with --id and --token: enrol only
+#   --uninstall     disconnect it and remove the program; the enrolment is kept
+#
+# It needs curl. The program is one file, built for this system. It goes in ~/.acentric/bin
+# (MACHINE_DIR), with a link on the PATH, and nothing needs root.
 
 set -eu
 
 SERVER='__SERVER__'
 DIR="${MACHINE_DIR:-$HOME/.acentric}"
 BIN="$DIR/bin"
-# What the service is called. For tests, another, so as not to touch the real one.
-LABEL="${MACHINE_SERVICE:-dev.acentric.machine}"
+PROGRAM="$BIN/acentric-machine"
 
 id=''
 token=''
@@ -54,23 +53,25 @@ case $(uname -m) in
   *) fail "this machine's processor, $(uname -m), is not one the machine program is built for" ;;
 esac
 
-# The service, as this system keeps one.
-systemd_unit="$HOME/.config/systemd/user/$LABEL.service"
-launchd_plist="$HOME/Library/LaunchAgents/$LABEL.plist"
-
-stop_service() {
-  if [ "$os" = darwin ]; then
-    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-  elif command -v systemctl >/dev/null 2>&1; then
-    systemctl --user disable --now "$LABEL.service" 2>/dev/null || true
-  fi
+# The links on the PATH this made, of this version and of one before, which named it `machine`.
+links() {
+  for folder in "$HOME/.local/bin" "$HOME/bin" /usr/local/bin; do
+    for name in acentric-machine machine; do
+      target=$(readlink "$folder/$name" 2>/dev/null || true)
+      if [ "$target" = "$PROGRAM" ] || [ "$target" = "$BIN/machine" ]; then
+        printf '%s\n' "$folder/$name"
+      fi
+    done
+  done
 }
 
 if [ "$uninstall" = 1 ]; then
-  stop_service
-  rm -f "$launchd_plist" "$systemd_unit"
+  for program in "$PROGRAM" "$BIN/machine"; do
+    if [ -x "$program" ]; then MACHINE_DIR="$DIR" "$program" disconnect </dev/null >/dev/null 2>&1 || true; fi
+  done
+  for link in $(links); do rm -f "$link"; done
   rm -rf "$BIN"
-  say "Removed the program and its service. The enrolment is kept in $DIR: remove it to forget it."
+  say "Disconnected it and removed the program. The enrolment is kept in $DIR: remove it to forget it."
   exit 0
 fi
 
@@ -79,82 +80,58 @@ command -v curl >/dev/null 2>&1 || fail "it needs curl"
 mkdir -p "$BIN"
 
 # The program, as the engine has it for this system, in place of whatever was there.
-if ! curl -fsSL "$SERVER/machine/$os-$arch" -o "$BIN/machine.new"; then
-  rm -f "$BIN/machine.new"
+if ! curl -fsSL "$SERVER/machine/$os-$arch" -o "$BIN/acentric-machine.new"; then
+  rm -f "$BIN/acentric-machine.new"
   fail "$SERVER hands out no machine program for $os-$arch"
 fi
-chmod +x "$BIN/machine.new"
-"$BIN/machine.new" --version >/dev/null 2>&1 || {
-  rm -f "$BIN/machine.new"
+chmod +x "$BIN/acentric-machine.new"
+"$BIN/acentric-machine.new" --version >/dev/null 2>&1 || {
+  rm -f "$BIN/acentric-machine.new"
   fail "the machine program for $os-$arch does not run on this machine"
 }
-mv "$BIN/machine.new" "$BIN/machine"
-# On the PATH, where the user has a folder for their own programs.
-for folder in "$HOME/.local/bin" "$HOME/bin"; do
-  if [ -d "$folder" ]; then ln -sf "$BIN/machine" "$folder/machine"; break; fi
-done
-say "Installed $BIN/machine, version $("$BIN/machine" --version)."
+mv "$BIN/acentric-machine.new" "$PROGRAM"
+# A version before this one installed it as `machine`, which its service may still run: it is
+# this program from now on.
+if [ -e "$BIN/machine" ] || [ -L "$BIN/machine" ]; then ln -sf "$PROGRAM" "$BIN/machine"; fi
+say "Installed acentric-machine $("$PROGRAM" --version | sed 's/^acentric-machine //'), in $BIN."
 
-if [ -n "$token" ]; then
-  stop_service
-  MACHINE_DIR="$DIR" "$BIN/machine" enrol --server "$SERVER" --id "$id" --token "$token"
-elif [ ! -f "$DIR/machine.json" ]; then
-  fail "this machine has not enrolled: give --id and --token, from \`acentric machines add\`"
+# On the PATH: in a folder of the user's that is on it already, so that it runs at once.
+on_path() { case ":$PATH:" in *":$1:"*) return 0 ;; *) return 1 ;; esac; }
+linked=''
+for folder in "$HOME/.local/bin" "$HOME/bin" /usr/local/bin; do
+  if on_path "$folder" && [ -d "$folder" ] && [ -w "$folder" ]; then
+    ln -sf "$PROGRAM" "$folder/acentric-machine"
+    linked="$folder"
+    break
+  fi
+done
+if [ -z "$linked" ] && ! on_path "$BIN"; then
+  # None is: the shell's own file puts the program's folder on it, from the next terminal on.
+  case "${SHELL:-}" in
+    */zsh) profile="$HOME/.zshrc" ;;
+    */bash) profile="$HOME/.bashrc"; [ "$os" = darwin ] && profile="$HOME/.bash_profile" ;;
+    *) profile="$HOME/.profile" ;;
+  esac
+  line="export PATH=\"$BIN:\$PATH\""
+  if ! grep -qsF "$line" "$profile"; then
+    printf '\n# acentric-machine\n%s\n' "$line" >> "$profile"
+  fi
+  say "Added $BIN to the PATH in $profile. In this terminal, first: $line"
 fi
 
-if [ "$service" = 0 ]; then
-  say "Run \`$BIN/machine connect\` to connect it."
+if [ -z "$token" ]; then
+  if [ -f "$DIR/machine.json" ]; then
+    say "This machine is enrolled: \`acentric-machine connect\` connects it, if it is not already."
+  else
+    say "Next, enrol it, with the command the engine gave for it: \`acentric-machine enrol --server $SERVER --id … --token …\`."
+  fi
   exit 0
 fi
 
-if [ "$os" = darwin ]; then
-  mkdir -p "$HOME/Library/LaunchAgents"
-  cat > "$launchd_plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>$LABEL</string>
-  <key>ProgramArguments</key>
-  <array><string>$BIN/machine</string><string>connect</string></array>
-  <key>EnvironmentVariables</key>
-  <dict><key>MACHINE_DIR</key><string>$DIR</string></dict>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>10</integer>
-  <key>StandardOutPath</key><string>$DIR/machine.log</string>
-  <key>StandardErrorPath</key><string>$DIR/machine.log</string>
-</dict>
-</plist>
-PLIST
-  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$launchd_plist"
-  say "Connected, as the service $LABEL: it starts at login and again if it stops. Its log is $DIR/machine.log."
-elif command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
-  mkdir -p "$(dirname "$systemd_unit")"
-  cat > "$systemd_unit" <<UNIT
-[Unit]
-Description=Acentric machine: connects this machine to $SERVER
-After=network-online.target
-
-[Service]
-Environment=MACHINE_DIR=$DIR
-ExecStart=$BIN/machine connect
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-UNIT
-  systemctl --user daemon-reload
-  systemctl --user enable "$LABEL.service" >/dev/null 2>&1
-  systemctl --user restart "$LABEL.service"
-  # Without lingering a user's services stop when they log out, and start only when they log in.
-  if command -v loginctl >/dev/null 2>&1 && ! loginctl show-user "$(id -un)" -p Linger 2>/dev/null | grep -q yes; then
-    loginctl enable-linger "$(id -un)" 2>/dev/null ||
-      say "To keep it connected while you are logged out: sudo loginctl enable-linger $(id -un)"
-  fi
-  say "Connected, as the user service $LABEL. Its log: journalctl --user -u $LABEL"
-else
-  say "This system has no service manager to use: run \`$BIN/machine connect\` to connect it."
+MACHINE_DIR="$DIR" "$PROGRAM" disconnect </dev/null >/dev/null 2>&1 || true
+MACHINE_DIR="$DIR" "$PROGRAM" enrol --server "$SERVER" --id "$id" --token "$token"
+if [ "$service" = 0 ]; then
+  say "Run \`acentric-machine connect\` to connect it."
+  exit 0
 fi
+MACHINE_DIR="$DIR" "$PROGRAM" connect --background

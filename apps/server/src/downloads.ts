@@ -2,8 +2,8 @@
 //
 //   GET /install-cli.sh        installs the acentric command
 //   GET /acentric.mjs          the acentric command, as one file
-//   GET /install.sh            installs the machine program, enrols the machine and keeps it
-//                              connected
+//   GET /install.sh            installs the machine program, `acentric-machine`, which then
+//                              enrols the machine and connects it
 //   GET /machine/<os>-<arch>   the machine program for a system, as one file: such as
 //                              /machine/linux-x64
 //

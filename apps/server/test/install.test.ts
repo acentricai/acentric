@@ -96,7 +96,7 @@ const acentric = (args: string): Promise<Ran> =>
 const machines = async () => (await client.call('machines.list')).items;
 
 function connect(): ChildProcess {
-  return spawn(join(machineHome, '.acentric', 'bin', 'machine'), ['connect'], {
+  return spawn(join(machineHome, '.acentric', 'bin', 'acentric-machine'), ['connect'], {
     env: {
       ...machineEnv,
       MACHINE_SHELL: '/bin/sh',
@@ -152,7 +152,14 @@ beforeAll(async () => {
   mkdirSync(home);
   mkdirSync(machineHome);
   keeper = { HOME: home, PATH: path };
-  machineEnv = { HOME: machineHome, PATH: path };
+  // A shell of no file of its own: the PATH goes in ~/.profile. A service of its own name, so
+  // that what is connected and disconnected here is never the computer's real one.
+  machineEnv = {
+    HOME: machineHome,
+    PATH: path,
+    SHELL: '/bin/sh',
+    MACHINE_SERVICE: `dev.acentric.machine.test-${String(process.pid)}`,
+  };
 }, 300_000);
 
 afterAll(async () => {
@@ -192,7 +199,7 @@ describe('a machine, from the acentric command to a program that is connected', 
     expect((await fetch(`${up.server.url}/machine/..%2Facentric.mjs`)).status).toBe(404);
   }, 30_000);
 
-  it('is added with a command to run on it, which installs the program and enrols it', async (context) => {
+  it('is added with three commands to run on it: install the program, enrol it, connect it', async (context) => {
     if (program === undefined) return context.skip();
     expect((await acentric(`login '${up.server.url}' --key '${ADMIN}'`)).code).toBe(0);
     expect((await acentric('machines')).out).toContain('The engine has no machine.');
@@ -207,45 +214,73 @@ describe('a machine, from the acentric command to a program that is connected', 
     const added = await acentric('machines add build-box --agent worker');
     expect(added.code, added.out).toBe(0);
     expect(added.out).toContain('Added the machine build-box, for worker.');
+    expect(added.out).toContain('`acentric-machine disconnect` disconnects it');
     const [machine] = await machines();
-    const command = added.out
-      .split('\n')
-      .map((line) => line.trim())
-      .find((line) => line.startsWith('curl '));
-    expect(command).toMatch(
+    const lines = added.out.split('\n').map((line) => line.trim());
+    const install = lines.find((line) => line.startsWith('curl '));
+    const enrol = lines.find((line) => line.startsWith('acentric-machine enrol '));
+    expect(install).toBe(`curl -fsSL ${up.server.url}/install.sh | sh`);
+    expect(enrol).toMatch(
       new RegExp(
-        `^curl -fsSL ${up.server.url}/install\\.sh \\| sh -s -- --id ${machine?.id ?? ''} --token [0-9a-f]{64}$`,
+        `^acentric-machine enrol --server ${up.server.url} --id ${machine?.id ?? ''} --token [0-9a-f]{64}$`,
       ),
     );
+    expect(lines).toContain('acentric-machine connect');
     expect((await acentric('machines')).out).toMatch(/build-box\s+not installed\s+1\s+mch_/);
 
-    // On the computer that is to be the machine: a folder of its user's own.
-    const installed = await sh(`${command ?? ''} --no-service`, machineEnv);
+    // On the computer that is to be the machine: a folder of its user's own. Its PATH has no
+    // folder of the user's on it, so the program's own is put on it, from the next shell on.
+    const installed = await sh(install ?? '', machineEnv);
     expect(installed.code, installed.out).toBe(0);
-    const bin = join(machineHome, '.acentric', 'bin', 'machine');
-    expect(installed.out).toContain(`Installed ${bin}, version acentric-machine `);
-    expect(installed.out).toContain(`Run \`${bin} connect\` to connect it.`);
+    const folder = join(machineHome, '.acentric', 'bin');
+    const bin = join(folder, 'acentric-machine');
+    expect(installed.out).toMatch(/^Installed acentric-machine \S+, in /m);
+    expect(installed.out).toContain(
+      `Added ${folder} to the PATH in ${join(machineHome, '.profile')}`,
+    );
+    expect(readFileSync(join(machineHome, '.profile'), 'utf8')).toContain(
+      `export PATH="${folder}:$PATH"`,
+    );
+    expect(installed.out).toContain('Next, enrol it');
     expect(readFileSync(bin).equals(readFileSync(join(downloads, 'machine', SYSTEM)))).toBe(true);
+    // Installed again, nothing is added twice.
+    expect((await sh(install ?? '', machineEnv)).code).toBe(0);
+    expect(
+      readFileSync(join(machineHome, '.profile'), 'utf8').split('# acentric-machine').length,
+    ).toBe(2);
+
+    // With a folder of the user's on the PATH, it is linked there, and runs at once.
+    const local = join(machineHome, '.local', 'bin');
+    mkdirSync(local, { recursive: true });
+    const withLocal = { ...machineEnv, PATH: `${local}:${machineEnv['PATH'] ?? ''}` };
+    expect((await sh(install ?? '', withLocal)).code).toBe(0);
+    const enrolled = await sh(enrol ?? '', withLocal);
+    expect(enrolled.code, enrolled.out).toBe(0);
+    expect(enrolled.out).toContain(`enrolled as ${machine?.id ?? ''}`);
     expect(existsSync(join(machineHome, '.acentric', 'machine.json'))).toBe(true);
     expect((await acentric('machines')).out).toMatch(/build-box\s+offline\s+1\s+mch_/);
 
     // The token worked once: the same command on another computer is refused.
     const other = join(dir, 'other-home');
     mkdirSync(other);
-    const again = await sh(`${command ?? ''} --no-service`, { ...machineEnv, HOME: other });
+    const shortcut = `curl -fsSL '${up.server.url}/install.sh' | sh -s -- --id ${machine?.id ?? ''} --token ${enrol?.split(' ').at(-1) ?? ''} --no-service`;
+    const again = await sh(shortcut, { ...machineEnv, HOME: other });
     expect(again.code).not.toBe(0);
-    // With no token, a computer that never enrolled has nothing to connect as.
-    const bare = await sh(`curl -fsSL '${up.server.url}/install.sh' | sh -s -- --no-service`, {
-      ...machineEnv,
-      HOME: join(dir, 'other-home'),
-    });
+    // Connected with nothing enrolled, a computer is told to enrol first.
+    const bare = await sh(
+      `'${join(other, '.acentric', 'bin', 'acentric-machine')}' connect --background`,
+      {
+        ...machineEnv,
+        HOME: other,
+      },
+    );
     expect(bare.code).toBe(1);
-    expect(bare.out).toContain('this machine has not enrolled');
+    expect(bare.out).toContain('This machine has not enrolled');
   }, 60_000);
 
   it('connects, is listed with what it is, and takes the engine’s build of its program when told to', async (context) => {
     if (program === undefined) return context.skip();
-    const bin = join(machineHome, '.acentric', 'bin', 'machine');
+    const bin = join(machineHome, '.acentric', 'bin', 'acentric-machine');
     // As a machine that was installed from an engine before this one: with another build.
     copyFileSync(program, bin);
     daemon = connect();

@@ -14,4 +14,4 @@ done
 if [ -e "$provision" ]; then
   acentric-machine provision "$provision" || exit 1
 fi
-exec acentric-machine connect
+exec acentric-machine connect --foreground
