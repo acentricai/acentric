@@ -53,9 +53,16 @@ export async function listMachines(io: Io): Promise<void> {
   }
 }
 
-/** The command that installs the machine program on a computer, and enrols it as a machine. */
-export function installCommand(engine: string, machine: string, token: string): string {
-  return `curl -fsSL ${engine}/install.sh | sh -s -- --id ${machine} --token ${token}`;
+/**
+ * What is run on the computer that is to be the machine: install the machine program, enrol it
+ * with its token, and connect it, in the background.
+ */
+export function connectCommands(engine: string, machine: string, token: string): readonly string[] {
+  return [
+    `curl -fsSL ${engine}/install.sh | sh`,
+    `acentric-machine enrol --server ${engine} --id ${machine} --token ${token}`,
+    'acentric-machine connect',
+  ];
 }
 
 export async function addMachine(
@@ -99,10 +106,12 @@ export async function addMachine(
     io.out('');
     io.out('On the computer it is, run:');
     io.out('');
-    io.out(`  ${installCommand(credentials.engine, added.machine.id, added.token)}`);
+    for (const command of connectCommands(credentials.engine, added.machine.id, added.token)) {
+      io.out(`  ${command}`);
+    }
     io.out('');
     io.out(
-      `It installs the machine program, and keeps it connected. The token works once, for ${String(minutes)} minutes.`,
+      `They install the machine program, enrol it, and connect it in the background: \`acentric-machine disconnect\` disconnects it. The token works once, for ${String(minutes)} minutes.`,
     );
   });
 }
@@ -112,7 +121,7 @@ export async function removeMachine(io: Io, given: { readonly machine: string })
     const machine = await machineOf(client, given.machine);
     await client.call('machines.delete', { params: { machine: machine.id } });
     io.out(
-      `Removed the machine ${machine.name}. Its program is still on that computer: \`curl -fsSL <engine>/install.sh | sh -s -- --uninstall\` removes it there.`,
+      `Removed the machine ${machine.name}. Its program is still on that computer: \`acentric-machine disconnect\` stops it there, and \`curl -fsSL <engine>/install.sh | sh -s -- --uninstall\` removes it.`,
     );
   });
 }
