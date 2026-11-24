@@ -20,6 +20,23 @@ What changed in each version, for the people who run a server. What a version pr
   another. A backup now checks that the data's disk has room for the copy of the database it
   makes there, where only the backups' disk was checked.
 
+- **Fixed:** a turn interrupted while an agent was spawned went on to make the rest of its
+  answer's calls.
+- **Fixed:** deleting an agent left the subagents of other agents under its actors, which then
+  failed every turn that wrote to their parent. They go with it now.
+- **Fixed:** a store closed with writes still to be stored failed them; every request's sign-in
+  waited for the disk; `/health` said 200 when the database's reader had gone.
+- **Fixed:** a file sent to a machine in chunks was read whole into memory before its size was
+  checked.
+- **Fixed:** a service's key made with a person's key kept all it held when the person was
+  disabled or given a smaller role.
+- **Fixed:** two accounts of a provider could both be its default.
+- **Fixed:** tries at signing in all at once got past the five allowed, and failures were never
+  forgotten: they are forgotten a day after the last.
+- **Fixed:** a key of an agent that was deleted was answered 404 for the list of agents.
+- **Fixed:** a machine's daemon taking an update answered nothing else until it was done, and
+  could be given up meanwhile.
+
 ## 0.16.0
 
 **Upgrading from 0.15.0.** The database, deployed agents, machines' daemons and the command
