@@ -8,7 +8,6 @@ import { useId, useState } from 'react';
 import type { Sandbox, SandboxProviderAccount as Provider, SandboxState } from '@acentric/protocol';
 
 import { queryClient } from '../api.ts';
-import { agentsText, useAgentNames } from './agents.tsx';
 import { engine } from './api.ts';
 import { keys, useProviders, useSandboxes } from './queries.ts';
 import { displayText, safeText } from './text.tsx';
@@ -294,7 +293,6 @@ export function ProviderPage({ providerId }: { providerId: string }) {
   const sandboxes = useSandboxes(providerId);
   const [creating, setCreating] = useState(false);
   const [removing, setRemoving] = useState<Sandbox | null>(null);
-  const names = useAgentNames();
   const provider = providers.data?.items.find((p) => p.id === providerId);
   return (
     <div className="list-page sandboxes-page">
@@ -337,7 +335,6 @@ export function ProviderPage({ providerId }: { providerId: string }) {
             },
             { name: 'Status', cell: (s) => <SandboxStatus sandbox={s} /> },
             { name: 'Size', cell: (s) => sizeText(s) },
-            { name: 'Agents', cell: (s) => displayText(agentsText(s.machine.agents, names)) },
             {
               name: `${provider ? kindText(provider.kind) : 'Provider'} ID`,
               cell: (s) =>

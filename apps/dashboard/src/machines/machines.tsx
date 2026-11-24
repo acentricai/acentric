@@ -1,6 +1,5 @@
-// `/machines`: the engine's machines, with which agents may work on each (every agent, as one is
-// added from here), a new enrolment token, and remove in each row, and how to add one. Filters under the heading show those of the types
-// chosen, personal machines, which no provider made, and each sandbox account's; and those the
+// `/machines`: the engine's machines, with a new enrolment token and remove in each row, and how
+// to add one. Filters under the heading show those of the types chosen, personal machines, which no provider made, and each sandbox account's; and those the
 // actors of the agents chosen, or the actors chosen, work on.
 
 import { IconKey, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
@@ -10,7 +9,6 @@ import { useId, useState } from 'react';
 import type { Machine, MachineToken } from '@acentric/protocol';
 
 import { queryClient } from '../api.ts';
-import { agentsText, useAgentNames } from './agents.tsx';
 import { engine, shellQuote } from './api.ts';
 import { PERSONAL } from '../url.ts';
 import type { MachinesFilter } from '../url.ts';
@@ -99,7 +97,6 @@ export function MachinesPage({
       : agents.filter((agent) => deployed.data.some((one) => one.id === agent));
   const machines = useMachines(true, { agents: agentsChosen, actors });
   const byActors = agentsChosen.length > 0 || actors.length > 0;
-  const names = useAgentNames();
   const providers = useProviders();
   const choices: Choice[] = [
     { value: PERSONAL, label: 'Personal' },
@@ -171,7 +168,6 @@ export function MachinesPage({
               );
             },
           },
-          { name: 'Agents', cell: (m) => displayText(agentsText(m.agents, names)) },
           {
             name: 'Daemon',
             cell: (m) =>

@@ -53,15 +53,16 @@ describe('the Machines page', () => {
       'build-box',
       'Online',
       'macOS · arm64',
-      'orders',
       '0.15.0',
+      expect.any(String) as string,
     ]);
-    expect(cells('old-box').slice(1, 4)).toEqual([
+    // No column says which agents each is for.
+    expect(screen.queryByRole('columnheader', { name: 'Agents' })).toBeNull();
+    expect(cells('old-box').slice(1, 3)).toEqual([
       expect.stringMatching(/^Offlinelast seen /) as string,
       '—',
-      'All agents',
     ]);
-    expect(cells('new-box').slice(1, 4)).toEqual(['Not enrolled', '—', 'None']);
+    expect(cells('new-box').slice(1, 3)).toEqual(['Not enrolled', '—']);
   });
 
   it('says so when there are none', async () => {
@@ -495,10 +496,11 @@ describe('the Sandboxes pages', () => {
       'work-1',
       'Online',
       '2 vCPU · 4 GB',
-      'All agents',
       'sbx_1',
       '10 minutes',
+      expect.any(String) as string,
     ]);
+    expect(screen.queryByRole('columnheader', { name: 'Agents' })).toBeNull();
     expect(screen.getByRole('columnheader', { name: 'Boat ID' })).toBeTruthy();
 
     fireEvent.click(within(await menu('work-1')).getByRole('menuitem', { name: 'Delete' }));
@@ -571,7 +573,7 @@ describe('the Sandboxes pages', () => {
     expect(cells('asleep')[1]).toBe('Stopped');
     expect(cells('waking')[1]).toBe('Connecting');
     // Docker's IDs are shown as Docker shows them; the idle time not offered is said as it is.
-    expect(cells('asleep').slice(4, 6)).toEqual(['f'.repeat(12), '2 h']);
+    expect(cells('asleep').slice(3, 5)).toEqual(['f'.repeat(12), '2 h']);
     expect(screen.getByRole('columnheader', { name: 'Docker ID' })).toBeTruthy();
     expect(shortSandboxId('sbx_1')).toBe('sbx_1');
   });
