@@ -8,6 +8,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
 import { queryClient } from '../api.ts';
+import { Dropdown } from '../ui.tsx';
 import { useAgentNames } from '../machines/agents.tsx';
 import { displayText, safeText } from '../machines/text.tsx';
 import {
@@ -241,25 +242,15 @@ function AddDialog({ onClose }: { onClose: () => void }) {
           if (ready && !add.isPending) add.mutate();
         }}
       >
-        <Field label="Provider">
-          {(id) => (
-            <span className="select">
-              <select
-                id={id}
-                className="ac-input"
-                value={provider}
-                disabled={add.isPending}
-                onChange={(e) => setProvider(e.target.value as KeyProvider)}
-              >
-                {KEY_PROVIDERS.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {providerName(kind)}
-                  </option>
-                ))}
-              </select>
-            </span>
-          )}
-        </Field>
+        <div className="ac-field">
+          <span className="ac-field__label">Provider</span>
+          <Dropdown
+            label="Provider"
+            value={provider}
+            options={KEY_PROVIDERS.map((kind) => ({ value: kind, label: providerName(kind) }))}
+            onChange={setProvider}
+          />
+        </div>
         <Field label="Name">
           {(id) => (
             <input
