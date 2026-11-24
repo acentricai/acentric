@@ -5,13 +5,14 @@ to an engine. The engine keeps each running agent, an actor, in its database, ru
 calls and tools, and picks up where it was after a crash. Actors can work on machines: your own,
 which connect out to the engine, or ones the engine makes at a sandbox provider.
 
-> **Nothing is published yet.** This repository is being built in the open, from its
-> foundation up. Today it has the engine on SQLite, four model providers (OpenAI, ChatGPT,
-> Fireworks and Anthropic), the framework an agent is written with, agents deployed as versions
-> that their running actors follow, agents' code run apart from the engine in isolates of
-> `workerd`, and a server with an HTTP API, API keys, sign-in for people with roles, an audit
-> log, model accounts and usage, a typed client, and the `acentric` command. Its dashboard has
-> the pages of signing in so far.
+> **Alpha.** 0.15.0 is the first release. It runs, and is tested as it is run, but before 1.0 a
+> minor version may change what the API takes and how the server is set up
+> ([VERSIONS.md](VERSIONS.md)). It has the engine on SQLite; three model providers (OpenAI,
+> Anthropic and Fireworks); the framework an agent is written with; agents deployed as versions
+> that their running actors follow, with their code run apart from the engine in isolates of
+> `workerd`; tools, scripts, MCP servers, subagents, schedules and machines; and a server with
+> an HTTP API, API keys, sign-in for people with roles, an audit log, model accounts and usage,
+> backups, the dashboard, and the `acentric` command.
 
 ## Running the server
 
@@ -23,8 +24,9 @@ docker run -p 4000:4000 -v acentric-data:/data \
   ghcr.io/acentricai/acentric-server:0.15.0
 ```
 
-[deploy/](deploy/) has ways to run it, each tested: Docker Compose behind Caddy, Kubernetes, and
-systemd. Run an exact version, and change it on purpose: [VERSIONS.md](VERSIONS.md) says what a version
+That is enough to try it. To run one whose data you keep, [deploy/](deploy/) is the guide, with
+a recipe for each way of running it: Docker Compose behind Caddy, Kubernetes, systemd, and
+Terraform on AWS. Run an exact version, and change it on purpose: [VERSIONS.md](VERSIONS.md) says what a version
 promises, how to check that an image is the one released, and what an upgrade carries over.
 [CHANGELOG.md](CHANGELOG.md) says what changed in each. To build the image yourself instead,
 `docker build -t acentric-server .`.
@@ -66,7 +68,7 @@ promises, how to check that an image is the one released, and what an upgrade ca
   up, by agent, actor, account, provider, model or day.
 - Its API is described at `/v1/openapi.json`, and `@acentric/client` calls it.
 
-Every setting is listed at the top of `apps/server/src/settings.ts`.
+Every setting is in [SETTINGS.md](SETTINGS.md).
 
 ## Using it
 
