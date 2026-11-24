@@ -810,6 +810,26 @@ dialog.ac-dialog.prefs::backdrop {
   font-size: 13px;
 }
 
+/* What is wrong, or how the last went, above a section's table. */
+.prefs-notices {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.prefs-table__mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.prefs-empty {
+  margin: 0;
+  padding: var(--space-5) 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
 .prefs-table {
   width: 100%;
   border-collapse: collapse;

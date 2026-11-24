@@ -1,13 +1,21 @@
 // Settings: a tab at the foot of the sidebar, above the account, that opens a large dialog with
 // a sidebar of its own: its sections, and the page beside it that the one chosen shows.
 
-import { IconKey, IconSettings, IconUserCircle, IconUsers, IconX } from '@tabler/icons-react';
+import {
+  IconDatabase,
+  IconKey,
+  IconSettings,
+  IconUserCircle,
+  IconUsers,
+  IconX,
+} from '@tabler/icons-react';
 import type { Icon } from '@tabler/icons-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 
 import { may, useMe, type Me } from '../me.ts';
 import { AccountSettings } from './SettingsAccount.tsx';
+import { BackupsSettings } from './SettingsBackups.tsx';
 import { KeysSettings } from './SettingsKeys.tsx';
 import { PeopleSettings } from './SettingsPeople.tsx';
 
@@ -35,6 +43,13 @@ const SECTIONS: readonly SettingsSection[] = [
     icon: IconKey,
     page: KeysSettings,
     shown: (me) => may(me, 'keys:manage'),
+  },
+  {
+    id: 'backups',
+    name: 'Backups',
+    icon: IconDatabase,
+    page: BackupsSettings,
+    shown: (me) => may(me, 'backups:manage'),
   },
 ];
 

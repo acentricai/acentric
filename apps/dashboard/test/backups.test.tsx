@@ -125,3 +125,43 @@ describe('when the next is taken, in words', () => {
     expect(inText(now - 5000, now)).toBe('in 0s');
   });
 });
+
+describe('the Backups section of Settings', () => {
+  const section = async (server: ReturnType<typeof signedIn>) => {
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    const sections = within(dialog).getByRole('navigation', { name: 'Settings' });
+    fireEvent.click(within(sections).getByRole('button', { name: 'Backups' }));
+    return within(dialog).getAllByRole('region', { name: 'Backups' })[0] as HTMLElement;
+  };
+
+  it('says how the last went, takes one when asked, and lists it', async () => {
+    const server = signedIn();
+    const page = within(await section(server));
+    expect(await page.findByText('No backup has been taken since the server started')).toBeTruthy();
+    expect(page.getByText('No backups yet')).toBeTruthy();
+    fireEvent.click(page.getByRole('button', { name: /Back up now/ }));
+    expect(await page.findByText('The last backup was taken')).toBeTruthy();
+    const table = within(page.getByRole('table', { name: 'Backups' }));
+    await waitFor(() => expect(table.getAllByRole('row')).toHaveLength(2));
+    expect(table.getByText('When asked')).toBeTruthy();
+  });
+
+  it('says a server with them off takes none, and offers no button', async () => {
+    const server = signedIn();
+    server.areas.engine.backups.status = null;
+    const page = within(await section(server));
+    expect(await page.findByText('This server takes no backups of its own')).toBeTruthy();
+    expect(page.queryByRole('button', { name: /Back up now/ })).toBeNull();
+  });
+
+  it('is not there for one who may not manage backups', async () => {
+    open('/', signedIn('member'));
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    expect(within(dialog).queryByRole('button', { name: 'Backups' })).toBeNull();
+  });
+});
