@@ -1,9 +1,24 @@
 // Settings: a tab at the foot of the sidebar, above the account, that opens a large dialog with
-// a sidebar of its own. It has no sections yet: its sidebar is where they will be listed, found
-// by its search, and the page beside it what the one chosen shows.
+// a sidebar of its own: its sections, found by its search, and the page beside it that the one
+// chosen shows.
 
-import { IconSearch, IconSettings, IconX } from '@tabler/icons-react';
+import { IconSettings, IconUser, IconX } from '@tabler/icons-react';
+import type { Icon } from '@tabler/icons-react';
 import { useEffect, useId, useRef, useState } from 'react';
+import type { ComponentType } from 'react';
+
+import { AccountSettings } from './SettingsAccount.tsx';
+
+type SettingsSection = {
+  readonly id: string;
+  readonly name: string;
+  readonly icon: Icon;
+  readonly page: ComponentType;
+};
+
+const SECTIONS: readonly SettingsSection[] = [
+  { id: 'account', name: 'Account', icon: IconUser, page: AccountSettings },
+];
 
 export function SettingsButton({ collapsed }: { collapsed: boolean }) {
   const [open, setOpen] = useState(false);
@@ -33,6 +48,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const opener = useRef<Element | null>(null);
   const title = useId();
   const [query, setQuery] = useState('');
+  const [chosen, setChosen] = useState(SECTIONS[0]?.id ?? '');
 
   useEffect(() => {
     opener.current = document.activeElement;
@@ -50,10 +66,16 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
+  const found = SECTIONS.filter((section) =>
+    section.name.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+  const shown = SECTIONS.find((section) => section.id === chosen);
+  const Page = shown?.page;
+
   return (
     <dialog
       ref={ref}
-      className="ac-dialog settings"
+      className="ac-dialog prefs"
       aria-labelledby={title}
       tabIndex={-1}
       onCancel={(event) => {
@@ -65,31 +87,49 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="settings__frame">
-        <header className="settings__head">
-          <h2 id={title} className="settings__title">
+      <div className="prefs__frame">
+        <header className="prefs__head">
+          <h2 id={title} className="prefs__title">
             Settings
           </h2>
           <button type="button" className="dialog__close" onClick={onClose} aria-label="Close">
             <IconX size={18} stroke={1.75} aria-hidden="true" />
           </button>
         </header>
-        <div className="settings__body">
-          <nav className="settings__side" aria-label="Settings">
-            <label className="settings__search">
-              <IconSearch size={16} stroke={1.75} aria-hidden="true" />
-              <input
-                type="search"
-                placeholder="Search"
-                aria-label="Search settings"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                data-autofocus
-              />
-            </label>
-            <ul className="settings__list" />
+        <div className="prefs__body">
+          <nav className="prefs__side" aria-label="Settings">
+            <input
+              type="search"
+              className="prefs__search"
+              placeholder="Search"
+              aria-label="Search settings"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              data-autofocus
+            />
+            <ul className="prefs__list">
+              {found.map((section) => {
+                const Glyph = section.icon;
+                return (
+                  <li key={section.id}>
+                    <button
+                      type="button"
+                      className="prefs__item"
+                      aria-current={section.id === chosen ? 'page' : undefined}
+                      onClick={() => setChosen(section.id)}
+                    >
+                      <Glyph size={17} stroke={1.75} aria-hidden="true" />
+                      <span>{section.name}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {found.length === 0 && <p className="prefs__none">Nothing is called that.</p>}
           </nav>
-          <section className="settings__page" aria-label="Settings page" />
+          <section className="prefs__page" aria-label={shown?.name ?? 'Settings'}>
+            {Page !== undefined && <Page />}
+          </section>
         </div>
       </div>
     </dialog>

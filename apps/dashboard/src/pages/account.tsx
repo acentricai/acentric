@@ -238,7 +238,7 @@ function PasswordGroup() {
 }
 
 /** Where a session signed in from, in words. */
-function sessionName(session: Session): string {
+export function sessionName(session: Session): string {
   if (session.label !== null) return session.label;
   return session.client === 'cli' ? 'The command' : 'A browser';
 }
