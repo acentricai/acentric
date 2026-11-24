@@ -87,6 +87,11 @@ export const isTransientRead = (error: unknown): boolean =>
 
 /** A failed call, in words a person reads. */
 export function errorText(error: unknown): string {
+  // A request refused as not what it takes: what is wrong with it, such as a name that is not one.
+  if (isApiError(error, 400, 'invalid_request')) {
+    const issue = error.issues?.find((each) => each.message !== '');
+    if (issue !== undefined) return issue.message;
+  }
   if (error instanceof ApiError || error instanceof Unreachable) return error.message;
   // Anything else is the page's own error, not the server's: said as it is, to be reported.
   return `The page failed: ${error instanceof Error ? error.message : String(error)}`;

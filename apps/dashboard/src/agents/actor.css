@@ -699,10 +699,6 @@ textarea.composer__payload {
   padding: 0 4px;
 }
 
-.composer__status .ac-field__error {
-  margin: 0;
-}
-
 /* ---------- Narrow screens ---------- */
 
 @media (max-width: 760px) {

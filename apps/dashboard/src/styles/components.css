@@ -181,15 +181,6 @@
   line-height: 18px;
 }
 
-.ac-field__error {
-  display: flex;
-  gap: var(--space-1);
-  align-items: flex-start;
-  color: var(--danger);
-  font-size: 13px;
-  line-height: 18px;
-}
-
 .ac-input {
   width: 100%;
   min-height: var(--control-lg);
@@ -677,6 +668,17 @@ select.ac-input {
   gap: var(--space-2);
   padding: 0 16px;
   pointer-events: none;
+}
+
+/* An error's toast, in the top layer over any dialog: none of a popover's own box. */
+.ac-toaster[popover] {
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
 }
 
 .ac-toast {

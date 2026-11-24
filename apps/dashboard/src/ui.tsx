@@ -4,6 +4,7 @@
 // dialogs, and the states of data being read. As basic-harness has it.
 
 import {
+  IconAlertCircle,
   IconAlertTriangle,
   IconCheck,
   IconChevronDown,
@@ -153,23 +154,63 @@ export function Field({
       </label>
       {children(id)}
       {hint != null && <span className="ac-field__hint">{hint}</span>}
-      {error != null && error !== false && (
-        <p className="ac-field__error" role="alert">
-          {error}
-        </p>
-      )}
+      {error != null && error !== false && <ErrorToast error={error} />}
     </div>
   );
 }
 
-/** An inline error under a form or in a dialog, in the API's words. */
-export function FormError({ error }: { error: unknown }) {
-  if (error === null || error === undefined || error === false) return null;
+/**
+ * An error, as a toast at the foot of the window, over a dialog too: it stays until it is
+ * dismissed, and a new error shows again. `error` is what went wrong, and what tells one error
+ * from the next; `children` says it, or the error's message does.
+ */
+/** Whether this browser draws popovers in the top layer: one that does not shows it in place. */
+const POPOVERS = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype;
+
+export function ErrorToast({ error, children }: { error: unknown; children?: ReactNode }) {
+  const [dismissed, setDismissed] = useState<unknown>(undefined);
+  const toaster = useRef<HTMLDivElement>(null);
+  const shown = error !== null && error !== undefined && error !== false && error !== dismissed;
+  // Drawn in the top layer, so that it is over a dialog that is open.
+  useLayoutEffect(() => {
+    const element = toaster.current;
+    if (!shown || element === null || !POPOVERS) return;
+    try {
+      element.showPopover();
+    } catch {
+      // Not supported: it is drawn where it is.
+    }
+  }, [shown, error]);
+  if (!shown) return null;
   return (
-    <p className="ac-field__error form-error" role="alert">
-      {errorText(error)}
-    </p>
+    <div
+      ref={toaster}
+      className="ac-toaster"
+      popover={POPOVERS ? 'manual' : undefined}
+      role="region"
+      aria-label="Notifications"
+    >
+      <div className="ac-toast ac-toast--danger" role="alert">
+        <IconAlertCircle className="ac-toast__icon" size={18} stroke={1.75} aria-hidden="true" />
+        <p className="ac-toast__title">
+          {children ?? (typeof error === 'string' ? error : errorText(error))}
+        </p>
+        <button
+          type="button"
+          className="ac-toast__close"
+          aria-label="Dismiss"
+          onClick={() => setDismissed(error)}
+        >
+          <IconX size={16} stroke={1.75} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
   );
+}
+
+/** A request's error, in the API's words, as a toast. */
+export function FormError({ error }: { error: unknown }) {
+  return <ErrorToast error={error} />;
 }
 
 // Copying
@@ -1052,11 +1093,7 @@ export function Confirm({
       }
     >
       <p className="ac-dialog__body">{sentence}</p>
-      {error != null && (
-        <p className="ac-field__error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorToast error={error} />
     </Dialog>
   );
 }

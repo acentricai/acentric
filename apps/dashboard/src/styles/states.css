@@ -95,10 +95,6 @@
   max-width: var(--prose-max);
 }
 
-.form-error {
-  margin: 12px 0 0;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .skeleton__line,
   .skeleton__title,

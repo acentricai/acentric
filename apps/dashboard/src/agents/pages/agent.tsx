@@ -25,6 +25,7 @@ import { NOTHING, shortId, version } from '../../format.ts';
 import { useMachines } from '../../machines/queries.ts';
 import { may, useMe, type Me } from '../../me.ts';
 import {
+  ErrorToast,
   Ago,
   Button,
   Command,
@@ -181,7 +182,7 @@ function AccountFact({ agent }: { agent: Agent }) {
         options={options}
         onChange={(value) => assign.mutate(value === '' ? null : value)}
       />
-      {assign.isError && <span className="ac-field__error">{errorText(assign.error)}</span>}
+      <ErrorToast error={assign.error} />
     </span>
   );
 }
