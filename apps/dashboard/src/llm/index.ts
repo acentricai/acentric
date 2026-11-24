@@ -1,12 +1,7 @@
 // The LLM providers section: the accounts model calls are made with, and what the calls cost.
 // Accounts are for a person who may manage them; usage for one who may read it.
 
-import {
-  IconChartBar,
-  IconChartBarPopular,
-  IconSparkles,
-  IconSparklesFilled,
-} from '@tabler/icons-react';
+import { IconBolt, IconBoltFilled, IconChartBar, IconChartBarPopular } from '@tabler/icons-react';
 import { createRoute, type AnyRoute } from '@tanstack/react-router';
 
 import { may } from '../me.ts';
@@ -29,8 +24,8 @@ export const llmSection: Section = {
       id: 'accounts',
       name: 'Accounts',
       path: '/llm-providers',
-      icon: IconSparkles,
-      activeIcon: IconSparklesFilled,
+      icon: IconBolt,
+      activeIcon: IconBoltFilled,
       shown: (me) => may(me, 'accounts:manage'),
     },
     {

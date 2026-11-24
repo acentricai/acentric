@@ -165,11 +165,7 @@ export function AccountsPage() {
           },
         ]}
       />
-      {rows?.length === 0 && (
-        <p className="table-empty">
-          No accounts. Every model call is made with one: add one to start.
-        </p>
-      )}
+      {rows?.length === 0 && <p className="table-empty">No accounts yet</p>}
       <FormError error={makeDefault.error} />
       {adding && <AddDialog existing={rows ?? []} onClose={() => setAdding(false)} />}
       {action?.kind === 'rename' && (
