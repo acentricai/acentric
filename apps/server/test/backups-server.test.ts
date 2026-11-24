@@ -201,6 +201,30 @@ describe('backups of a folder', () => {
       ...(more.audit === undefined ? {} : { audit: more.audit }),
     });
 
+  it('wait a year when they are taken every year, not a moment', async () => {
+    const data = await served();
+    const every = 365 * 86_400_000;
+    let now = 1_795_305_600_000;
+    const backups = new Backups({
+      data,
+      dir: join(data, 'backups'),
+      everyMs: every,
+      keep: 3,
+      version: '0.15.0',
+      withoutRemovals: (work) => work(),
+      log: () => {},
+      // A second on, each time it is asked: each backup is named for a time of its own.
+      clock: () => (now += 1000),
+    });
+    await backups.take('scheduled');
+    // The next is a year from that one: further than a timer holds, which then fires at once.
+    await backups.start();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await backups.close();
+    const kept = await listBackups(join(data, 'backups'));
+    expect(kept.filter((file) => file.kind === 'scheduled')).toHaveLength(1);
+  });
+
   it('keep the newest of each kind, as many as are kept', async () => {
     const data = await served();
     let now = 1_795_305_600_000;

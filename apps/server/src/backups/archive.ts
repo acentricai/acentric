@@ -21,7 +21,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
-import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat, statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import type { Readable, Writable } from 'node:stream';
@@ -38,6 +38,19 @@ const FORMAT = 1;
 
 export const DATABASE = 'engine.sqlite';
 const BLOBS = 'blobs';
+
+/** How large the database is, with what its write-ahead log holds. */
+async function databaseBytes(data: string): Promise<number> {
+  let bytes = 0;
+  for (const file of [DATABASE, `${DATABASE}-wal`]) {
+    bytes += await stat(join(data, file)).then(
+      (found) => found.size,
+      () => 0,
+    );
+  }
+  return bytes;
+}
+
 /** How many times a backup taken beside a server starts again when a blob went while it was. */
 const ATTEMPTS = 5;
 
@@ -115,6 +128,15 @@ export async function makeBackup(options: {
 
   async function once(): Promise<Manifest> {
     const snapshot = join(data, `.backup-${randomBytes(6).toString('hex')}.sqlite`);
+    // The snapshot is made beside the database, on its disk, which may not be the backups':
+    // one that would fill it is not begun, as the server writes there too.
+    const needs = await databaseBytes(data);
+    const free = await statfs(data);
+    if (free.bavail * free.bsize < needs) {
+      throw new Error(
+        `${data} has ${String(Math.floor((free.bavail * free.bsize) / 1_048_576))} MB free, and the copy of the database a backup is made from needs about ${String(Math.ceil(needs / 1_048_576))} MB beside it`,
+      );
+    }
     try {
       // The database as it is now, whatever the server writes while it is copied.
       const source = new DatabaseSync(join(data, DATABASE));
