@@ -1,14 +1,19 @@
 // Whether there are versions after this server's: which to take next, what GitHub's releases
 // say, how often they are asked, and the route that says so.
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { readSettings, start } from '../src/index.ts';
+import type { Updates } from '@acentric/protocol';
+
+import { handlers } from '../src/handlers.ts';
+import type { Parts } from '../src/handlers.ts';
 import { UpdateCheck, nextOf, releasesOf, versionOf } from '../src/updates.ts';
+import { UpdaterFolder, linesOf } from '../src/updater.ts';
 
 const released = (
   tag: string,
@@ -166,9 +171,126 @@ describe('GET /v1/updates', () => {
         latest: null,
         next: null,
         releases: [],
+        updater: null,
       });
     } finally {
       await server.close();
     }
   }, 60_000);
+});
+
+describe('the updater’s folder', () => {
+  const folders: string[] = [];
+  afterAll(() => {
+    for (const made of folders.splice(0)) rmSync(made, { recursive: true, force: true });
+  });
+  const folder = () => {
+    const made = mkdtempSync(join(tmpdir(), 'acentric-updater-'));
+    folders.push(made);
+    return made;
+  };
+
+  it('is no updater until it says it is there, and what it says it is doing then', async () => {
+    const dir = folder();
+    let now = 1_795_000_000_000;
+    const updater = new UpdaterFolder(dir, () => now);
+    expect(await updater.status()).toBeNull();
+    writeFileSync(join(dir, 'alive'), `${String(now / 1000)}\n`);
+    expect(await updater.status()).toEqual({
+      state: 'idle',
+      version: null,
+      at: null,
+      error: null,
+      changedAt: null,
+    });
+    writeFileSync(
+      join(dir, 'status'),
+      'id=a\nstate=waiting\nversion=0.16.1\nat=1795003600\nerror=\nchanged=1795000000\n',
+    );
+    expect(await updater.status()).toEqual({
+      state: 'waiting',
+      version: '0.16.1',
+      at: 1_795_003_600_000,
+      error: null,
+      changedAt: 1_795_000_000_000,
+    });
+    // Not heard from for a minute, it is taken as gone.
+    now += 61_000;
+    expect(await updater.status()).toBeNull();
+  });
+
+  it('is asked for a version, whole, and the asking taken back', async () => {
+    const dir = folder();
+    const updater = new UpdaterFolder(dir);
+    await updater.request({ version: '0.17.0', action: 'install', at: 1_795_003_600_000 });
+    const asked = linesOf(readFileSync(join(dir, 'request'), 'utf8'));
+    expect(asked).toMatchObject({ action: 'install', version: '0.17.0', at: '1795003600' });
+    expect(asked['id']).toMatch(/^[0-9a-f]{16}$/);
+    await updater.request({ version: '0.17.0', action: 'download' });
+    expect(linesOf(readFileSync(join(dir, 'request'), 'utf8'))).toMatchObject({
+      action: 'download',
+      at: '0',
+    });
+    await updater.cancel();
+    expect(existsSync(join(dir, 'request'))).toBe(false);
+  });
+});
+
+describe('asking for an update', () => {
+  const folders: string[] = [];
+  afterAll(() => {
+    for (const made of folders.splice(0)) rmSync(made, { recursive: true, force: true });
+  });
+
+  const partsOf = (alive: boolean) => {
+    const dir = mkdtempSync(join(tmpdir(), 'acentric-updater-'));
+    folders.push(dir);
+    if (alive) writeFileSync(join(dir, 'alive'), `${String(Math.floor(Date.now() / 1000))}\n`);
+    const recorded: unknown[] = [];
+    const { fetcher } = github([released('v0.16.1'), released('v0.17.0'), released('v0.18.0')]);
+    const parts = {
+      updates: new UpdateCheck({ version: '0.16.0', enabled: true, fetch: fetcher }),
+      updater: new UpdaterFolder(dir),
+      audit: { record: async (event: unknown) => void recorded.push(event) },
+      version: '0.16.0',
+    } as unknown as Parts;
+    return { dir, parts, recorded };
+  };
+  const asked = (body: unknown) =>
+    ({ principal: { type: 'user', user: 'usr_1' }, body, query: {} }) as never;
+  const request = handlers['updates.request'] as (asked: never, parts: Parts) => Promise<Updates>;
+  const cancel = handlers['updates.cancel'] as (asked: never, parts: Parts) => Promise<Updates>;
+
+  it('asks the updater for the next version alone, and records who asked', async () => {
+    const { dir, parts, recorded } = partsOf(true);
+    await expect(request(asked({ version: '0.18.0', action: 'install' }), parts)).rejects.toThrow(
+      'The version to take next is 0.17.0',
+    );
+    const said = await request(asked({ version: '0.17.0', action: 'download' }), parts);
+    expect(said.updater).toMatchObject({ state: 'idle' });
+    expect(readFileSync(join(dir, 'request'), 'utf8')).toContain('version=0.17.0');
+    expect(recorded).toMatchObject([
+      {
+        by: { type: 'user', id: 'usr_1' },
+        action: 'update.request',
+        detail: { version: '0.17.0' },
+      },
+    ]);
+    await cancel(asked(undefined), parts);
+    expect(existsSync(join(dir, 'request'))).toBe(false);
+    expect(recorded).toHaveLength(2);
+  });
+
+  it('is refused while the updater takes a version, or is not running', async () => {
+    const { dir, parts } = partsOf(true);
+    writeFileSync(join(dir, 'status'), 'state=updating\nversion=0.17.0\n');
+    await expect(request(asked({ version: '0.17.0', action: 'install' }), parts)).rejects.toThrow(
+      'The updater is taking a version now',
+    );
+    await expect(cancel(asked(undefined), parts)).rejects.toThrow('it is not stopped');
+    const gone = partsOf(false);
+    await expect(
+      request(asked({ version: '0.17.0', action: 'install' }), gone.parts),
+    ).rejects.toThrow('No updater is running');
+  });
 });

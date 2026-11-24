@@ -39,6 +39,9 @@
 //                           it, they are in the folder only
 //   ACENTRIC_UPDATE_CHECK   `off` for a server that does not ask GitHub's releases of the
 //                           engine whether there is a newer version. On without it
+//   ACENTRIC_UPDATER_DIR    the folder the server shares with an updater beside it, which takes
+//                           a newer version when asked from the dashboard (deploy/compose).
+//                           Without it, a version is taken where the server runs
 //   ACENTRIC_RETAIN_ARCHIVED  how long an archived actor is kept, such as 90d: then it is
 //                           deleted, with its subagents and their conversations. Without it,
 //                           for ever
@@ -123,6 +126,8 @@ export type Settings = {
   readonly backupDir: string;
   /** Whether the server asks GitHub's releases for a newer version. */
   readonly updateCheck: boolean;
+  /** The folder shared with an updater beside the server. Undefined for none. */
+  readonly updaterDir: string | undefined;
   /** How the server writes its log, and the least it writes. */
   readonly log: { readonly format: Format; readonly level: Level };
   /** The port metrics are served at. Undefined when none are. */
@@ -378,6 +383,10 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     secretKeys,
     backupDir,
     updateCheck: updateCheck === 'on',
+    updaterDir:
+      given('ACENTRIC_UPDATER_DIR') === undefined
+        ? undefined
+        : resolve(given('ACENTRIC_UPDATER_DIR') as string),
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
     maxTurns: wholeNumber('ACENTRIC_MAX_TURNS', 1000, 1, 10_000),

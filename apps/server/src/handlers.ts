@@ -28,6 +28,7 @@ import type {
   ResponseOf,
   RouteId,
   routes,
+  Updates,
 } from '@acentric/protocol';
 import type { z } from 'zod';
 
@@ -36,6 +37,7 @@ import type { Granted } from './auth.ts';
 import { ApiFailure } from './errors.ts';
 import type { BackupControl } from './backups/control.ts';
 import type { UpdateCheck } from './updates.ts';
+import type { UpdaterFolder } from './updater.ts';
 import type { Streams } from './events.ts';
 
 export type Parts = {
@@ -50,6 +52,8 @@ export type Parts = {
   readonly backups?: BackupControl;
   /** Whether there are versions after this one. */
   readonly updates?: UpdateCheck;
+  /** The folder of the updater beside the server. Undefined for none. */
+  readonly updater?: UpdaterFolder;
   /** What the server says it is. */
   readonly version?: string;
 };
@@ -836,17 +840,69 @@ export const handlers: Handlers = {
     if (backups === undefined) throw noBackups();
     return backups.configure(asked.body, refOf(asked));
   },
-  'updates.get': (asked, { updates, version }) =>
-    updates?.status(asked.query.refresh === true) ?? {
-      current: version ?? '',
+  'updates.get': async (asked, parts) => updatesOf(parts, asked.query.refresh === true),
+  'updates.request': async (asked, parts) => {
+    const { updater, audit } = parts;
+    if (updater === undefined || !(await updater.alive())) throw noUpdater();
+    const now = await updatesOf(parts);
+    if (now.next !== asked.body.version) {
+      throw new ApiFailure(
+        'conflict',
+        now.next === null
+          ? `There is no version to take after ${now.current}`
+          : `The version to take next is ${now.next}: a version is taken one minor at a time`,
+      );
+    }
+    if (await updater.busy()) {
+      throw new ApiFailure('conflict', 'The updater is taking a version now');
+    }
+    await updater.request(asked.body);
+    await audit.record({
+      by: refOf(asked),
+      action: 'update.request',
+      detail: {
+        version: asked.body.version,
+        action: asked.body.action,
+        ...(asked.body.at == null ? {} : { at: asked.body.at }),
+      },
+    });
+    return updatesOf(parts);
+  },
+  'updates.cancel': async (asked, parts) => {
+    const { updater, audit } = parts;
+    if (updater === undefined || !(await updater.alive())) throw noUpdater();
+    if (await updater.busy()) {
+      throw new ApiFailure('conflict', 'The updater is taking a version now: it is not stopped');
+    }
+    await updater.cancel();
+    await audit.record({ by: refOf(asked), action: 'update.cancel' });
+    return updatesOf(parts);
+  },
+};
+
+/** A server with no updater beside it. */
+const noUpdater = () =>
+  new ApiFailure(
+    'unavailable',
+    'No updater is running beside this server: a version is taken where it runs',
+  );
+
+/** What there is after this version, and what the updater is doing. */
+async function updatesOf(parts: Parts, refresh = false): Promise<Updates> {
+  const updater = parts.updater === undefined ? null : await parts.updater.status();
+  return (
+    (await parts.updates?.status(refresh, updater)) ?? {
+      current: parts.version ?? '',
       check: 'off',
       checkedAt: null,
       error: null,
       latest: null,
       next: null,
       releases: [],
-    },
-};
+      updater,
+    }
+  );
+}
 
 /** An object without the fields that were not given. */
 function defined<T extends { readonly [key: string]: unknown }>(

@@ -39,6 +39,7 @@ import { observing } from './observe.ts';
 import { Retention } from './retention.ts';
 import { startServer } from './serve.ts';
 import { UpdateCheck } from './updates.ts';
+import { UpdaterFolder } from './updater.ts';
 import { reseal, sealedKeys } from './sealed.ts';
 import { holdPort } from './upgrading.ts';
 import type { Holding } from './upgrading.ts';
@@ -266,6 +267,9 @@ export async function start(
       accounts,
       backups,
       updates: new UpdateCheck({ version: more.version, enabled: settings.updateCheck }),
+      ...(settings.updaterDir === undefined
+        ? {}
+        : { updater: new UpdaterFolder(settings.updaterDir) }),
       version: more.version,
       port: settings.port,
       host: settings.host,
