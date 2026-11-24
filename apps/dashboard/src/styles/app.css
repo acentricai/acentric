@@ -637,12 +637,9 @@ dialog.ac-dialog.prefs::backdrop {
   margin: 0;
 }
 
-.prefs-empty {
-  margin: 0;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--prefs-line);
-  color: var(--ink-muted);
-  font-size: 14px;
+/* A heading with a table under it: more room between the two. */
+.prefs-group__head--spaced {
+  margin-bottom: 16px;
 }
 
 /* A member: their picture, and what they are called with their email under it. */

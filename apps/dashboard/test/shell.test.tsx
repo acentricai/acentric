@@ -180,7 +180,7 @@ describe('the Account section of Settings', () => {
 });
 
 describe('the People section of Settings', () => {
-  it('is for one who may manage people: the members, and the invites with one to make', async () => {
+  it('is for one who may manage people: the members, and Invite beside them', async () => {
     const server = fakeServer();
     server.person('ada@example.test', 'a-password-for-tests', true);
     server.person('grace@example.test', 'a-password-for-tests', false, 'member');
@@ -197,7 +197,8 @@ describe('the People section of Settings', () => {
     expect(
       within(members).getByRole('button', { name: 'Actions for grace@example.test' }),
     ).toBeTruthy();
-    expect(within(page).getByRole('heading', { name: 'Invites' })).toBeTruthy();
+    // No list of invites: a link made is passed on, and not tracked here.
+    expect(within(page).queryByRole('heading', { name: 'Invites' })).toBeNull();
 
     // Its dialogs open over Settings, and closing one leaves Settings open.
     fireEvent.click(within(page).getByRole('button', { name: 'Invite' }));
