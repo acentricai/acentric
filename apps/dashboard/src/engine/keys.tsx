@@ -15,6 +15,7 @@ import {
   Button,
   CopyButton,
   Dialog,
+  Dropdown,
   Field,
   FormError,
   PageHeader,
@@ -386,6 +387,15 @@ export function NewKeyDialog({
           )}
         </Field>
         <div className="ac-field">
+          <span className="ac-field__label">Expires</span>
+          <Dropdown
+            label="Expires"
+            value={expiry}
+            options={EXPIRIES.map((each) => ({ value: each.value, label: each.text }))}
+            onChange={setExpiry}
+          />
+        </div>
+        <div className="ac-field">
           <span className="ac-field__label">Reaches</span>
           <Segmented
             label="Reaches"
@@ -398,56 +408,34 @@ export function NewKeyDialog({
           />
         </div>
         {type !== 'engine' && (
-          <Field label="Agent">
-            {(id) => (
-              <span className="select">
-                <select
-                  id={id}
-                  className="ac-input"
-                  required
-                  value={agent}
-                  onChange={(event) => {
-                    setAgent(event.target.value);
-                    setActor('');
-                  }}
-                >
-                  <option value="" disabled>
-                    {agents.isPending ? 'Loading…' : 'Choose an agent'}
-                  </option>
-                  {(agents.data ?? []).map((each) => (
-                    <option key={each.id} value={each.id}>
-                      {each.name}
-                    </option>
-                  ))}
-                </select>
-              </span>
-            )}
-          </Field>
+          <div className="ac-field">
+            <span className="ac-field__label">Agent</span>
+            <Dropdown
+              label="Agent"
+              value={agent}
+              placeholder={agents.isPending ? 'Loading…' : 'Choose an agent'}
+              options={(agents.data ?? []).map((each) => ({ value: each.id, label: each.name }))}
+              onChange={(value) => {
+                setAgent(value);
+                setActor('');
+              }}
+            />
+          </div>
         )}
         {type === 'actor' && (
-          <Field label="Actor">
-            {(id) => (
-              <span className="select">
-                <select
-                  id={id}
-                  className="ac-input"
-                  required
-                  disabled={agent === ''}
-                  value={actor}
-                  onChange={(event) => setActor(event.target.value)}
-                >
-                  <option value="" disabled>
-                    {agent !== '' && actors.isPending ? 'Loading…' : 'Choose an actor'}
-                  </option>
-                  {(actors.data ?? []).map((each) => (
-                    <option key={each.id} value={each.id}>
-                      {each.name ?? each.id}
-                    </option>
-                  ))}
-                </select>
-              </span>
-            )}
-          </Field>
+          <div className="ac-field">
+            <span className="ac-field__label">Actor</span>
+            <Dropdown
+              label="Actor"
+              value={actor}
+              placeholder={agent !== '' && actors.isPending ? 'Loading…' : 'Choose an actor'}
+              options={(actors.data ?? []).map((each) => ({
+                value: each.id,
+                label: each.name ?? each.id,
+              }))}
+              onChange={setActor}
+            />
+          </div>
         )}
         <div className="ac-field">
           <span className="ac-field__label">Permissions</span>
@@ -467,24 +455,6 @@ export function NewKeyDialog({
             </fieldset>
           </div>
         </div>
-        <Field label="Expires">
-          {(id) => (
-            <span className="select">
-              <select
-                id={id}
-                className="ac-input"
-                value={expiry}
-                onChange={(event) => setExpiry(event.target.value as typeof expiry)}
-              >
-                {EXPIRIES.map((each) => (
-                  <option key={each.value} value={each.value}>
-                    {each.text}
-                  </option>
-                ))}
-              </select>
-            </span>
-          )}
-        </Field>
       </form>
     </Dialog>
   );
