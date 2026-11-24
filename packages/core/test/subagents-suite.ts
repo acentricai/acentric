@@ -283,6 +283,49 @@ export function subagentsSuite(name: string, open: () => Promise<Store>): void {
         expect(down?.input?.type).toBe('agent');
       });
 
+      it('sends nothing more of an answer when the turn is ended while an agent is created', async () => {
+        let release: () => void = () => {};
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const made = await setup(
+          {
+            [LEAD]: [
+              // A subagent there is already.
+              spawn('c0', { agent: 'helper', name: 'rev' }),
+              says('Made.'),
+              // Then one more, and a message to the first in the same answer.
+              calls(
+                {
+                  id: 'c1',
+                  name: 'spawn_agent',
+                  arguments: { agent: 'plain', name: 'strict', params: { strict: true } },
+                },
+                { id: 'c2', name: 'message_agent', arguments: { to: 'rev', message: 'Begin.' } },
+              ),
+            ],
+          },
+          {
+            // Its agent's code is slow to say how it is made: the turn is ended meanwhile.
+            create: async (args) => {
+              await held;
+              return { configuration: { asked: args } };
+            },
+          },
+        );
+        await made.say('Make one.');
+        await quiet(made);
+        await made.say('Go.');
+        await eventually(() =>
+          made.one.executor.made.some((call) => call.path === 'subagents.plain.create'),
+        );
+        const interrupted = made.one.it.interrupt(made.actor.id);
+        release();
+        await interrupted;
+        await quiet(made);
+        expect(await lines((await child(made, 'rev')).id)).toEqual([]);
+      });
+
       it('is created before anything of the same answer is sent to it', async () => {
         const made = await setup({
           [LEAD]: [
