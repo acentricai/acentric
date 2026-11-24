@@ -65,7 +65,7 @@ export function KeysSettings() {
           <table className="prefs-table" aria-label="Keys">
             <thead>
               <tr>
-                <th scope="col" aria-label="Key" />
+                <th scope="col">Name</th>
                 <th scope="col">Reaches</th>
                 <th scope="col">Permissions</th>
                 <th scope="col">Expires</th>
