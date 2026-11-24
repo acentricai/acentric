@@ -5,6 +5,8 @@ What changed in each version, for the people who run a server. What a version pr
 
 ## Unreleased
 
+- **Fixed:** the dashboard's API keys page failed after the Agents page, in a new tab, and said
+  the server could not be reached. It says so now only when it could not.
 - **Fixed:** one who followed an actor's events and went could stop the actor answering: a
   listener that fails is its own failure now. A stream that catches up a long conversation
   reads the next part once the last is taken, not all of it into memory.
