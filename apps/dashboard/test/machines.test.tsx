@@ -3,7 +3,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { enrolCommands, installCommand } from '../src/machines/machines.tsx';
+import { connectSteps } from '../src/machines/machines.tsx';
 import { sandboxDeletion, shortSandboxId } from '../src/machines/sandboxes.tsx';
 import { open } from './render.tsx';
 import { actorOf, fakeServer, machineOf } from './server.ts';
@@ -82,7 +82,7 @@ describe('the Machines page', () => {
     // Which agents it is for is not asked: every one, changed from the list later.
     expect(within(form).queryByRole('checkbox')).toBeNull();
     press('Add machine', form);
-    expect(await screen.findByRole('heading', { name: 'Enrol build-box' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Connect build-box' })).toBeTruthy();
     expect(
       server.calls.find((call) => call.path === '/v1/machines' && call.method === 'POST')?.body,
     ).toEqual({
@@ -90,12 +90,23 @@ describe('the Machines page', () => {
       agents: '*',
     });
     const added = server.machines[0];
-    const shown = dialog().textContent ?? '';
-    expect(shown).toContain(
-      `curl -fsSL '${window.location.origin}/install.sh' | sh -s -- --id '${added?.id ?? ''}' --token 'token-build-box'`,
-    );
-    expect(shown).toContain(`acentric-machine enrol --server '${window.location.origin}'`);
-    expect(shown).toContain('acentric-machine connect');
+    // Three steps, in order, each a command to copy: install, enrol, connect.
+    const steps = within(dialog())
+      .getAllByRole('listitem')
+      .map((step) => [
+        step.querySelector('.connect-step__name')?.textContent,
+        step.querySelector('pre')?.textContent,
+      ]);
+    expect(steps).toEqual([
+      ['Install', `curl -fsSL '${window.location.origin}/install.sh' | sh`],
+      [
+        'Enrol',
+        `acentric-machine enrol --server '${window.location.origin}' --id '${added?.id ?? ''}' --token 'token-build-box'`,
+      ],
+      ['Connect', 'acentric-machine connect'],
+    ]);
+    expect(within(dialog()).getAllByRole('button', { name: /^Copy/ })).toHaveLength(3);
+    expect(dialog().textContent).toContain('acentric-machine disconnect disconnects it.');
     press('Done');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     // The token is gone with the dialog; the machine is in the list.
@@ -142,7 +153,7 @@ describe('the Machines page', () => {
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     fireEvent.click(within(await menu('build-box')).getByRole('menuitem', { name: 'Enrol again' }));
     press('New token', await screen.findByRole('dialog'));
-    expect(await within(dialog()).findByText('token-again-1')).toBeTruthy();
+    expect(await within(dialog()).findByText(/--token 'token-again-1'$/)).toBeTruthy();
   });
 
   it('removes a machine once its name is typed', async () => {
@@ -414,10 +425,8 @@ describe('the commands that enrol a machine', () => {
       token: 'a b',
       expiresAt: 0,
     };
-    expect(installCommand(token, 'https://engine.example')).toBe(
-      "curl -fsSL 'https://engine.example/install.sh' | sh -s -- --id 'mch_it'\\''s' --token 'a b'",
-    );
-    expect(enrolCommands(token, 'https://engine.example')).toEqual([
+    expect(connectSteps(token, 'https://engine.example').map((step) => step.command)).toEqual([
+      "curl -fsSL 'https://engine.example/install.sh' | sh",
       "acentric-machine enrol --server 'https://engine.example' --id 'mch_it'\\''s' --token 'a b'",
       'acentric-machine connect',
     ]);

@@ -5,6 +5,7 @@
 import { IconKey, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { Machine, MachineToken } from '@acentric/protocol';
 
@@ -22,7 +23,6 @@ import {
   Button,
   Command,
   Confirm,
-  CopyButton,
   Dialog,
   errorText,
   Field,
@@ -260,49 +260,50 @@ export function MachinesPage({
 }
 
 /**
- * The one command that installs the machine program from this engine, enrols the machine with
- * its token, and keeps it connected as a service.
+ * What is run on the computer that is to be the machine, one after another: install the machine
+ * program from this engine, enrol it with its token, and connect it in the background.
  */
-export function installCommand(token: MachineToken, server = location.origin): string {
-  return `curl -fsSL ${shellQuote(`${server}/install.sh`)} | sh -s -- --id ${shellQuote(token.machine.id)} --token ${shellQuote(token.token)}`;
-}
-
-/** The same, for a machine that has the program already: enrol, then connect. */
-export function enrolCommands(token: MachineToken, server = location.origin): readonly string[] {
+export function connectSteps(
+  token: MachineToken,
+  server = location.origin,
+): readonly { readonly name: string; readonly command: string }[] {
   return [
-    `acentric-machine enrol --server ${shellQuote(server)} --id ${shellQuote(token.machine.id)} --token ${shellQuote(token.token)}`,
-    'acentric-machine connect',
+    { name: 'Install', command: `curl -fsSL ${shellQuote(`${server}/install.sh`)} | sh` },
+    {
+      name: 'Enrol',
+      command: `acentric-machine enrol --server ${shellQuote(server)} --id ${shellQuote(token.machine.id)} --token ${shellQuote(token.token)}`,
+    },
+    { name: 'Connect', command: 'acentric-machine connect' },
   ];
 }
 
-/** A token, and the commands that use it: shown once, and gone when the dialog closes. */
+/** The steps that connect a machine, with its token in them: shown once, gone with the dialog. */
 function Enrol({ token }: { token: MachineToken }) {
+  const notes: { readonly [step: string]: ReactNode } = {
+    Enrol: <>The token works once, until {fullTime(token.expiresAt)}.</>,
+    Connect: (
+      <>
+        <code>acentric-machine disconnect</code> disconnects it.
+      </>
+    ),
+  };
   return (
-    <>
-      <p className="note">
-        Run this on the machine, macOS or Linux. It installs the machine program from this engine,
-        enrols the machine, and keeps it connected as a service. The token works once, until{' '}
-        {fullTime(token.expiresAt)} at the latest, and is not shown again.
-      </p>
-      <Command text={installCommand(token)} />
-      <p className="note">With the machine program installed already:</p>
-      <ol className="connect-steps">
-        {enrolCommands(token).map((text) => (
-          <li key={text}>
-            <Command text={text} />
-          </li>
-        ))}
-      </ol>
-      <div className="ac-field">
-        <span className="ac-field__label">Token</span>
-        <div className="secret-once">
-          <code className="secret-once__value" dir="ltr">
-            {displayText(token.token)}
-          </code>
-          <CopyButton value={token.token} what="token" text />
-        </div>
-      </div>
-    </>
+    <ol className="connect-steps">
+      {connectSteps(token).map((step, index) => (
+        <li key={step.name} className="connect-step">
+          <span className="connect-step__number" aria-hidden="true">
+            {index + 1}
+          </span>
+          <div className="connect-step__body">
+            <span className="connect-step__name">{step.name}</span>
+            <Command text={step.command} />
+            {notes[step.name] !== undefined && (
+              <span className="connect-step__note">{notes[step.name]}</span>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -320,7 +321,7 @@ function AddDialog({ onClose }: { onClose: () => void }) {
   if (add.data !== undefined) {
     return (
       <Dialog
-        title={`Enrol ${add.data.machine.name}`}
+        title={`Connect ${add.data.machine.name}`}
         onClose={onClose}
         wide
         footer={
