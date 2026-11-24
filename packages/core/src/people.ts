@@ -95,6 +95,8 @@ const RESET_MS = DAY;
 const ATTEMPTS = 5;
 const FIRST_WAIT_MS = 30_000;
 const LONGEST_WAIT_MS = 15 * 60_000;
+/** How long after its last failure an email's failures are forgotten. */
+const FORGET_FAILURES_MS = 24 * 60 * 60_000;
 
 const TOKEN = /^(as|al)_([0-9a-z]{26})_([A-Za-z0-9_-]{43})$/;
 
@@ -120,7 +122,9 @@ export class People {
   readonly #ids: IdSource;
   readonly #cost: number;
   /** How many times signing in as each email failed, and until when it is refused. */
-  readonly #failed = new Map<string, { count: number; until: number }>();
+  readonly #failed = new Map<string, { count: number; until: number; at: number }>();
+  /** The try at signing in as each email that is being checked now, which the next waits for. */
+  readonly #trying = new Map<string, Promise<void>>();
   readonly #keptFailures: number;
   /** When each session's last use was last written down. */
   readonly #touched = new Map<SessionId, number>();
@@ -204,8 +208,40 @@ export class People {
     } & SessionFor,
   ): Promise<SignedIn> {
     const email = emailOf(given.email);
+    // One email's tries are taken one at a time: tries at once would each find the count as
+    // it was before any of them, while the hash is checked, and so get past it.
+    const before = this.#trying.get(email) ?? Promise.resolve();
+    let done: () => void = () => {};
+    const mine = before.then(
+      () =>
+        new Promise<void>((resolve) => {
+          done = resolve;
+        }),
+    );
+    this.#trying.set(email, mine);
+    await before;
+    try {
+      return await this.#signIn(email, given);
+    } finally {
+      done();
+      if (this.#trying.get(email) === mine) this.#trying.delete(email);
+    }
+  }
+
+  async #signIn(
+    email: string,
+    given: {
+      readonly email: string;
+      readonly password: string;
+    } & SessionFor,
+  ): Promise<SignedIn> {
     const now = this.#clock();
-    const failed = this.#failed.get(email);
+    let failed = this.#failed.get(email);
+    // Failures a day apart are no try at a password: the count starts again.
+    if (failed !== undefined && now - failed.at > FORGET_FAILURES_MS) {
+      this.#failed.delete(email);
+      failed = undefined;
+    }
     if (failed !== undefined && failed.until > now) throw new TooManyAttempts(failed.until - now);
 
     const stored = await this.#store.findUser(email);
@@ -217,7 +253,7 @@ export class People {
       const wait =
         count < ATTEMPTS ? 0 : Math.min(FIRST_WAIT_MS * 2 ** (count - ATTEMPTS), LONGEST_WAIT_MS);
       this.#failed.delete(email);
-      this.#failed.set(email, { count, until: now + wait });
+      this.#failed.set(email, { count, until: now + wait, at: now });
       this.#forgetPast(now);
       await this.#audit?.record({
         by: { type: 'system' },
