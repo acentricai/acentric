@@ -258,7 +258,7 @@ function AddDialog({ onClose }: { onClose: () => void }) {
               className="ac-input"
               required
               maxLength={64}
-              placeholder={`${providerName(provider)} personal`}
+              placeholder={`${provider}-personal`}
               disabled={add.isPending}
               value={name}
               onChange={(e) => setName(e.target.value)}

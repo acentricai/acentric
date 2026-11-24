@@ -832,8 +832,15 @@ export function Confirm({
   );
 }
 
-/** The message of an error, as the API gave it. */
+/**
+ * The message of an error, as the API gave it: for a request it refused as not what it takes,
+ * what is wrong with it, such as a name that is not one.
+ */
 export function errorText(error: unknown): string {
+  if (isApiError(error, 400, 'invalid_request')) {
+    const issue = error.issues?.find((each) => each.message !== '');
+    if (issue !== undefined) return issue.message;
+  }
   if (error instanceof Error) return error.message;
   return String(error);
 }

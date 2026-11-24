@@ -113,6 +113,18 @@ describe('the Accounts page', () => {
       'Fireworks',
     ]);
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'OpenAI' }));
+    expect(within(dialog()).getByLabelText('Name').getAttribute('placeholder')).toBe(
+      'openai-personal',
+    );
+    // A name is what the server takes, and it says so of one that is not.
+    fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'My work' } });
+    fireEvent.change(within(dialog()).getByLabelText('API key'), { target: { value: 'sk-test' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Add account' }));
+    expect(
+      await within(dialog()).findByText(
+        'A name is lowercase letters, digits, - and _, starting with a letter or digit, 63 at most',
+      ),
+    ).toBeTruthy();
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'work' } });
     fireEvent.change(within(dialog()).getByLabelText('API key'), {
       target: { value: 'bad-key' },
