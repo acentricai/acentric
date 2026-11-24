@@ -65,7 +65,7 @@ function useAgents(enabled = true) {
 }
 
 /** What the agents and actors keys reach are called, by their IDs. */
-function useReachNames(rows: readonly Key[] | undefined): Map<string, string> {
+export function useReachNames(rows: readonly Key[] | undefined): Map<string, string> {
   const agents = useAgents();
   const actors = [
     ...new Set(
@@ -115,14 +115,6 @@ export function KeysPage() {
   // dismissed.
   const [fresh, setFresh] = useState<string | null>(null);
   const [revoked, setRevoked] = useState<ReadonlySet<string>>(new Set());
-  const revoke = useMutation({
-    mutationFn: (key: Key) => engine.revokeKey(key.id),
-    onSuccess: (_, key) => {
-      setRevoked((was) => new Set([...was, key.id]));
-      setRevoking(null);
-      void queryClient.invalidateQueries({ queryKey: keyQueries.keys });
-    },
-  });
 
   const rows = keys.data?.items;
   const names = useReachNames(rows);
@@ -237,41 +229,54 @@ export function KeysPage() {
       )}
       {made !== null && <KeyShown made={made} onDone={() => setMade(null)} />}
       {revoking !== null && (
-        <Dialog
-          title={`Revoke ${revoking.label}?`}
-          onClose={() => {
-            revoke.reset();
-            setRevoking(null);
-          }}
-          footer={
-            <>
-              <Button
-                onClick={() => {
-                  revoke.reset();
-                  setRevoking(null);
-                }}
-                data-autofocus
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                busy={revoke.isPending}
-                onClick={() => revoke.mutate(revoking)}
-              >
-                Revoke
-              </Button>
-            </>
-          }
-        >
-          <p className="note">
-            Anything that calls the engine with it, or with a key made with it, is refused from now
-            on.
-          </p>
-          <FormError error={revoke.error} />
-        </Dialog>
+        <RevokeKeyDialog
+          target={revoking}
+          onClose={() => setRevoking(null)}
+          onRevoked={(key) => setRevoked((was) => new Set([...was, key.id]))}
+        />
       )}
     </div>
+  );
+}
+
+/** Asks before a key is revoked, and revokes it: what was made with it goes with it. */
+export function RevokeKeyDialog({
+  target,
+  onClose,
+  onRevoked,
+}: {
+  target: Key;
+  onClose: () => void;
+  onRevoked?: (key: Key) => void;
+}) {
+  const revoke = useMutation({
+    mutationFn: (key: Key) => engine.revokeKey(key.id),
+    onSuccess: (_, key) => {
+      onRevoked?.(key);
+      onClose();
+      void queryClient.invalidateQueries({ queryKey: keyQueries.keys });
+    },
+  });
+  return (
+    <Dialog
+      title={`Revoke ${target.label}?`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose} data-autofocus>
+            Cancel
+          </Button>
+          <Button variant="danger" busy={revoke.isPending} onClick={() => revoke.mutate(target)}>
+            Revoke
+          </Button>
+        </>
+      }
+    >
+      <p className="note">
+        Anything that calls the engine with it, or with a key made with it, is refused from now on.
+      </p>
+      <FormError error={revoke.error} />
+    </Dialog>
   );
 }
 

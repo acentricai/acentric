@@ -221,6 +221,37 @@ describe('the People section of Settings', () => {
   });
 });
 
+describe('the API keys section of Settings', () => {
+  it('lists the keys, makes one and shows it once, and revokes one from its row', async () => {
+    const server = fakeServer();
+    server.person('ada@example.test', 'a-password-for-tests', true);
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    const sections = within(dialog).getByRole('navigation', { name: 'Settings' });
+    fireEvent.click(within(sections).getByRole('button', { name: 'API keys' }));
+    const page = within(dialog).getAllByRole('region', { name: 'API keys' })[0] as HTMLElement;
+    await within(page).findByRole('table', { name: 'Keys' });
+
+    fireEvent.click(within(page).getByRole('button', { name: 'New key' }));
+    const making = await screen.findByRole('dialog', { name: 'New key' });
+    fireEvent.change(within(making).getByLabelText('Name'), { target: { value: 'ci' } });
+    fireEvent.click(within(making).getByLabelText(/actors:read/));
+    fireEvent.click(within(making).getByRole('button', { name: 'New key' }));
+    const shown = await screen.findByRole('dialog', { name: 'ci' });
+    fireEvent.click(within(shown).getByRole('button', { name: 'Done' }));
+    const keys = await within(page).findByRole('table', { name: 'Keys' });
+    expect(await within(keys).findByText('ci')).toBeTruthy();
+
+    fireEvent.click(within(keys).getByRole('button', { name: 'Revoke ci' }));
+    const asked = await screen.findByRole('dialog', { name: 'Revoke ci?' });
+    fireEvent.click(within(asked).getByRole('button', { name: 'Revoke' }));
+    await waitFor(() => expect(within(keys).queryByText('ci')).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+  });
+});
+
 describe('a page a person may not see', () => {
   it('is not there for them, and its tab is not in their sidebar', async () => {
     const server = fakeServer();
