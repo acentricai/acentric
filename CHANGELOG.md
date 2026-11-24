@@ -3,6 +3,14 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## Unreleased
+
+- **Added:** backups may be set through the API, `PUT /v1/backups/settings`: on or off, how
+  often, how many are kept, and a bucket reached with an access key of its own, checked first
+  and its secret kept sealed. Once set, they take the place of `ACENTRIC_BACKUP_EVERY`,
+  `ACENTRIC_BACKUP_KEEP` and `ACENTRIC_BACKUP_URL`, without a restart. The database gains a
+  table for them: a backup is taken before it is changed, as ever.
+
 ## 0.16.1
 
 Fixes. **Upgrading from 0.16.0:** take this version's image; the database is not changed, and

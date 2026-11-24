@@ -53,6 +53,7 @@ export const ACTIONS: readonly { readonly value: string; readonly label: string 
   { value: 'machine.enrol', label: 'Machine enrolled' },
   { value: 'machine.upgrade', label: 'Machine’s daemon updated' },
   { value: 'backup.made', label: 'Backup taken' },
+  { value: 'backup.configured', label: 'Backup settings changed' },
   { value: 'backup.failed', label: 'Backup failed' },
   { value: 'retention.removed', label: 'Old data removed' },
   { value: 'machine.delete', label: 'Machine removed' },
