@@ -33,14 +33,21 @@ export const DASHBOARD_HEADERS: { readonly [name: string]: string } = {
 };
 
 /** Whether a path is the API's own, found or not: never the dashboard's. */
-const isApi = (path: string): boolean =>
+export const isApi = (path: string): boolean =>
   path === '/v1' || path.startsWith('/v1/') || path === '/health' || path === '/health/live';
 
+/** A file of the dashboard's, as it is sent. */
+export type DashboardFile = {
+  readonly body: Buffer;
+  readonly headers: { readonly [name: string]: string };
+};
+
 /**
- * Serves the dashboard's files from `folder` on every GET the routes before it did not answer.
+ * The dashboard's build in `folder`, as a function of a request's path: the file it names, or
+ * its page for any other path; undefined for the API's paths, and for what is not a path.
  * Throws at once when the folder has no dashboard in it, not at the first visit.
  */
-export function serveDashboard(app: Hono, folder: string): void {
+export function dashboardFiles(folder: string): (pathname: string) => DashboardFile | undefined {
   const root = resolve(folder);
   const page = join(root, 'index.html');
   if (!statSync(page, { throwIfNoEntry: false })?.isFile()) {
@@ -49,23 +56,36 @@ export function serveDashboard(app: Hono, folder: string): void {
     );
   }
   const assets = join(root, 'assets') + sep;
-
-  app.get('*', (context, next) => {
+  return (pathname) => {
     let path: string;
     try {
-      path = decodeURIComponent(new URL(context.req.url).pathname);
+      path = decodeURIComponent(pathname);
     } catch {
-      return next();
+      return undefined;
     }
-    if (isApi(path) || path.includes('\0')) return next();
+    if (isApi(path) || path.includes('\0')) return undefined;
     const wanted = resolve(root, `.${path}`);
     const inside = wanted === root || wanted.startsWith(root + sep);
     const file = inside && statSync(wanted, { throwIfNoEntry: false })?.isFile() ? wanted : page;
-    return context.body(readFileSync(file), 200, {
-      ...DASHBOARD_HEADERS,
-      'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream',
-      // Built files carry a hash in their names. The page itself is always fetched again.
-      'Cache-Control': file.startsWith(assets) ? 'public, max-age=31536000, immutable' : 'no-cache',
-    });
+    return {
+      body: readFileSync(file),
+      headers: {
+        ...DASHBOARD_HEADERS,
+        'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream',
+        // Built files carry a hash in their names. The page itself is always fetched again.
+        'Cache-Control': file.startsWith(assets)
+          ? 'public, max-age=31536000, immutable'
+          : 'no-cache',
+      },
+    };
+  };
+}
+
+/** Serves the dashboard's files from `folder` on every GET the routes before it did not answer. */
+export function serveDashboard(app: Hono, folder: string): void {
+  const files = dashboardFiles(folder);
+  app.get('*', (context, next) => {
+    const file = files(new URL(context.req.url).pathname);
+    return file === undefined ? next() : context.body(new Uint8Array(file.body), 200, file.headers);
   });
 }

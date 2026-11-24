@@ -1,7 +1,7 @@
 // While a new version upgrades the database, its port says so: a server that is upgrading is
 // told from one that died, and the server takes the port once it is done.
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -57,6 +57,35 @@ describe('a port held while the database is upgraded', () => {
     // Let go of, it is the server's to take.
     const again = await holdPort({ host: '127.0.0.1', port, version: '0.16.0' });
     await again.close();
+  });
+
+  it('serves the dashboard meanwhile, so that it says it is updating, and not the API', async () => {
+    const dashboard = mkdtempSync(join(tmpdir(), 'acentric-upgrading-dashboard-'));
+    folders.push(dashboard);
+    writeFileSync(join(dashboard, 'index.html'), '<!doctype html><title>Acentric</title>');
+    mkdirSync(join(dashboard, 'assets'));
+    writeFileSync(join(dashboard, 'assets', 'app-1.js'), 'console.log(1);');
+    const port = await freePort();
+    const held = await holdPort({ host: '127.0.0.1', port, version: '0.16.0', dashboard });
+    const url = `http://127.0.0.1:${String(port)}`;
+    try {
+      for (const path of ['/', '/agents', '/settings?x=1']) {
+        const page = await fetch(`${url}${path}`);
+        expect(page.status).toBe(200);
+        expect(page.headers.get('content-type')).toBe('text/html; charset=utf-8');
+        expect(page.headers.get('content-security-policy')).toContain("default-src 'none'");
+        expect(await page.text()).toContain('<title>Acentric</title>');
+      }
+      const asset = await fetch(`${url}/assets/app-1.js`);
+      expect(asset.headers.get('cache-control')).toContain('immutable');
+      expect(await asset.text()).toBe('console.log(1);');
+      // The API, and what is not a GET, are as without it.
+      expect((await fetch(`${url}/v1/me`)).status).toBe(503);
+      expect((await fetch(`${url}/health`)).status).toBe(503);
+      expect((await fetch(`${url}/`, { method: 'POST' })).status).toBe(503);
+    } finally {
+      await held.close();
+    }
   });
 
   it('is let go of for the server once the database is upgraded', async () => {

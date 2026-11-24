@@ -2,10 +2,14 @@
 // one, the server's port answers that it is upgrading: 503 to everything, but 200 at
 // /health/live, which says the process is there. So what watches it (a Kubernetes probe, a load
 // balancer) tells a server that is upgrading from one that died, and does not stop it in the
-// middle, to start it again and back it up again.
+// middle, to start it again and back it up again. The dashboard's own files are served as ever,
+// so that one who opens it then is told it is updating, by the dashboard, rather than shown an
+// answer of the API.
 
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
+
+import { dashboardFiles } from './dashboard.ts';
 
 /** The port, held until the server itself takes it. */
 export type Holding = { close(): Promise<void> };
@@ -15,9 +19,18 @@ export async function holdPort(options: {
   readonly port: number;
   /** The version being upgraded to. */
   readonly version: string;
+  /** The folder of the dashboard's build. None, without it. */
+  readonly dashboard?: string;
 }): Promise<Holding> {
+  const files = options.dashboard === undefined ? undefined : dashboardFiles(options.dashboard);
   const server = createServer((request, response) => {
-    const path = (request.url ?? '/').split('?')[0];
+    const path = (request.url ?? '/').split('?')[0] ?? '/';
+    const file = request.method === 'GET' ? files?.(path) : undefined;
+    if (file !== undefined) {
+      response.writeHead(200, file.headers);
+      response.end(file.body);
+      return;
+    }
     const send = (status: number, body: unknown) => {
       response.writeHead(status, {
         'content-type': 'application/json',
