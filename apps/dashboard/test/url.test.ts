@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { framed } from '../src/frame-guard.ts';
+import { shortOf } from '../src/shell/SettingsKeys.tsx';
 import { machinesSearch, safeRedirect, signInSearch, tokenSearch, typesOf } from '../src/url.ts';
 
 describe('where a person is sent after signing in', () => {
@@ -74,5 +75,15 @@ describe('a page inside a frame', () => {
       },
     };
     expect(framed(hidden)).toBe(true);
+  });
+});
+
+describe('a long name, shown short', () => {
+  it('is its first words that fit, then …, or its first word cut when that alone is too long', () => {
+    expect(shortOf('ci deploys')).toBe('ci deploys');
+    expect(shortOf('The first key, made when the engine first started')).toBe(
+      'The first key, made when…',
+    );
+    expect(shortOf('averyveryveryverylongnamewithoutspaces')).toBe('averyveryveryverylongnam…');
   });
 });
