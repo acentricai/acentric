@@ -35,6 +35,7 @@
   "dependencies": {
     "@acentric/core": "workspace:*",
     "@acentric/protocol": "workspace:*",
-    "workerd": "1.20261110.1"
+    "workerd": "1.20261110.1",
+    "undici": "8.13.1"
   }
 }

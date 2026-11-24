@@ -370,6 +370,9 @@ importers:
       '@acentric/protocol':
         specifier: workspace:*
         version: link:../protocol
+      undici:
+        specifier: 8.13.1
+        version: 8.13.1
       workerd:
         specifier: 1.20261110.1
         version: 1.20261110.1

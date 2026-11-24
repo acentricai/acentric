@@ -11,7 +11,7 @@ import { builtInProviders } from '@acentric/ai';
 import type { ModelRunner, Providers } from '@acentric/ai';
 import { Accounts, Audit, Engine, Keys, People, Secrets, accountRunners } from '@acentric/core';
 import type { EngineOptions, RunnerSource } from '@acentric/core';
-import { IsolateExecutor } from '@acentric/executor';
+import { fetchWithin, IsolateExecutor } from '@acentric/executor';
 import { boat, docker } from '@acentric/sandbox';
 import { FileBlobStore, SCHEMA_VERSION, SqliteStore } from '@acentric/store';
 
@@ -171,6 +171,8 @@ export async function start(
     // The computers actors' commands run on: their daemons connect to this server. A daemon
     // is asked to take the machine program this server hands out, by its digest.
     machines: { build: programs.build, ...more.machines },
+    // An agent's MCP servers are reached from this process: as far as its code may reach.
+    mcp: { fetch: fetchWithin(settings.network) },
     // Machines the server makes itself, at the providers it was set up with.
     sandboxes: {
       // Docker only where the server was told where Docker is. Boat always: an account at it

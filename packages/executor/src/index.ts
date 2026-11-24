@@ -10,6 +10,7 @@ export type { SecretSource } from './in-process.ts';
 export { IsolateExecutor } from './isolate-executor.ts';
 export type { IsolateOptions } from './isolate-executor.ts';
 export type { Network } from './isolate/config.ts';
+export { fetchWithin, reachable, Unreachable } from './reach.ts';
 export type { PoolOptions, PoolStats, ProcessStats, RecycleReason } from './isolate/pool.ts';
 export type { LossKind } from './isolate/sandbox.ts';
 export { BundleError, CallFailed, SandboxLost, UnsupportedProtocol } from './errors.ts';
