@@ -117,6 +117,8 @@ export type Settings = {
   readonly docker: DockerOptions | undefined;
   /** The server's own backups. Undefined when they are off. */
   readonly backups: BackupSettings | undefined;
+  /** The folder backups go in, whether the environment has them on or not. */
+  readonly backupDir: string;
   /** How the server writes its log, and the least it writes. */
   readonly log: { readonly format: Format; readonly level: Level };
   /** The port metrics are served at. Undefined when none are. */
@@ -348,11 +350,12 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
       'ACENTRIC_BACKUP_URL is where the server copies its backups, and ACENTRIC_BACKUP_EVERY=off is for a server that takes none',
     );
   }
+  const backupDir = resolve(given('ACENTRIC_BACKUP_DIR') ?? `${data}/backups`);
   const backups: BackupSettings | undefined =
     every === 'off'
       ? undefined
       : {
-          dir: resolve(given('ACENTRIC_BACKUP_DIR') ?? `${data}/backups`),
+          dir: backupDir,
           everyMs: durationOf('ACENTRIC_BACKUP_EVERY', every),
           keep: wholeNumber('ACENTRIC_BACKUP_KEEP', 3, 1, 1000),
           bucket,
@@ -365,6 +368,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     publicUrl,
     adminKey,
     secretKeys,
+    backupDir,
     network: reach === 'any' ? { reach: 'any' } : { reach: 'public', allow },
     codeProcesses: wholeNumber('ACENTRIC_CODE_PROCESSES', 2, 1, 64),
     maxTurns: wholeNumber('ACENTRIC_MAX_TURNS', 1000, 1, 10_000),

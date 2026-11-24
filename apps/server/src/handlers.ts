@@ -34,7 +34,7 @@ import type { z } from 'zod';
 import { personOf, sessionCookie } from './auth.ts';
 import type { Granted } from './auth.ts';
 import { ApiFailure } from './errors.ts';
-import type { Backups } from './backups/schedule.ts';
+import type { BackupControl } from './backups/control.ts';
 import type { Streams } from './events.ts';
 
 export type Parts = {
@@ -45,8 +45,8 @@ export type Parts = {
   readonly secrets: Secrets;
   readonly accounts: Accounts;
   readonly streams: Streams;
-  /** The server's own backups. Undefined for a server that takes none. */
-  readonly backups?: Backups;
+  /** The server's own backups, and how they are set. */
+  readonly backups?: BackupControl;
 };
 
 /** An answer with headers of its own: what sets, or clears, the dashboard's cookie. */
@@ -118,11 +118,11 @@ const refOf = (granted: Granted): PrincipalRef =>
     ? { type: 'key', id: granted.principal.key }
     : { type: 'user', id: granted.principal.user };
 
-/** A server whose backups are off: ACENTRIC_BACKUP_EVERY=off. */
+/** A server whose backups are off. */
 const noBackups = () =>
   new ApiFailure(
     'unavailable',
-    'This server takes no backups of its own: ACENTRIC_BACKUP_EVERY is off',
+    'This server takes no backups of its own: they are off, in its settings or as set through the API',
   );
 
 const summaryOf = ({ definition: _definition, ...summary }: Deployment): DeploymentSummary =>
@@ -800,7 +800,8 @@ export const handlers: Handlers = {
     const { limit, cursor, action } = query;
     return audit.list({ limit, ...defined({ cursor, action }) });
   },
-  'backups.list': async (_asked, { backups }) => {
+  'backups.list': async (_asked, parts) => {
+    const backups = parts.backups?.current;
     if (backups === undefined) throw noBackups();
     const { items, bucketError } = await backups.list();
     return {
@@ -815,11 +816,20 @@ export const handlers: Handlers = {
       items,
     };
   },
-  'backups.create': async (asked, { backups }) => {
+  'backups.create': async (asked, parts) => {
+    const backups = parts.backups?.current;
     if (backups === undefined) throw noBackups();
     const file = await backups.take('manual', refOf(asked));
     // Taken, it is in the folder, and in the bucket when there is one.
     return { ...file, onServer: true, inBucket: backups.bucketUrl !== undefined };
+  },
+  'backups.settings': (_asked, { backups }) => {
+    if (backups === undefined) throw noBackups();
+    return backups.settings();
+  },
+  'backups.configure': async (asked, { backups }) => {
+    if (backups === undefined) throw noBackups();
+    return backups.configure(asked.body, refOf(asked));
   },
 };
 

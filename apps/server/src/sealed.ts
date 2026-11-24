@@ -42,12 +42,29 @@ const SEALED: readonly {
     update: 'UPDATE actors SET machine_env = ? WHERE id = ? AND machine_env = ?',
     bound: (row) => sealedFor.actorEnv(row.a),
   },
+  {
+    what: "the backups' bucket's secret",
+    select:
+      'SELECT id AS a, NULL AS b, bucket_secret AS value FROM backup_settings WHERE bucket_secret IS NOT NULL',
+    update: 'UPDATE backup_settings SET bucket_secret = ? WHERE id = ? AND bucket_secret = ?',
+    bound: () => sealedFor.backupBucket(),
+  },
 ];
+
+/** Those of the tables there are: a database of an older version has fewer. */
+function presentIn(db: DatabaseSync): typeof SEALED {
+  const tables = new Set(
+    (
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]
+    ).map((row) => row.name),
+  );
+  return SEALED.filter(({ select }) => tables.has(/ FROM (\w+)/.exec(select)?.[1] ?? ''));
+}
 
 /** How many values are sealed with each key, by its ID. */
 export function sealedKeys(db: DatabaseSync): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const { select } of SEALED) {
+  for (const { select } of presentIn(db)) {
     for (const row of db.prepare(select).all() as Row[]) {
       const id = sealedWith(row.value);
       if (id !== undefined) counts.set(id, (counts.get(id) ?? 0) + 1);
@@ -64,7 +81,7 @@ export function reseal(db: DatabaseSync, keys: SecretKeys): number {
   let sealed = 0;
   db.exec('BEGIN IMMEDIATE');
   try {
-    for (const { what, select, update, bound } of SEALED) {
+    for (const { what, select, update, bound } of presentIn(db)) {
       const set = db.prepare(update);
       for (const row of db.prepare(select).all() as Row[]) {
         if (sealedWith(row.value) === keys.current) continue;

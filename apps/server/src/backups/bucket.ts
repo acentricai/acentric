@@ -33,6 +33,12 @@ export type BucketPlace = {
   readonly region: string | undefined;
 };
 
+/** An access key a bucket is reached with, in place of what AWS's tools would find. */
+export type BucketCredentials = {
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+};
+
 /** An object in the bucket. */
 export type BucketObject = { readonly name: string; readonly bytes: number };
 
@@ -86,9 +92,10 @@ export class Bucket {
   readonly place: BucketPlace;
   readonly #client: S3Client;
 
-  constructor(place: BucketPlace) {
+  constructor(place: BucketPlace, credentials?: BucketCredentials) {
     this.place = place;
     this.#client = new S3Client({
+      ...(credentials === undefined ? {} : { credentials }),
       // S3 says which region a bucket is in, when it is asked in another: so one is enough to
       // start with.
       region: place.region ?? 'us-east-1',
