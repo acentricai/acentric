@@ -12,8 +12,12 @@ certificate for the server's name from Let's Encrypt and renews it.
 
 ## Running it
 
+On the machine, this folder of the version you run, then the settings and the keys:
+
 ```sh
-cp .env.example .env    # then put the name in it
+git clone --depth 1 --branch v0.16.0 https://github.com/acentricai/acentric.git
+cd acentric/deploy/compose
+install -m 600 .env.example .env    # then put the name in it
 install -d -m 700 secrets
 openssl rand -hex 32 > secrets/secret-key    # keep a copy somewhere other than this machine
 openssl rand -hex 24 > secrets/admin-key     # the API key that may do everything
@@ -22,8 +26,10 @@ docker compose up -d
 
 The keys are files the server reads, not settings in its environment, which `docker inspect`
 shows. `secrets/` is for this machine's user alone; its files are readable, as the server's
-user in the container reads them. Then open `ACENTRIC_PUBLIC_URL`. `docker compose logs server` has the setup link that makes the
-first person, the owner.
+user in the container reads them. `.env` is for this machine's user alone too, as a bucket's key
+may be put in it. Then open `ACENTRIC_PUBLIC_URL`. `docker compose logs server` has the setup
+link that makes the first person, the owner. `acentric login` asks for the key in
+`secrets/admin-key`.
 
 ## What it is
 

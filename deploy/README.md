@@ -48,7 +48,7 @@ made from.
 2. The owner adds people from the dashboard's People page, by invite links: the server sends no
    email.
 3. Install the `acentric` command from the server (`curl -fsSL <url>/install-cli.sh | sh`),
-   `acentric login` with an API key, and add a model account
+   `acentric login` with the admin key, and add a model account
    (`acentric accounts add <provider> <name>`): the [README](../README.md#using-it) goes on from
    there.
 4. Check its backups: the dashboard's Backups page says where they go and whether the bucket is
