@@ -1,19 +1,16 @@
-// The Account section of Settings: what the Account page has, as rows of a name and what it is,
-// beside each other. The person signed in, what their role lets them do, their name and
-// password, where they are signed in, the theme, and signing out.
+// The Account section of Settings, as rows of a name and what it is, beside each other: the
+// person signed in, their name and role, their password, and where they are signed in.
 
-import { PASSWORD_MIN, type Session } from '@acentric/protocol';
+import { PASSWORD_MIN, PHOTO_TYPES, type Session } from '@acentric/protocol';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { api, keys, queryClient } from '../api.ts';
+import { Avatar, CHOSEN_BYTES, sendPhoto, squarePhoto } from '../avatar.tsx';
 import { fullTime } from '../format.ts';
 import { useMe, type Me } from '../me.ts';
 import { sessionName } from '../pages/account.tsx';
-import { signOut } from '../sign-out.ts';
-import { ThemeToggle } from '../theme.tsx';
 import { Button, FormError, LoadError, Skeleton } from '../ui.tsx';
 
 const ROLES: Record<Me['role'], string> = {
@@ -79,6 +76,7 @@ export function AccountSettings() {
         <h3 className="prefs-group__title" id="prefs-profile">
           Profile
         </h3>
+        <PhotoRow me={me.data} />
         <NameRow me={me.data} />
         <Row name="Email">
           <span className="prefs-row__plain">{me.data.email}</span>
@@ -86,28 +84,71 @@ export function AccountSettings() {
         <Row name="Role">
           <span className="prefs-row__plain">{ROLES[me.data.role]}</span>
         </Row>
-        <Row name="What you may do">
-          <span className="chips prefs-row__chips">
-            {me.data.permissions.map((permission) => (
-              <span key={permission} className="chip chip--mono">
-                {permission}
-              </span>
-            ))}
-          </span>
-        </Row>
       </section>
       <PasswordGroup />
       <SessionsGroup me={me.data} />
-      <section className="prefs-group" aria-labelledby="prefs-appearance">
-        <h3 className="prefs-group__title" id="prefs-appearance">
-          Appearance
-        </h3>
-        <Row name="Theme">
-          <ThemeToggle />
-        </Row>
-      </section>
-      <SignOutRow />
     </div>
+  );
+}
+
+function PhotoRow({ me }: { me: Me }) {
+  const chooser = useRef<HTMLInputElement>(null);
+  const [tooLarge, setTooLarge] = useState(false);
+  const done = () => void queryClient.invalidateQueries({ queryKey: keys.me });
+  const give = useMutation({
+    mutationFn: async (file: File) => sendPhoto(await squarePhoto(file)),
+    onSuccess: done,
+  });
+  const remove = useMutation({
+    mutationFn: () => api.call('me.removePhoto'),
+    onSuccess: done,
+  });
+  const has = me.photo !== null && me.photo !== undefined;
+  return (
+    <Row name="Profile picture" note="PNG, JPEG or WebP, up to 10 MB.">
+      <div className="prefs-row__form">
+        <Avatar
+          user={me.user}
+          photo={me.photo}
+          name={me.displayName ?? me.email}
+          size={40}
+          className="me__avatar prefs-photo"
+        />
+        <input
+          ref={chooser}
+          type="file"
+          accept={PHOTO_TYPES.join(',')}
+          className="prefs-photo__file"
+          aria-label="Choose a picture"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file === undefined) return;
+            remove.reset();
+            setTooLarge(file.size > CHOSEN_BYTES);
+            if (file.size <= CHOSEN_BYTES) give.mutate(file);
+          }}
+        />
+        <Button size="sm" busy={give.isPending} onClick={() => chooser.current?.click()}>
+          {has ? 'Change' : 'Upload'}
+        </Button>
+        {has && (
+          <Button
+            size="sm"
+            variant="quiet"
+            busy={remove.isPending}
+            onClick={() => {
+              give.reset();
+              remove.mutate();
+            }}
+          >
+            Remove
+          </Button>
+        )}
+      </div>
+      {tooLarge && <p className="prefs-row__note">The picture is larger than 10 MB.</p>}
+      <FormError error={give.error ?? remove.error} />
+    </Row>
   );
 }
 
@@ -327,21 +368,6 @@ function SessionsGroup({ me }: { me: Me }) {
         </table>
       )}
       <FormError error={end.error ?? endOthers.error} />
-    </section>
-  );
-}
-
-function SignOutRow() {
-  const navigate = useNavigate();
-  return (
-    <section className="prefs-group" aria-label="Sign out">
-      <Row name="Sign out" note="Ends the session of this browser. Others stay signed in.">
-        <Button
-          onClick={() => void signOut().then(() => navigate({ to: '/sign-in', replace: true }))}
-        >
-          Sign out
-        </Button>
-      </Row>
     </section>
   );
 }

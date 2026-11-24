@@ -92,6 +92,7 @@ export function fakeServer() {
     role: person.role,
     permissions: ROLE_PERMISSIONS[person.role],
     session: 'ses_1',
+    photo: person.photo ?? null,
   });
   const add = (email: string, password: string, role: Role = 'owner'): Person => {
     const person = { id: `usr_${String(people.size + 1)}`, email, password, role };
@@ -358,8 +359,9 @@ export function fakeServer() {
     calls,
     /** A person who has an account, signed in or not, an owner unless said. */
     person(email: string, password: string, signIn = false, role: Role = 'owner') {
-      add(email, password, role);
+      const added = add(email, password, role);
       if (signIn) signedIn = email;
+      return added;
     },
     machines,
     agents,

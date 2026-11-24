@@ -1,12 +1,13 @@
 // The shell of a person signed in: the sections they may see, where `/` takes them, and a page
 // they may not see.
 
-import { fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import type { Role } from '@acentric/protocol';
 import { ROLE_PERMISSIONS } from '@acentric/protocol';
 
+import { queryClient } from '../src/api.ts';
 import type { Me } from '../src/me.ts';
 import { NOT_FOUND } from '../src/shell/NotFound.tsx';
 import { firstTab, tabAt, visibleSections } from '../src/shell/nav.ts';
@@ -118,6 +119,35 @@ describe('the sidebar', () => {
 });
 
 describe('the Account section of Settings', () => {
+  it('has a picture to give, and one given to change or take away', async () => {
+    const server = fakeServer();
+    const ada = server.person('ada@example.test', 'a-password-for-tests', true);
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    expect(await within(dialog).findByRole('button', { name: 'Upload' })).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    cleanup();
+    queryClient.clear();
+
+    // With one: it is shown, in Settings and at the foot of the sidebar, by which one it is.
+    ada.photo = 'aaaaaaaaaaaaaaaa';
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
+    expect(sidebar.querySelector('img.avatar-photo')?.getAttribute('src')).toBe(
+      `/v1/users/${ada.id}/photo?v=aaaaaaaaaaaaaaaa`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    expect(await within(dialog).findByRole('button', { name: 'Change' })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+    expect(await within(dialog).findByRole('button', { name: 'Upload' })).toBeTruthy();
+    expect(ada.photo).toBeNull();
+  });
+
   it('keeps a name as it is left, with no Save to press', async () => {
     const server = fakeServer();
     server.person('ada@example.test', 'a-password-for-tests', true);

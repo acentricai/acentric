@@ -18,6 +18,7 @@ export type Person = {
   password: string;
   role: Role;
   displayName?: string | null;
+  photo?: string | null;
 };
 
 /** A call as an area sees it: only once someone is signed in. */

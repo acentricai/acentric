@@ -64,6 +64,7 @@ export function engineArea(shared: Shared) {
     role: person.role,
     createdAt: NOW,
     disabledAt: disabled.get(person.id) ?? null,
+    photo: null,
   });
   const personBy = (id: string) => [...shared.people.values()].find((one) => one.id === id);
   const forbidden = (message: string) => refused(403, 'forbidden', message);
