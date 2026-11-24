@@ -3,7 +3,15 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
-## Unreleased
+## 0.16.1
+
+Fixes. **Upgrading from 0.16.0:** take this version's image; the database is not changed, and
+nothing is deployed again. Two of the fixes change what a server does:
+
+- Deleting an agent now deletes the subagents under its actors, of other agents too, as
+  deleting an actor deletes those under it.
+- A service's key made with a person's key is held to that person: it does no more than they
+  may, and stops while they are disabled.
 
 - **Fixed:** the dashboard's API keys page failed after the Agents page, in a new tab, and said
   the server could not be reached. It says so now only when it could not.

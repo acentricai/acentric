@@ -1,6 +1,6 @@
 {
   "name": "@acentric/core",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "private": true,
   "description": "The engine as a library: the turn machine, mailbox, tasks, compaction and scheduler, built on interfaces alone.",
   "license": "Apache-2.0",
