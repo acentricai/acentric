@@ -629,6 +629,25 @@ export function engineSuite(name: string, open: () => Promise<Store>): void {
         expect((await store.loadActor(actor.id))?.actor.pendingInputs).toBe(0);
       });
 
+      it('is answered when one who follows the actor fails as it is told', async () => {
+        const one = w.engine([says('First answer.'), says('Second answer.')]);
+        const actor = await one.createActor();
+        // As a stream whose reader went: what it is told throws.
+        one.it.bus.subscribe(actor.id, () => {
+          throw new TypeError('Invalid state: Controller is already closed');
+        });
+        await one.say(actor.id, 'Hello.');
+        await one.it.settled(actor.id);
+        // The actor's driver goes on: the next message is answered too.
+        await one.say(actor.id, 'And again.');
+        await one.it.settled(actor.id);
+
+        expect(await w.roles(actor.id)).toEqual(['user', 'assistant', 'user', 'assistant']);
+        // What failed is said, as the listener's own, and nothing else is.
+        expect(one.failures.length).toBeGreaterThan(0);
+        expect(one.failures.every((error) => error instanceof TypeError)).toBe(true);
+      });
+
       it('that comes just as the actor goes idle is not left waiting', async () => {
         const one = w.engine([says('First answer.'), says('Second answer.')]);
         const actor = await one.createActor();

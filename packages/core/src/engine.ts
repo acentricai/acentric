@@ -479,7 +479,7 @@ export class Engine {
           ? this.#call(deployment, path, argument, context, signal)
           : this.#timed(deployment, path, argument, context, signal),
       blobs: this.blobs,
-      bus: options.bus ?? new MemoryBus(),
+      bus: options.bus ?? new MemoryBus({ report }),
       clock: this.#clock,
       timer: this.#timer,
       rules: options.rules ?? DEFAULT_RULES,

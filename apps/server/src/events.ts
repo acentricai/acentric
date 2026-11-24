@@ -37,6 +37,8 @@ export class Streams {
     const { signal } = request;
     const encoder = new TextEncoder();
     let end: () => void = () => {};
+    // What waits for the one who reads to take what was sent, while the past is read.
+    let room: (() => void) | null = null;
     const body = new ReadableStream<Uint8Array>({
       start: (controller) => {
         let closed = false;
@@ -44,7 +46,14 @@ export class Streams {
         let waiting: ActorEvent[] | null = [];
         let sentTo = after ?? 0;
         const write = (text: string) => {
-          if (!closed) controller.enqueue(encoder.encode(text));
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(text));
+          } catch {
+            // The stream is gone before its request said so: it ends here, and nothing it
+            // listens to is the worse for it.
+            end();
+          }
         };
         const send = (event: ActorEvent) => {
           // A message that was read from the store as well is sent once.
@@ -70,6 +79,7 @@ export class Streams {
           unsubscribe();
           this.#open.delete(end);
           request.signal.removeEventListener('abort', end);
+          room?.();
           try {
             controller.close();
           } catch {
@@ -93,6 +103,15 @@ export class Streams {
                 });
                 for (const entry of entries) send({ type: 'message', entry });
                 if (entries.length < CATCH_UP) break;
+                // The next page is read once this one is taken: one who reads slowly is not
+                // sent the whole conversation into memory to wait for them.
+                while (!closed && (controller.desiredSize ?? 0) <= 0) {
+                  await new Promise<void>((resolve) => {
+                    room = resolve;
+                  });
+                  room = null;
+                }
+                if (closed) return;
               }
             }
             send({
@@ -109,6 +128,9 @@ export class Streams {
             end();
           }
         })();
+      },
+      pull: () => {
+        room?.();
       },
       cancel: () => {
         end();
