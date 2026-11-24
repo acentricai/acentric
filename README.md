@@ -5,7 +5,7 @@ to an engine. The engine keeps each running agent, an actor, in its database, ru
 calls and tools, and picks up where it was after a crash. Actors can work on machines: your own,
 which connect out to the engine, or ones the engine makes at a sandbox provider.
 
-> **Alpha.** 0.17.0 is the newest release. It runs, and is tested as it is run, but before 1.0 a
+> **Alpha.** 0.17.1 is the newest release. It runs, and is tested as it is run, but before 1.0 a
 > minor version may change what the API takes and how the server is set up
 > ([VERSIONS.md](VERSIONS.md)). It has the engine on SQLite; three model providers (OpenAI,
 > Anthropic and Fireworks); the framework an agent is written with; agents deployed as versions
@@ -21,7 +21,7 @@ The server is an image, for linux/amd64 and linux/arm64:
 ```sh
 docker run -p 4000:4000 -v acentric-data:/data \
   -e ACENTRIC_SECRET_KEY=<32 bytes, as 64 hex characters> \
-  ghcr.io/acentricai/acentric-server:0.17.0
+  ghcr.io/acentricai/acentric-server:0.17.1
 ```
 
 That is enough to try it. To run one whose data you keep, [deploy/](deploy/) is the guide, with
@@ -54,7 +54,7 @@ promises, how to check that an image is the one released, and what an upgrade ca
 - The server makes machines itself, as sandboxes, at the providers it was set up with. For
   Docker, set `ACENTRIC_DOCKER_HOST`, such as `unix:///var/run/docker.sock`, and
   `ACENTRIC_DOCKER_IMAGE` to the sandbox image of the server's version,
-  `ghcr.io/acentricai/acentric-sandbox:0.17.0`. Whoever may make a sandbox then has the computer Docker is on. For
+  `ghcr.io/acentricai/acentric-sandbox:0.17.1`. Whoever may make a sandbox then has the computer Docker is on. For
   Boat (boat.dev), build its snapshot with `deploy/sandbox/boat-template.sh` and set
   `ACENTRIC_BOAT_TEMPLATE` to the name it prints. An
   account at the provider is added with `POST /v1/providers`, and a sandbox is made with

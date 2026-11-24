@@ -1,6 +1,6 @@
 {
   "name": "@acentric/protocol",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "private": true,
   "description": "The contracts every part of Acentric is built against: API schemas, events, the bundle manifest and protocol versions.",
   "license": "Apache-2.0",

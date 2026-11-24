@@ -1,6 +1,6 @@
 {
   "name": "@acentric/executor",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "private": true,
   "description": "Runs an agent's code outside the server's process.",
   "license": "Apache-2.0",
