@@ -1053,6 +1053,22 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         sealed: `sealed-${called}`,
       });
 
+      it('are one default of a provider at most, made so in the write that makes another', async () => {
+        const defaults = async () =>
+          (await store.listAccounts())
+            .filter(({ account }) => account.default)
+            .map(({ account }) => account.name);
+        const first = accountOf('first', { default: true });
+        const second = accountOf('second', { default: true });
+        const elsewhere = accountOf('elsewhere', { provider: 'other', default: true });
+        await store.addAccount(first);
+        await store.addAccount(elsewhere);
+        await store.addAccount(second);
+        expect((await defaults()).toSorted()).toEqual(['elsewhere', 'second']);
+        await store.saveAccount({ ...first, account: { ...first.account, default: true } });
+        expect((await defaults()).toSorted()).toEqual(['elsewhere', 'first']);
+      });
+
       it('are kept sealed, changed and removed, each with a name of its own', async () => {
         const main = accountOf('main', { default: true });
         const spare = accountOf('spare');

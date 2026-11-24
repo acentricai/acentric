@@ -347,6 +347,18 @@ export class MemoryStore implements Store {
     if (this.#accountNamed(stored.account.name))
       throw new NameTaken(stored.account.name, 'account');
     this.#accounts.set(stored.account.id, copy(stored));
+    this.#onlyDefault(stored);
+  }
+
+  /** No other account of its provider is the default, when this one is. */
+  #onlyDefault(stored: StoredAccount): void {
+    if (!stored.account.default) return;
+    for (const [id, other] of this.#accounts) {
+      if (id === stored.account.id || other.account.provider !== stored.account.provider) continue;
+      if (other.account.default) {
+        this.#accounts.set(id, { ...other, account: { ...other.account, default: false } });
+      }
+    }
   }
 
   async loadAccount(id: AccountId): Promise<StoredAccount | undefined> {
@@ -362,6 +374,7 @@ export class MemoryStore implements Store {
     if (!this.#accounts.has(id)) return;
     if (this.#accountNamed(name, id)) throw new NameTaken(name, 'account');
     this.#accounts.set(id, copy(stored));
+    this.#onlyDefault(stored);
   }
 
   async removeAccount(id: AccountId): Promise<void> {
