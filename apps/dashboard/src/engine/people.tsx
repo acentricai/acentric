@@ -6,7 +6,15 @@
 // one, and nobody changes their own role, disables themselves or removes themselves. That the
 // last owner who can sign in stays one is the server's to say, in its words.
 
-import { IconPlus } from '@tabler/icons-react';
+import {
+  IconKey,
+  IconPlus,
+  IconTrash,
+  IconUserCheck,
+  IconUserCog,
+  IconUserOff,
+} from '@tabler/icons-react';
+import type { Icon } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
@@ -217,6 +225,9 @@ export function PeoplePage() {
   );
 }
 
+/** An icon of a menu's item, the size the picture's menu has them. */
+const icon = (Glyph: Icon) => <Glyph size={16} stroke={1.75} aria-hidden="true" />;
+
 export function PersonMenu({
   person,
   me,
@@ -237,23 +248,28 @@ export function PersonMenu({
         };
         return (
           <>
-            <MenuItem disabled={!may || self} onSelect={pick('role')}>
+            <MenuItem icon={icon(IconUserCog)} disabled={!may || self} onSelect={pick('role')}>
               Change role
             </MenuItem>
             {person.disabledAt === null ? (
-              <MenuItem disabled={!may || self} onSelect={pick('disable')}>
+              <MenuItem icon={icon(IconUserOff)} disabled={!may || self} onSelect={pick('disable')}>
                 Disable
               </MenuItem>
             ) : (
-              <MenuItem disabled={!may} onSelect={pick('enable')}>
+              <MenuItem icon={icon(IconUserCheck)} disabled={!may} onSelect={pick('enable')}>
                 Enable
               </MenuItem>
             )}
-            <MenuItem disabled={!may} onSelect={pick('reset')}>
-              Make a password-reset link
+            <MenuItem icon={icon(IconKey)} disabled={!may} onSelect={pick('reset')}>
+              Reset password
             </MenuItem>
             <MenuRule />
-            <MenuItem danger disabled={!may || self} onSelect={pick('remove')}>
+            <MenuItem
+              danger
+              icon={icon(IconTrash)}
+              disabled={!may || self}
+              onSelect={pick('remove')}
+            >
               Remove
             </MenuItem>
           </>

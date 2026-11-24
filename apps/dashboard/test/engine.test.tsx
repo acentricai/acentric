@@ -220,7 +220,7 @@ describe('the People page', () => {
     press('Enable', await screen.findByRole('dialog'));
     await waitFor(() => expect(within(rowOf('bea@example.test')).getByText('Active')).toBeTruthy());
 
-    fireEvent.click(item(await menuOf('bea@example.test'), 'Make a password-reset link'));
+    fireEvent.click(item(await menuOf('bea@example.test'), 'Reset password'));
     press('Make a link', await screen.findByRole('dialog'));
     expect([...server.areas.engine.disabled.keys()]).toEqual([]);
     expect(
@@ -237,7 +237,7 @@ describe('the People page', () => {
     fireEvent.keyDown(mine, { key: 'Escape' });
     const owners = await menuOf('cy@example.test');
     expect(item(owners, 'Change role').disabled).toBe(true);
-    expect(item(owners, 'Make a password-reset link').disabled).toBe(true);
+    expect(item(owners, 'Reset password').disabled).toBe(true);
     fireEvent.keyDown(owners, { key: 'Escape' });
     // An admin gives only the roles below admin.
     press('Invite');
