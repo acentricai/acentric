@@ -88,7 +88,8 @@ A new version that does not change the database starts as any start does. One th
 
 1. writes `upgrading the database to <version>: the server answers once it has`, and from then
    its port answers 503 to everything, saying it is upgrading (`/health` with
-   `"upgrading": true`), but `/health/live`, which answers 200;
+   `"upgrading": true`), but `/health/live`, which answers 200, and the dashboard's own files,
+   so that the dashboard opens and says it is updating;
 2. writes `this version changes the database: backing it up first, to <folder>`, takes the
    backup, and copies it to the bucket when there is one (`ACENTRIC_BACKUP_URL`);
 3. changes the database, and writes `acentric-server <version> listening on <address>`. From
