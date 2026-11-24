@@ -9,16 +9,27 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { builtInProviders } from '@acentric/ai';
 import type { ModelRunner, Providers } from '@acentric/ai';
-import { Accounts, Audit, Engine, Keys, People, Secrets, accountRunners } from '@acentric/core';
+import {
+  Accounts,
+  Audit,
+  Engine,
+  Keys,
+  People,
+  Secrets,
+  accountRunners,
+  openWith,
+} from '@acentric/core';
 import type { EngineOptions, RunnerSource } from '@acentric/core';
 import { fetchWithin, IsolateExecutor } from '@acentric/executor';
 import { boat, docker } from '@acentric/sandbox';
-import { FileBlobStore, SCHEMA_VERSION, SqliteStore } from '@acentric/store';
+import { FileBlobStore, readBackupSettings, SCHEMA_VERSION, SqliteStore } from '@acentric/store';
 
 import { DATABASE } from './backups/archive.ts';
 import { lockData } from './backups/lock.ts';
 import { Bucket } from './backups/bucket.ts';
 import { Backups } from './backups/schedule.ts';
+import { BackupControl, fromEnvironment, fromStored, openBucketSecret } from './backups/control.ts';
+import type { Effective } from './backups/control.ts';
 
 import { machinePrograms } from './downloads.ts';
 import { createLogger } from './log.ts';
@@ -202,21 +213,28 @@ export async function start(
     holderOf: (user) => people.holder(user),
   });
 
-  const backups =
-    settings.backups === undefined
-      ? undefined
-      : new Backups({
-          data: settings.data,
-          dir: settings.backups.dir,
-          everyMs: settings.backups.everyMs,
-          keep: settings.backups.keep,
-          version: more.version,
-          // Blobs are kept as ever while one is taken, and none is removed.
-          withoutRemovals: (work) => engine.blobs.withoutRemovals(work),
-          audit,
-          log: (line) => logger.info(line),
-          ...bucketOf(settings),
-        });
+  // The environment's backup settings until others are set through the API.
+  const backups = new BackupControl({
+    store,
+    secrets,
+    audit,
+    dir: settings.backupDir,
+    env: settings.backups,
+    make: (effective) =>
+      new Backups({
+        data: settings.data,
+        dir: settings.backupDir,
+        everyMs: effective.everyMs,
+        keep: effective.keep,
+        version: more.version,
+        // Blobs are kept as ever while one is taken, and none is removed.
+        withoutRemovals: (work) => engine.blobs.withoutRemovals(work),
+        audit,
+        log: (line) => logger.info(line),
+        ...bucketOf(effective),
+      }),
+    log: (line) => logger.info(line),
+  });
 
   const retention = new Retention({
     engine,
@@ -236,6 +254,7 @@ export async function start(
     // Before anything is kept: what a process that died left in the blob store is removed.
     await engine.blobs.sweep();
     const recovered = await engine.recover();
+    await backups.load();
     await release();
     const server = await startServer({
       engine,
@@ -244,7 +263,7 @@ export async function start(
       audit,
       secrets,
       accounts,
-      ...(backups === undefined ? {} : { backups }),
+      backups,
       version: more.version,
       port: settings.port,
       host: settings.host,
@@ -282,7 +301,7 @@ export async function start(
             },
           }),
     });
-    await backups?.start();
+    await backups.start();
     retention.start();
     if (metrics !== undefined && settings.metricsPort !== undefined) {
       gaugesOf(metrics, {
@@ -313,7 +332,7 @@ export async function start(
         // No backup is started from now on, and one being taken is finished first.
         draining = true;
         await retention.close();
-        await backups?.close();
+        await backups.close();
         await server.close(options);
         await metricsServer?.close();
         metrics?.close();
@@ -327,7 +346,7 @@ export async function start(
     await retention.close();
     await metricsServer?.close();
     metrics?.close();
-    await backups?.close();
+    await backups.close();
     await engine.close({ graceMs: 0 });
     await executor.close();
     await store.close();
@@ -348,28 +367,30 @@ export async function backUpBeforeUpgrade(
   current: number = SCHEMA_VERSION,
   logger: Logger = createLogger(settings.log),
 ): Promise<boolean> {
-  if (settings.backups === undefined) return false;
   const schema = schemaOf(join(settings.data, DATABASE));
   if (schema === undefined || schema >= current) return false;
-  logger.info(`this version changes the database: backing it up first, to ${settings.backups.dir}`);
+  // As set through the API, when they were: those win over the environment's.
+  const effective = backupsOf(settings, logger);
+  if (!effective.enabled) return false;
+  logger.info(`this version changes the database: backing it up first, to ${settings.backupDir}`);
   const before = new Backups({
     data: settings.data,
-    dir: settings.backups.dir,
-    everyMs: settings.backups.everyMs,
-    keep: settings.backups.keep,
+    dir: settings.backupDir,
+    everyMs: effective.everyMs,
+    keep: effective.keep,
     // Named for the version it was taken before upgrading to.
     version,
     // No server is running on it: nothing is removed meanwhile.
     withoutRemovals: (work) => work(),
     log: (line) => logger.info(line),
-    ...bucketOf(settings),
+    ...bucketOf(effective),
   });
   try {
     await before.take('before-upgrade');
     return true;
   } catch (error) {
     throw new Error(
-      `the backup before this version changes the database failed, so it was not changed: ${error instanceof Error ? error.message : String(error)}. Make room in ${settings.backups.dir}, or set ACENTRIC_BACKUP_EVERY=off to start without one.`,
+      `the backup before this version changes the database failed, so it was not changed: ${error instanceof Error ? error.message : String(error)}. Make room in ${settings.backupDir}, or turn backups off to start without one.`,
       { cause: error },
     );
   } finally {
@@ -378,9 +399,40 @@ export async function backUpBeforeUpgrade(
 }
 
 /** The bucket backups are copied to as well, as the options of Backups. */
-function bucketOf(settings: Settings): { bucket?: Bucket } {
-  const place = settings.backups?.bucket;
-  return place === undefined ? {} : { bucket: new Bucket(place) };
+function bucketOf(effective: Effective): { bucket?: Bucket } {
+  const { bucket } = effective;
+  return bucket === undefined ? {} : { bucket: new Bucket(bucket.place, bucket.credentials) };
+}
+
+/**
+ * How the server backs itself up, read from the database with no server running on it: those
+ * set through the API, or the environment's.
+ */
+function backupsOf(settings: Settings, logger: Logger): Effective {
+  const path = join(settings.data, DATABASE);
+  const db = new DatabaseSync(path);
+  let stored;
+  try {
+    db.exec('PRAGMA query_only = ON');
+    stored = readBackupSettings(db);
+  } finally {
+    db.close();
+  }
+  if (stored === undefined) return fromEnvironment(settings.backups);
+  const keys = settings.secretKeys;
+  try {
+    return fromStored(stored, (sealed) => {
+      if (keys === undefined) throw new Error('ACENTRIC_SECRET_KEY is not given');
+      return openBucketSecret({
+        open: (bound, value, what) => openWith(keys, bound, value, what),
+      })(sealed);
+    });
+  } catch (error) {
+    logger.warn(
+      `the backup is not copied to ${stored.bucket?.url ?? 'the bucket'}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return fromStored({ ...stored, bucket: null }, () => '');
+  }
 }
 
 /** The metrics read when they are asked for: what is so now, rather than what happened. */
@@ -393,7 +445,7 @@ function gaugesOf(
     readonly connected: () => number;
     readonly load: () => Engine['load'];
     readonly executor: IsolateExecutor;
-    readonly backups: Backups | undefined;
+    readonly backups: BackupControl;
   },
 ): void {
   const one = (value: number) => [{ value }];
@@ -487,17 +539,20 @@ function gaugesOf(
       ];
     },
   );
+  // Of the backups taken now: none while they are off.
   const { backups } = parts;
-  if (backups !== undefined) {
-    metrics.gauge(
-      'acentric_backup_newest_timestamp_seconds',
-      'When the newest backup in the folder was taken, in seconds since 1970.',
-      () => (backups.newestAt === undefined ? [] : one(backups.newestAt / 1000)),
-    );
-    metrics.gauge('acentric_backup_failures', 'Backups that failed since the server started.', () =>
-      one(backups.failures),
-    );
-  }
+  metrics.gauge(
+    'acentric_backup_newest_timestamp_seconds',
+    'When the newest backup in the folder was taken, in seconds since 1970.',
+    () => {
+      const newest = backups.current?.newestAt;
+      return newest === undefined ? [] : one(newest / 1000);
+    },
+  );
+  metrics.gauge('acentric_backup_failures', 'Backups that failed since the server started.', () => {
+    const current = backups.current;
+    return current === undefined ? [] : one(current.failures);
+  });
 }
 
 /**

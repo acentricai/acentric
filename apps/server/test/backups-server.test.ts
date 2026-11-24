@@ -158,7 +158,7 @@ describe('the server’s own backups', () => {
     try {
       const answer = await call(server.server.url, '/v1/backups');
       expect(answer.status).toBe(503);
-      expect(JSON.stringify(answer.body)).toContain('ACENTRIC_BACKUP_EVERY is off');
+      expect(JSON.stringify(answer.body)).toContain('This server takes no backups of its own');
     } finally {
       await server.close();
     }

@@ -14,6 +14,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { openWith, sealWith, sealedFor } from '@acentric/core';
 import type { SecretKeys } from '@acentric/core';
 import { createClient } from '@acentric/client';
+import { SqliteStore } from '@acentric/store';
 import type { ActorId } from '@acentric/protocol';
 
 import { restore } from '../src/backups/archive.ts';
@@ -59,6 +60,8 @@ describe('a changed key for secrets', () => {
       default: Facts;
     };
     const actor = facts.default.actors[0]?.id as ActorId;
+    // Brought up to this version's database, as a server of it would, before it is sealed again.
+    await (await SqliteStore.open(join(data, 'engine.sqlite'))).close();
 
     // An actor's variables and a sandbox provider's key, sealed with the old key, beside the
     // secret and the model account's key the release left.
@@ -79,12 +82,17 @@ describe('a changed key for secrets', () => {
       null,
       1,
     );
+    // And the secret of the bucket backups are copied to, as set through the API.
+    db.prepare(
+      `INSERT INTO backup_settings (id, enabled, every_ms, keep, bucket_url, bucket_key_id,
+         bucket_secret, changed_at) VALUES (1, 1, 86400000, 3, 's3://b/acentric', 'AKIA', ?, 1)`,
+    ).run(sealWith(old, sealedFor.backupBucket(), 'bucket-secret'));
     db.close();
 
     // Only the new key: what the old one sealed does not open, and the server says so.
     const without = settingsOf(data, { ACENTRIC_SECRET_KEY: NEW_KEY });
     expect(keysSaid(without)).toEqual([
-      `4 sealed values are sealed with the key ${old.current}, which this server was not given: they do not open. Give it in ACENTRIC_SECRET_KEYS_OLD.`,
+      `5 sealed values are sealed with the key ${old.current}, which this server was not given: they do not open. Give it in ACENTRIC_SECRET_KEYS_OLD.`,
     ]);
     expect(() => resealData(without)).toThrow(`which this engine was not given`);
 
@@ -96,7 +104,7 @@ describe('a changed key for secrets', () => {
     const keys = keysOf(changed);
     expect(keysSaid(changed)).toEqual([
       expect.stringContaining(
-        `4 sealed values are sealed with the old key ${old.current}: \`acentric-server reseal\``,
+        `5 sealed values are sealed with the old key ${old.current}: \`acentric-server reseal\``,
       ),
     ]);
 
@@ -112,14 +120,14 @@ describe('a changed key for secrets', () => {
       await running.close();
     }
 
-    expect(resealData(changed)).toBe(4);
+    expect(resealData(changed)).toBe(5);
     expect(resealData(changed)).toBe(0);
     expect(keysSaid(changed)).toEqual([
       `ACENTRIC_SECRET_KEYS_OLD has ${old.current}, which nothing is sealed with: it may be taken out.`,
     ]);
     const after = new DatabaseSync(path, { readOnly: true });
     try {
-      expect([...sealedKeys(after)]).toEqual([[keys.current, 4]]);
+      expect([...sealedKeys(after)]).toEqual([[keys.current, 5]]);
       // Each opens with the new key alone, as what it was.
       const only: SecretKeys = {
         current: keys.current,
@@ -134,6 +142,12 @@ describe('a changed key for secrets', () => {
         .get() as { value: string };
       expect(openWith(only, sealedFor.provider('sbp_test'), provider.value, 'provider')).toBe(
         'boat-key',
+      );
+      const bucket = after
+        .prepare('SELECT bucket_secret AS value FROM backup_settings WHERE id = 1')
+        .get() as { value: string };
+      expect(openWith(only, sealedFor.backupBucket(), bucket.value, 'bucket')).toBe(
+        'bucket-secret',
       );
     } finally {
       after.close();
