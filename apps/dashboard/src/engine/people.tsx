@@ -42,7 +42,7 @@ export const peopleQueries = {
   invites: ['invites'] as const,
 };
 
-const ROLE_NAMES: { readonly [R in Role]: string } = {
+export const ROLE_NAMES: { readonly [R in Role]: string } = {
   viewer: 'Viewer',
   member: 'Member',
   admin: 'Admin',
@@ -73,7 +73,7 @@ const refresh = () => {
 };
 
 /** What was opened from a person's row. */
-type Action =
+export type PeopleAction =
   | { kind: 'role' | 'disable' | 'enable' | 'reset' | 'remove'; person: User }
   | { kind: 'revoke'; invite: Invite };
 
@@ -88,7 +88,7 @@ export function PeoplePage() {
     queryFn: ({ signal }) => engine.invites(signal),
   });
   const [inviting, setInviting] = useState(false);
-  const [action, setAction] = useState<Action | null>(null);
+  const [action, setAction] = useState<PeopleAction | null>(null);
   const close = () => setAction(null);
   const emailOf = (id: string) => people.data?.items.find((one) => one.id === id)?.email;
 
@@ -217,14 +217,14 @@ export function PeoplePage() {
   );
 }
 
-function PersonMenu({
+export function PersonMenu({
   person,
   me,
   onAction,
 }: {
   person: User;
   me: Me | undefined;
-  onAction: (action: Action) => void;
+  onAction: (action: PeopleAction) => void;
 }) {
   const may = mayChange(me, person);
   const self = person.id === me?.user;
@@ -282,7 +282,7 @@ function LinkOnce({ link, expiresAt, what }: { link: string; expiresAt: number; 
   );
 }
 
-function InviteDialog({ me, onClose }: { me: Me | undefined; onClose: () => void }) {
+export function InviteDialog({ me, onClose }: { me: Me | undefined; onClose: () => void }) {
   const roles = rolesFor(me);
   const [role, setRole] = useState<Role>('member');
   const [note, setNote] = useState('');
@@ -375,7 +375,7 @@ function InviteDialog({ me, onClose }: { me: Me | undefined; onClose: () => void
   );
 }
 
-function RoleDialog({
+export function RoleDialog({
   me,
   person,
   onClose,
@@ -445,7 +445,7 @@ function RoleDialog({
   );
 }
 
-function SignInConfirm({
+export function SignInConfirm({
   person,
   disable,
   onClose,
@@ -479,7 +479,7 @@ function SignInConfirm({
   );
 }
 
-function ResetDialog({ person, onClose }: { person: User; onClose: () => void }) {
+export function ResetDialog({ person, onClose }: { person: User; onClose: () => void }) {
   const reset = useMutation({ mutationFn: () => engine.resetLink(person.id) });
   if (reset.data !== undefined) {
     return (
@@ -514,7 +514,7 @@ function ResetDialog({ person, onClose }: { person: User; onClose: () => void })
   );
 }
 
-function RemoveConfirm({ person, onClose }: { person: User; onClose: () => void }) {
+export function RemoveConfirm({ person, onClose }: { person: User; onClose: () => void }) {
   const remove = useMutation({
     mutationFn: () => engine.removePerson(person.id),
     onSuccess: () => {
@@ -536,7 +536,7 @@ function RemoveConfirm({ person, onClose }: { person: User; onClose: () => void 
   );
 }
 
-function RevokeConfirm({ invite, onClose }: { invite: Invite; onClose: () => void }) {
+export function RevokeConfirm({ invite, onClose }: { invite: Invite; onClose: () => void }) {
   const revoke = useMutation({
     mutationFn: () => engine.revokeInvite(invite.id),
     onSuccess: () => {

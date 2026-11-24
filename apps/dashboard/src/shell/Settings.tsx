@@ -1,22 +1,33 @@
 // Settings: a tab at the foot of the sidebar, above the account, that opens a large dialog with
 // a sidebar of its own: its sections, and the page beside it that the one chosen shows.
 
-import { IconSettings, IconUser, IconX } from '@tabler/icons-react';
+import { IconSettings, IconUser, IconUsers, IconX } from '@tabler/icons-react';
 import type { Icon } from '@tabler/icons-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 
+import { may, useMe, type Me } from '../me.ts';
 import { AccountSettings } from './SettingsAccount.tsx';
+import { PeopleSettings } from './SettingsPeople.tsx';
 
 type SettingsSection = {
   readonly id: string;
   readonly name: string;
   readonly icon: Icon;
   readonly page: ComponentType;
+  /** Whether a person sees it: everyone, without it. */
+  readonly shown?: (me: Me) => boolean;
 };
 
 const SECTIONS: readonly SettingsSection[] = [
   { id: 'account', name: 'Account', icon: IconUser, page: AccountSettings },
+  {
+    id: 'people',
+    name: 'People',
+    icon: IconUsers,
+    page: PeopleSettings,
+    shown: (me) => may(me, 'users:manage'),
+  },
 ];
 
 export function SettingsButton({ collapsed }: { collapsed: boolean }) {
@@ -46,6 +57,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
   const title = useId();
+  const me = useMe();
+  const sections = SECTIONS.filter(
+    (section) => section.shown === undefined || (me.data !== undefined && section.shown(me.data)),
+  );
   const [chosen, setChosen] = useState(SECTIONS[0]?.id ?? '');
 
   useEffect(() => {
@@ -64,7 +79,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  const shown = SECTIONS.find((section) => section.id === chosen);
+  const shown = sections.find((section) => section.id === chosen) ?? sections[0];
   const Page = shown?.page;
 
   return (
@@ -97,14 +112,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         <div className="prefs__body">
           <nav className="prefs__side" aria-label="Settings">
             <ul className="prefs__list">
-              {SECTIONS.map((section) => {
+              {sections.map((section) => {
                 const Glyph = section.icon;
                 return (
                   <li key={section.id}>
                     <button
                       type="button"
                       className="prefs__item"
-                      aria-current={section.id === chosen ? 'page' : undefined}
+                      aria-current={section.id === shown?.id ? 'page' : undefined}
                       onClick={() => setChosen(section.id)}
                     >
                       <Glyph size={17} stroke={1.75} aria-hidden="true" />

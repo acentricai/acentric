@@ -584,9 +584,14 @@ dialog.ac-dialog.prefs::backdrop {
   color: var(--ink-muted);
 }
 
-.prefs__item:hover,
-.prefs__item[aria-current='page'] {
+/* Hovered is a faint wash; the section open, a stronger one. */
+.prefs__item:hover {
   background: var(--hover);
+  color: var(--ink);
+}
+
+.prefs__item[aria-current='page'] {
+  background: color-mix(in srgb, var(--ink) 11%, transparent);
   color: var(--ink);
 }
 
@@ -618,6 +623,62 @@ dialog.ac-dialog.prefs::backdrop {
   font-size: 15px;
   font-weight: 500;
   line-height: 22px;
+}
+
+.prefs-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: 8px;
+}
+
+.prefs-group__head .prefs-group__title {
+  margin: 0;
+}
+
+.prefs-empty {
+  margin: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--prefs-line);
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+/* A member: their picture, and what they are called with their email under it. */
+.prefs-member {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.prefs-member__face {
+  flex: none;
+  font-size: 11px;
+}
+
+.prefs-member__text {
+  display: grid;
+  min-width: 0;
+}
+
+.prefs-member__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.prefs-member__email {
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.prefs-table tbody tr:has(.prefs-member) td {
+  height: 52px;
 }
 
 .prefs-row {

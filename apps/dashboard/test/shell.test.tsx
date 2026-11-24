@@ -179,6 +179,47 @@ describe('the Account section of Settings', () => {
   });
 });
 
+describe('the People section of Settings', () => {
+  it('is for one who may manage people: the members, and the invites with one to make', async () => {
+    const server = fakeServer();
+    server.person('ada@example.test', 'a-password-for-tests', true);
+    server.person('grace@example.test', 'a-password-for-tests', false, 'member');
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    const sections = within(dialog).getByRole('navigation', { name: 'Settings' });
+    fireEvent.click(within(sections).getByRole('button', { name: 'People' }));
+    const page = within(dialog).getByRole('region', { name: 'People' });
+    const members = await within(page).findByRole('table', { name: 'Members' });
+    expect(within(members).getByText('ada@example.test')).toBeTruthy();
+    expect(within(members).getByText('grace@example.test')).toBeTruthy();
+    expect(
+      within(members).getByRole('button', { name: 'Actions for grace@example.test' }),
+    ).toBeTruthy();
+    expect(within(page).getByRole('heading', { name: 'Invites' })).toBeTruthy();
+
+    // Its dialogs open over Settings, and closing one leaves Settings open.
+    fireEvent.click(within(page).getByRole('button', { name: 'Invite' }));
+    const invite = await screen.findByRole('dialog', { name: 'Invite someone' });
+    fireEvent.click(within(invite).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Invite someone' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+  });
+
+  it('is not there for one who may not manage people', async () => {
+    const server = fakeServer();
+    server.person('grace@example.test', 'a-password-for-tests', true, 'member');
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    const sections = within(dialog).getByRole('navigation', { name: 'Settings' });
+    expect(within(sections).getByRole('button', { name: 'Account' })).toBeTruthy();
+    expect(within(sections).queryByRole('button', { name: 'People' })).toBeNull();
+  });
+});
+
 describe('a page a person may not see', () => {
   it('is not there for them, and its tab is not in their sidebar', async () => {
     const server = fakeServer();
