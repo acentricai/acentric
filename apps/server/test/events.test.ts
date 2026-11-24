@@ -72,3 +72,51 @@ describe('one who follows an actor from a place in its conversation', () => {
     expect(sent().indexOf('message 4')).toBeLessThan(sent().indexOf('idle'));
   });
 });
+
+describe('one who comes back to a long conversation', () => {
+  it('is sent a page of it at a time, as they read, not all of it at once', async () => {
+    const actor = { id: 'act_1' } as unknown as Actor;
+    const all = Array.from(
+      { length: 1_600 },
+      (_, index) =>
+        ({
+          seq: index + 1,
+          message: {
+            role: 'user',
+            content: [{ type: 'text', text: `Message ${String(index + 1)}` }],
+          },
+        }) as unknown as ConversationEntry,
+    );
+    const pages: number[] = [];
+    const engine = {
+      bus: new MemoryBus(),
+      conversation: async (_: unknown, { after, limit }: { after: number; limit: number }) => {
+        pages.push(after);
+        return all.filter((entry) => entry.seq > after).slice(0, limit);
+      },
+      getActor: async () => ({ status: 'idle', lastTurn: null, pendingInputs: 0 }),
+    } as unknown as Engine;
+    const given = new AbortController();
+    const request = new Request('http://engine.test/v1/actors/act_1/events', {
+      signal: given.signal,
+    });
+    const response = new Streams().follow(engine, actor, 0, request);
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+
+    // Nothing is read: one page is sent, and the next waits.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(pages).toEqual([0]);
+
+    // Read, every page comes, and then where the actor stands.
+    const decoder = new TextDecoder();
+    let text = '';
+    while (!text.includes('"status"')) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+    }
+    given.abort();
+    expect(pages).toEqual([0, 500, 1_000, 1_500]);
+    expect(text.split('event: message').length - 1).toBe(1_600);
+  });
+});
