@@ -224,6 +224,32 @@ describe('a sandbox', () => {
     ).toBe(true);
   });
 
+  it('is refused a file larger than may be written at once, sent in chunks with no length', async () => {
+    const { admin, app, account } = await withProvider();
+    const made = await admin.call('sandboxes.create', {
+      body: { provider: account.id, vcpu: 2, memoryGB: 4 },
+    });
+    let sent = 0;
+    const MIB = new Uint8Array(1 << 20);
+    // A body that never ends, as one could send: what is read of it is counted.
+    const body = new ReadableStream<Uint8Array>({
+      pull: (controller) => {
+        sent += MIB.byteLength;
+        controller.enqueue(MIB);
+      },
+    });
+    const written = await app.request(`/v1/machines/${made.machine.id}/files?path=/tmp/big`, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${ADMIN}` },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+    expect(written.status).toBe(413);
+    expect(await written.json()).toMatchObject({ error: { code: 'too_large' } });
+    // It stopped reading once it was past 8 MiB, not at the end, which there is not.
+    expect(sent).toBeLessThan(16 << 20);
+  });
+
   it('is woken for a command or a file asked of it from outside, and answers 503 when it cannot be', async () => {
     const { admin, app, account, provider, engine } = await withProvider();
     const made = await admin.call('sandboxes.create', {
