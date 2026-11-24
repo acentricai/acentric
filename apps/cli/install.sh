@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs the acentric command from the engine that serves this script. The engine puts its own
-# address in place of __SERVER__ when it serves it, and the command remembers it, so that
+# address in SERVER, below, when it serves it, and the command remembers it, so that
 # `acentric login` needs no address:
 #
 #   curl -fsSL https://<engine>/install-cli.sh | sh
