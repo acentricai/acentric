@@ -1,7 +1,7 @@
 // The API keys section of Settings, for one who may manage keys: the keys they may see, each
 // revoked from its row, and New key. It uses the API keys page's dialogs.
 
-import { IconPlus, IconX } from '@tabler/icons-react';
+import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { PERMISSIONS } from '@acentric/protocol';
 import type { CreateKeyResponse, Key } from '@acentric/protocol';
 import { useState } from 'react';
@@ -98,12 +98,12 @@ export function KeysSettings() {
                   <td className="prefs-table__action">
                     <button
                       type="button"
-                      className="prefs-table__out"
+                      className="prefs-table__out prefs-table__out--shown"
                       aria-label={`Revoke ${key.label}`}
                       title="Revoke"
                       onClick={() => setRevoking(key)}
                     >
-                      <IconX size={16} stroke={1.75} aria-hidden="true" />
+                      <IconTrash size={16} stroke={1.75} aria-hidden="true" />
                     </button>
                   </td>
                 </tr>

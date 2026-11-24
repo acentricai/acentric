@@ -857,7 +857,8 @@ dialog.ac-dialog.prefs::backdrop {
 }
 
 .prefs-table tr:hover .prefs-table__out,
-.prefs-table__out:focus-visible {
+.prefs-table__out:focus-visible,
+.prefs-table__out--shown {
   opacity: 1;
 }
 
