@@ -194,6 +194,32 @@ describe('signing in', () => {
   });
 });
 
+describe('failed sign-ins', () => {
+  it('are kept up to a number, and one refused now is kept past emails tried at random', async () => {
+    const store = new MemoryStore();
+    const people = new People({ store, passwordCost: 1024, keptFailures: 3 });
+    const token = (await people.setupLink()) as string;
+    await people.setup({ token, email: 'ada@example.com', password: PASSWORD, client: 'cli' });
+    const signIn = (email: string, password = 'wrong') =>
+      people.signIn({ email, password, client: 'cli' });
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(signIn('ada@example.com')).rejects.toMatchObject({
+        code: 'invalid_credentials',
+      });
+    }
+    for (let one = 0; one < 20; one += 1) {
+      await expect(signIn(`someone-${String(one)}@example.com`)).rejects.toMatchObject({
+        code: 'invalid_credentials',
+      });
+      expect(people.failing).toBeLessThanOrEqual(3);
+    }
+    // Ada is refused still, with the right password too.
+    await expect(signIn('ada@example.com', PASSWORD)).rejects.toMatchObject({
+      code: 'rate_limited',
+    });
+  });
+});
+
 describe('a session', () => {
   it('lasts from when it was last used: a month for the dashboard', async () => {
     const { people, owner, as, store, advance } = world();
