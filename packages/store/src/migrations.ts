@@ -417,6 +417,27 @@ const MIGRATIONS: readonly string[] = [
   -- Whether anything still refers to a blob.
   CREATE INDEX actor_blobs_digest ON actor_blobs (digest);
   `,
+  // 2: how the server backs itself up, as set from the dashboard.
+  `
+  -- One row, once they were set: what wins over the environment's backup settings.
+  CREATE TABLE backup_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled INTEGER NOT NULL,
+    every_ms INTEGER NOT NULL,
+    keep INTEGER NOT NULL,
+    -- The bucket each is copied to as well: s3://bucket/folder. NULL for none, and the
+    -- columns after it NULL with it.
+    bucket_url TEXT,
+    -- Where a store that is not S3 is reached. NULL for S3.
+    bucket_endpoint TEXT,
+    bucket_region TEXT,
+    bucket_key_id TEXT,
+    -- The secret access key, sealed.
+    bucket_secret TEXT,
+    changed_at INTEGER NOT NULL,
+    changed_by TEXT
+  ) STRICT;
+  `,
 ];
 
 /** The version a database is at when it has had every migration. */

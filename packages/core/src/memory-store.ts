@@ -40,6 +40,7 @@ import type {
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
+  StoredBackupSettings,
   PageOf,
   Paged,
   Redeem,
@@ -128,6 +129,7 @@ export class MemoryStore implements Store {
   /** Each actor's compactions, newest first. */
   readonly #compactions = new Map<ActorId, StoredCompaction[]>();
   readonly #sandboxProviders = new Map<SandboxProviderId, StoredSandboxProvider>();
+  #backupSettings: StoredBackupSettings | undefined;
   /** By `actor/task`. */
   readonly #commands = new Map<string, StoredCommand>();
   readonly #inputs = new Map<ActorId, Input[]>();
@@ -1009,6 +1011,14 @@ export class MemoryStore implements Store {
 
   async listStopping(): Promise<({ actor: ActorId } & Stopping)[]> {
     return [...this.#stopping].map(([actor, stopping]) => ({ actor, ...stopping }));
+  }
+
+  async loadBackupSettings(): Promise<StoredBackupSettings | undefined> {
+    return copy(this.#backupSettings);
+  }
+
+  async saveBackupSettings(settings: StoredBackupSettings): Promise<void> {
+    this.#backupSettings = copy(settings);
   }
 
   async addSandboxProvider(provider: StoredSandboxProvider): Promise<void> {

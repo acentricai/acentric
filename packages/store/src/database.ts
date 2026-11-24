@@ -18,6 +18,7 @@ import type {
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
+  StoredBackupSettings,
   PageOf,
   Paged,
   Redeem,
@@ -253,6 +254,55 @@ type MachineRow = {
   provider_id: string | null;
   sandbox: string | null;
 };
+
+type BackupSettingsRow = {
+  enabled: number;
+  every_ms: number;
+  keep: number;
+  bucket_url: string | null;
+  bucket_endpoint: string | null;
+  bucket_region: string | null;
+  bucket_key_id: string | null;
+  bucket_secret: string | null;
+  changed_at: number;
+  changed_by: string | null;
+};
+
+/** The row of backup settings as they are kept. */
+function backupSettingsOf(row: BackupSettingsRow): StoredBackupSettings {
+  return {
+    enabled: row.enabled === 1,
+    everyMs: row.every_ms,
+    keep: row.keep,
+    bucket:
+      row.bucket_url === null || row.bucket_key_id === null || row.bucket_secret === null
+        ? null
+        : {
+            url: row.bucket_url,
+            endpoint: row.bucket_endpoint,
+            region: row.bucket_region,
+            accessKeyId: row.bucket_key_id,
+            secret: row.bucket_secret,
+          },
+    changedAt: row.changed_at,
+    changedBy: row.changed_by,
+  };
+}
+
+/**
+ * The backup settings of a database read as it is, by a server not running on it, as before a
+ * new version changes it. Undefined when they were not set, or the database is from before
+ * they could be.
+ */
+export function readBackupSettings(db: DatabaseSync): StoredBackupSettings | undefined {
+  const table = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'backup_settings'")
+    .get();
+  if (table === undefined) return undefined;
+  const row = db.prepare('SELECT * FROM backup_settings WHERE id = 1').get() as
+    BackupSettingsRow | undefined;
+  return row === undefined ? undefined : backupSettingsOf(row);
+}
 
 type SandboxProviderRow = {
   id: string;
@@ -574,6 +624,7 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'changeMachine',
   'enrolMachine',
   'removeMachine',
+  'saveBackupSettings',
   'addSandboxProvider',
   'removeSandboxProvider',
   'setSandbox',
@@ -1986,6 +2037,30 @@ export function operations(db: DatabaseSync) {
       return all<{ id: ActorId; stopping: string }>(
         'SELECT id, stopping FROM actors WHERE stopping IS NOT NULL ORDER BY created_at, id',
       ).map((row) => ({ actor: row.id, ...(JSON.parse(row.stopping) as Stopping) }));
+    },
+
+    loadBackupSettings(): StoredBackupSettings | undefined {
+      const row = get<BackupSettingsRow>('SELECT * FROM backup_settings WHERE id = 1');
+      return row === undefined ? undefined : backupSettingsOf(row);
+    },
+
+    saveBackupSettings(settings: StoredBackupSettings): void {
+      const { bucket } = settings;
+      run(
+        `INSERT OR REPLACE INTO backup_settings (id, enabled, every_ms, keep, bucket_url,
+           bucket_endpoint, bucket_region, bucket_key_id, bucket_secret, changed_at, changed_by)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        settings.enabled ? 1 : 0,
+        settings.everyMs,
+        settings.keep,
+        bucket?.url ?? null,
+        bucket?.endpoint ?? null,
+        bucket?.region ?? null,
+        bucket?.accessKeyId ?? null,
+        bucket?.secret ?? null,
+        settings.changedAt,
+        settings.changedBy,
+      );
     },
 
     addSandboxProvider(provider: StoredSandboxProvider): void {
