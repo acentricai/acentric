@@ -600,16 +600,38 @@ export function open(path: string, readOnly: boolean, fullFsync = false): Databa
   return db;
 }
 
-export function operations(db: DatabaseSync) {
+/**
+ * Statements prepared once, for each time they are run again: as many as `most`, past which the
+ * one run longest ago is made again when it is next run. Some are made for what they are given,
+ * as `IN (?, ?, …)` for a list, or an UPDATE of the columns that change: there is no end to them.
+ */
+export function preparedStatements(db: DatabaseSync, most = 500) {
   const statements = new Map<string, StatementSync>();
-  const statement = (sql: string): StatementSync => {
-    let prepared = statements.get(sql);
-    if (prepared === undefined) {
-      prepared = db.prepare(sql);
+  return {
+    get size(): number {
+      return statements.size;
+    },
+    of(sql: string): StatementSync {
+      let prepared = statements.get(sql);
+      if (prepared === undefined) {
+        prepared = db.prepare(sql);
+        for (const old of statements.keys()) {
+          if (statements.size < most) break;
+          statements.delete(old);
+        }
+      } else {
+        // Run: it is the last to go.
+        statements.delete(sql);
+      }
       statements.set(sql, prepared);
-    }
-    return prepared;
+      return prepared;
+    },
   };
+}
+
+export function operations(db: DatabaseSync) {
+  const statements = preparedStatements(db);
+  const statement = (sql: string): StatementSync => statements.of(sql);
   const run = (sql: string, ...values: SQLInputValue[]) =>
     Number(statement(sql).run(...values).changes);
   const get = <T>(sql: string, ...values: SQLInputValue[]) =>
