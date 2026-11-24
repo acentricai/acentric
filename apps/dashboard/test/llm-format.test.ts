@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   cacheShare,
-  change,
   compact,
   dayLabel,
   dayOf,
@@ -64,12 +63,8 @@ describe('days', () => {
   });
 });
 
-describe('a change, and how long a call took', () => {
+describe('how long a call took', () => {
   it('are written short', () => {
-    expect(change(6, 2)).toBe('+200%');
-    expect(change(1, 4)).toBe('−75%');
-    expect(change(5, 5)).toBe('0%');
-    expect(change(5, 0)).toBeUndefined();
     expect(duration(null)).toBe('—');
     expect(duration(840)).toBe('840 ms');
     expect(duration(1000)).toBe('1 s');

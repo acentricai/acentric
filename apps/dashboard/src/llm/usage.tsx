@@ -1,5 +1,5 @@
 // `/usage`: what model calls cost, over a range of days of the viewer's own time zone. The range,
-// beside the heading, scopes everything below it: the totals beside those of the range before,
+// beside the heading, scopes everything below it: the totals,
 // what was spent each day by provider, each provider's and model's part, the actors that cost
 // most with their subagents, where the tokens went, and what each agent spent.
 
@@ -15,7 +15,6 @@ import { Segmented } from '../ui.tsx';
 import type { Group } from './api.ts';
 import {
   cacheShare,
-  change,
   compact,
   dayLabel,
   daysBetween,
@@ -78,18 +77,9 @@ const seriesOf = (provider: string): string => {
 export function UsagePage() {
   const [range, setRange] = useState<Range>('30');
   // Read once for the range, so that a refetch does not move it under the page.
-  const { from, before } = useMemo(() => {
-    if (range === 'all') return { from: undefined, before: undefined };
-    const days = Number(range);
-    const start = rangeStart(days);
-    return { from: start, before: rangeStart(days, start - 1) };
-  }, [range]);
+  const from = useMemo(() => (range === 'all' ? undefined : rangeStart(Number(range))), [range]);
   const scope = from === undefined ? {} : { from };
   const daily = useUsage({ ...scope, by: 'day', split: 'provider', tz: TIME_ZONE });
-  const previous = useUsage(
-    before === undefined || from === undefined ? {} : { from: before, to: from },
-    before !== undefined,
-  );
   const providers = useUsage({ ...scope, by: 'provider' });
   const models = useUsage({ ...scope, by: 'model' });
   const roots = useUsage({ ...scope, by: 'root' });
@@ -99,7 +89,6 @@ export function UsagePage() {
   const total = daily.data?.total;
   const reads = [daily, providers, models, roots, agents];
   const error = reads.find((read) => read.error !== null)?.error ?? null;
-  const span = range === 'all' ? null : `${range} days`;
   return (
     <div className="list-page llm-page usage-page">
       <PageHeader title="LLM Usage" spaced>
@@ -115,11 +104,7 @@ export function UsagePage() {
           }}
         />
       )}
-      <Tiles
-        total={total}
-        before={range === 'all' ? undefined : previous.data?.total}
-        span={span}
-      />
+      <Tiles total={total} />
       <TimeChart
         groups={daily.data?.groups}
         from={from ?? daily.data?.total.first ?? Date.now()}
@@ -185,29 +170,9 @@ export function UsagePage() {
   );
 }
 
-/** The numbers of the range, each beside what it was in the range before, when there was one. */
-function Tiles({
-  total,
-  before,
-  span,
-}: {
-  total: UsageTotals | undefined;
-  before: UsageTotals | undefined;
-  span: string | null;
-}) {
-  const against = (now: number, then: number | undefined) => {
-    const moved = then === undefined ? undefined : change(now, then);
-    return moved === undefined || span === null ? null : `${moved} on the ${span} before`;
-  };
+/** The numbers of the range. */
+function Tiles({ total }: { total: UsageTotals | undefined }) {
   const tokens = (of: UsageTotals) => of.totalInput + of.output;
-  const share = (of: UsageTotals | undefined) => (of === undefined ? undefined : cacheShare(of));
-  const points = (() => {
-    const now = share(total);
-    const then = share(before);
-    if (now === undefined || then === undefined || span === null) return null;
-    const moved = Math.round((now - then) * 100);
-    return `${moved > 0 ? '+' : moved < 0 ? '−' : ''}${String(Math.abs(moved))} pts on the ${span} before`;
-  })();
   const tiles: { label: string; value: string; notes: (string | null)[] }[] =
     total === undefined
       ? ['Spend', 'Model calls', 'Tokens', 'Cache hits', 'Typical call'].map((label) => ({
@@ -220,7 +185,6 @@ function Tiles({
             label: 'Spend',
             value: dollars(total.cost),
             notes: [
-              against(total.cost, before?.cost),
               total.estimatedCost > 0
                 ? total.estimatedCost === total.cost
                   ? 'estimated from prices'
@@ -233,7 +197,6 @@ function Tiles({
             label: 'Model calls',
             value: compact(total.calls),
             notes: [
-              against(total.calls, before?.calls),
               total.failed > 0
                 ? `${compact(total.failed)} failed (${percent(total.failed / total.calls)})`
                 : null,
@@ -242,15 +205,12 @@ function Tiles({
           {
             label: 'Tokens',
             value: compact(tokens(total)),
-            notes: [
-              against(tokens(total), before === undefined ? undefined : tokens(before)),
-              `${compact(total.totalInput)} in · ${compact(total.output)} out`,
-            ],
+            notes: [`${compact(total.totalInput)} in · ${compact(total.output)} out`],
           },
           {
             label: 'Cache hits',
             value: percent(cacheShare(total)),
-            notes: [points],
+            notes: [],
           },
           {
             label: 'Typical call',
