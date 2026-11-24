@@ -3,7 +3,22 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
-## Unreleased
+## 0.17.0
+
+**Upgrading from 0.16.** Take this version's image. **The database changes**, for the backups'
+settings and people's pictures: the new version backs it up first, then changes it, and its
+port answers that it is updating meanwhile. Deployed agents, machines' daemons and the command
+carry over: nothing is deployed again.
+
+- **The dashboard's Account page and Engine pages are in Settings now**, the tab at the foot of
+  the sidebar: their old addresses (`/account`, `/keys`, `/people`, `/backups`, `/audit`) are
+  no more.
+- **To take later versions from the dashboard**, with Compose: take this version's recipe
+  (`compose.yaml`, `Caddyfile` and `updater.sh`, from the tag `v0.17.0`), keeping `.env` and
+  `secrets/`, and set `COMPOSE_PROFILES=updater` in `.env`. Without it, nothing changes: a
+  version is taken as before.
+- **A new permission, `updates:manage`**, which owners and admins hold. A key made before holds
+  it only when it is made again.
 
 - **Changed:** while a new version upgrades the database, the dashboard's own files are served
   as ever, so that it opens and says it is updating. The API answers 503 then, as before.

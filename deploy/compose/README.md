@@ -15,7 +15,7 @@ certificate for the server's name from Let's Encrypt and renews it.
 On the machine, this folder of the version you run, then the settings and the keys:
 
 ```sh
-git clone --depth 1 --branch v0.16.1 https://github.com/acentricai/acentric.git
+git clone --depth 1 --branch v0.17.0 https://github.com/acentricai/acentric.git
 cd acentric/deploy/compose
 install -m 600 .env.example .env    # then put the name in it
 install -d -m 700 secrets

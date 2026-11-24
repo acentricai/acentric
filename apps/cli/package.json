@@ -1,6 +1,6 @@
 {
   "name": "acentric",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "private": true,
   "description": "The acentric command: sign in to an engine, start a project of agents, and deploy them.",
   "license": "Apache-2.0",
