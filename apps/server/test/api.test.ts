@@ -240,6 +240,18 @@ describe('agents and their versions', () => {
     });
   });
 
+  it('are listed as none to a key of one agent that was deleted', async () => {
+    const { admin, deploy, keyed } = await api();
+    const { agent } = await deploy();
+    const { client } = await keyed({
+      scope: { type: 'agent', agent: agent.id },
+      permissions: ['agents:read'],
+    });
+    expect((await client.call('agents.list')).items.map((one) => one.id)).toEqual([agent.id]);
+    await admin.call('agents.delete', { params: { agent: agent.id } });
+    expect((await client.call('agents.list')).items).toEqual([]);
+  });
+
   it('are listed a page at a time, found by name, and read', async () => {
     const { admin, deploy } = await api();
     const made = [];
