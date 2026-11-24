@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs the machine program from the engine that serves this script, enrols this machine with
 # it, and keeps it connected as a service that starts again on its own. The engine puts its own
-# address in place of __SERVER__ when it serves it, and `acentric machines add` gives the
+# address in SERVER, below, when it serves it, and `acentric machines add` gives the
 # command:
 #
 #   curl -fsSL https://<engine>/install.sh | sh -s -- --id <machine> --token <token>
