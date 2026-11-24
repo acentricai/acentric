@@ -4,6 +4,7 @@
 import {
   IconDatabase,
   IconKey,
+  IconListDetails,
   IconSettings,
   IconUserCircle,
   IconUsers,
@@ -15,6 +16,7 @@ import type { ComponentType } from 'react';
 
 import { may, useMe, type Me } from '../me.ts';
 import { AccountSettings } from './SettingsAccount.tsx';
+import { AuditSettings } from './SettingsAudit.tsx';
 import { BackupsSettings } from './SettingsBackups.tsx';
 import { KeysSettings } from './SettingsKeys.tsx';
 import { PeopleSettings } from './SettingsPeople.tsx';
@@ -50,6 +52,13 @@ const SECTIONS: readonly SettingsSection[] = [
     icon: IconDatabase,
     page: BackupsSettings,
     shown: (me) => may(me, 'backups:manage'),
+  },
+  {
+    id: 'audit',
+    name: 'Audit log',
+    icon: IconListDetails,
+    page: AuditSettings,
+    shown: (me) => may(me, 'audit:read'),
   },
 ];
 
