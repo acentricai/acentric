@@ -8,7 +8,6 @@ import { useState } from 'react';
 
 import {
   KeyShown,
-  maskOf,
   NewKeyDialog,
   RevokeKeyDialog,
   useKeys,
@@ -20,7 +19,7 @@ import { useMe } from '../me.ts';
 import { Button, LoadError, Skeleton } from '../ui.tsx';
 
 /** How many letters of a name are shown. */
-const NAME_LETTERS = 12;
+const NAME_LETTERS = 20;
 
 /**
  * A long name as its first words that fit in so many letters, then `…`: the first word cut
@@ -82,7 +81,6 @@ export function KeysSettings() {
                       <span className="prefs-member__name" title={key.label}>
                         {shortOf(key.label)}
                       </span>
-                      <code className="prefs-member__email">{maskOf(key)}</code>
                     </span>
                   </td>
                   <td>{reachText(key.scope, names)}</td>
