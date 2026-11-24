@@ -33,6 +33,7 @@ import type {
 import type { z } from 'zod';
 
 import { personOf, sessionCookie } from './auth.ts';
+import { deviceOf } from './device.ts';
 import type { Granted } from './auth.ts';
 import { ApiFailure } from './errors.ts';
 import type { BackupControl } from './backups/control.ts';
@@ -228,6 +229,13 @@ function fileFailure(error: unknown): unknown {
 
 /** A list that is all on one page. */
 const onePage = <T>(items: T[]): Page<T> => ({ items, nextCursor: null });
+
+/** A sign-in that names its session, or one named by the browser it came from. */
+function named<T extends { readonly label?: string }>(body: T, request: Request): T {
+  if (body.label !== undefined) return body;
+  const device = deviceOf(request.headers.get('user-agent'));
+  return device === undefined ? body : { ...body, label: device };
+}
 
 export const handlers: Handlers = {
   'me.get': ({ principal }) => principal,
@@ -762,9 +770,9 @@ export const handlers: Handlers = {
   // Signing in
 
   'setup.complete': async ({ body, request }, { people }) =>
-    signed(request, await people.setup(defined(body))),
+    signed(request, await people.setup(named(defined(body), request))),
   'auth.signIn': async ({ body, request }, { people }) =>
-    signed(request, await people.signIn(defined(body))),
+    signed(request, await people.signIn(named(defined(body), request))),
   'auth.signOut': async ({ principal, request }, { people }) => {
     await people.signOut(personOf(principal));
     return new Reply(undefined, { 'set-cookie': sessionCookie(request) });
@@ -819,7 +827,7 @@ export const handlers: Handlers = {
     return undefined;
   },
   'invites.accept': async ({ body, request }, { people }) =>
-    signed(request, await people.accept(defined(body))),
+    signed(request, await people.accept(named(defined(body), request))),
 
   // People and their sessions
 
