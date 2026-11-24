@@ -1,7 +1,7 @@
 // The shell of a person signed in: the sections they may see, where `/` takes them, and a page
 // they may not see.
 
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import type { Role } from '@acentric/protocol';
@@ -77,6 +77,29 @@ describe('the sidebar', () => {
     ]);
     expect(within(sidebar).getByText('ada@example.test')).toBeTruthy();
     expect(document.title).toBe('Agents | Acentric');
+  });
+
+  it('has Settings at its foot, above the account, which opens a dialog of its own', async () => {
+    const server = fakeServer();
+    server.person('ada@example.test', 'a-password-for-tests', true);
+    open('/', server);
+    await screen.findByRole('heading', { name: 'Agents' });
+    const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
+    const settings = within(sidebar).getByRole('button', { name: 'Settings' });
+    // After every section's tabs, and before the account.
+    const account = within(sidebar).getByText('ada@example.test');
+    const nav = within(sidebar).getByRole('navigation', { name: 'Main' });
+    expect(nav.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      settings.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(settings);
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    expect(within(dialog).getByRole('searchbox', { name: 'Search settings' })).toBeTruthy();
+    expect(within(dialog).getByRole('navigation', { name: 'Settings' })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
   });
 });
 
