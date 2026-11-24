@@ -497,3 +497,22 @@ describe('a picture of a person', () => {
     ).toBe(404);
   });
 });
+
+describe('a session a browser signs in with', () => {
+  it('is named by the browser when its sign-in names it nothing', async () => {
+    const world = await api();
+    await owner(world);
+    const response = await world.app.request(`${BASE}/v1/sign-in`, {
+      method: 'POST',
+      headers: {
+        ...json,
+        'user-agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({ email: 'ada@example.com', password: PASSWORD }),
+    });
+    expect(((await response.json()) as { session: { label: string } }).session.label).toBe(
+      'Chrome (Mac OS X)',
+    );
+  });
+});
