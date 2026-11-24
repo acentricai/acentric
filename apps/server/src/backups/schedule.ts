@@ -33,6 +33,8 @@ export type BackupFile = {
   readonly bytes: number;
 };
 
+/** The longest a timer waits: Node's hold 2^31 - 1 ms, some 24.8 days, and fire at once past it. */
+const LONGEST_TIMER_MS = 2_000_000_000;
 /** A backup, where it is: in the folder on the server, in the bucket, or both. */
 export type PlacedBackup = BackupFile & { readonly onServer: boolean; readonly inBucket: boolean };
 
@@ -240,11 +242,16 @@ export class Backups {
     this.#next = at;
     this.#timer = setTimeout(
       () => {
+        // A time further off than a timer holds is waited for a part at a time.
+        if (this.#clock() < at) {
+          this.#schedule(at);
+          return;
+        }
         void this.take('scheduled').finally(() => {
           this.#schedule(this.#clock() + this.#everyMs);
         });
       },
-      Math.max(0, at - this.#clock()),
+      Math.min(Math.max(0, at - this.#clock()), LONGEST_TIMER_MS),
     );
     this.#timer.unref();
   }
