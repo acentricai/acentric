@@ -4,7 +4,7 @@
 // ACENTRIC_UPDATE_CHECK=off asks nothing. Taking a version is not done here: whoever runs the
 // server does that, as VERSIONS.md says.
 
-import type { Release, Updates } from '@acentric/protocol';
+import type { Release, Updater, Updates } from '@acentric/protocol';
 
 /** Where the releases are read. */
 const RELEASES = 'https://api.github.com/repos/acentricai/acentric/releases?per_page=50';
@@ -97,8 +97,11 @@ export class UpdateCheck {
     this.#clock = options.clock ?? Date.now;
   }
 
-  /** What there is after this version: asked again when it is old, or now when `refresh`. */
-  async status(refresh = false): Promise<Updates> {
+  /**
+   * What there is after this version: asked again when it is old, or now when `refresh`; and
+   * what the updater beside the server is doing, when there is one.
+   */
+  async status(refresh = false, updater: Updater | null = null): Promise<Updates> {
     if (this.#enabled) {
       const since = this.#checkedAt === null ? Infinity : this.#clock() - this.#checkedAt;
       if (since >= FRESH_MS || (refresh && since >= AGAIN_MS)) await this.#ask();
@@ -123,6 +126,7 @@ export class UpdateCheck {
         newer.map((release) => release.version),
       ),
       releases: newer,
+      updater,
     };
   }
 
