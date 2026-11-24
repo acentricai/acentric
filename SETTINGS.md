@@ -44,7 +44,7 @@ environment.
 
 ## Backups
 
-[BACKUPS.md](BACKUPS.md) says what a backup is, and how one is put back.
+[BACKUPS.md](BACKUPS.md) says what a backup is, and how one is put back. Set through the API, as the dashboard does, how often, how many and the bucket take the place of these, all but the folder.
 
 | Setting                 | Without it             | What it is                                                                                                                                                                                                   |
 | ----------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

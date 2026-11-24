@@ -50,6 +50,26 @@ server that was told to remove them.
 acentric-server restore s3://my-bucket/acentric/acentric-2026-11-23T03-00-00Z-scheduled-0.15.0.tar
 ```
 
+## Set through the API
+
+How often, how many are kept, whether they are taken at all, and the bucket, may be set through
+the API instead, by one who may manage backups: `PUT /v1/backups/settings`, which the
+dashboard's settings use. Once set, they are kept in the database and take the place of
+`ACENTRIC_BACKUP_EVERY`, `ACENTRIC_BACKUP_KEEP` and `ACENTRIC_BACKUP_URL`, at once and after a
+restart, for the backup before a new version changes the database too. `GET /v1/backups/settings`
+says which are in use. The folder is `ACENTRIC_BACKUP_DIR`'s always.
+
+A bucket set so is reached with the access key it is given, in place of AWS's own variables, at
+the endpoint it is given for a store that is not S3. It is checked first: a small file is
+written to it and removed, and a bucket that is not reached is refused. Its secret is kept
+sealed with `ACENTRIC_SECRET_KEY`, as the agents' secrets are, and is never read back through
+the API: set it again with the same access key, and the secret is kept.
+
+**Keep the bucket's key somewhere other than the server too.** A backup is put back with the
+server stopped, often after its disk was lost: `restore` from the bucket is given the key in
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, as above, and does not read it from a database
+that is not there.
+
 ## The key
 
 A backup never has `ACENTRIC_SECRET_KEY` in it. Its manifest says which keys sealed the agents'
