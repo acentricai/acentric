@@ -41,6 +41,7 @@ against: from the tag, fill a server as people do and keep a backup of it, and m
 ```sh
 git checkout v0.15.0 && pnpm build
 node apps/server/test/releases/seed.ts   # apps/server/test/releases/0.15.0.tar.gz and .json
+pnpm prettier --write apps/server/test/releases   # as CI checks the .json
 ```
 
 `releases.test.ts` opens each one with the version being tested, and checks that what was
