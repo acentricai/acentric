@@ -3,6 +3,28 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## 0.17.1
+
+**Upgrading from 0.17.0:** take this version's image, or take it from the dashboard where an
+updater runs; the database is not changed, and nothing is deployed again. Nothing that worked
+changes in the API: what it adds, it adds beside what was.
+
+- **Added:** `GET /v1/usage` adds up by `hour`, `failure`, `kind` and `version` as well, and
+  with `split`, each group by another as well, such as each day by provider, in one request.
+  `tz` makes days and hours those of a time zone, UTC without it. `failed` narrows to the calls
+  that failed, or those that were answered. Totals say how long an answered call took, as
+  `medianMs` and `p95Ms`.
+- **Added:** `GET /v1/usage/calls` lists the calls of models a filter leaves, newest first, a
+  page at a time, with `usage:read`. A key is told of what it reaches, as with `/v1/usage`.
+- **Changed:** the dashboard's LLM Usage page is new: the totals of a range, spend, tokens or
+  calls by day and by provider, in the viewer's own days, what each provider, model and actor
+  with its subagents spent, where the tokens went, and what each agent spent.
+- **Changed:** the dashboard's errors are toasts, over a dialog too, and say what the server
+  found wrong with a request it refused, such as a name that is not one.
+- **Changed:** the dashboard adds machines and sandboxes for every agent, and asks no longer
+  which: which agents one is for is still the API's to say. Its pages for model accounts,
+  machines and sandboxes have no Agents column, and its top bar no Go to field.
+
 ## 0.17.0
 
 **Upgrading from 0.16.** Take this version's image. **The database changes**, for the backups'
