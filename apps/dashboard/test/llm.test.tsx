@@ -359,6 +359,11 @@ describe('the Usage page', () => {
       ['claude-x', '$5.00'],
       ['gpt-x', '$1.00'],
     ]);
+    // An actor is its name and what it spent, with nothing under its bar.
+    expect(screen.queryByText('With their subagents')).toBeNull();
+    expect(
+      screen.getByRole('list', { name: 'Spend by actor' }).querySelector('.usage-bars__note'),
+    ).toBeNull();
     const actor = within(screen.getByRole('list', { name: 'Spend by actor' })).getAllByRole(
       'link',
     )[0];
