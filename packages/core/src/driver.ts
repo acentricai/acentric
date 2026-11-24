@@ -867,6 +867,8 @@ export class ActorDriver {
     try {
       const run = async (call: OwedCall): Promise<void> => {
         const { signal } = controller;
+        // The turn was ended before this call began: it is not begun, and stays owed.
+        if (signal.aborted || this.#interrupt) return;
         const began = this.#host.clock();
         const kind: { value: ToolKind } = { value: 'agent' };
         const result = await untilAborted(this.#runTool(call, cutOff, signal, kind), signal);
@@ -899,6 +901,8 @@ export class ActorDriver {
           .map((one) => one.tool.name),
       );
       await Promise.all(owed.filter((call) => first.has(call.name)).map(run));
+      // Ended while those were made, as while an agent was spawned: nothing more of it begins.
+      if (controller.signal.aborted || this.#interrupt) return;
       await Promise.all(owed.filter((call) => !first.has(call.name)).map(run));
     } finally {
       this.#abort = null;
@@ -928,6 +932,8 @@ export class ActorDriver {
     // again, so it is made again after a restart, whatever was begun before it.
     const { tasks } = this.#host;
     const definition = await this.#host.definition(actor.deployment.id);
+    // Ended while it was read: a tool of the engine's own takes no signal, so it is not begun.
+    if (signal.aborted) return undefined;
     if (tasks.handles(call.name)) {
       kind.value = 'task';
       const own = tasks.tools(actor, definition).find((tool) => tool.name === call.name);
