@@ -121,6 +121,7 @@ export class People {
   readonly #cost: number;
   /** How many times signing in as each email failed, and until when it is refused. */
   readonly #failed = new Map<string, { count: number; until: number }>();
+  readonly #keptFailures: number;
   /** When each session's last use was last written down. */
   readonly #touched = new Map<SessionId, number>();
 
@@ -134,12 +135,23 @@ export class People {
      * which takes a moment on purpose. Tests ask for less.
      */
     readonly passwordCost?: number;
+    /**
+     * How many emails' failed sign-ins are kept, to refuse one that failed too often: 10,000
+     * without it. Past it, those that are not refused now go first, the oldest first.
+     */
+    readonly keptFailures?: number;
   }) {
     this.#store = options.store;
     this.#audit = options.audit;
     this.#clock = options.clock ?? Date.now;
     this.#ids = new IdSource(options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10))));
     this.#cost = options.passwordCost ?? 32_768;
+    this.#keptFailures = options.keptFailures ?? 10_000;
+  }
+
+  /** How many emails' failed sign-ins are kept now. */
+  get failing(): number {
+    return this.#failed.size;
   }
 
   // The first person
@@ -168,6 +180,23 @@ export class People {
 
   // Signing in
 
+  /**
+   * Keeps no more failed sign-ins than the number: anyone may try any email, and each is kept.
+   * Those that are not refused now go first, the oldest first, so that many emails tried at
+   * random do not make one being refused tried again.
+   */
+  #forgetPast(now: number): void {
+    if (this.#failed.size <= this.#keptFailures) return;
+    for (const [email, failed] of this.#failed) {
+      if (this.#failed.size <= this.#keptFailures) return;
+      if (failed.until <= now) this.#failed.delete(email);
+    }
+    for (const email of this.#failed.keys()) {
+      if (this.#failed.size <= this.#keptFailures) return;
+      this.#failed.delete(email);
+    }
+  }
+
   async signIn(
     given: {
       readonly email: string;
@@ -187,7 +216,9 @@ export class People {
       const count = (failed?.count ?? 0) + 1;
       const wait =
         count < ATTEMPTS ? 0 : Math.min(FIRST_WAIT_MS * 2 ** (count - ATTEMPTS), LONGEST_WAIT_MS);
+      this.#failed.delete(email);
       this.#failed.set(email, { count, until: now + wait });
+      this.#forgetPast(now);
       await this.#audit?.record({
         by: { type: 'system' },
         action: 'user.sign_in_failed',
