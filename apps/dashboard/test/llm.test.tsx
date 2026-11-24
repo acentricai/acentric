@@ -283,20 +283,18 @@ describe('the Usage page', () => {
     expect(within(usage).getByRole('link', { name: 'billing' })).toBeTruthy();
   });
 
-  it('adds usage up by account, by name, and reads each range asked for', async () => {
+  it('reads each range asked for, beside the heading, by agent alone', async () => {
     const server = withUsage();
     open('/usage', server);
     await screen.findByRole('table', { name: 'Usage' });
-    fireEvent.click(screen.getByRole('button', { name: 'Group: By agent' }));
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'By account' }));
-    await waitFor(() =>
-      expect(within(screen.getByRole('table', { name: 'Usage' })).getByText('main')).toBeTruthy(),
-    );
-    expect(asked).toContain(`from=${String(rangeStart(30))}&by=account`);
+    expect(screen.queryByRole('button', { name: /^Group/ })).toBeNull();
+    const header = screen.getByRole('heading', { name: 'LLM Usage' }).closest('header');
+    expect(within(header as HTMLElement).getByRole('radio', { name: '30 days' })).toBeTruthy();
+    expect(asked).toContain(`from=${String(rangeStart(30))}&by=agent`);
     fireEvent.click(screen.getByRole('radio', { name: '7 days' }));
-    await waitFor(() => expect(asked).toContain(`from=${String(rangeStart(7))}&by=account`));
+    await waitFor(() => expect(asked).toContain(`from=${String(rangeStart(7))}&by=agent`));
     fireEvent.click(screen.getByRole('radio', { name: 'All time' }));
-    await waitFor(() => expect(asked).toContain('by=account'));
+    await waitFor(() => expect(asked).toContain('by=agent'));
   });
 
   it('says so when there were no model calls', async () => {
