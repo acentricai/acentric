@@ -40,6 +40,7 @@ import {
   backupsSchema,
   setBackupSettingsRequestSchema,
 } from './resources/backups.ts';
+import { updatesQuerySchema, updatesSchema } from './resources/updates.ts';
 import {
   actorSchema,
   conversationEntrySchema,
@@ -1109,6 +1110,17 @@ export const routes = defineRoutes({
     response: backupSettingsSchema,
     status: 200,
     errors: ['conflict', 'unavailable'],
+  },
+  'updates.get': {
+    method: 'GET',
+    path: '/v1/updates',
+    summary:
+      "The server's version, and the versions after it with their notes, as GitHub's releases say. Asked every few hours, or now with refresh.",
+    auth: { on: 'any' },
+    query: updatesQuerySchema,
+    response: updatesSchema,
+    status: 200,
+    errors: [],
   },
 });
 
