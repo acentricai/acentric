@@ -11,6 +11,7 @@ import type {
   Permission,
   Role,
   Scope,
+  Updates,
   User,
 } from '@acentric/protocol';
 
@@ -61,6 +62,19 @@ export function engineArea(shared: Shared) {
     fail: null,
     set: null,
   };
+  /** What GET /v1/updates says, and how often it was asked to ask again. */
+  const updates: { status: Updates; refreshed: number } = {
+    status: {
+      current: '0.16.1',
+      check: 'ok',
+      checkedAt: NOW,
+      error: null,
+      latest: null,
+      next: null,
+      releases: [],
+    },
+    refreshed: 0,
+  };
   let made = 0;
 
   const userOf = (person: Person): User => ({
@@ -79,6 +93,11 @@ export function engineArea(shared: Shared) {
   const outranked = (by: Person, role: Role) => isAtLeast(role, 'admin') && by.role !== 'owner';
 
   const answer = ({ method, path, body, query, person: by }: Call): Response | undefined => {
+    // Updates
+    if (method === 'GET' && path === '/v1/updates') {
+      if (query.get('refresh') === 'true') updates.refreshed += 1;
+      return json(200, updates.status);
+    }
     // Backups
     if (method === 'GET' && path === '/v1/backups/settings') {
       const status = backups.status;
@@ -293,6 +312,6 @@ export function engineArea(shared: Shared) {
     return undefined;
   };
 
-  return { answer, keys, invites, audit, disabled, backups } satisfies Area &
+  return { answer, keys, invites, audit, disabled, backups, updates } satisfies Area &
     Record<string, unknown>;
 }

@@ -49,6 +49,11 @@ export const engine = {
   backups: (signal?: AbortSignal) => api.call('backups.list', withSignal(signal)),
   takeBackup: () => api.call('backups.create'),
   backupSettings: (signal?: AbortSignal) => api.call('backups.settings', withSignal(signal)),
+  updates: (refresh: boolean, signal?: AbortSignal) =>
+    api.call('updates.get', {
+      query: refresh ? { refresh: true } : {},
+      ...withSignal(signal),
+    }),
   setBackupSettings: (body: SetBackupSettingsRequest) => api.call('backups.configure', { body }),
 
   // The audit log

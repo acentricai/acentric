@@ -843,6 +843,98 @@ dialog.ac-dialog.prefs::backdrop {
   justify-content: flex-end;
 }
 
+/* The versions after this one, each with its notes. */
+.prefs-releases {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.prefs-release {
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--prefs-line);
+}
+
+.prefs-release__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--space-3);
+}
+
+.prefs-release__version {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.prefs-release__date {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.prefs-release__link {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+}
+
+.prefs-release__link:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* Notes in Markdown, as a release's are. */
+.md {
+  display: grid;
+  gap: 10px;
+  color: var(--ink-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md pre {
+  margin: 0;
+}
+
+.md ul,
+.md ol {
+  display: grid;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.md strong,
+.md .md__heading {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.md code,
+.md pre {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.md pre {
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.md a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* A row that opens what it is. */
 .prefs-table__open {
   cursor: pointer;

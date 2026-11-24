@@ -5,6 +5,7 @@ import {
   IconDatabase,
   IconKey,
   IconListDetails,
+  IconRefresh,
   IconSettings,
   IconUserCircle,
   IconUsers,
@@ -20,6 +21,7 @@ import { AuditSettings } from './SettingsAudit.tsx';
 import { BackupsSettings } from './SettingsBackups.tsx';
 import { KeysSettings } from './SettingsKeys.tsx';
 import { PeopleSettings } from './SettingsPeople.tsx';
+import { UpdatesSettings } from './SettingsUpdates.tsx';
 
 type SettingsSection = {
   readonly id: string;
@@ -59,6 +61,14 @@ const SECTIONS: readonly SettingsSection[] = [
     icon: IconListDetails,
     page: AuditSettings,
     shown: (me) => may(me, 'audit:read'),
+  },
+  {
+    id: 'updates',
+    name: 'Updates',
+    icon: IconRefresh,
+    page: UpdatesSettings,
+    // For whoever runs the server: one who may manage its backups.
+    shown: (me) => may(me, 'backups:manage'),
   },
 ];
 
