@@ -505,6 +505,8 @@ dialog.ac-dialog.prefs {
   padding: 0;
   overflow: hidden;
   animation: dialog-in 220ms var(--ease-out) both;
+  /* Its dividers, fainter than the page's. */
+  --prefs-line: color-mix(in srgb, var(--hairline) 55%, transparent);
 }
 
 dialog.ac-dialog.prefs::backdrop {
@@ -524,15 +526,15 @@ dialog.ac-dialog.prefs::backdrop {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 12px 12px 12px 18px;
-  border-bottom: 1px solid var(--hairline);
+  padding: 6px 10px 6px 18px;
+  border-bottom: 1px solid var(--prefs-line);
 }
 
 .prefs__title {
   margin: 0;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 500;
-  line-height: 26px;
+  line-height: 22px;
 }
 
 .prefs__body {
@@ -548,29 +550,8 @@ dialog.ac-dialog.prefs::backdrop {
   min-height: 0;
   padding: 16px;
   overflow-y: auto;
-  border-right: 1px solid var(--hairline);
+  border-right: 1px solid var(--prefs-line);
   background: var(--panel);
-}
-
-.prefs__search {
-  width: 100%;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--line-field);
-  border-radius: var(--radius-sm);
-  outline: 0;
-  background: var(--raised);
-  color: var(--ink);
-  font: inherit;
-  font-size: 14px;
-}
-
-.prefs__search::placeholder {
-  color: var(--ink-muted);
-}
-
-.prefs__search:focus {
-  border-color: var(--line-field-focus);
 }
 
 .prefs__list {
@@ -616,13 +597,6 @@ dialog.ac-dialog.prefs::backdrop {
 .prefs__item:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
-}
-
-.prefs__none {
-  margin: 0;
-  padding: 0 10px;
-  color: var(--ink-muted);
-  font-size: 13px;
 }
 
 .prefs__page {
@@ -674,7 +648,7 @@ dialog.ac-dialog.prefs::backdrop {
   gap: var(--space-5);
   min-height: 52px;
   padding: 10px 0;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--prefs-line);
 }
 
 .prefs-row__text {
@@ -745,7 +719,7 @@ dialog.ac-dialog.prefs::backdrop {
 
 .prefs-table th {
   padding: 8px 12px 8px 0;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--prefs-line);
   color: var(--ink-muted);
   font-size: 13px;
   font-weight: 400;
@@ -755,7 +729,7 @@ dialog.ac-dialog.prefs::backdrop {
 .prefs-table td {
   height: 44px;
   padding: 0 12px 0 0;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--prefs-line);
   color: var(--ink-secondary);
   white-space: nowrap;
 }
@@ -789,7 +763,7 @@ dialog.ac-dialog.prefs::backdrop {
 
   .prefs__side {
     border-right: 0;
-    border-bottom: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--prefs-line);
   }
 
   .prefs__page {
