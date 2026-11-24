@@ -71,23 +71,22 @@ describe('the Machines page', () => {
     ).toBeTruthy();
   });
 
-  it('adds one for the agents chosen, and shows the commands that enrol it, once', async () => {
+  it('adds one for every agent, and shows the commands that enrol it, once', async () => {
     const server = signedIn();
     open('/machines', server);
     await screen.findByText(/^No machines/);
     press('Add a machine');
     const form = dialog();
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'build-box' } });
-    // All agents, unless some are chosen.
-    fireEvent.click(within(form).getByLabelText('All agents, and any deployed later'));
-    fireEvent.click(await within(form).findByLabelText('orders'));
+    // Which agents it is for is not asked: every one, changed from the list later.
+    expect(within(form).queryByRole('checkbox')).toBeNull();
     press('Add machine', form);
     expect(await screen.findByRole('heading', { name: 'Enrol build-box' })).toBeTruthy();
     expect(
       server.calls.find((call) => call.path === '/v1/machines' && call.method === 'POST')?.body,
     ).toEqual({
       name: 'build-box',
-      agents: [ORDERS],
+      agents: '*',
     });
     const added = server.machines[0];
     const shown = dialog().textContent ?? '';
@@ -116,20 +115,14 @@ describe('the Machines page', () => {
     );
   });
 
-  it('changes which agents a machine is for', async () => {
+  it('offers no way to change which agents a machine is for', async () => {
     const server = signedIn();
     server.machines.push(machineOf('build-box', { agents: '*' }));
     open('/machines', server);
     await screen.findByText('build-box');
-    fireEvent.click(
-      within(await menu('build-box')).getByRole('menuitem', { name: 'Change agents' }),
-    );
-    expect(await screen.findByRole('heading', { name: 'Agents on build-box' })).toBeTruthy();
-    fireEvent.click(within(dialog()).getByLabelText('All agents, and any deployed later'));
-    fireEvent.click(await within(dialog()).findByLabelText('billing'));
-    press('Save', dialog());
-    await waitFor(() => expect(server.machines[0]?.agents).toEqual([BILLING]));
-    expect(await screen.findByText('billing')).toBeTruthy();
+    expect(
+      within(await menu('build-box')).queryByRole('menuitem', { name: 'Change agents' }),
+    ).toBeNull();
   });
 
   it('gives a new token to enrol a machine again, and none for a sandbox', async () => {
@@ -144,7 +137,7 @@ describe('the Machines page', () => {
       within(await menu('sandbox-1'))
         .getAllByRole('menuitem')
         .map((item) => item.textContent),
-    ).toEqual(['Change agents', 'Remove']);
+    ).toEqual(['Remove']);
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     fireEvent.click(within(await menu('build-box')).getByRole('menuitem', { name: 'Enrol again' }));
     press('New token', await screen.findByRole('dialog'));
@@ -483,6 +476,8 @@ describe('the Sandboxes pages', () => {
       target: { value: '600' },
     });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'work-1' } });
+    // For every agent: which is not asked.
+    expect(within(form).queryByRole('checkbox')).toBeNull();
     press('Create sandbox', form);
     await screen.findByText('work-1');
     expect(server.calls.find((call) => call.path === '/v1/sandboxes')?.body).toEqual({

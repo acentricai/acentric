@@ -220,12 +220,6 @@
   }
 }
 
-/* Which agents may work on a machine: a box for all of them, then one for each. */
-.agents-field {
-  display: grid;
-  gap: 8px;
-}
-
 /* A filter of several choices, as a chip: dashed while nothing is chosen, solid with what is
    once something is, and a list of checkboxes under it. */
 .filter-chip {

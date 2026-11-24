@@ -25,8 +25,6 @@ export const engine = {
     }),
   addMachine: (name: string, agents: MachineAgents) =>
     api.call('machines.create', { body: { name, agents } }),
-  allowAgents: (machine: string, agents: MachineAgents) =>
-    api.call('machines.update', { params: { machine: machine as never }, body: { agents } }),
   machineToken: (machine: string) =>
     api.call('machines.token', { params: { machine: machine as never } }),
   /** Has the machine's daemon take this engine's build of the machine program. */

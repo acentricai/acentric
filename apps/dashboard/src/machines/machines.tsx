@@ -1,16 +1,16 @@
-// `/machines`: the engine's machines, with which agents may work on each, a new enrolment token,
-// and remove in each row, and how to add one. Filters under the heading show those of the types
+// `/machines`: the engine's machines, with which agents may work on each (every agent, as one is
+// added from here), a new enrolment token, and remove in each row, and how to add one. Filters under the heading show those of the types
 // chosen, personal machines, which no provider made, and each sandbox account's; and those the
 // actors of the agents chosen, or the actors chosen, work on.
 
-import { IconKey, IconPencil, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconKey, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
-import type { Machine, MachineAgents, MachineToken } from '@acentric/protocol';
+import type { Machine, MachineToken } from '@acentric/protocol';
 
 import { queryClient } from '../api.ts';
-import { AgentsField, agentsText, useAgentNames } from './agents.tsx';
+import { agentsText, useAgentNames } from './agents.tsx';
 import { engine, shellQuote } from './api.ts';
 import { PERSONAL } from '../url.ts';
 import type { MachinesFilter } from '../url.ts';
@@ -67,7 +67,7 @@ const system = (m: Machine) =>
   m.os === null ? null : `${SYSTEMS[m.os] ?? m.os}${m.arch === null ? '' : ` · ${m.arch}`}`;
 
 /** What the row menu opened: a dialog for one machine. */
-type Action = { kind: 'agents' | 'token' | 'update' | 'remove'; machine: Machine };
+type Action = { kind: 'token' | 'update' | 'remove'; machine: Machine };
 
 /** Whether a machine is of one of the types chosen: none chosen is every machine. */
 export function ofTypes(machine: Machine, types: readonly string[]): boolean {
@@ -193,15 +193,6 @@ export function MachinesPage({
               <Menu label={`Actions for ${safeText(m.name)}`}>
                 {(close) => (
                   <>
-                    <MenuItem
-                      icon={<IconPencil size={16} stroke={1.75} aria-hidden="true" />}
-                      onSelect={() => {
-                        close();
-                        setAction({ kind: 'agents', machine: m });
-                      }}
-                    >
-                      Change agents
-                    </MenuItem>
                     {m.online && m.current === false && (
                       <MenuItem
                         icon={<IconRefresh size={16} stroke={1.75} aria-hidden="true" />}
@@ -247,13 +238,6 @@ export function MachinesPage({
         shown?.length === 0 && <p className="table-empty">No machines match the filters.</p>
       )}
       {adding && <AddDialog onClose={() => setAdding(false)} />}
-      {action?.kind === 'agents' && (
-        <AgentsDialog
-          key={action.machine.id}
-          machine={action.machine}
-          onClose={() => setAction(null)}
-        />
-      )}
       {action?.kind === 'token' && (
         <TokenDialog
           key={action.machine.id}
@@ -326,13 +310,15 @@ function Enrol({ token }: { token: MachineToken }) {
   );
 }
 
-/** `POST /v1/machines`: a name and its agents, then the token its daemon enrols with. */
+/**
+ * `POST /v1/machines`: a name, then the token its daemon enrols with. It is for every agent, and
+ * any deployed later: which agents it is for is changed from the list.
+ */
 function AddDialog({ onClose }: { onClose: () => void }) {
   const [id, setId] = useState('');
-  const [agents, setAgents] = useState<MachineAgents>('*');
   const form = useId();
   const add = useMutation({
-    mutationFn: () => engine.addMachine(id.trim(), agents),
+    mutationFn: () => engine.addMachine(id.trim(), '*'),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: keys.machines }),
   });
   if (add.data !== undefined) {
@@ -395,52 +381,8 @@ function AddDialog({ onClose }: { onClose: () => void }) {
             />
           )}
         </Field>
-        <AgentsField value={agents} onChange={setAgents} disabled={add.isPending} />
       </form>
       <FormError error={add.error} />
-    </Dialog>
-  );
-}
-
-/** `PATCH /v1/machines/:machine`: which agents' actors may work on it. */
-function AgentsDialog({ machine, onClose }: { machine: Machine; onClose: () => void }) {
-  const [agents, setAgents] = useState<MachineAgents>(machine.agents);
-  const form = useId();
-  const save = useMutation({
-    mutationFn: () => engine.allowAgents(machine.id, agents),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.all });
-      onClose();
-    },
-  });
-  return (
-    <Dialog
-      title={`Agents on ${machine.name}`}
-      pending={save.isPending}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="quiet" disabled={save.isPending} onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" form={form} variant="primary" busy={save.isPending}>
-            Save
-          </Button>
-        </>
-      }
-    >
-      <form
-        id={form}
-        className="dialog-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!save.isPending) save.mutate();
-        }}
-      >
-        <AgentsField value={agents} onChange={setAgents} disabled={save.isPending} />
-        <p className="note">Actors already working on it are not moved off.</p>
-      </form>
-      <FormError error={save.error} />
     </Dialog>
   );
 }
