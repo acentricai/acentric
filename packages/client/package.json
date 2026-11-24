@@ -1,6 +1,6 @@
 {
   "name": "@acentric/client",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "private": true,
   "description": "A typed client of the engine's API and of an actor's event stream.",
   "license": "Apache-2.0",
