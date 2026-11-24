@@ -109,6 +109,70 @@ describe('the Updates section of Settings', () => {
     expect(await page.findByText('Updating to 0.17.0…')).toBeTruthy();
   });
 
+  const updaterSays = (
+    server: ReturnType<typeof signedIn>,
+    state: 'waiting' | 'downloaded' | 'done',
+    version: string,
+    next: string,
+  ) => {
+    server.areas.engine.updates.status = {
+      ...server.areas.engine.updates.status,
+      latest: next,
+      next,
+      updater: {
+        state,
+        version,
+        at: state === 'waiting' ? 4_070_000_000_000 : null,
+        error: null,
+        changedAt: 1,
+      },
+    };
+  };
+
+  it('takes one set for later now instead, once asked whether to', async () => {
+    const server = withNext(signedIn());
+    updaterSays(server, 'waiting', '0.17.0', '0.17.0');
+    const page = await section(server);
+    expect(await page.findByText(/^0\.17\.0 at /)).toBeTruthy();
+    fireEvent.click(update(page).getByRole('button', { name: 'Update now' }));
+    const asked = within(await screen.findByRole('dialog', { name: 'Update to 0.17.0 now?' }));
+    fireEvent.click(asked.getByRole('button', { name: 'Update now' }));
+    expect(await page.findByText('Updating to 0.17.0…')).toBeTruthy();
+    expect(server.areas.engine.updates.status.updater?.at).toBeNull();
+  });
+
+  it('keeps one set for later of a version that is no longer the next, to take back', async () => {
+    const server = withNext(signedIn());
+    updaterSays(server, 'waiting', '0.17.0', '0.17.1');
+    const page = await section(server);
+    expect(await page.findByText(/^0\.17\.0 at /)).toBeTruthy();
+    expect(update(page).queryByRole('button', { name: 'Update now' })).toBeNull();
+    expect(update(page).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+  });
+
+  it('offers a newer version afresh, after one was downloaded or taken', async () => {
+    const server = withNext(signedIn());
+    updaterSays(server, 'downloaded', '0.17.0', '0.17.1');
+    const page = await section(server);
+    await loaded(page);
+    expect(update(page).getByText('0.17.1')).toBeTruthy();
+    expect(update(page).getByRole('button', { name: 'Download' })).toBeTruthy();
+    expect(update(page).queryByRole('button', { name: 'Update now' })).toBeNull();
+  });
+
+  it('says it was updated, and offers the one after it once there is one', async () => {
+    const server = withNext(signedIn());
+    server.areas.engine.updates.status = {
+      ...server.areas.engine.updates.status,
+      current: '0.17.0',
+      latest: null,
+      next: null,
+      updater: { state: 'done', version: '0.17.0', at: null, error: null, changedAt: 1 },
+    };
+    const page = await section(server);
+    expect(await page.findByText('Updated to 0.17.0')).toBeTruthy();
+  });
+
   it('says it is downloading while the updater has not answered', async () => {
     const server = withNext(signedIn());
     server.areas.engine.updates.silent = true;

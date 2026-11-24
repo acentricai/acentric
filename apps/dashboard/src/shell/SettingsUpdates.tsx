@@ -248,22 +248,23 @@ function UpdateRow({
       </div>
     );
   }
+  // What it does now, and what may be asked of it then. A version it is busy with is said, and
+  // what it did is past once there is a newer one to take: that one is offered afresh.
   let said: string | null = null;
-  let actions: 'ask' | 'downloaded' | 'cancel' | null = null;
+  let actions: 'download' | 'downloaded' | 'waiting' | null = null;
   if (updater.state === 'downloading') said = `Downloading ${of ?? ''}…`;
   else if (updater.state === 'updating') said = `Updating to ${of ?? ''}…`;
   else if (updater.state === 'waiting') {
     said = `${of ?? ''} at ${updater.at === null ? '—' : longTime(updater.at)}`;
-    actions = 'cancel';
+    actions = 'waiting';
   } else if (updater.state === 'downloaded' && about) {
     said = `${of} downloaded`;
     actions = 'downloaded';
+  } else if (next !== null) {
+    said = next;
+    actions = 'download';
   } else if (updater.state === 'done' && of === data.current) {
     said = `Updated to ${of}`;
-  }
-  if (next !== null && actions === null && said === null) {
-    said = next;
-    actions = 'ask';
   }
   if (said === null) return null;
   return (
@@ -271,7 +272,7 @@ function UpdateRow({
       <span className="prefs-row__name">Update</span>
       <span className="prefs-row__form">
         <span className="prefs-row__plain">{said}</span>
-        {actions === 'ask' && next !== null && (
+        {actions === 'download' && next !== null && (
           <Button size="sm" onClick={() => onAsk({ version: next, action: 'download' })}>
             Download
           </Button>
@@ -286,10 +287,18 @@ function UpdateRow({
             </Button>
           </>
         )}
-        {actions === 'cancel' && (
-          <Button size="sm" busy={busy} onClick={onCancel}>
-            Cancel
-          </Button>
+        {actions === 'waiting' && (
+          <>
+            <Button size="sm" busy={busy} onClick={onCancel}>
+              Cancel
+            </Button>
+            {/* Set for later, it may be taken now instead: while it is still the next. */}
+            {about && (
+              <Button size="sm" variant="primary" onClick={onNow}>
+                Update now
+              </Button>
+            )}
+          </>
         )}
       </span>
     </div>
