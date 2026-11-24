@@ -1,7 +1,7 @@
 // Settings: a tab at the foot of the sidebar, above the account, that opens a large dialog with
 // a sidebar of its own: its sections, and the page beside it that the one chosen shows.
 
-import { IconSettings, IconUser, IconUsers, IconX } from '@tabler/icons-react';
+import { IconSettings, IconUserCircle, IconUsers, IconX } from '@tabler/icons-react';
 import type { Icon } from '@tabler/icons-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
@@ -20,7 +20,7 @@ type SettingsSection = {
 };
 
 const SECTIONS: readonly SettingsSection[] = [
-  { id: 'account', name: 'Account', icon: IconUser, page: AccountSettings },
+  { id: 'account', name: 'Account', icon: IconUserCircle, page: AccountSettings },
   {
     id: 'people',
     name: 'People',
