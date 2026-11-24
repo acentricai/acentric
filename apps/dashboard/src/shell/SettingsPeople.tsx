@@ -57,7 +57,7 @@ export function PeopleSettings() {
           <table className="prefs-table" aria-label="Members">
             <thead>
               <tr>
-                <th scope="col">Member</th>
+                <th scope="col" aria-label="Member" />
                 <th scope="col">Role</th>
                 <th scope="col">Status</th>
                 <th scope="col">Joined</th>
