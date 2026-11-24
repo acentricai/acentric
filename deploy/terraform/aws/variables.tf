@@ -17,7 +17,7 @@ variable "name" {
 variable "acentric_version" {
   description = "The version of the server, as VERSIONS.md says: an exact one, changed on purpose. Changing it makes the instance again, on the same data volume, and the new version backs the database up before it changes it."
   type        = string
-  default     = "0.15.0"
+  default     = "0.16.0"
 
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.acentric_version))

@@ -3,7 +3,20 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
-## Unreleased
+## 0.16.0
+
+**Upgrading from 0.15.0.** The database, deployed agents, machines' daemons and the command
+carry over; nothing is deployed again. Before you start the new version:
+
+- **Take this version's recipe** (its tag, `v0.16.0`). Each gives the keys as files now: make
+  the files from the values you have (`ACENTRIC_SECRET_KEY` and `ACENTRIC_ADMIN_KEY`), as its
+  README says, and take them out of the environment. A server given both a key and its `_FILE`
+  does not start.
+- **Look at `ACENTRIC_MAX_TURNS`.** A server now takes 1,000 actors in a turn at once where it
+  took 100. On a machine smaller than 2 vCPU and 4 GB, set it lower.
+- **A new server's first key** is in `/data/first-admin-key`, not its log.
+
+Then upgrade as the recipe's README says ([VERSIONS.md](VERSIONS.md#what-an-upgrade-looks-like)).
 
 - **Upgrades, tested.** CI upgrades the last release's server to each commit of `main`, on
   data it filled, and goes back again; a release does it before anything is pushed. Every
