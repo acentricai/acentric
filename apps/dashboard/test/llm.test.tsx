@@ -113,11 +113,6 @@ describe('the Accounts page', () => {
       'Fireworks',
     ]);
     fireEvent.change(provider, { target: { value: 'openai' } });
-    expect(
-      within(dialog()).getByText(
-        'The first OpenAI account is its default: every agent given none uses it.',
-      ),
-    ).toBeTruthy();
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'work' } });
     fireEvent.change(within(dialog()).getByLabelText('API key'), {
       target: { value: 'bad-key' },
@@ -137,19 +132,19 @@ describe('the Accounts page', () => {
     expect(document.body.innerHTML).not.toContain('sk-test');
   });
 
-  it('offers to make another of a provider the default as it is added', async () => {
+  it('adds another of a provider as it is, not its default', async () => {
     const server = signedIn();
     server.areas.llm.accounts.push(accountOf(1, { name: 'main', default: true }));
     open('/llm-providers', server);
     fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
+    expect(within(dialog()).queryByRole('checkbox')).toBeNull();
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'second' } });
     fireEvent.change(within(dialog()).getByLabelText('API key'), { target: { value: 'sk-2' } });
-    fireEvent.click(within(dialog()).getByLabelText('Make it the default for Anthropic'));
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Add account' }));
     await waitFor(() =>
       expect(server.areas.llm.accounts.map((account) => [account.name, account.default])).toEqual([
-        ['main', false],
-        ['second', true],
+        ['main', true],
+        ['second', false],
       ]),
     );
   });
