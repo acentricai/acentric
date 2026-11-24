@@ -439,3 +439,14 @@
   align-items: end;
   gap: var(--space-2);
 }
+
+/* A row with nothing under its bar keeps the room a row with a line under it has, so the rows of
+   the cards beside each other stand as far apart. */
+.usage-bars__row:not(:has(.usage-bars__note)) {
+  padding-bottom: 24px;
+}
+
+/* A name in a card's list opens its page, with no line under it on hover. */
+.usage-bars__name .title-link:hover {
+  background-size: 0 1px;
+}
