@@ -1668,6 +1668,10 @@ tr:hover .row-action,
 
 /* A dropdown in a dialog's form is a field like the others: as wide and as tall as an input,
    and its list as wide as it. */
+.dropdown__value--none {
+  color: var(--ink-muted);
+}
+
 .dialog-form .dropdown,
 .dialog-form .dropdown__button {
   width: 100%;

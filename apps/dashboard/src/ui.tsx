@@ -866,20 +866,29 @@ export function Dropdown<T extends string>({
   options,
   label,
   onChange,
+  placeholder,
 }: {
   value: T;
   options: ReadonlyArray<DropdownOption<T>>;
   /** What the choice is, for assistive technology. */
   label: string;
   onChange: (value: T) => void;
+  /** What it shows while none of the options is chosen. */
+  placeholder?: string;
 }) {
   const current = options.find((option) => option.value === value);
   return (
     <Menu
-      label={`${label}: ${current?.label ?? ''}`}
+      label={`${label}: ${current?.label ?? placeholder ?? ''}`}
       button={
         <>
-          <span className="dropdown__value">{current?.label}</span>
+          <span
+            className={
+              current === undefined ? 'dropdown__value dropdown__value--none' : 'dropdown__value'
+            }
+          >
+            {current?.label ?? placeholder}
+          </span>
           <IconChevronDown size={14} stroke={1.75} aria-hidden="true" />
         </>
       }

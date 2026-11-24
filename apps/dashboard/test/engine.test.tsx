@@ -66,8 +66,8 @@ describe('the API keys page', () => {
     fireEvent.click(within(dialog()).getByRole('radio', { name: 'One agent' }));
     // Only what a key of one agent can hold is offered.
     expect(offered()).toEqual(HOLDABLE.agent);
-    const agent = await within(dialog()).findByRole('option', { name: 'orders' });
-    fireEvent.change(agent.closest('select') as HTMLSelectElement, { target: { value: ORDERS } });
+    fireEvent.click(await within(dialog()).findByRole('button', { name: /^Agent: / }));
+    fireEvent.click(await within(dialog()).findByRole('menuitemradio', { name: 'orders' }));
     fireEvent.click(within(dialog()).getByLabelText(/agents:read/));
     press('New key', dialog());
 
@@ -96,12 +96,10 @@ describe('the API keys page', () => {
     fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'desk' } });
     fireEvent.click(within(dialog()).getByRole('radio', { name: 'One actor' }));
     expect(offered()).toEqual(HOLDABLE.actor);
-    const agent = await within(dialog()).findByRole('option', { name: 'orders' });
-    fireEvent.change(agent.closest('select') as HTMLSelectElement, { target: { value: ORDERS } });
-    const actor = await within(dialog()).findByRole('option', { name: 'eu-desk' });
-    fireEvent.change(actor.closest('select') as HTMLSelectElement, {
-      target: { value: idOf('act', 1) },
-    });
+    fireEvent.click(await within(dialog()).findByRole('button', { name: /^Agent: / }));
+    fireEvent.click(await within(dialog()).findByRole('menuitemradio', { name: 'orders' }));
+    fireEvent.click(await within(dialog()).findByRole('button', { name: /^Actor: / }));
+    fireEvent.click(await within(dialog()).findByRole('menuitemradio', { name: 'eu-desk' }));
     fireEvent.click(within(dialog()).getByLabelText(/actors:send/));
     press('New key', dialog());
     await screen.findByRole('dialog', { name: 'desk' });
