@@ -881,6 +881,25 @@ dialog.ac-dialog.prefs::backdrop {
   }
 }
 
+/* A row's ⋯ in Settings: the icon alone, with no box round it, and its menu as wide as its words. */
+.prefs-table .more-menu__button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.prefs-table .more-menu__button:hover,
+.prefs-table .more-menu__button[aria-expanded='true'] {
+  background: var(--hover);
+}
+
+.prefs-table .more-menu__pop {
+  width: max-content;
+  min-width: 0;
+}
+
 .prefs-table__action {
   width: 1%;
   text-align: right;
