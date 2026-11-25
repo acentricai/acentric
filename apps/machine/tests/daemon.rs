@@ -672,7 +672,10 @@ fn a_daemon_takes_the_engines_build_when_asked_and_becomes_it() {
         json!({ "updated": true, "build": digest })
     );
     // It became the new program, as the same process, started as the old one was.
-    eventually("the new program ran", || became.exists());
+    // Its shell makes the file before it writes it: what it wrote is waited for, not the file.
+    eventually("the new program ran", || {
+        std::fs::read_to_string(&became).is_ok_and(|said| !said.trim().is_empty())
+    });
     assert_eq!(
         std::fs::read_to_string(&became).unwrap().trim(),
         format!("{pid} connect")
