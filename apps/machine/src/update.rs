@@ -56,19 +56,34 @@ pub fn replace(program: &Path, fetched: &[u8], expected: &str) -> Result<bool, R
     fs::write(&beside, fetched)
         .and_then(|()| fs::set_permissions(&beside, fs::Permissions::from_mode(0o755)))
         .map_err(|error| failed(format!("The program could not be written: {error}")))?;
-    // It is run once before it is trusted with the machine.
-    let runs = Command::new(&beside)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
-    if !runs {
+    // It is run once before it is trusted with the machine. Just written, Linux may refuse to
+    // run it while another thread's new process still holds it open: that passes in a moment.
+    let mut tried = 0;
+    let ran = loop {
+        let ran = Command::new(&beside)
+            .arg("--version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        match ran {
+            Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy && tried < 20 => {
+                tried += 1;
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            ran => break ran,
+        }
+    };
+    let why = match ran {
+        Ok(status) if status.success() => None,
+        Ok(status) => Some(format!("it ended with {status}")),
+        Err(error) => Some(error.to_string()),
+    };
+    if let Some(why) = why {
         let _ = fs::remove_file(&beside);
-        return Err(failed(
-            "What the engine handed out does not run on this machine".into(),
-        ));
+        return Err(failed(format!(
+            "What the engine handed out does not run on this machine: {why}"
+        )));
     }
     fs::rename(&beside, program)
         .map_err(|error| failed(format!("The program could not be replaced: {error}")))?;
