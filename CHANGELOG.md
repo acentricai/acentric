@@ -3,6 +3,43 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## 0.18.0
+
+**Upgrading from 0.17.** Take this version's image, or take it from the dashboard where an
+updater runs. **The database changes**, for a command's images and an actor's instructions:
+the new version backs it up first, then changes it, and its port answers that it is updating
+meanwhile. Deployed agents carry over, and nothing is deployed again. A machine connected
+before stays connected as it was.
+
+- **The tool `view_image` is gone:** a command shows the model images with `show`, below. A
+  machine has `show` once it takes this version's machine program: `acentric machines update
+--all`, or Update in the dashboard.
+- **To disconnect a machine installed before**, take the program again with the new install
+  command on it, then `acentric-machine disconnect`.
+
+- **Changed:** a machine is connected in three commands, which `acentric machines add` and the
+  dashboard give: `curl -fsSL <engine>/install.sh | sh` installs the machine program, as
+  `acentric-machine`, and puts it on the PATH; `acentric-machine enrol` enrols it with its
+  token; `acentric-machine connect` keeps it connected in the background, as a launchd agent on
+  macOS or a systemd user service on Linux. **Added:** `acentric-machine disconnect` stops it.
+  A program installed as `machine` before is linked to the new one, and its service runs as it
+  did. The script's `--id` and `--token` still do all three in one go.
+- **Changed:** a command shows the model images with `show <file>...`, in its bash command, in
+  place of the tool `view_image`, which is gone. The images come after the command's output,
+  each checked for the model first. Machines take the program that has `show` when they are
+  updated.
+- **Added:** an agent's instructions may be a function, which makes them for each actor from
+  what it was created with, when it is created: kept with the actor, and made again when it
+  moves to another version of its agent. Such an agent needs this version or a later one: an
+  engine before refuses to deploy it. Agents whose instructions are text are as they were.
+- **Fixed:** a machine's daemon tried only the first address of its engine's host, and never
+  reached a server that answers on another: `localhost` is `::1` first, and one listening on
+  127.0.0.1 alone was not reached. It tries each in turn.
+- **Fixed:** updating a machine's daemon could fail on Linux, saying the program handed out
+  does not run there, when the program just written was busy for a moment: it is tried again.
+  And an update that worked could be said to have lost its connection before it answered: the
+  daemon closes its connection whole before it becomes the new program.
+
 ## 0.17.1
 
 **Upgrading from 0.17.0:** take this version's image, or take it from the dashboard where an

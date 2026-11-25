@@ -1,6 +1,6 @@
 {
   "name": "@acentric/agent",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "private": true,
   "description": "What a developer writes an agent with: the Agent class, tool(), and their types.",
   "license": "Apache-2.0",
