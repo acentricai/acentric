@@ -390,6 +390,21 @@ impl Daemon {
         if let Some(mut session) = self.session.take() {
             let _ = session.socket.close(None);
             let _ = session.socket.flush();
+            // What the engine sent meanwhile is read, and its close waited for, two seconds at
+            // most: a socket closed with something unread in it is reset, and a reset may take
+            // with it what was sent last, such as the answer to an update.
+            let until = sys::now_ms() + 2_000;
+            while sys::now_ms() < until {
+                match session.socket.read() {
+                    Ok(_) => {}
+                    Err(tungstenite::Error::Io(error))
+                        if matches!(
+                            error.kind(),
+                            io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                        ) => {}
+                    Err(_) => break,
+                }
+            }
         }
         if !restart {
             let _ = fs::remove_file(self.options.dir.join("lock"));
