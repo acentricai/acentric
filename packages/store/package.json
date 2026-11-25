@@ -1,6 +1,6 @@
 {
   "name": "@acentric/store",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "private": true,
   "description": "Where the engine keeps what it has: the store, on SQLite.",
   "license": "Apache-2.0",

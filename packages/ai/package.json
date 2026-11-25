@@ -1,6 +1,6 @@
 {
   "name": "@acentric/ai",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "private": true,
   "description": "Calls model providers: the provider interface, the protocol codecs, and each provider.",
   "license": "Apache-2.0",
