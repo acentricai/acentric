@@ -71,7 +71,6 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
         <h2 className="actor-side__title actor-side__title--unseen" id="actor-cost">
           Cost
         </h2>
-        <p className="actor-cost__total">{total === undefined ? '—' : dollars(total)}</p>
         {whole > 0 && (
           <div className="usage-split" role="img" aria-label="Tokens by kind">
             {PARTS.map(({ part, name, hue }) => {
@@ -112,6 +111,7 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
           <Fact name="Turns">{dollarsOf(ofKind('turn'), read)}</Fact>
           <Fact name="Compaction">{dollarsOf(ofKind('compaction'), read)}</Fact>
           <Fact name="Subagents">{below === undefined ? '—' : dollars(below)}</Fact>
+          <Fact name="Total">{total === undefined ? '—' : dollars(total)}</Fact>
         </dl>
       </section>
       <section className="actor-side__group" aria-labelledby="actor-requests">
