@@ -10,7 +10,6 @@ import {
 import { Link, Outlet, useLocation, useParams, type LinkOptions } from '@tanstack/react-router';
 import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
-import { actorName } from '../agents/pages/agent.tsx';
 import { agentPath } from '../agents/links.tsx';
 import { agentSection } from '../agents/pages/dashboard.tsx';
 import { useActor, useAgent } from '../agents/queries.ts';
@@ -64,11 +63,9 @@ function useCrumbs(): Crumb[] {
     if (page !== undefined) crumbs.push({ label: page.name, link: { to: page.path } });
   }
   if (actor !== undefined) {
-    crumbs.push({
-      label: read.data === undefined ? actorName({ id: actor, name: null }) : actorName(read.data),
-      mono: true,
-      title: actor,
-    });
+    // An actor is one of its agent's Actors, and is named by its ID.
+    if (of !== undefined) crumbs.push({ label: 'Actors', link: { to: agentPath(of, 'actors') } });
+    crumbs.push({ label: actor, mono: true, title: actor });
   }
   return crumbs;
 }
