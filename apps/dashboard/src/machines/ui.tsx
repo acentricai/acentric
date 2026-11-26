@@ -512,23 +512,26 @@ export function Menu({
   );
 }
 
-/** An item of a menu; `danger` reads red. */
+/** An item of a menu; `danger` reads red, and `disabled` is shown but not chosen. */
 export function MenuItem({
   children,
   onSelect,
   icon,
   danger = false,
+  disabled = false,
 }: {
   children: ReactNode;
   onSelect: () => void;
   icon: ReactNode;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
       tabIndex={-1}
+      disabled={disabled}
       className={`pop__item${danger ? ' pop__item--danger' : ''}`}
       onClick={onSelect}
     >

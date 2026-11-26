@@ -111,8 +111,9 @@ export function DeploymentsPage() {
                       >
                         View source
                       </MenuItem>
-                      {deploys && active !== undefined && deployment.version !== active && (
+                      {deploys && (
                         <MenuItem
+                          disabled={active === undefined || deployment.version === active}
                           icon={<IconCircleCheck size={16} stroke={1.75} aria-hidden="true" />}
                           onSelect={() => {
                             done();

@@ -156,14 +156,16 @@ describe('a deployment’s menu', () => {
     expect(await within(source).findByText("export default 'v1';")).toBeTruthy();
   });
 
-  it('makes an older version active, after asking, and offers it for none but those', async () => {
+  it('makes another version active, after asking, and not the one that is', async () => {
     const { server, orders } = withAgents();
     open(`/agents/${orders.id}/deployments`, server);
-    // The active version is not made active again.
+    // The active version is offered, but not to be made active again.
     await screen.findByRole('button', { name: 'Actions for v2' });
     press('Actions for v2');
     await screen.findByRole('menuitem', { name: 'View source' });
-    expect(screen.queryByRole('menuitem', { name: 'Make active' })).toBeNull();
+    expect(
+      (screen.getByRole('menuitem', { name: 'Make active' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     press('Actions for v1');
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Make active' }));
