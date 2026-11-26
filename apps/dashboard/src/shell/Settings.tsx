@@ -9,13 +9,13 @@ import {
   IconSettings,
   IconUserCircle,
   IconUsers,
-  IconX,
 } from '@tabler/icons-react';
 import type { Icon } from '@tabler/icons-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { ComponentType } from 'react';
 
 import { may, useMe, type Me } from '../me.ts';
+import { SideDialog } from '../side-dialog.tsx';
 import { AccountSettings } from './SettingsAccount.tsx';
 import { AuditSettings } from './SettingsAudit.tsx';
 import { BackupsSettings } from './SettingsBackups.tsx';
@@ -96,87 +96,22 @@ export function SettingsButton({ collapsed }: { collapsed: boolean }) {
 }
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const opener = useRef<Element | null>(null);
-  const title = useId();
   const me = useMe();
   const sections = SECTIONS.filter(
     (section) => section.shown === undefined || (me.data !== undefined && section.shown(me.data)),
   );
   const [chosen, setChosen] = useState(SECTIONS[0]?.id ?? '');
-
-  useEffect(() => {
-    opener.current = document.activeElement;
-    const dialog = ref.current;
-    if (dialog !== null && !dialog.open) {
-      if (typeof dialog.showModal === 'function') dialog.showModal();
-      else dialog.setAttribute('open', '');
-    }
-    dialog?.querySelector<HTMLElement>('.prefs__item[aria-current="page"]')?.focus();
-    document.body.dataset['dialog'] = 'open';
-    return () => {
-      delete document.body.dataset['dialog'];
-      const back = opener.current;
-      if (back instanceof HTMLElement && back.isConnected) back.focus();
-    };
-  }, []);
-
-  const shown = sections.find((section) => section.id === chosen) ?? sections[0];
-  const Page = shown?.page;
-
+  const Page = (sections.find((section) => section.id === chosen) ?? sections[0])?.page;
   return (
-    <dialog
-      ref={ref}
-      className="ac-dialog prefs"
-      aria-labelledby={title}
-      tabIndex={-1}
-      onCancel={(event) => {
-        // A file picker that was cancelled says so with a cancel of its own, which comes up
-        // here: only the dialog's own, as Escape, closes it.
-        if (event.target !== event.currentTarget) return;
-        event.preventDefault();
-        onClose();
-      }}
-      // A click on the backdrop is a click on the dialog itself, outside its frame.
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <SideDialog
+      title="Settings"
+      label="Settings"
+      tabs={sections}
+      chosen={chosen}
+      onChoose={setChosen}
+      onClose={onClose}
     >
-      <div className="prefs__frame">
-        <header className="prefs__head">
-          <h2 id={title} className="prefs__title">
-            Settings
-          </h2>
-          <button type="button" className="dialog__close" onClick={onClose} aria-label="Close">
-            <IconX size={18} stroke={1.75} aria-hidden="true" />
-          </button>
-        </header>
-        <div className="prefs__body">
-          <nav className="prefs__side" aria-label="Settings">
-            <ul className="prefs__list">
-              {sections.map((section) => {
-                const Glyph = section.icon;
-                return (
-                  <li key={section.id}>
-                    <button
-                      type="button"
-                      className="prefs__item"
-                      aria-current={section.id === shown?.id ? 'page' : undefined}
-                      onClick={() => setChosen(section.id)}
-                    >
-                      <Glyph size={17} stroke={1.75} aria-hidden="true" />
-                      <span>{section.name}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-          <section className="prefs__page" aria-label={shown?.name ?? 'Settings'}>
-            {Page !== undefined && <Page />}
-          </section>
-        </div>
-      </div>
-    </dialog>
+      {Page !== undefined && <Page />}
+    </SideDialog>
   );
 }
