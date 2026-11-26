@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { actorFor, definitionOf, idOf } from './fake/agents.ts';
 import { open } from './render.tsx';
+import { totalsOf } from './fake/llm.ts';
 import { fakeServer, machineOf } from './server.ts';
 
 const signedIn = (role: Role = 'owner') => {
@@ -125,6 +126,51 @@ describe('an agent’s own dashboard', () => {
     fireEvent.click(within(side).getByRole('link', { name: 'Back to Dashboard' }));
     await waitFor(() => expect(page.where()).toBe('/agents'));
     expect(await within(side).findByRole('link', { name: 'Machines' })).toBeTruthy();
+  });
+});
+
+describe('an agent’s Overview', () => {
+  it('says what it is, and adds up only its own model calls, with how its actors stand', async () => {
+    const { server, orders } = withAgents();
+    const asked: URLSearchParams[] = [];
+    server.areas.llm.usageIs((query) => {
+      asked.push(query);
+      const by = query.get('by');
+      return {
+        totals: totalsOf({ cost: 12.5, calls: 40 }),
+        groups:
+          by === 'model'
+            ? [{ key: 'gpt-6.2-sol', totals: totalsOf({ cost: 12.5, calls: 40 }) }]
+            : by === 'actor'
+              ? [{ key: idOf('act', 1), totals: totalsOf({ cost: 9, calls: 30 }) }]
+              : [],
+      };
+    });
+    open(`/agents/${orders.id}`, server);
+    expect(await screen.findByRole('heading', { name: 'Overview' })).toBeTruthy();
+    expect(await screen.findByText('v2 active')).toBeTruthy();
+    await waitFor(() =>
+      expect(document.querySelector('.usage-tile__value')?.textContent).toBe('$12.50'),
+    );
+    // Every read of usage is of this agent alone.
+    expect(asked.length).toBeGreaterThan(0);
+    expect(asked.every((query) => query.get('agent') === orders.id)).toBe(true);
+    // Its top actor by name, a way to its page.
+    const top = await within(screen.getByRole('list', { name: 'Spend by actor' })).findByRole(
+      'link',
+      { name: 'eu-desk' },
+    );
+    expect(top.getAttribute('href')).toBe(`/agents/${orders.id}/actors/${idOf('act', 1)}`);
+    // One working, one idle, one archived.
+    const standing = screen.getByRole('list', { name: 'Actors by status' });
+    await waitFor(() =>
+      expect(
+        within(standing)
+          .getAllByRole('listitem')
+          .slice(0, 3)
+          .map((row) => row.textContent),
+      ).toEqual(['working1', 'idle1', 'archived1']),
+    );
   });
 });
 

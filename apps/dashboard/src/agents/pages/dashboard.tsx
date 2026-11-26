@@ -16,7 +16,6 @@ import { Outlet } from '@tanstack/react-router';
 
 import { may } from '../../me.ts';
 import type { Section } from '../../sections.ts';
-import { PageHeader } from '../../ui.tsx';
 import { agentPath } from '../links.tsx';
 import '../agents.css';
 
@@ -86,5 +85,3 @@ export function AgentDashboard() {
     </div>
   );
 }
-
-export const OverviewPage = () => <PageHeader title="Overview" spaced />;
