@@ -134,6 +134,45 @@ body {
   }
 }
 
+/* With an agent open: the way back to the whole dashboard, beside the mark. */
+.side__back {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 18px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.side__back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.side__back:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.side__back > svg {
+  flex: none;
+}
+
+/* The rail has room for the mark only, which goes back too. */
+.side[data-collapsed] .side__back {
+  display: none;
+}
+
 /* ---------- Navigation ---------- */
 
 .nav {

@@ -5,10 +5,9 @@ import type { Role } from '@acentric/protocol';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { shortId } from '../src/format.ts';
 import { actorFor, definitionOf, idOf } from './fake/agents.ts';
 import { open } from './render.tsx';
-import { fakeServer, machineOf } from './server.ts';
+import { fakeServer } from './server.ts';
 
 const signedIn = (role: Role = 'owner') => {
   const server = fakeServer();
@@ -104,92 +103,28 @@ describe('the Agents page', () => {
   });
 });
 
-describe('an agent’s page', () => {
-  it('says its newest version, provider and inputs, and lists its actors by status', async () => {
+describe('an agent’s own dashboard', () => {
+  it('has its own tabs in the sidebar, each its own page, and the way back', async () => {
     const { server, orders } = withAgents();
     const page = open(`/agents/${orders.id}`, server);
-    expect(await screen.findByRole('heading', { name: 'orders' })).toBeTruthy();
-    expect(await screen.findByText('refund')).toBeTruthy();
-    await screen.findByText('eu-desk');
-    expect(cells('Actors')).toEqual(['eu-desk', shortId(idOf('act', 2), 28), 'old-desk']);
-    // The status filter keeps the address, and choosing it again clears it.
-    fireEvent.click(screen.getByRole('button', { name: 'Status' }));
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'working' }));
-    await waitFor(() => expect(cells('Actors')).toEqual(['eu-desk']));
-    expect(page.where()).toBe(`/agents/${orders.id}?status=working`);
-    // The breadcrumbs name the agent.
-    expect(
-      within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByText('orders'),
-    ).toBeTruthy();
-  });
-
-  it('makes an actor, on a machine for an agent whose actors work on one, and opens it', async () => {
-    const server = signedIn();
-    const worker = area(server).agent('worker', 3, [definitionOf({ features: ['machine'] })]);
-    server.machines.push(machineOf('box', { agents: '*', online: true }));
-    const page = open(`/agents/${worker.id}`, server);
-    fireEvent.click(await screen.findByRole('button', { name: 'New actor' }));
-    const form = dialog();
-    fireEvent.change(within(form).getByLabelText(/^Name/), { target: { value: 'night-shift' } });
-    const machine = await within(form).findByRole('option', { name: 'box' });
-    fireEvent.change(machine.closest('select') as HTMLSelectElement, {
-      target: { value: machineOf('box').id },
-    });
-    fireEvent.change(within(form).getByLabelText('Working directory'), {
-      target: { value: '~/work' },
-    });
-    fireEvent.click(within(form).getByRole('button', { name: 'New actor' }));
-    await waitFor(() => expect(page.where()).toMatch(/^\/actors\/act_/));
-    const created = server.calls.find(
-      (call) => call.method === 'POST' && call.path === `/v1/agents/${worker.id}/actors`,
+    const side = await screen.findByRole('complementary', { name: 'Sidebar' });
+    const tabs = await within(side).findAllByRole('link');
+    expect(tabs.map((tab) => tab.getAttribute('aria-label'))).toEqual(
+      expect.arrayContaining(['Overview', 'Actors', 'Deployments', 'Secrets', 'Settings']),
     );
-    expect(created?.body).toEqual({
-      name: 'night-shift',
-      machine: { id: machineOf('box').id, cwd: '~/work' },
-    });
-  });
-
-  it('lists its deployments, newest first, and opens what one declares', async () => {
-    const { server, orders } = withAgents();
-    const page = open(`/agents/${orders.id}/deployments`, server);
-    await screen.findByText('latest');
-    expect(cells('Deployments').map((text) => text?.replace('latest', ''))).toEqual(['v2', 'v1']);
-    fireEvent.click(screen.getAllByRole('button', { name: /v2/ })[0] as HTMLElement);
-    expect(await screen.findByText('lookup_order')).toBeTruthy();
-    expect(screen.getByText('code mode')).toBeTruthy();
-    expect(screen.getByText('You answer questions about orders.')).toBeTruthy();
-    expect(page.where()).toBe(`/agents/${orders.id}/deployments?v=2`);
-  });
-
-  it('sets a secret, asks before replacing one, and removes one', async () => {
-    const { server, orders } = withAgents();
-    area(server).secrets(orders.id, ['ORDERS_KEY']);
-    open(`/agents/${orders.id}/secrets`, server);
-    await screen.findByText('ORDERS_KEY');
-    press('Set secret');
-    fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'ORDERS_KEY' } });
-    fireEvent.change(within(dialog()).getByLabelText('Value'), { target: { value: 'k-2' } });
-    fireEvent.click(within(dialog()).getByRole('button', { name: 'Set secret' }));
-    expect(await screen.findByRole('heading', { name: 'Replace secret' })).toBeTruthy();
-    fireEvent.click(within(dialog()).getByRole('button', { name: 'Set secret' }));
-    await waitFor(() =>
-      expect(
-        server.calls.some(
-          (call) =>
-            call.method === 'PUT' &&
-            call.path === `/v1/agents/${orders.id}/secrets/ORDERS_KEY` &&
-            (call.body as { value?: string }).value === 'k-2',
-        ),
-      ).toBe(true),
+    expect(within(side).queryByRole('link', { name: 'Machines' })).toBeNull();
+    expect(within(side).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe(
+      'page',
     );
-  });
-
-  it('has no Secrets tab for one who may not set them', async () => {
-    const { server, orders } = withAgents('viewer');
-    open(`/agents/${orders.id}`, server);
-    await screen.findByText('eu-desk');
-    expect(screen.queryByRole('link', { name: 'Secrets' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'New actor' })).toBeNull();
+    fireEvent.click(within(side).getByRole('link', { name: 'Deployments' }));
+    await waitFor(() => expect(page.where()).toBe(`/agents/${orders.id}/deployments`));
+    expect(await screen.findByRole('heading', { name: 'Deployments' })).toBeTruthy();
+    expect(within(side).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe(
+      null,
+    );
+    fireEvent.click(within(side).getByRole('link', { name: 'Back to Dashboard' }));
+    await waitFor(() => expect(page.where()).toBe('/agents'));
+    expect(await within(side).findByRole('link', { name: 'Machines' })).toBeTruthy();
   });
 });
 

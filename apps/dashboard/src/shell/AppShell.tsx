@@ -12,10 +12,11 @@ import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from
 
 import { actorName } from '../agents/pages/agent.tsx';
 import { agentPath } from '../agents/links.tsx';
+import { agentSection } from '../agents/pages/dashboard.tsx';
 import { useActor, useAgent } from '../agents/queries.ts';
 import { useMe } from '../me.ts';
 import { session } from '../session.ts';
-import { tabAt } from './nav.ts';
+import { onTab, tabAt } from './nav.ts';
 import { NotFound } from './NotFound.tsx';
 import { Sidebar } from './Sidebar.tsx';
 
@@ -55,6 +56,12 @@ function useCrumbs(): Crumb[] {
       crumbs.push({ label: 'Agents', link: { to: '/agents' as never } });
     }
     crumbs.push({ label: named.data?.name ?? of, link: { to: agentPath(of) } });
+    // The agent's own tab, past its overview.
+    const page =
+      agent === undefined
+        ? undefined
+        : agentSection(agent).tabs.find((t) => t.exact !== true && onTab(pathname, t));
+    if (page !== undefined) crumbs.push({ label: page.name, link: { to: page.path } });
   }
   if (actor !== undefined) {
     crumbs.push({

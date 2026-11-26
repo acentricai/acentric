@@ -30,7 +30,7 @@ export function firstTab(
 
 /** Whether `pathname` is on `tab`: its page, or one below it. */
 export function onTab(pathname: string, tab: Tab): boolean {
-  return pathname === tab.path || pathname.startsWith(`${tab.path}/`);
+  return pathname === tab.path || (tab.exact !== true && pathname.startsWith(`${tab.path}/`));
 }
 
 /** The tab, of any section, that `pathname` is on. */
