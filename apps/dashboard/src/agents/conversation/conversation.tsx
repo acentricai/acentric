@@ -7,11 +7,9 @@ import type { Compaction, ConversationEntry, Json, Message } from '@acentric/pro
 import {
   IconAlertTriangle,
   IconArrowsMinimize,
-  IconBolt,
   IconChevronRight,
   IconInfoCircle,
   IconSearch,
-  IconSparkles,
 } from '@tabler/icons-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -214,12 +212,14 @@ function EntryView({
       case 'tool_result':
         // One whose call was not read.
         return (
-          <div className="convo__calls">
-            <CallCard
-              call={{ toolCallId: message.toolCallId, toolName: message.toolName, arguments: {} }}
-              result={entry}
-            />
-          </div>
+          <Calls
+            calls={[
+              {
+                call: { toolCallId: message.toolCallId, toolName: message.toolName, arguments: {} },
+                result: entry,
+              },
+            ]}
+          />
         );
       case 'native':
         return <NativeLine entry={entry} items={message.content} provider={message.provider} />;
@@ -306,18 +306,11 @@ function Answer({
   const view = readResponse(message);
   const usage = entry.completion?.usage;
   const used = usage === undefined ? '' : tokens(inputTokens(usage), usage.output);
+  const said = view.text !== '';
   return (
     <div className="convo__answer">
-      <div className="convo__head">
-        <IconSparkles size={14} stroke={1.75} aria-hidden="true" />
-        <span className="convo__who">Assistant</span>
-        <span className="convo__muted mono">{message.model}</span>
-        {used !== '' && <span className="convo__muted">{used}</span>}
-        {entry.leftOut === true && <span className="convo__tag">left out</span>}
-        <When at={entry.createdAt} />
-      </div>
       {view.thinking.length > 0 && <Thinking text={view.thinking.join('\n\n')} />}
-      {view.text !== '' && <Markdown text={view.text} className="convo__markdown" />}
+      {said && <Markdown text={view.text} className="convo__markdown" />}
       {view.refusals.map((refusal, index) => (
         <p key={index} className="convo__refusal">
           {displayText(refusal === '' ? 'It refused.' : refusal, true)}
@@ -329,14 +322,8 @@ function Answer({
           Searched the web{search === '' ? '' : ` for ${search}`}
         </p>
       ))}
-      {calls.length > 0 && (
-        <div className="convo__calls">
-          {calls.map((one) => (
-            <CallCard key={one.call.toolCallId} call={one.call} result={one.result} />
-          ))}
-        </div>
-      )}
-      {view.text === '' &&
+      {calls.length > 0 && <Calls calls={calls} />}
+      {!said &&
         view.thinking.length === 0 &&
         calls.length === 0 &&
         view.refusals.length === 0 &&
@@ -347,6 +334,13 @@ function Answer({
               : `Stopped: ${entry.completion.stopReason}`}
           </p>
         )}
+      <div className="convo__actions">
+        {entry.leftOut === true && <span className="convo__tag">left out</span>}
+        <When at={entry.createdAt} />
+        <span className="mono">{message.model}</span>
+        {used !== '' && <span>{used}</span>}
+        {said && <CopyButton value={view.text} what="the answer" />}
+      </div>
     </div>
   );
 }
@@ -370,14 +364,59 @@ function Thinking({ text }: { text: string }) {
   );
 }
 
-/** A tool call: its name and what it is about, how it went, and opened, what went in and out. */
-function CallCard({ call, result }: { call: ToolCall; result: ConversationEntry | null }) {
+/** How a call went: under way until its result is in, and failed if the tool said so. */
+function stateOf(result: ConversationEntry | null): 'running' | 'failed' | 'done' {
+  if (result === null) return 'running';
+  const message = result.message;
+  if (message.role !== 'tool_result' && message.role !== 'native') return 'done';
+  return readResult(message).isError ? 'failed' : 'done';
+}
+
+/** The tools a turn called, folded to one line of their names; opened, a row each. */
+function Calls({ calls }: { calls: readonly Call[] }) {
+  const [open, setOpen] = useState(false);
+  const names = [...new Set(calls.map((one) => one.call.toolName))];
+  const shown = names.slice(0, 3).join(', ');
+  const more = names.length > 3 ? ` +${String(names.length - 3)}` : '';
+  const states = calls.map((one) => stateOf(one.result));
+  const running = states.filter((state) => state === 'running').length;
+  const failed = states.filter((state) => state === 'failed').length;
+  return (
+    <div className="convo__calls" data-open={open || undefined}>
+      <button
+        type="button"
+        className="convo__fold"
+        aria-expanded={open}
+        onClick={() => setOpen((was) => !was)}
+      >
+        <span>
+          {open
+            ? `Called ${calls.length === 1 ? 'a tool' : `${String(calls.length)} tools`}`
+            : `Called ${shown}${more}`}
+        </span>
+        {running > 0 && <span className="convo__running">running</span>}
+        {failed > 0 && <span className="convo__failing">{failed} failed</span>}
+        <IconChevronRight size={13} stroke={1.75} aria-hidden="true" className="convo__chevron" />
+      </button>
+      {open && (
+        <div className="convo__call-list">
+          {calls.map((one) => (
+            <CallRow key={one.call.toolCallId} call={one.call} result={one.result} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A tool call: its name and what it is about; opened, what went in and what came out. */
+function CallRow({ call, result }: { call: ToolCall; result: ConversationEntry | null }) {
   const [open, setOpen] = useState(false);
   const read =
     result !== null && (result.message.role === 'tool_result' || result.message.role === 'native')
       ? readResult(result.message)
       : null;
-  const state = read === null ? 'running' : read.isError ? 'failed' : 'done';
+  const state = stateOf(result);
   const about = firstArgument(call.arguments);
   return (
     <div className="convo__call" data-state={state} data-open={open || undefined}>
@@ -387,36 +426,42 @@ function CallCard({ call, result }: { call: ToolCall; result: ConversationEntry 
         aria-expanded={open}
         onClick={() => setOpen((was) => !was)}
       >
-        <IconChevronRight size={13} stroke={1.75} aria-hidden="true" className="convo__chevron" />
-        <IconBolt size={13} stroke={1.75} aria-hidden="true" />
         <span className="convo__call-name mono">{call.toolName}</span>
         {about !== '' && <span className="convo__call-about mono">{about}</span>}
-        <span className="convo__call-state">
-          {state === 'running' ? 'running' : state === 'failed' ? 'failed' : ''}
-        </span>
+        <IconChevronRight size={13} stroke={1.75} aria-hidden="true" className="convo__chevron" />
+        {state !== 'done' && <span className="convo__call-state">{state}</span>}
       </button>
       {open && (
         <div className="convo__call-body">
-          <span className="convo__label">Arguments</span>
           {typeof call.arguments === 'string' ? (
-            <pre className="convo__out">{displayText(call.arguments, true)}</pre>
+            <Out text={call.arguments} what="the arguments" />
           ) : (
             <JsonCode value={call.arguments as Json} what="the arguments" />
           )}
-          {read !== null && (
-            <>
-              <span className="convo__label">{read.isError ? 'Error' : 'Result'}</span>
-              {read.native !== null ? (
-                <JsonCode value={read.native as Json} what="the result" />
-              ) : (
-                <pre className="convo__out" data-error={read.isError || undefined}>
-                  {read.text === '' ? 'Nothing' : displayText(read.text, true)}
-                </pre>
-              )}
-            </>
-          )}
+          {read !== null &&
+            (read.native !== null ? (
+              <JsonCode value={read.native as Json} what="the result" />
+            ) : (
+              <Out
+                text={read.text === '' ? 'Nothing' : read.text}
+                what={read.isError ? 'the error' : 'the result'}
+                error={read.isError}
+              />
+            ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** What a tool gave back, as it wrote it, with a copy of it. */
+function Out({ text, what, error = false }: { text: string; what: string; error?: boolean }) {
+  return (
+    <div className="json convo__result">
+      <pre className="json__code convo__out-text" data-error={error || undefined}>
+        {displayText(text, true)}
+      </pre>
+      <CopyButton value={text} what={what} />
     </div>
   );
 }
