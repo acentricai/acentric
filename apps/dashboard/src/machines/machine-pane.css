@@ -252,7 +252,7 @@
   color: var(--ink-muted);
 }
 
-.more-menu__pop .pop__item:hover,
+.more-menu__pop .pop__item:hover:not([disabled]),
 .more-menu__pop .pop__item:focus-visible {
   background: var(--hover);
   outline: none;
