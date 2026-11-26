@@ -135,18 +135,24 @@ body {
 }
 
 /* With an agent open: the way back to the whole dashboard, beside the mark. */
+/* An agent's sidebar: the way back, a row above its tabs, set apart from them as a head. */
+.side__back-row {
+  flex: none;
+  padding: 8px 8px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
 .side__back {
-  display: inline-flex;
-  min-width: 0;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  margin-left: 8px;
-  padding: 0 8px;
+  gap: 10px;
+  height: 32px;
+  padding: 0 8px 0 11px;
+  overflow: hidden;
   border-radius: var(--radius-sm);
   color: var(--ink-muted);
-  font-size: 13px;
-  line-height: 18px;
+  font-size: 14px;
+  line-height: 20px;
   text-decoration: none;
   white-space: nowrap;
   transition:
@@ -161,15 +167,15 @@ body {
 
 .side__back:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 
 .side__back > svg {
   flex: none;
 }
 
-/* The rail has room for the mark only, which goes back too. */
-.side[data-collapsed] .side__back {
+/* On the rail: its arrow only, where the tabs' icons are. */
+.side[data-collapsed] .side__back-text {
   display: none;
 }
 
