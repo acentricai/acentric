@@ -6,7 +6,7 @@
 // not use keeps them true.
 
 import { IconArrowLeft, IconChevronDown } from '@tabler/icons-react';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link, useLocation, useParams } from '@tanstack/react-router';
 import {
   useCallback,
   useEffect,
@@ -21,6 +21,7 @@ import {
 import { createPortal } from 'react-dom';
 
 import { agentAt, agentSection } from '../agents/pages/dashboard.tsx';
+import { useActor } from '../agents/queries.ts';
 import type { Me } from '../me.ts';
 import { type Section, type Tab } from '../sections.ts';
 import { session } from '../session.ts';
@@ -31,8 +32,12 @@ import { UserMenu } from './UserMenu.tsx';
 type Box = { y: number; h: number; x: number; w: number };
 
 export function Sidebar({ me, collapsed }: { me: Me | undefined; collapsed: boolean }) {
-  // With an agent open, the sidebar is that agent's own: its tabs, and the way back.
-  const agent = useLocation({ select: (l) => agentAt(l.pathname) });
+  // With an agent open, the sidebar is that agent's own: its tabs, and the way back. An
+  // actor's page is its agent's, once the actor is read.
+  const opened = useLocation({ select: (l) => agentAt(l.pathname) });
+  const { actor } = useParams({ strict: false }) as { actor?: string };
+  const read = useActor(actor ?? '', actor !== undefined);
+  const agent = opened ?? (actor === undefined ? undefined : read.data?.agent);
   const sections = visibleSections(me, agent === undefined ? undefined : [agentSection(agent)]);
   return (
     <aside className="side" data-collapsed={collapsed || undefined} aria-label="Sidebar">
