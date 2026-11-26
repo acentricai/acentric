@@ -115,7 +115,7 @@
 
 .convo__text {
   margin: 0;
-  color: var(--ink);
+  color: var(--ink-secondary);
   font-size: 14px;
   line-height: 22px;
   white-space: pre-wrap;
@@ -148,11 +148,22 @@
   justify-self: start;
 }
 
+/* Long reading, so softer than the ink of a short page: the secondary ink, and what it makes
+   strong only a little heavier and a little brighter. */
 .convo__markdown {
-  color: var(--ink);
+  color: var(--ink-secondary);
   font-size: 14px;
   line-height: 22px;
   overflow-wrap: anywhere;
+}
+
+.convo__markdown strong,
+.convo__markdown h1,
+.convo__markdown h2,
+.convo__markdown h3,
+.convo__markdown h4 {
+  color: var(--ink);
+  font-weight: 500;
 }
 
 .convo__markdown > :first-child {
