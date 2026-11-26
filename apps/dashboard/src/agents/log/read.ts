@@ -47,43 +47,6 @@ export function messageText(message: Message): string {
   }
 }
 
-/** Images and files in a message's parts. */
-export function media(message: Message): { images: number; files: number } {
-  if (message.role !== 'user' && message.role !== 'system' && message.role !== 'tool_result') {
-    return { images: 0, files: 0 };
-  }
-  let images = 0;
-  let files = 0;
-  for (const part of message.content) {
-    if (part.type === 'image') images += 1;
-    else if (part.type === 'file') files += 1;
-  }
-  return { images, files };
-}
-
-/** `image`, `2 images`, `file`, `2 files`, both with ` · `; empty for none. */
-export function mediaLabel({ images, files }: { images: number; files: number }): string {
-  const parts: string[] = [];
-  if (images > 0) parts.push(images === 1 ? 'image' : `${String(images)} images`);
-  if (files > 0) parts.push(files === 1 ? 'file' : `${String(files)} files`);
-  return parts.join(' · ');
-}
-
-/** The first line of text across messages, or what media they hold. */
-export function messagesHeadline(messages: readonly Message[]): string {
-  for (const message of messages) {
-    const line = firstLine(messageText(message));
-    if (line !== '') return line;
-  }
-  const total = { images: 0, files: 0 };
-  for (const message of messages) {
-    const found = media(message);
-    total.images += found.images;
-    total.files += found.files;
-  }
-  return mediaLabel(total);
-}
-
 export type ResponseView = {
   readonly text: string;
   readonly thinking: readonly string[];

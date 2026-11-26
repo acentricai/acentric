@@ -42,11 +42,3 @@ export type ActorSearch = { all?: boolean | undefined };
 export function actorSearch(raw: Raw): ActorSearch {
   return { all: raw['all'] === '1' || raw['all'] === 1 || raw['all'] === true ? true : undefined };
 }
-
-/** `#seq-4803` → 4803. */
-export function seqFromHash(hash: string): number | null {
-  const match = /^#?seq-(\d+)$/.exec(hash);
-  return match === null ? null : Number(match[1]);
-}
-
-export const seqHash = (seq: number) => `seq-${String(seq)}`;
