@@ -3,7 +3,6 @@
 import type { Agent } from '@acentric/protocol';
 import { IconAlertTriangle, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
 import { useState, type ComponentProps, type ReactNode } from 'react';
 
 import { version } from '../../format.ts';
@@ -15,16 +14,16 @@ import {
   Dialog,
   Field,
   FormError,
-  Menu,
-  MenuItem,
   PageHeader,
   Table,
   errorText,
   type Column,
 } from '../../ui.tsx';
+import { Menu, MenuItem, Table as RowTable } from '../../machines/ui.tsx';
 import { engine, isApiError, queryClient, shellQuote } from '../api.ts';
-import { AgentLink, agentPath } from '../links.tsx';
+import { AgentLink } from '../links.tsx';
 import { useAgents } from '../queries.ts';
+import '../../machines/machine-pane.css';
 import '../agents.css';
 
 const columns: Column<Agent>[] = [
@@ -32,7 +31,7 @@ const columns: Column<Agent>[] = [
     name: 'Name',
     cell: (agent) => (
       <div className="ac-table__primary">
-        <AgentLink agent={agent.id} className="ac-table__name title-link">
+        <AgentLink agent={agent.id} className="ac-table__name">
           {agent.name}
         </AgentLink>
       </div>
@@ -123,7 +122,6 @@ export function AgentLoadError({
 }
 
 export function AgentsPage() {
-  const navigate = useNavigate();
   const agents = useAgents();
   const me = useMe();
   const [deleting, setDeleting] = useState<Agent | null>(null);
@@ -139,7 +137,7 @@ export function AgentsPage() {
           hidden: true,
           className: 'ac-table__actions',
           cell: (agent) => (
-            <Menu label={`Actions for ${agent.name}`} variant="more" align="end">
+            <Menu label={`Actions for ${agent.name}`}>
               {(close) => (
                 <MenuItem
                   danger
@@ -174,15 +172,12 @@ export function AgentsPage() {
       ) : (
         !(agents.isError && rows === undefined) && (
           <div className="rise">
-            <AgentTable
+            <RowTable
               label="Agents"
-              className="agents-list"
               columns={shown}
               rows={rows}
               rowKey={(agent) => agent.id}
               loading={agents.isPending}
-              empty="No agents"
-              onRow={(agent) => void navigate({ to: agentPath(agent.id) })}
             />
           </div>
         )
