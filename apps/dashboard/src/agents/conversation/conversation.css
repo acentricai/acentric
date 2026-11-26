@@ -220,72 +220,20 @@
 }
 
 [data-open] > .convo__toggle > svg:first-child,
-[data-open] > .convo__fold > .convo__chevron,
 [data-open] > .convo__call-head > .convo__chevron {
   transform: rotate(90deg);
 }
 
-.convo__thought {
-  margin: 8px 0 0 19px;
-  padding-left: 12px;
-  border-left: 2px solid var(--divider);
-  color: var(--ink-muted);
-  font-size: 13px;
-  line-height: 20px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-/* Its tool calls: a line of their names that opens to a row each, a row opening to what went
-   in and what came out. */
-.convo__fold {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  justify-self: start;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink-muted);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  cursor: pointer;
-}
-
-.convo__fold:hover {
-  color: var(--ink);
-}
-
-.convo__fold:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.convo__calls {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.convo__running {
-  color: var(--chart-4);
-}
-
-.convo__failing {
-  color: var(--danger);
-}
-
+/* Its tool calls: a row each in a faint box, a row opening to what went in and what came out. */
 .convo__call-list {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--divider);
   border-radius: var(--radius-md);
 }
 
 .convo__call + .convo__call {
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--divider);
 }
 
 .convo__call-head {
@@ -315,7 +263,7 @@
 
 .convo__call-name {
   flex: none;
-  color: var(--ink);
+  color: var(--ink-secondary);
   font-size: 12.5px;
 }
 
@@ -471,4 +419,8 @@
   .convo__working-dot {
     animation: none;
   }
+}
+
+.convo__call-body .json {
+  border-color: var(--divider);
 }

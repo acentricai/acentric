@@ -14,7 +14,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { JsonCode } from '../../code.tsx';
-import { clock, count, longTime, tokens } from '../../format.ts';
+import { clock, count, longTime } from '../../format.ts';
 import { displayText } from '../../machines/text.tsx';
 import { CopyButton } from '../../machines/ui.tsx';
 import { Markdown } from '../../markdown.tsx';
@@ -22,7 +22,6 @@ import { blobUrl, engine } from '../api.ts';
 import {
   firstArgument,
   imageSource,
-  inputTokens,
   messageText,
   partsText,
   readResponse,
@@ -304,12 +303,9 @@ function Answer({
   calls: readonly Call[];
 }) {
   const view = readResponse(message);
-  const usage = entry.completion?.usage;
-  const used = usage === undefined ? '' : tokens(inputTokens(usage), usage.output);
   const said = view.text !== '';
   return (
     <div className="convo__answer">
-      {view.thinking.length > 0 && <Thinking text={view.thinking.join('\n\n')} />}
       {said && <Markdown text={view.text} className="convo__markdown" />}
       {view.refusals.map((refusal, index) => (
         <p key={index} className="convo__refusal">
@@ -337,29 +333,8 @@ function Answer({
       <div className="convo__actions">
         {entry.leftOut === true && <span className="convo__tag">left out</span>}
         <When at={entry.createdAt} />
-        <span className="mono">{message.model}</span>
-        {used !== '' && <span>{used}</span>}
         {said && <CopyButton value={view.text} what="the answer" />}
       </div>
-    </div>
-  );
-}
-
-/** What the model thought before it answered: folded, as it is long and not for the reader. */
-function Thinking({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="convo__thinking" data-open={open || undefined}>
-      <button
-        type="button"
-        className="convo__toggle"
-        aria-expanded={open}
-        onClick={() => setOpen((was) => !was)}
-      >
-        <IconChevronRight size={13} stroke={1.75} aria-hidden="true" />
-        Thought
-      </button>
-      {open && <p className="convo__thought">{displayText(text, true)}</p>}
     </div>
   );
 }
@@ -372,42 +347,14 @@ function stateOf(result: ConversationEntry | null): 'running' | 'failed' | 'done
   return readResult(message).isError ? 'failed' : 'done';
 }
 
-/** The tools a turn called, folded to one line of their names; opened, a row each. */
-function Calls({ calls }: { calls: readonly Call[] }) {
-  const [open, setOpen] = useState(false);
-  const names = [...new Set(calls.map((one) => one.call.toolName))];
-  const shown = names.slice(0, 3).join(', ');
-  const more = names.length > 3 ? ` +${String(names.length - 3)}` : '';
-  const states = calls.map((one) => stateOf(one.result));
-  const running = states.filter((state) => state === 'running').length;
-  const failed = states.filter((state) => state === 'failed').length;
-  return (
-    <div className="convo__calls" data-open={open || undefined}>
-      <button
-        type="button"
-        className="convo__fold"
-        aria-expanded={open}
-        onClick={() => setOpen((was) => !was)}
-      >
-        <span>
-          {open
-            ? `Called ${calls.length === 1 ? 'a tool' : `${String(calls.length)} tools`}`
-            : `Called ${shown}${more}`}
-        </span>
-        {running > 0 && <span className="convo__running">running</span>}
-        {failed > 0 && <span className="convo__failing">{failed} failed</span>}
-        <IconChevronRight size={13} stroke={1.75} aria-hidden="true" className="convo__chevron" />
-      </button>
-      {open && (
-        <div className="convo__call-list">
-          {calls.map((one) => (
-            <CallRow key={one.call.toolCallId} call={one.call} result={one.result} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+/** The tools a turn called: a row each. */
+const Calls = ({ calls }: { calls: readonly Call[] }) => (
+  <div className="convo__call-list">
+    {calls.map((one) => (
+      <CallRow key={one.call.toolCallId} call={one.call} result={one.result} />
+    ))}
+  </div>
+);
 
 /** A tool call: its name and what it is about; opened, what went in and what came out. */
 function CallRow({ call, result }: { call: ToolCall; result: ConversationEntry | null }) {
