@@ -1,55 +1,30 @@
-// An actor's Cost tab: what it and the actors under it spent, each call to the model it made
-// as a point on a line of input, output and cache, in dollars or in tokens, and below, each of
-// those calls, opened to what the model sent back.
+// An actor's Cost tab: what it and the actors under it spent; a bar of where its own calls'
+// tokens went, and each part of them with what it cost; what it spent on turns and on
+// compaction and what the actors under it did; and each of its calls to the model, opened to
+// what the model sent back.
 
 import type { Actor, ConversationEntry, Usage } from '@acentric/protocol';
 import { IconChevronRight } from '@tabler/icons-react';
-import { useState, type PointerEvent, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { JsonCode } from '../../code.tsx';
-import { clock, count } from '../../format.ts';
+import { count, tokens } from '../../format.ts';
 import { dollars } from '../../llm/format.ts';
 import { useUsage } from '../../llm/queries.ts';
-import { Segmented } from '../../ui.tsx';
 import type { ConversationState } from '../conversation/conversation.tsx';
 import '../../llm/llm.css';
 
-type Measure = 'cost' | 'tokens';
-
-const MEASURES: ReadonlyArray<readonly [Measure, string]> = [
-  ['cost', 'Cost'],
-  ['tokens', 'Tokens'],
-];
-
-type Part = 'input' | 'output' | 'cacheRead' | 'cacheWrite';
+type Part = 'input' | 'cacheRead' | 'cacheWrite' | 'output';
 
 const PARTS: ReadonlyArray<{ part: Part; name: string; hue: string }> = [
   { part: 'input', name: 'Input', hue: 'var(--chart-1)' },
-  { part: 'output', name: 'Output', hue: 'var(--chart-2)' },
-  { part: 'cacheRead', name: 'Cache read', hue: 'var(--chart-3)' },
-  { part: 'cacheWrite', name: 'Cache write', hue: 'var(--chart-4)' },
+  { part: 'cacheRead', name: 'Read from cache', hue: 'var(--chart-2)' },
+  { part: 'cacheWrite', name: 'Written to cache', hue: 'var(--chart-3)' },
+  { part: 'output', name: 'Output', hue: 'var(--chart-4)' },
 ];
 
-/** A part of a call: in dollars, or in tokens; nothing where it is not known. */
-function partOf(usage: Usage | undefined, part: Part, measure: Measure): number {
-  if (usage === undefined) return 0;
-  return (measure === 'cost' ? usage.cost?.[part] : usage[part]) ?? 0;
-}
-
-/** All of a call, as it is shown on its row. */
-function wholeOf(usage: Usage | undefined, measure: Measure): string {
-  if (usage === undefined) return '—';
-  if (measure === 'cost') return usage.cost === undefined ? '—' : dollars(usage.cost.total);
-  const sent =
-    usage.totalInput ?? (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
-  return `${count(sent)} in · ${count(usage.output ?? 0)} out`;
-}
-
-const written = (value: number, measure: Measure) =>
-  measure === 'cost' ? dollars(value) : count(value);
-
 /** A line of the tab: what it is, and its value beside it. */
-function Fact({ name, children }: { name: string; children: ReactNode }) {
+function Fact({ name, children }: { name: ReactNode; children: ReactNode }) {
   return (
     <div className="actor-fact">
       <dt>{name}</dt>
@@ -58,8 +33,25 @@ function Fact({ name, children }: { name: string; children: ReactNode }) {
   );
 }
 
+/** Its own calls to the model, each part of them added up: in tokens, and in dollars. */
+function partsOf(calls: readonly ConversationEntry[]) {
+  const sums = new Map<Part, { tokens: number; cost: number }>(
+    PARTS.map(({ part }) => [part, { tokens: 0, cost: 0 }]),
+  );
+  for (const entry of calls) {
+    const usage: Usage | undefined = entry.completion?.usage;
+    if (usage === undefined) continue;
+    for (const { part } of PARTS) {
+      const sum = sums.get(part);
+      if (sum === undefined) continue;
+      sum.tokens += usage[part] ?? 0;
+      sum.cost += usage.cost?.[part] ?? 0;
+    }
+  }
+  return sums;
+}
+
 export function CostTab({ info, conversation }: { info: Actor; conversation: ConversationState }) {
-  const [measure, setMeasure] = useState<Measure>('cost');
   // What it and the actors under it spent; and what it spent itself, by kind of call.
   const tree = useUsage({ root: info.id, by: 'actor' });
   const own = useUsage({ actor: info.id, by: 'kind' });
@@ -71,6 +63,8 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
   const calls = conversation.items.flatMap((item) =>
     item.kind === 'entry' && item.entry.message.role === 'assistant' ? [item.entry] : [],
   );
+  const sums = partsOf(calls);
+  const whole = [...sums.values()].reduce((sum, part) => sum + part.tokens, 0);
   return (
     <>
       <section className="actor-side__group" aria-labelledby="actor-cost">
@@ -78,15 +72,47 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
           Cost
         </h2>
         <p className="actor-cost__total">{total === undefined ? '—' : dollars(total)}</p>
+        {whole > 0 && (
+          <div className="usage-split" role="img" aria-label="Tokens by kind">
+            {PARTS.map(({ part, name, hue }) => {
+              const value = sums.get(part)?.tokens ?? 0;
+              return value === 0 ? null : (
+                <span
+                  key={part}
+                  className="usage-split__part"
+                  style={{ flexGrow: value / whole, background: hue }}
+                  title={`${name}: ${count(value)}`}
+                />
+              );
+            })}
+          </div>
+        )}
+        <dl className="actor-facts" aria-label="Tokens by kind">
+          {PARTS.map(({ part, name, hue }) => {
+            const sum = sums.get(part);
+            return (
+              <Fact
+                key={part}
+                name={
+                  <span className="actor-part">
+                    <span className="usage-swatch" style={{ background: hue }} aria-hidden="true" />
+                    {name}
+                  </span>
+                }
+              >
+                <span className="actor-fact__none">{count(sum?.tokens ?? 0)} · </span>
+                {dollars(sum?.cost ?? 0)}
+              </Fact>
+            );
+          })}
+        </dl>
+      </section>
+      <section className="actor-side__group" aria-label="By kind of call">
         <dl className="actor-facts">
           <Fact name="Turns">{dollarsOf(ofKind('turn'), read)}</Fact>
           <Fact name="Compaction">{dollarsOf(ofKind('compaction'), read)}</Fact>
           <Fact name="Subagents">{below === undefined ? '—' : dollars(below)}</Fact>
         </dl>
-      </section>
-      <section className="actor-side__group" aria-label="By call">
-        <Segmented label="Measure" value={measure} options={MEASURES} onChange={setMeasure} />
-        <CallChart calls={calls} measure={measure} />
       </section>
       <section className="actor-side__group" aria-labelledby="actor-requests">
         <h2 className="actor-side__title" id="actor-requests">
@@ -97,7 +123,7 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
         ) : (
           <ul className="actor-tasks">
             {calls.toReversed().map((entry) => (
-              <RequestRow key={entry.seq} entry={entry} measure={measure} />
+              <RequestRow key={entry.seq} entry={entry} />
             ))}
           </ul>
         )}
@@ -106,74 +132,16 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
   );
 }
 
-const WIDTH = 300;
-const HEIGHT = 120;
-
-/** Each call to the model, oldest at the left: a line for each part of it. */
-function CallChart({ calls, measure }: { calls: readonly ConversationEntry[]; measure: Measure }) {
-  const [hover, setHover] = useState<number | null>(null);
-  if (calls.length === 0) return null;
-  const values = PARTS.map(({ part }) =>
-    calls.map((entry) => partOf(entry.completion?.usage, part, measure)),
-  );
-  const top = Math.max(...values.flat(), 0);
-  const x = (index: number) =>
-    calls.length === 1 ? WIDTH / 2 : (index / (calls.length - 1)) * WIDTH;
-  const y = (value: number) => (top === 0 ? HEIGHT : HEIGHT - (value / top) * HEIGHT);
-  const onMove = (event: PointerEvent<SVGSVGElement>) => {
-    const box = event.currentTarget.getBoundingClientRect();
-    const at = ((event.clientX - box.left) / box.width) * (calls.length - 1);
-    setHover(Math.min(calls.length - 1, Math.max(0, Math.round(at))));
-  };
-  const shown = hover === null ? undefined : calls[hover];
-  return (
-    <div className="actor-chart">
-      <div className="actor-chart__plot">
-        <svg
-          viewBox={`0 0 ${String(WIDTH)} ${String(HEIGHT)}`}
-          preserveAspectRatio="none"
-          role="img"
-          aria-label={`${measure === 'cost' ? 'Cost' : 'Tokens'} of each call to the model`}
-          onPointerMove={onMove}
-          onPointerLeave={() => setHover(null)}
-        >
-          <line className="actor-chart__base" x1={0} x2={WIDTH} y1={HEIGHT} y2={HEIGHT} />
-          {hover !== null && (
-            <line className="actor-chart__at" x1={x(hover)} x2={x(hover)} y1={0} y2={HEIGHT} />
-          )}
-          {PARTS.map(({ part, hue }, index) => (
-            <polyline
-              key={part}
-              className="actor-chart__line"
-              stroke={hue}
-              points={(values[index] ?? []).map((value, at) => `${x(at)},${y(value)}`).join(' ')}
-            />
-          ))}
-        </svg>
-      </div>
-      <ul className="actor-chart__legend" aria-live="polite">
-        {PARTS.map(({ part, name, hue }) => (
-          <li key={part}>
-            <span className="usage-swatch" style={{ background: hue }} aria-hidden="true" />
-            {name}
-            {shown !== undefined && (
-              <span className="actor-chart__value">
-                {written(partOf(shown.completion?.usage, part, measure), measure)}
-              </span>
-            )}
-          </li>
-        ))}
-        {shown !== undefined && <li className="actor-chart__when">{clock(shown.createdAt)}</li>}
-      </ul>
-    </div>
-  );
-}
-
-/** A call to the model: its response's ID and what it came to; opened, all it sent back. */
-function RequestRow({ entry, measure }: { entry: ConversationEntry; measure: Measure }) {
+/** A call to the model: its response's ID, its tokens and cost; opened, all it sent back. */
+function RequestRow({ entry }: { entry: ConversationEntry }) {
   const [open, setOpen] = useState(false);
   const message = entry.message;
   const id = message.id ?? `#${String(entry.seq)}`;
+  const usage = entry.completion?.usage;
+  const sent =
+    usage === undefined
+      ? undefined
+      : (usage.totalInput ?? (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0));
   return (
     <li className="actor-task" data-open={open || undefined}>
       <div className="actor-task__head">
@@ -188,7 +156,12 @@ function RequestRow({ entry, measure }: { entry: ConversationEntry; measure: Mea
             {id}
           </span>
         </button>
-        <span className="actor-task__when">{wholeOf(entry.completion?.usage, measure)}</span>
+        <span className="actor-task__when">
+          {usage === undefined ? '—' : tokens(sent, usage.output)}
+        </span>
+        <span className="actor-request__cost">
+          {usage?.cost === undefined ? '—' : dollars(usage.cost.total)}
+        </span>
       </div>
       {open && message.role === 'assistant' && (
         <div className="actor-task__detail">

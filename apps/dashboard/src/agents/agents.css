@@ -386,71 +386,19 @@
   overflow-wrap: anywhere;
 }
 
-/* Each call to the model as a point on a line of each of its parts, a tooltip on hover. */
-.actor-chart {
-  display: grid;
-  gap: 10px;
-}
-
-.actor-chart__plot {
-  position: relative;
-  height: 120px;
-}
-
-.actor-chart__plot > svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.actor-chart__line {
-  fill: none;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.actor-chart__base,
-.actor-chart__at {
-  stroke: var(--divider);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.actor-chart__at {
-  stroke: var(--hairline);
-}
-
-.actor-chart__legend {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 4px 14px;
-  margin: 0;
-  padding: 0;
-  color: var(--ink-muted);
-  font-size: 12px;
-  list-style: none;
-}
-
-.actor-chart__legend li {
+/* A part of its calls' tokens: its mark, and its name. */
+.actor-part {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
-.actor-chart__legend li {
+.actor-request__cost {
+  min-width: 52px;
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
-}
-
-.actor-chart__value {
-  margin-left: auto;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.actor-chart__when {
-  font-variant-numeric: tabular-nums;
 }
 
 .actor-request__id {
