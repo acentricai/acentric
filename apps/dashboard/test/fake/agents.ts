@@ -306,6 +306,7 @@ export function agentsArea(shared: Shared) {
       const one = actorFor(agent, made, {
         name: (body.name as string | undefined) ?? null,
         ...(body.modelId === undefined ? {} : { modelId: body.modelId }),
+        ...(body.account === undefined ? {} : { account: body.account }),
         ...(body.machine === undefined
           ? {}
           : { machine: { id: body.machine.id as never, cwd: body.machine.cwd, env: [] } }),
