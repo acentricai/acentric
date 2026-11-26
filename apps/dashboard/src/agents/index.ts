@@ -3,15 +3,26 @@
 
 import { IconHexagon, IconHexagonFilled } from '@tabler/icons-react';
 import { createRoute, type AnyRoute } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
 
 import { may } from '../me.ts';
 import type { Section } from '../sections.ts';
 import { ActorPage } from './pages/actor.tsx';
-import { ActorsTab, AgentLayout, DeploymentsTab, SecretsTab } from './pages/agent.tsx';
 import { AgentsPage } from './pages/agents.tsx';
+import {
+  ActorsPage,
+  AgentDashboard,
+  DeploymentsPage,
+  OverviewPage,
+  SecretsPage,
+  SettingsPage,
+} from './pages/dashboard.tsx';
 import { actorSearch, actorsSearch, deploymentsSearch } from './url.ts';
 
-/** `/agents`, `/agents/$agent` (actors, deployments, secrets), and `/actors/$actor`. */
+/**
+ * `/agents`; an agent's own dashboard, `/agents/$agent` (its overview), `actors`, `deployments`,
+ * `secrets` and `settings`; and `/actors/$actor`.
+ */
 function routes(parent: AnyRoute): AnyRoute[] {
   const agents = createRoute({
     getParentRoute: () => parent,
@@ -21,24 +32,21 @@ function routes(parent: AnyRoute): AnyRoute[] {
   const agent = createRoute({
     getParentRoute: () => parent,
     path: 'agents/$agent',
-    component: AgentLayout,
+    component: AgentDashboard,
   });
+  const page = (path: string, component: () => ReactNode) =>
+    createRoute({ getParentRoute: () => agent, path, component });
   const actors = createRoute({
     getParentRoute: () => agent,
-    path: '/',
+    path: 'actors',
     validateSearch: actorsSearch,
-    component: ActorsTab,
+    component: ActorsPage,
   });
   const deployments = createRoute({
     getParentRoute: () => agent,
     path: 'deployments',
     validateSearch: deploymentsSearch,
-    component: DeploymentsTab,
-  });
-  const secrets = createRoute({
-    getParentRoute: () => agent,
-    path: 'secrets',
-    component: SecretsTab,
+    component: DeploymentsPage,
   });
   const actor = createRoute({
     getParentRoute: () => parent,
@@ -46,7 +54,17 @@ function routes(parent: AnyRoute): AnyRoute[] {
     validateSearch: actorSearch,
     component: ActorPage,
   });
-  return [agents, agent.addChildren([actors, deployments, secrets]), actor];
+  return [
+    agents,
+    agent.addChildren([
+      page('/', OverviewPage),
+      actors,
+      deployments,
+      page('secrets', SecretsPage),
+      page('settings', SettingsPage),
+    ]),
+    actor,
+  ];
 }
 
 export const agentsSection: Section = {

@@ -17,12 +17,14 @@ export type Tab = {
   readonly activeIcon: Icon;
   /** Whether the person signed in may see it. */
   readonly shown: (me: Me) => boolean;
+  /** Current on its own path only, not on the pages below it. */
+  readonly exact?: boolean;
 };
 
 export type Section = {
   readonly id: string;
-  /** The collapsible head in the sidebar. */
-  readonly label: string;
+  /** The collapsible head in the sidebar; a section without one is a plain list. */
+  readonly label?: string;
   readonly tabs: readonly Tab[];
   /** The section's routes, children of the signed-in route the shell passes in. */
   routes(parent: AnyRoute): AnyRoute[];

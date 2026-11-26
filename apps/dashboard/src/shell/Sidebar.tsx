@@ -5,7 +5,7 @@
 // folding a section, collapsing to the rail or hiding a section the org may
 // not use keeps them true.
 
-import { IconChevronDown } from '@tabler/icons-react';
+import { IconArrowLeft, IconChevronDown } from '@tabler/icons-react';
 import { Link, useLocation } from '@tanstack/react-router';
 import {
   useCallback,
@@ -20,6 +20,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
+import { agentAt, agentSection } from '../agents/pages/dashboard.tsx';
 import type { Me } from '../me.ts';
 import { type Section, type Tab } from '../sections.ts';
 import { session } from '../session.ts';
@@ -30,13 +31,26 @@ import { UserMenu } from './UserMenu.tsx';
 type Box = { y: number; h: number; x: number; w: number };
 
 export function Sidebar({ me, collapsed }: { me: Me | undefined; collapsed: boolean }) {
-  const sections = visibleSections(me);
+  // With an agent open, the sidebar is that agent's own: its tabs, and the way back.
+  const agent = useLocation({ select: (l) => agentAt(l.pathname) });
+  const sections = visibleSections(me, agent === undefined ? undefined : [agentSection(agent)]);
   return (
     <aside className="side" data-collapsed={collapsed || undefined} aria-label="Sidebar">
       <div className="side__header">
         <Link to="/" className="side__brand" aria-label="Acentric">
           <img src="/acentric-mark-cropped.png" alt="" className="side__mark" />
         </Link>
+        {agent !== undefined && (
+          <Link
+            to="/agents"
+            className="side__back"
+            aria-label="Back to Dashboard"
+            title={collapsed ? 'Back to Dashboard' : undefined}
+          >
+            <IconArrowLeft size={14} stroke={1.75} aria-hidden="true" />
+            <span className="side__back-text">Back to Dashboard</span>
+          </Link>
+        )}
       </div>
       <Navigation sections={sections} collapsed={collapsed} />
       <SettingsButton collapsed={collapsed} />
@@ -251,6 +265,7 @@ function NavItem({
         className="nav__link"
         // Marked from the path this tab covers, not the link's own match.
         activeProps={{}}
+        activeOptions={{ exact: tab.exact === true }}
         aria-current={active ? 'page' : undefined}
         aria-label={tab.name}
         tabIndex={inert ? -1 : undefined}
