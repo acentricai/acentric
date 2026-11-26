@@ -63,6 +63,8 @@ function ActorView({ id }: { id: string }) {
   // Read once, for its conversation and for how large that is in the sidebar.
   const conversation = useConversation(id);
   const [tab, setTab] = useState<SideTab>('overview');
+  // A call to the model asked to be shown, from its answer: each ask anew, even of the same one.
+  const [reveal, setReveal] = useState<{ seq: number; at: number } | null>(null);
   const split = useSplit();
 
   if (isApiError(actor.error, 404)) {
@@ -72,7 +74,16 @@ function ActorView({ id }: { id: string }) {
   return (
     <div className="actor-page" ref={split.page} style={split.style}>
       <div className="actor-page__main">
-        {info !== undefined && <Conversation actor={id} conversation={conversation} />}
+        {info !== undefined && (
+          <Conversation
+            actor={id}
+            conversation={conversation}
+            onReveal={(seq) => {
+              setTab('cost');
+              setReveal({ seq, at: Date.now() });
+            }}
+          />
+        )}
       </div>
       <div
         className="actor-split"
@@ -127,7 +138,7 @@ function ActorView({ id }: { id: string }) {
           ) : tab === 'overview' ? (
             <Overview info={info} conversation={conversation} />
           ) : tab === 'cost' ? (
-            <CostTab info={info} conversation={conversation} />
+            <CostTab info={info} conversation={conversation} reveal={reveal} />
           ) : (
             <Tasks info={info} />
           )}

@@ -611,6 +611,42 @@ describe('an actor’s page', () => {
     expect(within(requests).getByText(/"output_text"/)).toBeTruthy();
   });
 
+  it('shows the call to the model an answer came of, when the answer is clicked with Ctrl', async () => {
+    const { server, orders } = withAgents();
+    const actor = idOf('act', 1);
+    const at = 1_795_305_600_000;
+    area(server).conversation(actor, [
+      {
+        seq: 1,
+        createdAt: at,
+        message: {
+          role: 'assistant',
+          provider: 'openai',
+          api: 'openai-responses',
+          model: 'gpt-6.2-sol',
+          id: 'resp_1',
+          content: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello there.' }] }],
+        },
+        completion: { stopReason: 'stop', usage: { totalInput: 1_200, output: 30 } },
+      },
+    ]);
+    open(`/agents/${orders.id}/actors/${actor}`, server);
+    const convo = await screen.findByLabelText('Conversation');
+    const side = screen.getByRole('complementary', { name: 'About the actor' });
+    // A click with nothing held does nothing of the kind.
+    fireEvent.click(await within(convo).findByText('Hello there.'));
+    expect(within(side).getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    fireEvent.click(within(convo).getByText('Hello there.'), { ctrlKey: true });
+    expect(within(side).getByRole('tab', { name: 'Cost' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    const row = await within(side).findByRole('button', { name: /resp_1/ });
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(within(side).getByText('Time', { selector: 'dt' })).toBeTruthy();
+  });
+
   it('resizes its conversation and sidebar by the line between them, and keeps the size', async () => {
     const { server, orders } = withAgents();
     localStorage.removeItem('acentric.actor-split');

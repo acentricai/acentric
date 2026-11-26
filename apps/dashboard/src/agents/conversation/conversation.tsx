@@ -5,7 +5,15 @@
 
 import type { Compaction, ConversationEntry, Json, Message } from '@acentric/protocol';
 import { IconAlertTriangle, IconChevronRight, IconSearch } from '@tabler/icons-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 
 import { JsonCode } from '../../code.tsx';
 import { clock, count, longTime } from '../../format.ts';
@@ -141,9 +149,12 @@ export function useConversation(actor: string) {
 export function Conversation({
   actor,
   conversation,
+  onReveal,
 }: {
   actor: string;
   conversation: ConversationState;
+  /** A model's answer clicked with Ctrl (or ⌘): its place, to show that call to the model. */
+  onReveal?: (seq: number) => void;
 }) {
   const { items, standing, ready } = conversation;
   // At the end, the view keeps to it as messages join; scrolled up, it stays where it is.
@@ -158,6 +169,16 @@ export function Conversation({
     if (ready && atEnd.current && el !== null) el.scrollTop = el.scrollHeight;
   }, [items, standing, ready]);
 
+  const revealed = (event: MouseEvent) => {
+    const target = event.target as Element;
+    // A link clicked so opens in a new tab, as it would anywhere.
+    if (onReveal === undefined || target.closest('a') !== null) return;
+    const answer = target.closest<HTMLElement>('[data-call]');
+    if (answer === null) return;
+    event.preventDefault();
+    onReveal(Number(answer.dataset['call']));
+  };
+
   if (!ready && items.length === 0) {
     return (
       <div className="skeleton convo__loading" role="status" aria-label="Loading the conversation">
@@ -169,7 +190,20 @@ export function Conversation({
   }
   const failed = standing?.lastTurn?.end === 'failed' ? standing.lastTurn : null;
   return (
-    <div className="convo" role="log" aria-label="Conversation" ref={box} onScroll={scrolled}>
+    <div
+      className="convo"
+      role="log"
+      aria-label="Conversation"
+      ref={box}
+      onScroll={scrolled}
+      onClick={(event) => {
+        if (event.ctrlKey || event.metaKey) revealed(event);
+      }}
+      // On a Mac, a click with Ctrl is a right click: it is taken there, and not the menu.
+      onContextMenu={(event) => {
+        if (event.ctrlKey) revealed(event);
+      }}
+    >
       {items.length === 0 && <p className="convo__empty">Nothing said yet</p>}
       {items.map((item) =>
         item.kind === 'compaction' ? (
@@ -327,7 +361,7 @@ function Answer({
   const view = readResponse(message);
   const said = view.text !== '';
   return (
-    <div className="convo__answer">
+    <div className="convo__answer" data-call={entry.seq}>
       {said && <Markdown text={view.text} className="convo__markdown" />}
       {view.refusals.map((refusal, index) => (
         <p key={index} className="convo__refusal">
