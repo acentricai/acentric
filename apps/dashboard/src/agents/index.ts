@@ -9,9 +9,10 @@ import { may } from '../me.ts';
 import type { Section } from '../sections.ts';
 import { ActorPage } from './pages/actor.tsx';
 import { AgentsPage } from './pages/agents.tsx';
-import { ActorsPage, AgentDashboard, OverviewPage, SettingsPage } from './pages/dashboard.tsx';
+import { ActorsPage, AgentDashboard, OverviewPage } from './pages/dashboard.tsx';
 import { DeploymentsPage } from './pages/deployments.tsx';
 import { SecretsPage } from './pages/secrets.tsx';
+import { SettingsPage } from './pages/settings.tsx';
 import { actorSearch, actorsSearch, deploymentsSearch } from './url.ts';
 
 /**
