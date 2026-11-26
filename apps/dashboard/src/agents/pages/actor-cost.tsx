@@ -74,7 +74,7 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
   return (
     <>
       <section className="actor-side__group" aria-labelledby="actor-cost">
-        <h2 className="actor-side__title" id="actor-cost">
+        <h2 className="actor-side__title actor-side__title--unseen" id="actor-cost">
           Cost
         </h2>
         <p className="actor-cost__total">{total === undefined ? '—' : dollars(total)}</p>
