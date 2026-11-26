@@ -31,9 +31,9 @@ import { useUsage } from './queries.ts';
 
 import './llm.css';
 
-type Range = '7' | '30' | '90' | 'all';
+export type Range = '7' | '30' | '90' | 'all';
 
-const RANGES: ReadonlyArray<readonly [Range, string]> = [
+export const RANGES: ReadonlyArray<readonly [Range, string]> = [
   ['7', '7 days'],
   ['30', '30 days'],
   ['90', '90 days'],
@@ -167,7 +167,7 @@ export function UsagePage() {
 }
 
 /** The numbers of the range. */
-function Tiles({ total }: { total: UsageTotals | undefined }) {
+export function Tiles({ total }: { total: UsageTotals | undefined }) {
   const tokens = (of: UsageTotals) => of.totalInput + of.output;
   const tiles: { label: string; value: string; notes: (string | null)[] }[] =
     total === undefined
@@ -234,7 +234,7 @@ type Day = { readonly day: string; readonly parts: readonly Group[]; readonly wh
  * Each day of the range as a column, by provider, in what is measured: a tooltip on each names
  * the providers of its parts.
  */
-function TimeChart({
+export function TimeChart({
   groups,
   from,
   to,
@@ -372,7 +372,15 @@ function TimeChart({
   );
 }
 
-function Card({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+export function Card({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
   return (
     <section className="usage-card" aria-label={title}>
       <div className="usage-panel__head">
@@ -388,7 +396,7 @@ function Card({ title, hint, children }: { title: string; hint?: string; childre
  * What each group spent, the most first, as a bar of its share of the whole: the first `most`,
  * and the rest together as one when `rest` is not turned off.
  */
-function Bars({
+export function Bars({
   label,
   groups,
   total,
@@ -487,7 +495,7 @@ function Bars({
 }
 
 /** Where the tokens went: input from no cache, read from one and written to one, and output. */
-function Tokens({ total }: { total: UsageTotals | undefined }) {
+export function Tokens({ total }: { total: UsageTotals | undefined }) {
   if (total === undefined) return null;
   const parts = [
     { label: 'Input', value: total.input, series: 'var(--chart-1)' },
