@@ -4,7 +4,7 @@ import { Providers } from '@acentric/ai';
 import type { ModelRunner, ModelStep } from '@acentric/ai';
 import { fakeProvider, says } from '@acentric/ai/testing';
 import { makeId } from '@acentric/protocol';
-import type { Agent } from '@acentric/protocol';
+import type { AccountId, Actor, Agent } from '@acentric/protocol';
 
 import { Accounts } from '../src/accounts.ts';
 import { Audit } from '../src/audit.ts';
@@ -14,7 +14,7 @@ import { Secrets } from '../src/secrets.ts';
 const NOW = 1_795_305_600_000;
 const BY = { type: 'system' } as const;
 let made = 0;
-const id = <K extends 'agent' | 'deployment'>(kind: K) => {
+const id = <K extends 'agent' | 'deployment' | 'actor'>(kind: K) => {
   made += 1;
   return makeId(kind, { now: NOW, random: Uint8Array.from([0, 0, 0, 0, 0, 0, 0, 0, 0, made]) });
 };
@@ -52,7 +52,6 @@ function world(keys: boolean = true) {
       provider: of,
       activeDeployment: ref,
       latestDeployment: ref,
-      account: null,
       createdAt: NOW,
     };
     await store.addDeployment({
@@ -77,13 +76,37 @@ function world(keys: boolean = true) {
     tools: [],
     messages: [],
   };
-  /** The key an agent's calls are made with now. */
-  const keyOf = async (of: Agent) => {
-    const access = await accounts.access(of.id);
+  /** An actor of an agent, given an account, and archived when `archived` says so. */
+  const actor = async (of: Agent, account: AccountId | null, archived = false): Promise<Actor> => {
+    const one: Actor = {
+      id: id('actor'),
+      name: null,
+      externalId: null,
+      agent: of.id,
+      deployment: of.activeDeployment,
+      pinned: false,
+      behind: null,
+      account,
+      modelId: 'fake-1',
+      reasoning: 'low',
+      configuration: null,
+      machine: null,
+      parent: null,
+      status: archived ? 'archived' : 'idle',
+      lastTurn: null,
+      pendingInputs: 0,
+      createdAt: NOW,
+      archivedAt: archived ? NOW : null,
+    };
+    return (await store.createActor(one)).record.actor;
+  };
+  /** The key an actor's calls are made with now. */
+  const keyOf = async (of: Actor) => {
+    const access = await accounts.access(of, 'fake');
     await access.runner.run(step, new AbortController().signal);
     return { account: access.account, key: calls.at(-1)?.key };
   };
-  return { store, accounts, audit, agent, keyOf };
+  return { store, accounts, audit, agent, actor, keyOf };
 }
 
 describe('a model account', () => {
@@ -97,7 +120,7 @@ describe('a model account', () => {
       // The first of its provider is that provider's default.
       default: true,
       owner: null,
-      agents: [],
+      actors: 0,
       createdBy: BY,
     });
     expect(await accounts.get(account.id)).toEqual(account);
@@ -176,86 +199,116 @@ describe('a provider’s default account', () => {
   });
 });
 
-describe('an agent’s model calls', () => {
-  it('are made with its provider’s default account, or with the one it was given', async () => {
-    const { accounts, agent, keyOf } = world();
+describe('the account a new actor is given', () => {
+  it('is the one asked for, of its agent’s provider, or else that provider’s default', async () => {
+    const { accounts } = world();
     const main = await accounts.add(BY, { provider: 'fake', name: 'main', apiKey: 'good' });
     const own = await accounts.add(BY, { provider: 'fake', name: 'own', apiKey: 'better' });
-    const orders = await agent('orders');
-    expect(await keyOf(orders)).toEqual({ account: main.id, key: 'good' });
-
-    const given = await accounts.give(BY, orders, own.id);
-    expect(given.account).toBe(own.id);
-    expect(await keyOf(orders)).toEqual({ account: own.id, key: 'better' });
-    expect((await accounts.get(own.id)).agents).toEqual([orders.id]);
-
-    expect((await accounts.give(BY, given, null)).account).toBeNull();
-    expect(await keyOf(orders)).toEqual({ account: main.id, key: 'good' });
+    expect(await accounts.choose('fake')).toBe(main.id);
+    expect(await accounts.choose('fake', own.id)).toBe(own.id);
+    // A default made later is what the next actor is given.
+    await accounts.update(BY, own.id, { default: true });
+    expect(await accounts.choose('fake')).toBe(own.id);
   });
 
-  it('are made with a key that was replaced from the next call on', async () => {
-    const { accounts, agent, keyOf } = world();
-    const main = await accounts.add(BY, { provider: 'fake', name: 'main', apiKey: 'good' });
-    const orders = await agent('orders');
-    expect((await keyOf(orders)).key).toBe('good');
-    await expect(accounts.update(BY, main.id, { apiKey: 'wrong' })).rejects.toMatchObject({
-      code: 'invalid_request',
-    });
-    expect((await keyOf(orders)).key).toBe('good');
-    await accounts.update(BY, main.id, { apiKey: 'better' });
-    expect((await keyOf(orders)).key).toBe('better');
-  });
-
-  it('cannot be made while its provider has no account, and say what to do about it', async () => {
-    const { accounts, agent } = world();
-    await accounts.add(BY, { provider: 'other', name: 'elsewhere', apiKey: 'good' });
-    const orders = await agent('orders');
-    await expect(accounts.access(orders.id)).rejects.toThrow(
-      'There is no model account for Fake: add one before its models are called',
+  it('is none of another provider’s, or none there is, and is refused while there is none', async () => {
+    const { accounts } = world();
+    await expect(accounts.choose('fake')).rejects.toThrow(
+      'There is no model account for Fake: add one before creating an actor',
     );
-  });
-
-  it('are not given an account of another provider, and an account that is given is not removed', async () => {
-    const { accounts, agent } = world();
-    const main = await accounts.add(BY, { provider: 'fake', name: 'main', apiKey: 'good' });
+    await expect(accounts.choose('fake')).rejects.toMatchObject({ code: 'conflict' });
     const elsewhere = await accounts.add(BY, {
       provider: 'other',
       name: 'elsewhere',
       apiKey: 'good',
     });
-    const orders = await agent('orders');
-    await expect(accounts.give(BY, orders, elsewhere.id)).rejects.toMatchObject({
-      code: 'conflict',
+    await expect(accounts.choose('fake', elsewhere.id)).rejects.toThrow(
+      'The account elsewhere is of other, and the agent of fake',
+    );
+    await expect(accounts.choose('fake', elsewhere.id)).rejects.toMatchObject({
+      code: 'invalid_request',
     });
     const nobody = makeId('account', { now: NOW, random: new Uint8Array(10).fill(9) });
-    await expect(accounts.give(BY, orders, nobody)).rejects.toMatchObject({ code: 'not_found' });
+    await expect(accounts.choose('fake', nobody)).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+  });
+});
 
-    await accounts.give(BY, orders, main.id);
+describe('an actor’s model calls', () => {
+  it('are made with the account it was given, whatever the default is now', async () => {
+    const { accounts, agent, actor, keyOf } = world();
+    const main = await accounts.add(BY, { provider: 'fake', name: 'main', apiKey: 'good' });
+    const own = await accounts.add(BY, { provider: 'fake', name: 'own', apiKey: 'better' });
+    const orders = await agent('orders');
+    const first = await actor(orders, main.id);
+    const second = await actor(orders, own.id);
+    expect(await keyOf(first)).toEqual({ account: main.id, key: 'good' });
+    expect(await keyOf(second)).toEqual({ account: own.id, key: 'better' });
+    await accounts.update(BY, own.id, { default: true });
+    expect(await keyOf(first)).toEqual({ account: main.id, key: 'good' });
+  });
+
+  it('are made with its provider’s default for an actor made before actors had accounts', async () => {
+    const { accounts, agent, actor, keyOf } = world();
+    const orders = await agent('orders');
+    const old = await actor(orders, null);
+    await expect(accounts.access(old, 'fake')).rejects.toThrow(
+      'There is no model account for Fake: add one before its models are called',
+    );
+    const main = await accounts.add(BY, { provider: 'fake', name: 'main', apiKey: 'good' });
+    expect(await keyOf(old)).toEqual({ account: main.id, key: 'good' });
+  });
+
+  it('are made with a key that was replaced from the next call on', async () => {
+    const { accounts, agent, actor, keyOf } = world();
+    const main = await accounts.add(BY, { provider: 'fake', name: 'main', apiKey: 'good' });
+    const one = await actor(await agent('orders'), main.id);
+    expect((await keyOf(one)).key).toBe('good');
+    await expect(accounts.update(BY, main.id, { apiKey: 'wrong' })).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+    expect((await keyOf(one)).key).toBe('good');
+    await accounts.update(BY, main.id, { apiKey: 'better' });
+    expect((await keyOf(one)).key).toBe('better');
+  });
+});
+
+describe('an account actors were given', () => {
+  it('says how many live ones, and is not removed while any are', async () => {
+    const { accounts, store, agent, actor, keyOf } = world();
+    const main = await accounts.add(BY, { provider: 'fake', name: 'main', apiKey: 'good' });
+    const orders = await agent('orders');
+    const live = await actor(orders, main.id);
+    const gone = await actor(orders, main.id, true);
+    expect((await accounts.get(main.id)).actors).toBe(1);
     const refused = accounts.remove(BY, main.id);
     await expect(refused).rejects.toMatchObject({ code: 'conflict' });
-    await expect(refused).rejects.toThrow(/give them another first/);
-    await accounts.give(BY, { ...orders, account: main.id }, null);
+    await expect(refused).rejects.toThrow(
+      '1 actor is given this account: archive or delete it first',
+    );
+
+    await store.deleteActor(live.id);
     await accounts.remove(BY, main.id);
     await expect(accounts.get(main.id)).rejects.toMatchObject({ code: 'not_found' });
+    // The archived one keeps the ID, and is called with the default if it is unarchived.
+    expect((await store.loadActor(gone.id))?.actor.account).toBe(main.id);
+    const spare = await accounts.add(BY, { provider: 'fake', name: 'spare', apiKey: 'better' });
+    expect(await keyOf(gone)).toEqual({ account: spare.id, key: 'better' });
   });
 });
 
 describe('the audit log', () => {
   it('has what was done to accounts, and never a key', async () => {
-    const { accounts, audit, agent } = world();
+    const { accounts, audit } = world();
     const main = await accounts.add(BY, { provider: 'fake', name: 'main', apiKey: 'good' });
     await accounts.update(BY, main.id, { apiKey: 'better', name: 'primary' });
-    const orders = await agent('orders');
-    await accounts.give(BY, orders, main.id);
-    await accounts.give(BY, { ...orders, account: main.id }, null);
     await accounts.remove(BY, main.id);
 
     const { items } = await audit.list({ limit: 100 });
     expect(items.map((event) => event.action).toReversed()).toEqual([
       'account.create',
       'account.update',
-      'agent.account',
-      'agent.account',
       'account.delete',
     ]);
     expect(items.find((event) => event.action === 'account.update')?.detail).toEqual({

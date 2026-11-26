@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 
-import { actorIdSchema, agentIdSchema, inputIdSchema } from '../ids.ts';
+import { accountIdSchema, actorIdSchema, agentIdSchema, inputIdSchema } from '../ids.ts';
 import { jsonSchema } from '../json.ts';
 import { inputTypeSchema } from '../manifest.ts';
 import {
@@ -56,6 +56,13 @@ export const actorSchema = z
      * not. It stays on the deployment it has. Null for one that is where it is to be.
      */
     behind: z.object({ deployment: deploymentRefSchema, reason: z.string() }).nullable(),
+    /**
+     * The model account its calls are made with: one of its agent's provider's, given when it
+     * was created, and never changed. Null only for an actor made before actors had accounts
+     * whose agent and provider had none. One that has none, or whose account was removed while
+     * it was archived, uses its provider's default.
+     */
+    account: accountIdSchema.nullable(),
     modelId: modelIdSchema,
     reasoning: reasoningSchema,
     /** Its configuration, as its agent's schema returned it. Null for an agent that takes none. */
@@ -87,6 +94,11 @@ export const createActorRequestSchema = z
   .strictObject({
     name: nameSchema.optional(),
     externalId: externalIdSchema.optional(),
+    /**
+     * The model account its calls are made with: one of its agent's provider's. Without it,
+     * that provider's default. It is the actor's for as long as it is.
+     */
+    account: accountIdSchema.optional(),
     /** Without it, the default model of the agent's provider. */
     modelId: modelIdSchema.optional(),
     reasoning: reasoningSchema.optional(),

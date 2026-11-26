@@ -19,6 +19,7 @@ import { tasksSuite } from '../../core/test/tasks-suite.ts';
 import { upgradeSuite } from '../../core/test/upgrade-suite.ts';
 import { world } from '../../core/test/world.ts';
 import { SCHEMA_VERSION, SqliteStore } from '../src/index.ts';
+import { MIGRATIONS } from '../src/migrations.ts';
 import { databases } from './temp.ts';
 
 const database = databases();
@@ -53,6 +54,7 @@ const actorOf = (): Actor => {
     deployment: { id: makeId('deployment', { now: NOW, random: random(3) }), version: 1 },
     pinned: false,
     behind: null,
+    account: null,
     modelId: 'fake-1',
     reasoning: 'medium',
     configuration: null,
@@ -184,6 +186,54 @@ describe('the store on SQLite', () => {
     db.close();
 
     await expect(SqliteStore.open(path)).rejects.toThrow(/made by a newer one/);
+  });
+
+  it('gives each actor of a database from before actors had accounts what its calls were made with', async () => {
+    const path = database();
+    const db = new DatabaseSync(path);
+    for (const migration of MIGRATIONS.slice(0, 5)) db.exec(migration);
+    db.exec('PRAGMA user_version = 5');
+    const account = (id: string, provider: string, isDefault: boolean) =>
+      db
+        .prepare('INSERT INTO accounts (id, name, account, sealed) VALUES (?, ?, ?, ?)')
+        .run(id, id, JSON.stringify({ id, provider, name: id, default: isDefault }), 'sealed');
+    account('acc_main', 'fake', true);
+    account('acc_own', 'fake', false);
+    const agent = (id: string, provider: string, given: string | null) =>
+      db
+        .prepare(
+          `INSERT INTO agents (id, name, provider, active_id, active_version, latest_id,
+             latest_version, account_id, created_at) VALUES (?, ?, ?, 'dep_1', 1, 'dep_1', 1, ?, 1)`,
+        )
+        .run(id, id, provider, given);
+    agent('agt_given', 'fake', 'acc_own');
+    agent('agt_default', 'fake', null);
+    agent('agt_none', 'other', null);
+    const actor = (id: string, of: string) =>
+      db
+        .prepare(
+          `INSERT INTO actors (id, agent_id, deployment_id, deployment_version, pinned, model,
+             reasoning, reasoning_from, status, turn, owed, epoch, next_seq, created_at)
+           VALUES (?, ?, 'dep_1', 1, 0, 'fake-1', 'low', 1, 'idle', '{}', 0, 0, 1, 1)`,
+        )
+        .run(id, of);
+    actor('act_given', 'agt_given');
+    actor('act_default', 'agt_default');
+    actor('act_none', 'agt_none');
+    db.close();
+
+    await (await SqliteStore.open(path)).close();
+    const after = new DatabaseSync(path);
+    expect(after.prepare('SELECT id, account_id FROM actors ORDER BY id').all()).toEqual([
+      // Its agent's account, the account its provider's default, and none where there was none.
+      { id: 'act_default', account_id: 'acc_main' },
+      { id: 'act_given', account_id: 'acc_own' },
+      { id: 'act_none', account_id: null },
+    ]);
+    // An agent has no account of its own any more.
+    const columns = after.prepare('PRAGMA table_info(agents)').all() as { name: string }[];
+    expect(columns.map((column) => column.name)).not.toContain('account_id');
+    after.close();
   });
 
   it('refuses everything once it is closed', async () => {

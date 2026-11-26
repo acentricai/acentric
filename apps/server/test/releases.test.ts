@@ -105,6 +105,12 @@ describe('what a release left', () => {
         // The model accounts, the machines, the invites and the audit log.
         const accounts = await admin.call('accounts.list', {});
         expect(accounts.items.map((account) => account.name)).toEqual(facts.accounts);
+        // Each actor the release left is given what its calls were made with then: the
+        // release's one account, its provider's default.
+        for (const actor of facts.actors) {
+          const found = await admin.call('actors.get', { params: { actor: actor.id as ActorId } });
+          expect(found.account).toBe(accounts.items[0]?.id);
+        }
         const machines = await admin.call('machines.list', {});
         expect(machines.items.map((machine) => machine.name)).toEqual(facts.machines);
         const invites = await admin.call('invites.list', {});

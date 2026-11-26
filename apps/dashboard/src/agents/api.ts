@@ -29,12 +29,6 @@ export const engine = {
   agent: (id: string, signal?: AbortSignal) =>
     api.call('agents.get', { params: { agent: agentId(id) }, ...signalOf(signal) }),
   deleteAgent: (id: string) => api.call('agents.delete', { params: { agent: agentId(id) } }),
-  /** Gives an agent a model account, or its provider's default with null. */
-  assignAccount: (id: string, account: string | null) =>
-    api.call('agents.update', {
-      params: { agent: agentId(id) },
-      body: { account: account as never },
-    }),
   deployments: (id: string, signal?: AbortSignal) =>
     api.call('deployments.list', {
       params: { agent: agentId(id) },

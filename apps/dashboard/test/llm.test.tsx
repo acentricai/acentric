@@ -28,7 +28,7 @@ const accountOf = (id: number, more: Partial<Account> = {}): Account => ({
   credential: 'api_key',
   default: false,
   owner: null,
-  agents: [],
+  actors: 0,
   createdBy: { type: 'user', id: 'usr_1' as never },
   createdAt: 1_795_305_600_000,
   ...more,
@@ -66,7 +66,7 @@ describe('the Accounts page', () => {
   it('lists the accounts: the default, the provider, and its spend', async () => {
     const server = signedIn();
     server.areas.llm.accounts.push(
-      accountOf(1, { name: 'main', default: true, agents: [ORDERS] }),
+      accountOf(1, { name: 'main', default: true, actors: 1 }),
       accountOf(2, { name: 'spare', provider: 'openai', default: true }),
       accountOf(3, { name: 'side' }),
     );
@@ -186,18 +186,16 @@ describe('the Accounts page', () => {
     );
   });
 
-  it('removes one, and says what it is given to when it may not be', async () => {
+  it('removes one, and says how many actors are given it when it may not be', async () => {
     const server = signedIn();
     server.areas.llm.accounts.push(
-      accountOf(1, { name: 'main', default: true, agents: [ORDERS, BILLING] }),
+      accountOf(1, { name: 'main', default: true, actors: 2 }),
       accountOf(2, { name: 'side' }),
     );
     open('/llm-providers', server);
     await screen.findByText('side');
     await choose('main', 'Remove');
-    expect(dialog().textContent).toContain(
-      'It is given to orders, billing: give them another account first.',
-    );
+    expect(dialog().textContent).toContain('2 actors use it: archive or delete them first.');
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Remove' }));
     expect(await within(dialog()).findByRole('alert')).toBeTruthy();
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }));

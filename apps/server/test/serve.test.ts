@@ -103,14 +103,15 @@ describe('a server', () => {
       params: { agent: deployed.agent.id, name: 'ORDERS_API_KEY' },
       body: { value: 'k-1' },
     });
+    // What its model is called with: no setting of the server's says. An actor is given it.
+    const account = await client.call('accounts.create', {
+      body: { provider: 'fake', name: 'main', apiKey: MODEL_KEY },
+    });
     const { actor } = await client.call('actors.create', {
       params: { agent: deployed.agent.id },
       body: { configuration: { region: 'eu' }, externalId: 'telegram:4411' },
     });
-    // What its model is called with: no setting of the server's says.
-    const account = await client.call('accounts.create', {
-      body: { provider: 'fake', name: 'main', apiKey: MODEL_KEY },
-    });
+    expect(actor.account).toBe(account.id);
 
     const events = await turn(client, actor.id, 'Why two refunds?');
     const roles = events.flatMap((event) =>

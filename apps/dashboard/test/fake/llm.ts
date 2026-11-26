@@ -171,7 +171,7 @@ export function llmArea(_shared: Shared) {
         credential: 'api_key',
         default: isDefault,
         owner: null,
-        agents: [],
+        actors: 0,
         createdBy: { type: 'user', id: person.id as never },
         createdAt: NOW,
       };
@@ -195,11 +195,11 @@ export function llmArea(_shared: Shared) {
         return json(200, found);
       }
       if (method === 'DELETE') {
-        if (found.agents.length > 0) {
+        if (found.actors > 0) {
           return refused(
             409,
             'conflict',
-            `The agents ${found.agents.join(', ')} are given this account: give them another first`,
+            `${String(found.actors)} actors are given this account: archive or delete them first`,
           );
         }
         accounts.splice(accounts.indexOf(found), 1);

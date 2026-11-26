@@ -54,6 +54,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       deployment: { id: makeId('deployment', { now: NOW, random: random() }), version: 1 },
       pinned: false,
       behind: null,
+      account: null,
       modelId: 'fake-1',
       reasoning: 'medium',
       configuration: { region: 'eu' },
@@ -115,7 +116,6 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           provider: 'fake',
           activeDeployment: ref,
           latestDeployment: ref,
-          account: null,
           createdAt: NOW,
         },
         deployment: {
@@ -357,7 +357,6 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         provider: 'fake',
         activeDeployment: { id: active.id, version: active.version },
         latestDeployment: { id: latest.id, version: latest.version },
-        account: null,
         createdAt: NOW,
       });
       /** An agent with two deployments, the second the active one. */
@@ -482,6 +481,7 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           deployment: next,
           pinned: true,
           behind: null,
+          account: null,
         } as const;
         await store.commit(actor.id, 1, idle({ set }));
         const record = await store.loadActor(actor.id);
@@ -713,7 +713,6 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
           provider: 'fake',
           activeDeployment: ref,
           latestDeployment: ref,
-          account: null,
           createdAt: NOW,
         };
         await store.addDeployment({ agent, deployment, code: 'v1' });
@@ -1150,59 +1149,20 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
         expect(await store.listAccounts()).toEqual([main]);
       });
 
-      it('are given to agents, which keep theirs through a deploy', async () => {
-        const id = agentId();
-        const deploymentOf = (version: number): Deployment => ({
-          id: makeId('deployment', { now: NOW, random: random() }),
-          agent: id,
-          version,
-          hash: String(version).repeat(64).slice(0, 64),
-          manifest: { protocol: 1, sdk: '0.15.0' },
-          definition: {
-            provider: 'fake',
-            instructions: '',
-            configuration: null,
-            tools: [],
-            inputs: [],
-          },
-          createdBy: { type: 'system' },
-          createdAt: NOW,
-        });
-        const one = deploymentOf(1);
-        const agent: Agent = {
-          id,
-          name: 'orders',
-          provider: 'fake',
-          activeDeployment: { id: one.id, version: 1 },
-          latestDeployment: { id: one.id, version: 1 },
-          account: null,
-          createdAt: NOW,
-        };
-        await store.addDeployment({ agent, deployment: one, code: 'v1' });
+      it('are given to actors, of which those that are not archived are counted', async () => {
         const account = accountOf('main');
         await store.addAccount(account);
+        const id = account.account.id;
+        const agent = agentId();
+        const live = actorOf(agent, { account: id });
+        const archived = actorOf(agent, { account: id, status: 'archived', archivedAt: NOW });
+        await store.createActor(live);
+        await store.createActor(archived);
+        await store.createActor(actorOf(agent));
+        expect((await store.loadActor(live.id))?.actor.account).toBe(id);
+        expect(await store.actorsGiven(id)).toBe(1);
 
-        const given = await store.setAgentAccount(id, account.account.id);
-        expect(given).toEqual({ ...agent, account: account.account.id });
-        expect(await store.agentsOf(account.account.id)).toEqual([id]);
-        // A new version is the agent as it is, with the account it has.
-        const two = deploymentOf(2);
-        const ref = { id: two.id, version: 2 };
-        await store.addDeployment({
-          agent: {
-            ...agent,
-            account: account.account.id,
-            activeDeployment: ref,
-            latestDeployment: ref,
-          },
-          deployment: two,
-          code: 'v2',
-        });
-        expect((await store.loadAgent(id))?.account).toBe(account.account.id);
-
-        expect((await store.setAgentAccount(id, null))?.account).toBeNull();
-        expect(await store.agentsOf(account.account.id)).toEqual([]);
-        expect(await store.setAgentAccount(agentId(), null)).toBeUndefined();
+        expect(await store.actorsGiven(accountOf('spare').account.id)).toBe(0);
       });
     });
 

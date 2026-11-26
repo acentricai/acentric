@@ -133,6 +133,8 @@ export async function api(
     store,
     // An engine that seals nothing has no account: its model is called without one.
     runner: sealing ? accountRunners(accounts) : runner,
+    // As the server: each actor is given an account of its provider when it is created.
+    ...(sealing ? { accountOf: (provider, wanted) => accounts.choose(provider, wanted) } : {}),
     providers,
     executor: new InlineExecutor(AGENTS),
     secrets,

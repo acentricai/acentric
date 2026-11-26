@@ -280,29 +280,22 @@ export const handlers: Handlers = {
     return engine.listAgents({ limit, ...(cursor === undefined ? {} : { cursor }) });
   },
   'agents.get': (asked) => agentOf(asked),
-  'agents.update': async (asked, { engine, accounts, audit }) => {
-    const { activeVersion, account } = asked.body;
+  'agents.update': async (asked, { engine, audit }) => {
+    const { activeVersion } = asked.body;
     let agent = agentOf(asked);
-    if (activeVersion === undefined && account === undefined) {
+    if (activeVersion === undefined) {
       throw new ApiFailure('invalid_request', 'Nothing to change was given');
     }
-    // Both are done, or neither: a version there is not is refused before anything is changed.
-    if (activeVersion !== undefined && activeVersion > agent.latestDeployment.version) {
+    if (activeVersion > agent.latestDeployment.version) {
       throw new AgentNotFound(agent.id, activeVersion);
     }
-    if (account !== undefined) {
-      agent = await accounts.give(refOf(asked), agent, account);
-      engine.forgetAgent(agent.id);
-    }
-    if (activeVersion !== undefined) {
-      agent = await engine.activate(agent.id, activeVersion);
-      await audit.record({
-        by: refOf(asked),
-        action: 'agent.activate',
-        target: { type: 'agent', id: agent.id },
-        detail: { name: agent.name, version: activeVersion },
-      });
-    }
+    agent = await engine.activate(agent.id, activeVersion);
+    await audit.record({
+      by: refOf(asked),
+      action: 'agent.activate',
+      target: { type: 'agent', id: agent.id },
+      detail: { name: agent.name, version: activeVersion },
+    });
     return agent;
   },
   'agents.delete': async (asked, { engine, audit }) => {

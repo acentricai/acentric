@@ -272,10 +272,6 @@ export class SqliteStore implements Store {
     return this.#write.ask('pruneUsage' satisfies Operation, before, limit);
   }
 
-  setAgentAccount(agent: AgentId, account: AccountId | null): Promise<Agent | undefined> {
-    return this.#write.ask('setAgentAccount' satisfies Operation, agent, account);
-  }
-
   addAccount(account: StoredAccount): Promise<void> {
     return this.#write.ask('addAccount' satisfies Operation, account);
   }
@@ -297,8 +293,8 @@ export class SqliteStore implements Store {
     return this.#write.ask('removeAccount' satisfies Operation, id);
   }
 
-  agentsOf(account: AccountId): Promise<AgentId[]> {
-    return this.#write.ask('agentsOf' satisfies Operation, account);
+  actorsGiven(account: AccountId): Promise<number> {
+    return this.#write.ask('actorsGiven' satisfies Operation, account);
   }
 
   quietInputs(actor: ActorId, only?: readonly string[]): Promise<void> {

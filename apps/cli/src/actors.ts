@@ -2,9 +2,10 @@
 // conversation is read, or followed as it grows.
 
 import type { Client } from '@acentric/client';
-import { REASONING_LEVELS } from '@acentric/protocol';
-import type { Actor, Json, Reasoning } from '@acentric/protocol';
+import { parseId, REASONING_LEVELS } from '@acentric/protocol';
+import type { Account, Actor, Json, Reasoning } from '@acentric/protocol';
 
+import { accountOf } from './accounts.ts';
 import { actorOf, agentOf, signedIn, withEngine } from './engine.ts';
 import { machineOf } from './machines.ts';
 import type { Io } from './engine.ts';
@@ -73,6 +74,8 @@ export async function createActor(
     readonly name?: string | undefined;
     readonly externalId?: string | undefined;
     readonly model?: string | undefined;
+    /** The model account its calls are made with, by name or ID: its provider's default without. */
+    readonly account?: string | undefined;
     readonly reasoning?: string | undefined;
     readonly configuration?: string | undefined;
     /** The machine it works on, by name or ID, and its working directory there. */
@@ -103,6 +106,13 @@ export async function createActor(
     const agent = await agentOf(client, given.agent);
     const machine =
       given.machine === undefined ? undefined : await machineOf(client, given.machine);
+    // An ID is given as it is: the engine says whether it is an account of the agent's provider.
+    const account =
+      given.account === undefined
+        ? undefined
+        : parseId(given.account)?.kind === 'account'
+          ? given.account
+          : (await accountOf(client, given.account)).id;
     const { actor, created } = await client.call('actors.create', {
       params: { agent: agent.id },
       body: {
@@ -119,6 +129,7 @@ export async function createActor(
         ...(given.name === undefined ? {} : { name: given.name }),
         ...(given.externalId === undefined ? {} : { externalId: given.externalId }),
         ...(given.model === undefined ? {} : { modelId: given.model }),
+        ...(account === undefined ? {} : { account: account as Account['id'] }),
         ...(reasoning === undefined ? {} : { reasoning: reasoning as Reasoning }),
         ...(configuration === undefined ? {} : { configuration }),
       },

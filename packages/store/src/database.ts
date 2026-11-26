@@ -93,7 +93,6 @@ type AgentRow = {
   active_version: number;
   latest_id: string;
   latest_version: number;
-  account_id: string | null;
   created_at: number;
 };
 
@@ -104,7 +103,6 @@ function agentOf(row: AgentRow): Agent {
     provider: row.provider,
     activeDeployment: { id: row.active_id, version: row.active_version },
     latestDeployment: { id: row.latest_id, version: row.latest_version },
-    account: row.account_id,
     createdAt: row.created_at,
   } as Agent;
 }
@@ -331,6 +329,7 @@ type ActorRow = {
   behind: string | null;
   name: string | null;
   external_id: string | null;
+  account_id: string | null;
   model: string;
   reasoning: string;
   configuration: string | null;
@@ -651,6 +650,7 @@ function recordOf(row: ActorRow): ActorRecord {
       deployment: { id: row.deployment_id, version: row.deployment_version },
       pinned: row.pinned === 1,
       behind: row.behind === null ? null : JSON.parse(row.behind),
+      account: row.account_id,
       modelId: row.model,
       reasoning: row.reasoning,
       configuration: row.configuration === null ? null : JSON.parse(row.configuration),
@@ -706,7 +706,6 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'removeExpired',
   'pruneAudit',
   'pruneUsage',
-  'setAgentAccount',
   'addAccount',
   'saveAccount',
   'removeAccount',
@@ -933,8 +932,8 @@ export function operations(db: DatabaseSync) {
       );
       run(
         `INSERT INTO agents (id, name, provider, active_id, active_version, latest_id,
-           latest_version, account_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           latest_version, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET active_id = excluded.active_id,
            active_version = excluded.active_version, latest_id = excluded.latest_id,
            latest_version = excluded.latest_version`,
@@ -945,7 +944,6 @@ export function operations(db: DatabaseSync) {
         agent.activeDeployment.version,
         agent.latestDeployment.id,
         agent.latestDeployment.version,
-        agent.account,
         agent.createdAt,
       );
     },
@@ -1094,14 +1092,6 @@ export function operations(db: DatabaseSync) {
       );
     },
 
-    setAgentAccount(agent: AgentId, account: AccountId | null): Agent | undefined {
-      if (run('UPDATE agents SET account_id = ? WHERE id = ?', account, agent) === 0) {
-        return undefined;
-      }
-      const row = get<AgentRow>('SELECT * FROM agents WHERE id = ?', agent);
-      return row === undefined ? undefined : agentOf(row);
-    },
-
     addAccount(stored: StoredAccount): void {
       const { id, name } = stored.account;
       if (get('SELECT 1 FROM accounts WHERE name = ?', name) !== undefined) {
@@ -1187,11 +1177,13 @@ export function operations(db: DatabaseSync) {
       return all<{ digest: string }>('SELECT digest FROM blobs').map((row) => row.digest);
     },
 
-    agentsOf(account: AccountId): AgentId[] {
-      return all<{ id: AgentId }>(
-        'SELECT id FROM agents WHERE account_id = ? ORDER BY id',
-        account,
-      ).map((row) => row.id);
+    actorsGiven(account: AccountId): number {
+      return (
+        get<{ n: number }>(
+          'SELECT COUNT(*) AS n FROM actors WHERE account_id = ? AND archived_at IS NULL',
+          account,
+        )?.n ?? 0
+      );
     },
 
     usage(filter: UsageFilter = {}, grouping: UsageGrouping = {}): UsageReport {
@@ -1557,8 +1549,8 @@ export function operations(db: DatabaseSync) {
         `INSERT INTO actors (id, agent_id, deployment_id, deployment_version, pinned, behind, name, external_id,
            model, reasoning, configuration, configuration_given, sent, reasoning_from, status,
            last_turn, turn, owed, epoch, next_seq, created_at, archived_at, machine, machine_env,
-           parent_id, parent_name, spawned_by, instructions)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           parent_id, parent_name, spawned_by, instructions, account_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, 0, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         actor.id,
         actor.agent,
         actor.deployment.id,
@@ -1582,6 +1574,7 @@ export function operations(db: DatabaseSync) {
         actor.parent?.name ?? null,
         spawnedBy,
         instructions,
+        actor.account,
       );
       return {
         record: {

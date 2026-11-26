@@ -390,7 +390,7 @@
       },
       "patch": {
         "operationId": "agents.update",
-        "summary": "Makes one of an agent's deployments the active one, or gives it a model account.",
+        "summary": "Makes one of an agent's deployments the active one.",
         "tags": [
           "agents"
         ],
@@ -1373,7 +1373,7 @@
             }
           },
           "409": {
-            "description": "Failed: name_taken.",
+            "description": "Failed: conflict, name_taken.",
             "content": {
               "application/json": {
                 "schema": {
@@ -10072,16 +10072,10 @@
               }
             ]
           },
-          "agents": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^agt_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "description": "An ID of kind agent, made by the engine.",
-              "examples": [
-                "agt_01jd3m5kq8f4xv9t6w2rhb0c7n"
-              ]
-            }
+          "actors": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "createdBy": {
             "$ref": "#/components/schemas/PrincipalRef"
@@ -10103,7 +10097,7 @@
           "credential",
           "default",
           "owner",
-          "agents",
+          "actors",
           "createdBy",
           "createdAt"
         ]
@@ -10239,6 +10233,21 @@
                 "required": [
                   "deployment",
                   "reason"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^acc_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                "description": "An ID of kind account, made by the engine.",
+                "examples": [
+                  "acc_01jd3m5kq8f4xv9t6w2rhb0c7n"
                 ]
               },
               {
@@ -10417,6 +10426,7 @@
           "deployment",
           "pinned",
           "behind",
+          "account",
           "modelId",
           "reasoning",
           "configuration",
@@ -10606,21 +10616,6 @@
               "version"
             ]
           },
-          "account": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^acc_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                "description": "An ID of kind account, made by the engine.",
-                "examples": [
-                  "acc_01jd3m5kq8f4xv9t6w2rhb0c7n"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "createdAt": {
             "type": "integer",
             "minimum": 0,
@@ -10637,7 +10632,6 @@
           "provider",
           "activeDeployment",
           "latestDeployment",
-          "account",
           "createdAt"
         ]
       },
@@ -11837,6 +11831,14 @@
             "description": "The caller's own ID for it. Creating with one that is taken gives back what has it.",
             "examples": [
               "telegram:4411"
+            ]
+          },
+          "account": {
+            "type": "string",
+            "pattern": "^acc_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind account, made by the engine.",
+            "examples": [
+              "acc_01jd3m5kq8f4xv9t6w2rhb0c7n"
             ]
           },
           "modelId": {
@@ -14886,21 +14888,6 @@
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
-          },
-          "account": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^acc_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                "description": "An ID of kind account, made by the engine.",
-                "examples": [
-                  "acc_01jd3m5kq8f4xv9t6w2rhb0c7n"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "additionalProperties": false

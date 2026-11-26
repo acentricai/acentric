@@ -355,8 +355,8 @@ export type ActorsQuery = PageOf & {
 
 /** A model account as the store keeps it: its credential sealed, never the credential. */
 export type StoredAccount = {
-  /** The account, but for which agents were given it: that is asked of the agents. */
-  readonly account: Omit<Account, 'agents'>;
+  /** The account, but for how many actors were given it: that is asked of the actors. */
+  readonly account: Omit<Account, 'actors'>;
   readonly sealed: string;
 };
 
@@ -482,12 +482,6 @@ export interface Store {
   /** Removes usage from before `before`, the oldest first, `limit` at most: how many went. */
   pruneUsage(before: number, limit: number): Promise<number>;
 
-  /**
-   * Gives an agent a model account, or with null none: it then uses its provider's default.
-   * It gives the agent as it then is, or undefined when there is no such agent.
-   */
-  setAgentAccount(agent: AgentId, account: AccountId | null): Promise<Agent | undefined>;
-
   // Model accounts
 
   /**
@@ -505,8 +499,8 @@ export interface Store {
    */
   saveAccount(account: StoredAccount): Promise<void>;
   removeAccount(id: AccountId): Promise<void>;
-  /** The agents that were given an account. */
-  agentsOf(account: AccountId): Promise<AgentId[]>;
+  /** How many actors that are not archived were given an account. */
+  actorsGiven(account: AccountId): Promise<number>;
 
   // Usage
 

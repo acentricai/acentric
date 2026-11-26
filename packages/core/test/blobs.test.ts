@@ -46,7 +46,6 @@ function world(given: { readonly bytes?: BlobStore | null } = {}) {
         provider: 'fake',
         activeDeployment: ref,
         latestDeployment: ref,
-        account: null,
         createdAt: NOW,
       },
       deployment: {
@@ -77,6 +76,7 @@ function world(given: { readonly bytes?: BlobStore | null } = {}) {
       deployment: { id: id('deployment'), version: 1 },
       pinned: false,
       behind: null,
+      account: null,
       modelId: 'fake-1',
       reasoning: 'medium',
       configuration: null,
