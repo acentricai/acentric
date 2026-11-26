@@ -114,6 +114,60 @@
   overflow: auto;
 }
 
+/* ---------- Overview ---------- */
+
+/* What the agent is, in a line under the heading, each part apart by a dot. */
+.agent-overview__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: -16px 0 24px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.agent-overview__facts > span + span::before {
+  margin: 0 10px;
+  content: '·';
+}
+
+/* Its actors by status: each a row of the status and how many. */
+.agent-standing {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-standing__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-standing__count {
+  color: var(--ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-standing__all {
+  padding-top: 4px;
+  font-size: 13px;
+}
+
+.agent-standing__all a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.agent-standing__all a:hover {
+  color: var(--ink);
+}
+
 /* ---------- Actors ---------- */
 
 /* An actor's name, a link without a line under it, and what spawned it beside it. */
