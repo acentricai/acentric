@@ -231,17 +231,22 @@ export function Tiles({ total }: { total: UsageTotals | undefined }) {
 type Day = { readonly day: string; readonly parts: readonly Group[]; readonly whole: Group | null };
 
 /**
- * Each day of the range as a column, by provider, in what is measured: a tooltip on each names
- * the providers of its parts.
+ * Each day of the range as a column, split by what the days were read split by (a provider,
+ * without `series` and `name`), in what is measured: a tooltip on each names its parts.
  */
 export function TimeChart({
   groups,
   from,
   to,
+  series = seriesOf,
+  name = providerName,
 }: {
   groups: readonly Group[] | undefined;
   from: number;
   to: number;
+  /** The hue of a part, by its key and its place among the range's, the most first. */
+  series?: (key: string, rank: number) => string;
+  name?: (key: string) => string;
 }) {
   const [measure, setMeasure] = useState<Measure>('cost');
   const [hover, setHover] = useState<number | null>(null);
@@ -322,7 +327,10 @@ export function TimeChart({
                             className="usage-chart__part"
                             // Its share of the day: grown by the raw value, the parts of a day
                             // under 1 would leave the column's foot empty.
-                            style={{ flexGrow: value / all, background: seriesOf(provider) }}
+                            style={{
+                              flexGrow: value / all,
+                              background: series(provider, providers.indexOf(provider)),
+                            }}
                           />
                         );
                       })}
@@ -353,10 +361,10 @@ export function TimeChart({
                         <span key={provider} className="usage-tooltip__row">
                           <span
                             className="usage-swatch"
-                            style={{ background: seriesOf(provider) }}
+                            style={{ background: series(provider, providers.indexOf(provider)) }}
                             aria-hidden="true"
                           />
-                          {providerName(provider)}
+                          {name(provider)}
                           <span className="usage-tooltip__value">
                             {written(part === undefined ? 0 : valueOf(part, measure), measure)}
                           </span>
