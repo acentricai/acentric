@@ -13,6 +13,7 @@ import {
   IconSitemap,
   IconTool,
 } from '@tabler/icons-react';
+import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
 import { Code, JsonCode } from '../../code.tsx';
@@ -21,7 +22,7 @@ import { LoadError } from '../../machines/ui.tsx';
 import { displayText } from '../../machines/text.tsx';
 import { SideDialog, type SideTab } from '../../side-dialog.tsx';
 import { Label } from '../../ui.tsx';
-import { AgentLink } from '../links.tsx';
+import { agentPath } from '../links.tsx';
 import { useAgents, useDeployment, useDeploymentCode } from '../queries.ts';
 
 export const DEPLOYMENT_TABS = [
@@ -237,7 +238,10 @@ function Subagents({ definition }: { definition: AgentDefinition }) {
               id === undefined ? (
                 displayText(subagent.agent)
               ) : (
-                <AgentLink agent={id}>{displayText(subagent.agent)}</AgentLink>
+                // In a new tab: this dialog, and the page under it, stay as they are.
+                <Link to={agentPath(id)} target="_blank" rel="noopener">
+                  {displayText(subagent.agent)}
+                </Link>
               )
             }
             text={subagent.description}
