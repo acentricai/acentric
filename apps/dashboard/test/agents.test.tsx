@@ -553,6 +553,21 @@ describe('an actor’s page', () => {
     await waitFor(() => expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`));
   });
 
+  it('resizes its conversation and sidebar by the line between them, and keeps the size', async () => {
+    const { server, orders } = withAgents();
+    localStorage.removeItem('acentric.actor-split');
+    open(`/agents/${orders.id}/actors/${idOf('act', 1)}`, server);
+    const line = await screen.findByRole('separator', { name: 'Resize the conversation' });
+    expect(line.getAttribute('aria-valuenow')).toBe('65');
+    fireEvent.keyDown(line, { key: 'ArrowLeft', shiftKey: true });
+    expect(line.getAttribute('aria-valuenow')).toBe('55');
+    fireEvent.keyDown(line, { key: 'End' });
+    expect(line.getAttribute('aria-valuenow')).toBe('80');
+    expect(localStorage.getItem('acentric.actor-split')).toBe('80');
+    fireEvent.doubleClick(line);
+    expect(line.getAttribute('aria-valuenow')).toBe('65');
+  });
+
   it('draws its conversation as it grows: what it was sent, what the model said and called, and notices', async () => {
     const { server, orders } = withAgents();
     const actor = idOf('act', 1);
