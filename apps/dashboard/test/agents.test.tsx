@@ -628,11 +628,16 @@ describe('an actor’s page', () => {
     expect(within(convo).getByText('Input')).toBeTruthy();
     expect(within(convo).getByRole('button', { name: 'Copy the input' })).toBeTruthy();
     expect(within(convo).getByText('check').tagName).toBe('STRONG');
-    // A tool's result is in the card of the call that asked for it, not on its own.
-    const call = within(convo).getByRole('button', { name: /lookup_order/ });
+    // Its tool calls are folded to a line of their names; opened, a row each, and a row opened
+    // has the result of the call that asked for it, not on its own.
+    fireEvent.click(within(convo).getByRole('button', { name: 'Called lookup_order' }));
+    const call = within(convo).getByRole('button', { name: /^lookup_order/ });
     expect(within(convo).queryByText('Shipped today.')).toBeNull();
     fireEvent.click(call);
     expect(await within(convo).findByText('Shipped today.')).toBeTruthy();
+    expect(within(convo).getByRole('button', { name: 'Copy the result' })).toBeTruthy();
+    // Under the answer: its model, and a copy of it.
+    expect(within(convo).getByRole('button', { name: 'Copy the answer' })).toBeTruthy();
     // What it thought is folded.
     expect(within(convo).queryByText('Look it up first.')).toBeNull();
     fireEvent.click(within(convo).getByRole('button', { name: 'Thought' }));
