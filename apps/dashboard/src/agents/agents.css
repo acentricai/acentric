@@ -243,6 +243,11 @@
   line-height: 16px;
 }
 
+/* A title kept for its room and for assistive technology, and not shown. */
+.actor-side__title--unseen {
+  visibility: hidden;
+}
+
 .actor-facts {
   display: grid;
   gap: 8px;

@@ -217,7 +217,7 @@ function Overview({ info, conversation }: { info: Actor; conversation: Conversat
   return (
     <>
       <section className="actor-side__group" aria-labelledby="actor-details">
-        <h2 className="actor-side__title" id="actor-details">
+        <h2 className="actor-side__title actor-side__title--unseen" id="actor-details">
           Details
         </h2>
         <dl className="actor-facts">
