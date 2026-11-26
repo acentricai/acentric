@@ -40,18 +40,20 @@ export function Sidebar({ me, collapsed }: { me: Me | undefined; collapsed: bool
         <Link to="/" className="side__brand" aria-label="Acentric">
           <img src="/acentric-mark-cropped.png" alt="" className="side__mark" />
         </Link>
-        {agent !== undefined && (
+      </div>
+      {agent !== undefined && (
+        <div className="side__back-row">
           <Link
             to="/agents"
             className="side__back"
             aria-label="Back to Dashboard"
             title={collapsed ? 'Back to Dashboard' : undefined}
           >
-            <IconArrowLeft size={14} stroke={1.75} aria-hidden="true" />
+            <IconArrowLeft size={16} stroke={1.75} aria-hidden="true" />
             <span className="side__back-text">Back to Dashboard</span>
           </Link>
-        )}
-      </div>
+        </div>
+      )}
       <Navigation sections={sections} collapsed={collapsed} />
       <SettingsButton collapsed={collapsed} />
       <UserMenu me={me} collapsed={collapsed} />
