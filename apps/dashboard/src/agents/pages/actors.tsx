@@ -1,10 +1,10 @@
 // An agent's actors, newest first: a page at a time, each opened by its name,
-// archived, unarchived or deleted from its menu, and a new one made with the model account it
+// archived or deleted from its menu, and a new one made with the model account it
 // is to be called with.
 
 import { REASONING_LEVELS } from '@acentric/protocol';
 import type { Actor, CreateActorRequest, Json, Reasoning } from '@acentric/protocol';
-import { IconArchive, IconArchiveOff, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconArchive, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useId, useState } from 'react';
@@ -43,7 +43,7 @@ function useAccounts(enabled: boolean) {
   return useQuery({ queryKey: ['accounts', 'list'], queryFn: () => engine.accounts(), enabled });
 }
 
-type Action = { kind: 'archive' | 'unarchive' | 'delete'; actor: Actor };
+type Action = { kind: 'archive' | 'delete'; actor: Actor };
 
 export function ActorsPage() {
   const { agent } = useParams({ strict: false }) as { agent: string };
@@ -153,9 +153,10 @@ export function ActorsPage() {
                     className: 'ac-table__actions',
                     cell: (actor: Actor) => (
                       <Menu label={`Actions for ${actorName(actor)}`}>
-                        {(done) =>
-                          actor.archivedAt === null ? (
+                        {(done) => (
+                          <>
                             <MenuItem
+                              disabled={actor.archivedAt !== null}
                               icon={<IconArchive size={16} stroke={1.75} aria-hidden="true" />}
                               onSelect={() => {
                                 done();
@@ -164,30 +165,18 @@ export function ActorsPage() {
                             >
                               Archive
                             </MenuItem>
-                          ) : (
-                            <>
-                              <MenuItem
-                                icon={<IconArchiveOff size={16} stroke={1.75} aria-hidden="true" />}
-                                onSelect={() => {
-                                  done();
-                                  setAction({ kind: 'unarchive', actor });
-                                }}
-                              >
-                                Unarchive
-                              </MenuItem>
-                              <MenuItem
-                                danger
-                                icon={<IconTrash size={16} stroke={1.75} aria-hidden="true" />}
-                                onSelect={() => {
-                                  done();
-                                  setAction({ kind: 'delete', actor });
-                                }}
-                              >
-                                Delete
-                              </MenuItem>
-                            </>
-                          )
-                        }
+                            <MenuItem
+                              danger
+                              icon={<IconTrash size={16} stroke={1.75} aria-hidden="true" />}
+                              onSelect={() => {
+                                done();
+                                setAction({ kind: 'delete', actor });
+                              }}
+                            >
+                              Delete
+                            </MenuItem>
+                          </>
+                        )}
                       </Menu>
                     ),
                   },
@@ -217,45 +206,42 @@ export function ActorsPage() {
   );
 }
 
-/** Archiving, unarchiving or deleting an actor, after asking. */
+/**
+ * Archiving or deleting an actor, after asking. One that is deleted is archived first, as the
+ * engine deletes only an archived actor.
+ */
 function ActorAction({ action, onClose }: { action: Action; onClose: () => void }) {
   const { kind, actor } = action;
   const run = useMutation({
-    mutationFn: () =>
-      kind === 'archive'
-        ? engine.archive(actor.id)
-        : kind === 'unarchive'
-          ? engine.unarchive(actor.id)
-          : engine.deleteActor(actor.id),
+    mutationFn: async () => {
+      if (actor.archivedAt === null) await engine.archive(actor.id);
+      if (kind === 'delete') await engine.deleteActor(actor.id);
+    },
     onSuccess: () => {
       // Its list, its page, and the accounts that count the actors given them.
       void queryClient.invalidateQueries();
       onClose();
     },
+    // Archived before the delete failed, it is shown so.
+    onError: () => void queryClient.invalidateQueries(),
   });
   const name = actorName(actor);
-  const asked = {
-    archive: {
-      title: `Archive ${name}?`,
-      sentence: 'It takes no input while it is archived, and its subagents are archived with it.',
-      action: 'Archive',
-    },
-    unarchive: {
-      title: `Unarchive ${name}?`,
-      sentence: 'It takes input again, as it did before it was archived.',
-      action: 'Unarchive',
-    },
-    delete: {
-      title: `Delete ${name}?`,
-      sentence:
-        'It is removed with its subagents and their conversations. What they spent stays in Usage. This can’t be undone.',
-      action: 'Delete',
-    },
-  }[kind];
-  return (
+  return kind === 'archive' ? (
     <Confirm
-      {...asked}
-      danger={kind === 'delete'}
+      title="Archive actor?"
+      sentence={`${name} takes no input while it is archived, and its subagents are archived with it.`}
+      action="Archive"
+      pending={run.isPending}
+      error={run.error === null ? null : errorText(run.error)}
+      onConfirm={() => run.mutate()}
+      onClose={onClose}
+    />
+  ) : (
+    <Confirm
+      title="Delete actor?"
+      sentence={`${name} is archived and removed, with its subagents and their conversations. What they spent stays in Usage. This can’t be undone.`}
+      action="Delete"
+      danger
       pending={run.isPending}
       error={run.error === null ? null : errorText(run.error)}
       onConfirm={() => run.mutate()}
