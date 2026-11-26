@@ -1,6 +1,6 @@
 /* An actor's conversation, one rhythm down it: what it was sent in a filled bubble to the right,
    the model's answer as text with its tool calls in a faint box, and the engine's notices in the
-   same bubble in the middle. A bubble's actions show in the gap under it on
+   same bubble to the right. A bubble's actions show in the gap under it on
    hover, and take no room of their own. */
 
 .convo {
@@ -97,8 +97,7 @@
 }
 
 .convo__notice > .convo__actions {
-  left: 50%;
-  transform: translateX(-50%);
+  right: 0;
 }
 
 .convo__said:hover > .convo__actions,
@@ -296,12 +295,12 @@
   color: color-mix(in srgb, var(--danger) 65%, var(--ink-muted));
 }
 
-/* The engine's notices: what they say in a bubble in the middle, and under it, shown on hover,
+/* The engine's notices: what they say in a bubble to the right, as an input's, and under it, shown on hover,
    when and what. */
 .convo__notice {
   position: relative;
   display: grid;
-  justify-items: center;
+  justify-items: end;
   min-width: 0;
 }
 
