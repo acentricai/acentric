@@ -129,33 +129,51 @@ describe('an agent’s own dashboard', () => {
 });
 
 describe('an agent’s Deployments', () => {
-  it('lists them newest first, says which is active, and opens what one declares', async () => {
+  it('lists them newest first, and says which is active', async () => {
     const { server, orders } = withAgents();
-    const page = open(`/agents/${orders.id}/deployments`, server);
+    open(`/agents/${orders.id}/deployments`, server);
     await screen.findByText('active');
     expect(cells('Deployments').map((text) => text?.replace('active', ''))).toEqual(['v2', 'v1']);
-    fireEvent.click(screen.getByRole('button', { name: 'v2' }));
-    expect(await within(await screen.findByRole('dialog')).findByText('lookup_order')).toBeTruthy();
-    expect(within(dialog()).getByText('code mode')).toBeTruthy();
-    expect(within(dialog()).getByText('You answer questions about orders.')).toBeTruthy();
+  });
+
+  it('opens one by its version: a tab for each part it declared, kept in the address', async () => {
+    const { server, orders } = withAgents();
+    const page = open(`/agents/${orders.id}/deployments`, server);
+    fireEvent.click(await screen.findByRole('button', { name: 'v2' }));
+    const opened = await screen.findByRole('dialog');
+    expect(within(opened).getByRole('heading', { name: 'v2' })).toBeTruthy();
+    expect(await within(opened).findByText('You answer questions about orders.')).toBeTruthy();
     expect(page.where()).toBe(`/agents/${orders.id}/deployments?v=2`);
-    fireEvent.click(within(dialog()).getByRole('button', { name: 'Close' }));
+
+    fireEvent.click(within(opened).getByRole('button', { name: 'Tools' }));
+    expect(await within(opened).findByText('lookup_order')).toBeTruthy();
+    expect(within(opened).getByText('code mode')).toBeTruthy();
+    expect(within(opened).getByText('Finds an order.')).toBeTruthy();
+    expect(page.where()).toBe(`/agents/${orders.id}/deployments?v=2&tab=tools`);
+
+    fireEvent.click(within(opened).getByRole('button', { name: 'Inputs' }));
+    expect(await within(opened).findByText('refund')).toBeTruthy();
+
+    fireEvent.click(within(opened).getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(page.where()).toBe(`/agents/${orders.id}/deployments`));
   });
-});
 
-describe('a deployment’s menu', () => {
-  it('shows its code, as it was deployed', async () => {
+  it('shows the code, as it was deployed, in its Raw tab', async () => {
     const { server, orders } = withAgents();
     open(`/agents/${orders.id}/deployments`, server);
     await screen.findByRole('button', { name: 'Actions for v1' });
     press('Actions for v1');
     fireEvent.click(await screen.findByRole('menuitem', { name: 'View source' }));
-    const source = await screen.findByRole('dialog');
-    expect(within(source).getByRole('heading', { name: 'v1 source' })).toBeTruthy();
-    expect(await within(source).findByText("export default 'v1';")).toBeTruthy();
+    const opened = await screen.findByRole('dialog');
+    expect(within(opened).getByRole('heading', { name: 'v1' })).toBeTruthy();
+    fireEvent.click(within(opened).getByRole('button', { name: 'Raw' }));
+    await waitFor(() =>
+      expect(opened.querySelector('pre.code__text')?.textContent).toBe("export default 'v1';"),
+    );
   });
+});
 
+describe('a deployment’s menu', () => {
   it('makes another version active, after asking, and not the one that is', async () => {
     const { server, orders } = withAgents();
     open(`/agents/${orders.id}/deployments`, server);

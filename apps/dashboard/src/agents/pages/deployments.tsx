@@ -1,5 +1,5 @@
-// An agent's deployments, newest first: which is active, what each declared when it was
-// deployed, opened by its version, and from each one's menu its code and making it active.
+// An agent's deployments, newest first: which is active, each opened by its version or its menu
+// (what it declared, and its code), and from its menu making it the active one.
 
 import type { DeploymentSummary } from '@acentric/protocol';
 import { IconCircleCheck, IconCode } from '@tabler/icons-react';
@@ -11,8 +11,6 @@ import { version } from '../../format.ts';
 import {
   Ago,
   Confirm,
-  CopyButton,
-  Dialog,
   LoadError,
   Menu,
   MenuItem,
@@ -24,13 +22,13 @@ import { may, useMe } from '../../me.ts';
 import { Label } from '../../ui.tsx';
 import { engine, queryClient } from '../api.ts';
 import { agentPath } from '../links.tsx';
-import { useAgent, useDeploymentCode, useDeployments } from '../queries.ts';
+import { useAgent, useDeployments } from '../queries.ts';
 import type { DeploymentsSearch } from '../url.ts';
-import { Declares } from './agent.tsx';
+import { DEPLOYMENT_TABS, DeploymentDialog, type DeploymentTab } from './deployment.tsx';
 import '../../machines/machine-pane.css';
 import '../agents.css';
 
-type Action = { kind: 'source' | 'activate'; deployment: DeploymentSummary };
+type Action = { kind: 'activate'; deployment: DeploymentSummary };
 
 export function DeploymentsPage() {
   const { agent } = useParams({ strict: false }) as { agent: string };
@@ -45,11 +43,12 @@ export function DeploymentsPage() {
   // Only one who deploys the agent chooses which of its versions is active.
   const deploys = me.data !== undefined && may(me.data, 'agents:deploy');
   const opened = rows?.find((deployment) => deployment.version === search.v);
-  // The open one is in the address, so it can be linked to and survives a reload.
-  const show = (v: number | undefined) =>
+  const tab = DEPLOYMENT_TABS.find((one) => one.id === search.tab)?.id ?? 'instructions';
+  // The open one, and its tab, are in the address: they can be linked to and survive a reload.
+  const show = (v: number | undefined, to?: DeploymentTab) =>
     void navigate({
       to: agentPath(agent, 'deployments'),
-      search: { v } as never,
+      search: { v, tab: to === 'instructions' ? undefined : to } as never,
       replace: true,
     });
 
@@ -106,7 +105,7 @@ export function DeploymentsPage() {
                         icon={<IconCode size={16} stroke={1.75} aria-hidden="true" />}
                         onSelect={() => {
                           done();
-                          setAction({ kind: 'source', deployment });
+                          show(deployment.version);
                         }}
                       >
                         View source
@@ -132,18 +131,13 @@ export function DeploymentsPage() {
         />
       )}
       {opened !== undefined && (
-        <Dialog title={version(opened.version)} wide onClose={() => show(undefined)}>
-          <div className="deployment-facts">
-            <Declares agent={agent} deployment={opened.id} />
-          </div>
-        </Dialog>
-      )}
-      {action?.kind === 'source' && (
-        <Source
-          key={action.deployment.id}
+        <DeploymentDialog
+          key={opened.id}
           agent={agent}
-          deployment={action.deployment}
-          onClose={() => setAction(null)}
+          deployment={opened}
+          tab={tab}
+          onTab={(to) => show(opened.version, to)}
+          onClose={() => show(undefined)}
         />
       )}
       {action?.kind === 'activate' && active !== undefined && (
@@ -156,44 +150,6 @@ export function DeploymentsPage() {
         />
       )}
     </div>
-  );
-}
-
-/** A version's code, as it was deployed: the one module its bundle made, with a copy button. */
-function Source({
-  agent,
-  deployment,
-  onClose,
-}: {
-  agent: string;
-  deployment: DeploymentSummary;
-  onClose: () => void;
-}) {
-  const code = useDeploymentCode(agent, deployment.id);
-  return (
-    <Dialog title={`${version(deployment.version)} source`} wide onClose={onClose}>
-      {code.isError ? (
-        <LoadError
-          things="the source"
-          error={code.error}
-          compact
-          onRetry={() => void code.refetch()}
-        />
-      ) : code.data === undefined ? (
-        <div className="skeleton" role="status" aria-label="Loading the source">
-          <span className="skeleton__line" />
-          <span className="skeleton__line" />
-          <span className="skeleton__line" />
-        </div>
-      ) : (
-        <div className="json deployment-source">
-          <pre className="json__code" dir="ltr">
-            {code.data.code}
-          </pre>
-          <CopyButton value={code.data.code} what="the source" />
-        </div>
-      )}
-    </Dialog>
   );
 }
 

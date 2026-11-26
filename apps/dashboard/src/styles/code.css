@@ -1,0 +1,51 @@
+/* Code: the highlighter's classes in the theme's own hues, so light and dark follow it. */
+
+.code__text {
+  font-variant-ligatures: none;
+  white-space: pre;
+}
+
+.hljs-keyword,
+.hljs-meta,
+.hljs-selector-tag {
+  color: var(--chart-1);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-template-tag,
+.hljs-template-variable {
+  color: var(--chart-2);
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-symbol {
+  color: var(--chart-3);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-attr,
+.hljs-property {
+  color: var(--chart-4);
+}
+
+.hljs-built_in,
+.hljs-variable.language_,
+.hljs-params {
+  color: var(--ink);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.hljs-subst,
+.hljs-punctuation,
+.hljs-operator {
+  color: var(--ink-secondary);
+}
