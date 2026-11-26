@@ -142,6 +142,13 @@
   padding: 40px 32px 48px 40px;
 }
 
+/* Their scrollbars: thin, a faint thumb, and no track. */
+.actor-page__main > .convo,
+.actor-side {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink-muted) 28%, transparent) transparent;
+}
+
 .actor-split {
   position: relative;
   background: var(--divider);
