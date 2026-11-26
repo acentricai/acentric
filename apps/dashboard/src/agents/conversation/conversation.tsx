@@ -16,6 +16,7 @@ import { blobUrl, engine } from '../api.ts';
 import {
   firstArgument,
   imageSource,
+  inputTokens,
   messageText,
   partsText,
   readResponse,
@@ -39,7 +40,7 @@ type Call = { readonly call: ToolCall; result: ConversationEntry | null };
 
 type Item =
   | { readonly kind: 'entry'; readonly entry: ConversationEntry; readonly calls: readonly Call[] }
-  | { readonly kind: 'compaction'; readonly compaction: Compaction };
+  | { readonly kind: 'compaction'; readonly compaction: Compaction; readonly to?: number };
 
 /**
  * The conversation as it is drawn: each message once, in order, a tool's result in the card of
@@ -72,7 +73,15 @@ function itemsOf(entries: readonly ConversationEntry[], compactions: readonly Co
     for (const compaction of after.get(entry.seq) ?? [])
       items.push({ kind: 'compaction', compaction });
   }
-  return items;
+  // How large it was after: what the next call to the model was sent, as its provider counted it.
+  return items.map((item, index) => {
+    if (item.kind !== 'compaction') return item;
+    const next = items
+      .slice(index + 1)
+      .find((later) => later.kind === 'entry' && later.entry.completion?.usage !== undefined);
+    const to = next?.kind === 'entry' ? inputTokens(next.entry.completion?.usage) : undefined;
+    return to === undefined ? item : { ...item, to };
+  });
 }
 
 /** Its messages from the first, then each as it is written, and where it stands. */
@@ -143,6 +152,7 @@ export function Conversation({ actor }: { actor: string }) {
           <CompactionLine
             key={`c-${String(item.compaction.atSeq)}-${String(item.compaction.createdAt)}`}
             compaction={item.compaction}
+            {...(item.to === undefined ? {} : { to: item.to })}
           />
         ) : (
           <EntryView key={item.entry.seq} entry={item.entry} calls={item.calls} actor={actor} />
@@ -502,19 +512,15 @@ const Quiet = ({ at, children }: { at: number; children: ReactNode }) => (
   </div>
 );
 
-const REASONS: { readonly [reason: string]: string } = {
-  threshold: 'it grew past its size',
-  overflow: 'the provider refused it',
-  asked: 'asked for',
-};
-
-/** Where the conversation was compacted: a rule across it. */
-function CompactionLine({ compaction }: { compaction: Compaction }) {
-  const size = compaction.tokensBefore > 0 ? ` from ${count(compaction.tokensBefore)} tokens` : '';
+/** Where the conversation was compacted: a rule across it, and how large it was before and after. */
+function CompactionLine({ compaction, to }: { compaction: Compaction; to?: number }) {
+  const sized = compaction.tokensBefore > 0 && to !== undefined;
   return (
     <div className="convo__rule" role="separator">
       <span>
-        Compacted{size} · {REASONS[compaction.reason] ?? compaction.reason}
+        {sized
+          ? `Compacted from ${count(compaction.tokensBefore)} to ${count(to)} tokens`
+          : 'Compacted'}
       </span>
     </div>
   );

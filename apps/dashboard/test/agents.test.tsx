@@ -568,6 +568,34 @@ describe('an actor’s page', () => {
     expect(line.getAttribute('aria-valuenow')).toBe('65');
   });
 
+  it('says where its conversation was compacted, and from and to how many tokens once it knows', async () => {
+    const { server, orders } = withAgents();
+    const actor = idOf('act', 1);
+    const at = 1_795_305_600_000;
+    area(server).conversation(actor, [
+      {
+        seq: 1,
+        createdAt: at,
+        message: { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+        input: { id: idOf('inp', 1) as never, type: 'message' },
+      },
+    ]);
+    area(server).compactions(actor, [
+      {
+        kind: 'summary',
+        atSeq: 1,
+        keepFromSeq: 2,
+        tokensBefore: 182_000,
+        reason: 'threshold',
+        createdAt: at + 1,
+      },
+    ]);
+    open(`/agents/${orders.id}/actors/${actor}`, server);
+    const convo = await screen.findByLabelText('Conversation');
+    // No call to the model since: how large it came to is not known yet.
+    expect(await within(convo).findByText('Compacted')).toBeTruthy();
+  });
+
   it('draws its conversation as it grows: what it was sent, what the model said and called, and notices', async () => {
     const { server, orders } = withAgents();
     const actor = idOf('act', 1);
