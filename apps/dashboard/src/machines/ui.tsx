@@ -15,6 +15,7 @@ import {
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -410,15 +411,21 @@ function moveInMenu(event: ReactKeyboardEvent, list: HTMLElement | null) {
   items[to]?.focus();
 }
 
-/** Where the open menu sits: under its button, right edges aligned. */
-type Place = { top: number; right: number };
-function placeUnder(button: HTMLElement | null): Place | null {
+/**
+ * Where the open menu sits: under its button, right edges aligned, or over it when the window
+ * has no room for it below and has above.
+ */
+type Place = { top: number; right: number; above: boolean };
+function placeUnder(button: HTMLElement | null, menu: HTMLElement | null): Place | null {
   if (button === null) return null;
   const box = button.getBoundingClientRect();
-  return {
-    top: box.bottom + 6,
-    right: document.documentElement.clientWidth - box.right,
-  };
+  const right = document.documentElement.clientWidth - box.right;
+  const height = menu?.offsetHeight ?? 0;
+  const room = document.documentElement.clientHeight - 8;
+  if (box.bottom + 6 + height > room && box.top - 6 - height >= 8) {
+    return { top: box.top - 6 - height, right, above: true };
+  }
+  return { top: box.bottom + 6, right, above: false };
 }
 
 /**
@@ -441,14 +448,19 @@ export function Menu({
   const id = useId();
   const [place, setPlace] = useState<Place | null>(null);
   const open = () => {
-    setPlace(placeUnder(menu.trigger.current));
+    setPlace(placeUnder(menu.trigger.current, null));
     menu.setOpen(true);
   };
+
+  // Once drawn, its height says whether it fits under its button.
+  useLayoutEffect(() => {
+    if (menu.open) setPlace(placeUnder(menu.trigger.current, menu.popup.current));
+  }, [menu.open, menu.popup, menu.trigger]);
 
   useEffect(() => {
     if (!menu.open) return;
     menu.popup.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
-    const follow = () => setPlace(placeUnder(menu.trigger.current));
+    const follow = () => setPlace(placeUnder(menu.trigger.current, menu.popup.current));
     window.addEventListener('resize', follow);
     window.addEventListener('scroll', follow, true);
     return () => {
@@ -485,7 +497,7 @@ export function Menu({
             id={id}
             role="menu"
             aria-label={label}
-            className="pop more-menu__pop more-menu__pop--placed"
+            className={`pop more-menu__pop more-menu__pop--placed${place.above ? ' more-menu__pop--above' : ''}`}
             style={{ top: place.top, right: place.right }}
             onKeyDown={(event) => {
               if (event.key === 'Tab') menu.close();
