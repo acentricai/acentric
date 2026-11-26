@@ -10,7 +10,6 @@ import {
   IconBolt,
   IconChevronRight,
   IconInfoCircle,
-  IconMessage2,
   IconSearch,
   IconSparkles,
 } from '@tabler/icons-react';
@@ -123,17 +122,15 @@ function useConversation(actor: string) {
 export function Conversation({ actor }: { actor: string }) {
   const { items, standing, ready } = useConversation(actor);
   // At the end, the view keeps to it as messages join; scrolled up, it stays where it is.
+  const box = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true);
-  useEffect(() => {
-    const scrolled = () => {
-      atEnd.current =
-        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80;
-    };
-    window.addEventListener('scroll', scrolled, { passive: true });
-    return () => window.removeEventListener('scroll', scrolled);
-  }, []);
+  const scrolled = () => {
+    const el = box.current;
+    if (el !== null) atEnd.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
+  };
   useLayoutEffect(() => {
-    if (ready && atEnd.current) window.scrollTo({ top: document.documentElement.scrollHeight });
+    const el = box.current;
+    if (ready && atEnd.current && el !== null) el.scrollTop = el.scrollHeight;
   }, [items, standing, ready]);
 
   if (!ready && items.length === 0) {
@@ -147,7 +144,7 @@ export function Conversation({ actor }: { actor: string }) {
   }
   const failed = standing?.lastTurn?.end === 'failed' ? standing.lastTurn : null;
   return (
-    <div className="convo" role="log" aria-label="Conversation">
+    <div className="convo" role="log" aria-label="Conversation" ref={box} onScroll={scrolled}>
       {items.length === 0 && <p className="convo__empty">Nothing said yet</p>}
       {items.map((item) =>
         item.kind === 'compaction' ? (
@@ -268,8 +265,8 @@ function Said({
   return (
     <div className="convo__said">
       <div className="convo__head">
-        <IconMessage2 size={14} stroke={1.75} aria-hidden="true" />
-        <span className="convo__who">{type === undefined ? 'User' : inputName(type)}</span>
+        <span className="convo__who">Input</span>
+        {type !== undefined && type !== 'message' && <span className="convo__muted">{type}</span>}
         {entry.leftOut === true && <span className="convo__tag">left out</span>}
         <When at={entry.createdAt} />
       </div>
@@ -294,9 +291,6 @@ function Said({
     </div>
   );
 }
-
-/** `message` is a Message; any other type is written as it is named. */
-const inputName = (type: string) => (type === 'message' ? 'Message' : type);
 
 /** A model's answer: what it thought, what it said, what it searched, and the tools it called. */
 function Answer({
