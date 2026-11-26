@@ -1,5 +1,5 @@
 // An actor's page: its conversation to the left, and beside it, to the right, tabs of what it is
-// and what it cost, and of its tasks. Being built again: the left is empty for now.
+// and what it cost, and of its tasks.
 
 import type { Actor, Task } from '@acentric/protocol';
 import { IconChevronRight } from '@tabler/icons-react';
@@ -17,6 +17,7 @@ import { Ago, Button, FormError, LoadError, NOT_FOUND } from '../../machines/ui.
 import { may, useMe } from '../../me.ts';
 import { Status } from '../../ui.tsx';
 import { engine, isApiError, queryClient } from '../api.ts';
+import { Conversation } from '../conversation/conversation.tsx';
 import { keys, useActor, useTask, useTasks } from '../queries.ts';
 import '../agents.css';
 
@@ -48,7 +49,9 @@ export function ActorPage() {
   const info = actor.data;
   return (
     <div className="actor-page">
-      <div className="actor-page__main" />
+      <div className="actor-page__main">
+        {info !== undefined && <Conversation key={id} actor={id} />}
+      </div>
       <aside className="actor-side" aria-label="About the actor">
         <div className="actor-tabs" role="tablist" aria-label="About the actor">
           {TABS.map((one) => (

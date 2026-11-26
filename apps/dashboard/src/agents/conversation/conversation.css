@@ -1,0 +1,411 @@
+/* An actor's conversation: each message a block under a small head of who and when, what it was
+   sent in a soft panel, the model's answer as text, its tool calls as cards that open, and the
+   engine's notices as quiet lines. */
+
+.convo {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+  padding-bottom: 48px;
+}
+
+.convo__loading {
+  max-width: 480px;
+}
+
+.convo__empty {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.convo__entry {
+  min-width: 0;
+}
+
+/* What a refused turn was sent and did: shown, and dimmed, as the model is not sent it again. */
+.convo__entry[data-left-out] {
+  opacity: 0.55;
+}
+
+.convo__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.convo__head > svg {
+  flex: none;
+}
+
+.convo__who {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.convo__time {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.convo__muted {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.convo__tag {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--wash);
+  color: var(--ink-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* What it was sent: a soft panel. */
+.convo__bubble {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.convo__text {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.convo__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.convo__image {
+  display: block;
+  max-width: 220px;
+  max-height: 160px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+
+/* The model's answer: its text as it wrote it. */
+.convo__answer {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.convo__answer > .convo__head {
+  margin-bottom: 0;
+}
+
+.convo__markdown {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.convo__markdown > :first-child {
+  margin-top: 0;
+}
+
+.convo__markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.convo__markdown pre {
+  padding: 10px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  font: 12.5px/19px var(--font-mono);
+}
+
+.convo__markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.convo__refusal {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: 13.5px;
+  line-height: 20px;
+}
+
+.convo__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+/* A fold: what it thought, or a notice, opened by its line. */
+.convo__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.convo__toggle:hover {
+  color: var(--ink);
+}
+
+.convo__toggle > svg {
+  flex: none;
+}
+
+.convo__toggle:focus-visible,
+.convo__call-head:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.convo__toggle > svg:first-child,
+.convo__chevron {
+  transition: transform 150ms ease;
+}
+
+[data-open] > .convo__toggle > svg:first-child,
+[data-open] > .convo__call-head > .convo__chevron {
+  transform: rotate(90deg);
+}
+
+.convo__thought {
+  margin: 8px 0 0 19px;
+  padding-left: 12px;
+  border-left: 2px solid var(--divider);
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Its tool calls: a card each, its result inside it. */
+.convo__calls {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.convo__call {
+  min-width: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.convo__call-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.convo__call-head > svg {
+  flex: none;
+}
+
+.convo__call-name {
+  flex: none;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.convo__call-about {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.convo__call-state {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.convo__call[data-state='running'] .convo__call-state {
+  color: var(--chart-4);
+}
+
+.convo__call[data-state='failed'] .convo__call-state,
+.convo__call[data-state='failed'] .convo__call-name {
+  color: var(--danger);
+}
+
+.convo__call-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 12px 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.convo__label {
+  margin-top: 6px;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.convo__call-body .json__code {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.convo__out {
+  max-height: 320px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  color: var(--ink-secondary);
+  font: 12.5px/19px var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.convo__out[data-error] {
+  color: var(--danger);
+}
+
+/* The engine's notices: a quiet line, opened to all they say. */
+.convo__notice .convo__out {
+  margin-top: 8px;
+}
+
+.convo__notice[data-problem] > .convo__toggle {
+  color: var(--danger);
+}
+
+.convo__problem {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.convo__quiet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+/* Where it was compacted: a rule across, its words in the middle. */
+.convo__rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.convo__rule::before,
+.convo__rule::after {
+  flex: 1;
+  height: 1px;
+  background: var(--divider);
+  content: '';
+}
+
+.convo__working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.convo__working-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--chart-4);
+  animation: convo-working 1.4s ease-in-out infinite;
+}
+
+@keyframes convo-working {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.convo__failed {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.convo__failed > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .convo__working-dot {
+    animation: none;
+  }
+}
