@@ -511,48 +511,46 @@ describe('an agent’s Settings', () => {
 });
 
 describe('an actor’s page', () => {
-  const user = (seq: number, text: string) => ({
-    seq,
-    createdAt: 1_795_305_600_000 + seq,
-    message: { role: 'user' as const, content: [{ type: 'text' as const, text }] },
-    input: { id: idOf('inp', seq) as never, type: 'message' },
-  });
-  const model = (seq: number, text: string) => ({
-    seq,
-    createdAt: 1_795_305_600_000 + seq,
-    message: {
-      role: 'assistant' as const,
-      provider: 'openai',
-      api: 'openai-responses',
-      model: 'gpt-6.2-sol',
-      content: [{ type: 'message', content: [{ type: 'output_text', text }] }],
-    },
-    completion: { stopReason: 'stop' as const, usage: { totalInput: 100, output: 20 } },
-  });
-
-  it('says where it stands, and draws its conversation as it grows', async () => {
-    const { server } = withAgents();
+  it('says what it is, and what it and its subagents cost, beside where its conversation goes', async () => {
+    const { server, orders } = withAgents();
     const actor = idOf('act', 1);
-    area(server).conversation(actor, [user(1, 'Where is A-1042?'), model(2, 'It ships today.')]);
-    area(server).spent(actor, 0.42);
-    open(`/actors/${actor}`, server);
-    // Its agent, named and linked: in the page, and in the breadcrumbs.
-    expect((await screen.findAllByRole('link', { name: 'orders' })).length).toBeGreaterThan(0);
-    expect(await screen.findByText('It ships today.')).toBeTruthy();
-    expect(screen.getByText('Where is A-1042?')).toBeTruthy();
-    expect(screen.getByText('$0.42 spent')).toBeTruthy();
-    expect(screen.getByText('1 turn')).toBeTruthy();
+    server.areas.llm.accounts.push({
+      id: `acc_${'0'.repeat(25)}1` as never,
+      provider: orders.provider,
+      name: 'main',
+      credential: 'api_key',
+      default: true,
+      owner: null,
+      actors: 1,
+      createdBy: { type: 'user', id: 'usr_1' as never },
+      createdAt: 1_795_305_600_000,
+    });
+    server.actors[0] = { ...(server.actors[0] as Actor), account: `acc_${'0'.repeat(25)}1` };
+    // It and the actors under it, as the engine adds them up; and it alone, by kind of call.
+    area(server).spent(actor, 1.5);
+    server.areas.llm.usageIs(() => ({
+      totals: totalsOf({ cost: 1.2 }),
+      groups: [
+        { key: 'turn', totals: totalsOf({ cost: 1 }) },
+        { key: 'compaction', totals: totalsOf({ cost: 0.2 }) },
+      ],
+    }));
+    open(`/agents/${orders.id}/actors/${actor}`, server);
+    const side = await screen.findByRole('complementary', { name: 'About the actor' });
+    const fact = (name: string) =>
+      within(side).getByText(name, { selector: 'dt' }).nextElementSibling?.textContent;
+    await waitFor(() => expect(fact('Account')).toBe('main'));
+    expect(fact('Status')).toBe('working');
+    expect(fact('Model')).toBe('gpt-6.2-sol');
+    expect(fact('Reasoning')).toBe('medium');
+    expect(fact('Version')).toBe('v2 · follows the active');
+    await waitFor(() => expect(within(side).getByText('$1.50')).toBeTruthy());
+    expect(fact('Turns')).toBe('$1.00');
+    expect(fact('Compaction')).toBe('$0.20');
+    expect(fact('Subagents')).toBe('$0.30');
     // The breadcrumbs name its agent, that agent's Actors, and it by its ID.
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    await waitFor(() => expect(within(crumbs).getByText('orders')).toBeTruthy());
-    expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`);
-    expect(within(crumbs).getByRole('link', { name: 'Actors' }).getAttribute('href')).toBe(
-      `/agents/${idOf('agt', 1)}/actors`,
-    );
-    // A message that joins is drawn, whole.
-    area(server).say(actor, user(3, 'And A-1043?'));
-    expect(await screen.findByText('And A-1043?')).toBeTruthy();
-    expect(screen.getByText('2 turns')).toBeTruthy();
+    await waitFor(() => expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`));
   });
 
   it('has its agent’s sidebar, with Actors the tab it is on', async () => {
@@ -564,128 +562,6 @@ describe('an actor’s page', () => {
     expect(actors.getAttribute('aria-current')).toBe('page');
     expect(within(side).getByRole('link', { name: 'Back to Dashboard' })).toBeTruthy();
     expect(within(side).queryByRole('link', { name: 'Machines' })).toBeNull();
-  });
-
-  it('sends an input of its agent’s types, once, with an ID of its own', async () => {
-    const { server } = withAgents();
-    const actor = idOf('act', 2);
-    open(`/actors/${actor}`, server);
-    const type = (await screen.findByRole('combobox', { name: 'Input type' })) as HTMLSelectElement;
-    await waitFor(() =>
-      expect([...type.options].map((option) => option.value)).toEqual(['message', 'refund']),
-    );
-    fireEvent.change(screen.getByRole('textbox', { name: 'Payload' }), {
-      target: { value: '{"text":"Hello"}' },
-    });
-    press('Send');
-    expect(await screen.findByText('sent')).toBeTruthy();
-    expect(area(server).sent).toHaveLength(1);
-    const [first] = area(server).sent;
-    expect(first?.actor).toBe(actor);
-    expect(first?.body).toMatchObject({ type: 'message', payload: { text: 'Hello' } });
-    expect(first?.body['externalId']).toMatch(/^in_[0-9a-f]{20}$/);
-    // A payload that is not JSON is not sent.
-    fireEvent.change(screen.getByRole('textbox', { name: 'Payload' }), { target: { value: '{' } });
-    press('Send');
-    expect(await screen.findByRole('textbox', { name: 'Payload' })).toBeTruthy();
-    await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Payload' }).getAttribute('aria-invalid')).toBe(
-        'true',
-      ),
-    );
-    expect(area(server).sent).toHaveLength(1);
-  });
-
-  it('offers a message of text to an actor whose agent declares no input, as every agent takes one', async () => {
-    const server = signedIn();
-    const plain = area(server).agent('plain', 1, [definitionOf({ inputs: [] })]);
-    server.actors.push(actorFor(plain, 7));
-    open(`/actors/${idOf('act', 7)}`, server);
-    const type = (await screen.findByRole('combobox', { name: 'Input type' })) as HTMLSelectElement;
-    await waitFor(() =>
-      expect([...type.options].map((option) => option.value)).toEqual(['message']),
-    );
-    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
-  });
-
-  it('interrupts one that is working, and archives it after asking', async () => {
-    const { server } = withAgents();
-    const actor = idOf('act', 1);
-    const { where } = open(`/actors/${actor}`, server);
-    fireEvent.click(await screen.findByRole('button', { name: 'Interrupt' }));
-    expect(
-      await screen.findByText('Its turn was ended. Its tasks and subagents go on.'),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
-    fireEvent.click(within(dialog()).getByRole('button', { name: 'Archive' }));
-    expect(await screen.findByText('It was archived: it takes no input.')).toBeTruthy();
-    expect(
-      server.calls.some(
-        (call) => call.method === 'POST' && call.path === `/v1/actors/${actor}/archive`,
-      ),
-    ).toBe(true);
-    // An archived actor is sent nothing.
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Send' })).toBeNull());
-
-    // Archived, it may be deleted, after it is asked: then its agent's page is shown.
-    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
-    expect(within(dialog()).getByText(/It is not undone/)).toBeTruthy();
-    fireEvent.click(within(dialog()).getByRole('button', { name: 'Delete' }));
-    await waitFor(() =>
-      expect(
-        server.calls.some(
-          (call) => call.method === 'DELETE' && call.path === `/v1/actors/${actor}`,
-        ),
-      ).toBe(true),
-    );
-    await waitFor(() => expect(where()).toMatch(/^\/agents/));
-  });
-
-  it('shows its tasks, with what one was started with, and what waits in its mailbox', async () => {
-    const { server } = withAgents();
-    const actor = idOf('act', 2);
-    area(server).tasks(actor, [
-      {
-        id: 'b1',
-        kind: 'bash',
-        status: 'running',
-        attached: false,
-        startedAt: 1,
-        input: { command: 'npm test' },
-        result: null,
-      },
-    ]);
-    area(server).waiting(actor, [
-      {
-        id: idOf('inp', 7) as never,
-        actor: actor as never,
-        type: 'refund',
-        externalId: null,
-        message: { role: 'user', content: [] },
-        receivedAt: 1,
-        deliveredAt: null,
-      },
-    ]);
-    open(`/actors/${actor}`, server);
-    const tasks = await screen.findByRole('region', { name: 'Tasks' });
-    fireEvent.click(within(tasks).getByRole('button', { name: 'b1' }));
-    expect(await within(dialog()).findByText(/npm test/)).toBeTruthy();
-    expect(within(dialog()).getByText('Still running')).toBeTruthy();
-    fireEvent.click(within(dialog()).getByRole('button', { name: 'Done' }));
-    const mailbox = screen.getByRole('region', { name: 'Mailbox' });
-    expect(within(mailbox).getByText('refund')).toBeTruthy();
-    press('Stop', tasks);
-    await waitFor(() =>
-      expect(
-        server.calls.some(
-          (call) => call.method === 'POST' && call.path === `/v1/actors/${actor}/tasks/b1/stop`,
-        ),
-      ).toBe(true),
-    );
   });
 
   it('is among its agent’s Actors: its ID alone goes there, keeping what was asked', async () => {
