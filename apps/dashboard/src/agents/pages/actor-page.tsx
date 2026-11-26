@@ -16,7 +16,7 @@ import {
 
 import { JsonCode } from '../../code.tsx';
 
-import { duration, fullTime, version } from '../../format.ts';
+import { count, duration, fullTime, version } from '../../format.ts';
 import { dollars } from '../../llm/format.ts';
 import { useUsage } from '../../llm/queries.ts';
 import { displayText } from '../../machines/text.tsx';
@@ -24,7 +24,12 @@ import { Ago, Button, FormError, LoadError, NOT_FOUND } from '../../machines/ui.
 import { may, useMe } from '../../me.ts';
 import { Status } from '../../ui.tsx';
 import { engine, isApiError, queryClient } from '../api.ts';
-import { Conversation } from '../conversation/conversation.tsx';
+import {
+  Conversation,
+  contextOf,
+  useConversation,
+  type ConversationState,
+} from '../conversation/conversation.tsx';
 import { keys, useActor, useTask, useTasks } from '../queries.ts';
 import '../agents.css';
 
@@ -47,7 +52,14 @@ type SideTab = (typeof TABS)[number]['id'];
 
 export function ActorPage() {
   const { actor: id } = useParams({ strict: false }) as { actor: string };
+  // Afresh for each actor: its conversation is read from the first.
+  return <ActorView key={id} id={id} />;
+}
+
+function ActorView({ id }: { id: string }) {
   const actor = useActor(id);
+  // Read once, for its conversation and for how large that is in the sidebar.
+  const conversation = useConversation(id);
   const [tab, setTab] = useState<SideTab>('overview');
   const split = useSplit();
 
@@ -58,7 +70,7 @@ export function ActorPage() {
   return (
     <div className="actor-page" ref={split.page} style={split.style}>
       <div className="actor-page__main">
-        {info !== undefined && <Conversation key={id} actor={id} />}
+        {info !== undefined && <Conversation actor={id} conversation={conversation} />}
       </div>
       <div
         className="actor-split"
@@ -111,7 +123,7 @@ export function ActorPage() {
               <span className="skeleton__line" />
             </div>
           ) : tab === 'overview' ? (
-            <Overview info={info} />
+            <Overview info={info} conversation={conversation} />
           ) : (
             <Tasks info={info} />
           )}
@@ -183,7 +195,7 @@ function useSplit() {
 }
 
 /** What it is, and what it and the actors under it cost. */
-function Overview({ info }: { info: Actor }) {
+function Overview({ info, conversation }: { info: Actor; conversation: ConversationState }) {
   const me = useMe();
   // An account by its name, for one who may list them; by its ID, for anyone else.
   const accounts = useQuery({
@@ -198,6 +210,7 @@ function Overview({ info }: { info: Actor }) {
     info.account === null
       ? null
       : (accounts.data?.items.find((one) => one.id === info.account)?.name ?? info.account);
+  const context = contextOf(conversation.items);
   const total = tree.data?.total.cost;
   const itself = own.data?.total.cost;
   const ofKind = (kind: string) => own.data?.groups?.find((group) => group.key === kind)?.cost;
@@ -216,6 +229,7 @@ function Overview({ info }: { info: Actor }) {
             <span className="mono">{info.modelId}</span>
           </Fact>
           <Fact name="Reasoning">{info.reasoning}</Fact>
+          <Fact name="Context">{context === undefined ? '—' : `${count(context)} tokens`}</Fact>
           <Fact name="Account">
             {account === null ? (
               <span className="actor-fact__none">Its provider’s default</span>

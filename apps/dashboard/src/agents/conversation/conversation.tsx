@@ -84,8 +84,26 @@ function itemsOf(entries: readonly ConversationEntry[], compactions: readonly Co
   });
 }
 
+export type ConversationState = ReturnType<typeof useConversation>;
+
+/**
+ * How large the conversation is now, in tokens, as near as it is known: what the last call to
+ * the model was sent and wrote back. Unknown before its first call, and after a compaction until
+ * the next one.
+ */
+export function contextOf(items: readonly Item[]): number | undefined {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item === undefined || item.kind === 'compaction') return undefined;
+    const usage = item.entry.completion?.usage;
+    const sent = inputTokens(usage);
+    if (sent !== undefined) return sent + (usage?.output ?? 0);
+  }
+  return undefined;
+}
+
 /** Its messages from the first, then each as it is written, and where it stands. */
-function useConversation(actor: string) {
+export function useConversation(actor: string) {
   const [entries, setEntries] = useState<readonly ConversationEntry[]>([]);
   const [standing, setStanding] = useState<Standing | undefined>(undefined);
   const [ready, setReady] = useState(false);
@@ -120,8 +138,14 @@ function useConversation(actor: string) {
   return { items, standing, ready };
 }
 
-export function Conversation({ actor }: { actor: string }) {
-  const { items, standing, ready } = useConversation(actor);
+export function Conversation({
+  actor,
+  conversation,
+}: {
+  actor: string;
+  conversation: ConversationState;
+}) {
+  const { items, standing, ready } = conversation;
   // At the end, the view keeps to it as messages join; scrolled up, it stays where it is.
   const box = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true);
