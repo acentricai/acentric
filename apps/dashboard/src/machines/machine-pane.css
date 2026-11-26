@@ -34,7 +34,8 @@
 }
 
 .machines-page td,
-.sandboxes-page td {
+.sandboxes-page td,
+.secrets-page td {
   white-space: nowrap;
 }
 
@@ -52,7 +53,8 @@
    Positioned, so its visually hidden heading stays inside the scrolling table. */
 .machines-page .ac-table .ac-table__actions,
 .sandboxes-page .ac-table .ac-table__actions,
-.agents-page .ac-table .ac-table__actions {
+.agents-page .ac-table .ac-table__actions,
+.secrets-page .ac-table .ac-table__actions {
   position: relative;
   width: 1%;
   text-align: right;
@@ -60,7 +62,8 @@
 
 .machines-page .ac-table__actions .more-menu,
 .sandboxes-page .ac-table__actions .more-menu,
-.agents-page .ac-table__actions .more-menu {
+.agents-page .ac-table__actions .more-menu,
+.secrets-page .ac-table__actions .more-menu {
   display: inline-flex;
   vertical-align: middle;
 }

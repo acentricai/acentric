@@ -128,6 +128,68 @@ describe('an agent’s own dashboard', () => {
   });
 });
 
+describe('an agent’s Secrets', () => {
+  const putOf = (server: ReturnType<typeof fakeServer>, agent: string, name: string) =>
+    server.calls.find(
+      (call) => call.method === 'PUT' && call.path === `/v1/agents/${agent}/secrets/${name}`,
+    );
+
+  it('adds one, and asks before replacing one of a name it has', async () => {
+    const { server, orders } = withAgents();
+    area(server).secrets(orders.id, ['ORDERS_KEY']);
+    open(`/agents/${orders.id}/secrets`, server);
+    await screen.findByText('ORDERS_KEY');
+    press('Add secret');
+    fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'ORDERS_KEY' } });
+    fireEvent.change(within(dialog()).getByLabelText('Value'), { target: { value: 'k-2' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Add secret' }));
+    expect(await screen.findByRole('heading', { name: 'Replace ORDERS_KEY?' })).toBeTruthy();
+    expect(putOf(server, orders.id, 'ORDERS_KEY')).toBeUndefined();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Replace' }));
+    await waitFor(() =>
+      expect(
+        (putOf(server, orders.id, 'ORDERS_KEY')?.body as { value?: string } | undefined)?.value,
+      ).toBe('k-2'),
+    );
+  });
+
+  it('replaces one’s value from its menu, and removes one after asking', async () => {
+    const { server, orders } = withAgents();
+    area(server).secrets(orders.id, ['ORDERS_KEY']);
+    open(`/agents/${orders.id}/secrets`, server);
+    await screen.findByText('ORDERS_KEY');
+    press('Actions for ORDERS_KEY');
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Replace value' }));
+    expect(within(dialog()).queryByLabelText('Name')).toBeNull();
+    fireEvent.change(within(dialog()).getByLabelText('Value'), { target: { value: 'k-3' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Replace' }));
+    await waitFor(() =>
+      expect(
+        (putOf(server, orders.id, 'ORDERS_KEY')?.body as { value?: string } | undefined)?.value,
+      ).toBe('k-3'),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    press('Actions for ORDERS_KEY');
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove' }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Remove' }));
+    await waitFor(() =>
+      expect(
+        server.calls.some(
+          (call) =>
+            call.method === 'DELETE' && call.path === `/v1/agents/${orders.id}/secrets/ORDERS_KEY`,
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it('is no tab for one who may not set them', async () => {
+    const { server, orders } = withAgents('viewer');
+    open(`/agents/${orders.id}`, server);
+    await screen.findByRole('link', { name: 'Deployments' });
+    expect(screen.queryByRole('link', { name: 'Secrets' })).toBeNull();
+  });
+});
+
 describe('an actor’s page', () => {
   const user = (seq: number, text: string) => ({
     seq,

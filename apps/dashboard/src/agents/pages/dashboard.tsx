@@ -63,7 +63,8 @@ export function agentSection(agent: string): Section {
         path: agentPath(agent, 'secrets'),
         icon: IconKey,
         activeIcon: IconKeyFilled,
-        shown: reads,
+        // Listing secrets is part of setting them.
+        shown: (me) => may(me, 'secrets:write'),
       },
       {
         id: 'settings',
@@ -89,5 +90,4 @@ export function AgentDashboard() {
 export const OverviewPage = () => <PageHeader title="Overview" spaced />;
 export const ActorsPage = () => <PageHeader title="Actors" spaced />;
 export const DeploymentsPage = () => <PageHeader title="Deployments" spaced />;
-export const SecretsPage = () => <PageHeader title="Secrets" spaced />;
 export const SettingsPage = () => <PageHeader title="Settings" spaced />;
