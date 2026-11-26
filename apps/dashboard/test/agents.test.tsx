@@ -553,6 +553,84 @@ describe('an actor’s page', () => {
     await waitFor(() => expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`));
   });
 
+  it('draws its conversation as it grows: what it was sent, what the model said and called, and notices', async () => {
+    const { server, orders } = withAgents();
+    const actor = idOf('act', 1);
+    const at = 1_795_305_600_000;
+    area(server).conversation(actor, [
+      {
+        seq: 1,
+        createdAt: at,
+        message: { role: 'user', content: [{ type: 'text', text: 'Where is A-1042?' }] },
+        input: { id: idOf('inp', 1) as never, type: 'message' },
+      },
+      {
+        seq: 2,
+        createdAt: at + 1,
+        message: {
+          role: 'assistant',
+          provider: 'openai',
+          api: 'openai-responses',
+          model: 'gpt-6.2-sol',
+          content: [
+            { type: 'reasoning', summary: [{ type: 'summary_text', text: 'Look it up first.' }] },
+            { type: 'message', content: [{ type: 'output_text', text: 'Let me **check**.' }] },
+            {
+              type: 'function_call',
+              call_id: 'call_1',
+              name: 'lookup_order',
+              arguments: '{"id":"A-1042"}',
+            },
+          ],
+        },
+        completion: { stopReason: 'tool_use', usage: { totalInput: 100, output: 20 } },
+      },
+      {
+        seq: 3,
+        createdAt: at + 2,
+        message: {
+          role: 'tool_result',
+          toolCallId: 'call_1',
+          toolName: 'lookup_order',
+          content: [{ type: 'text', text: 'Shipped today.' }],
+        },
+      },
+      {
+        seq: 4,
+        createdAt: at + 3,
+        message: {
+          role: 'system',
+          content: [
+            { type: 'text', text: '<task id="b2" kind="bash" status="done">\nok\n</task>' },
+          ],
+        },
+      },
+    ]);
+    open(`/agents/${orders.id}/actors/${actor}`, server);
+    const convo = await screen.findByLabelText('Conversation');
+    expect(await within(convo).findByText('Where is A-1042?')).toBeTruthy();
+    expect(within(convo).getByText('check').tagName).toBe('STRONG');
+    // A tool's result is in the card of the call that asked for it, not on its own.
+    const call = within(convo).getByRole('button', { name: /lookup_order/ });
+    expect(within(convo).queryByText('Shipped today.')).toBeNull();
+    fireEvent.click(call);
+    expect(await within(convo).findByText('Shipped today.')).toBeTruthy();
+    // What it thought is folded.
+    expect(within(convo).queryByText('Look it up first.')).toBeNull();
+    fireEvent.click(within(convo).getByRole('button', { name: 'Thought' }));
+    expect(within(convo).getByText('Look it up first.')).toBeTruthy();
+    // The engine's own line, named for what it is about.
+    expect(within(convo).getByText('Task b2 · done')).toBeTruthy();
+    // A message that joins is drawn.
+    area(server).say(actor, {
+      seq: 5,
+      createdAt: at + 4,
+      message: { role: 'user', content: [{ type: 'text', text: 'And A-1043?' }] },
+      input: { id: idOf('inp', 5) as never, type: 'message' },
+    });
+    expect(await within(convo).findByText('And A-1043?')).toBeTruthy();
+  });
+
   it('lists its tasks under way and those that ended, each opened, and stops one', async () => {
     const { server, orders } = withAgents();
     const actor = idOf('act', 1);

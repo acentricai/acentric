@@ -132,7 +132,8 @@
 
 .actor-side {
   position: sticky;
-  top: 24px;
+  /* Under the top bar, which stays as the page scrolls. */
+  top: calc(var(--bar-h) + 24px);
   display: grid;
   gap: 20px;
   min-width: 0;
