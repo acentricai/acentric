@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { actorFor, definitionOf, idOf } from './fake/agents.ts';
 import { open } from './render.tsx';
+import { dayLabel, dayOf } from '../src/llm/format.ts';
 import { totalsOf } from './fake/llm.ts';
 import { fakeServer, machineOf } from './server.ts';
 
@@ -130,47 +131,48 @@ describe('an agent’s own dashboard', () => {
 });
 
 describe('an agent’s Overview', () => {
-  it('says what it is, and adds up only its own model calls, with how its actors stand', async () => {
+  it('adds up only its own model calls, each day split by the actors that made them', async () => {
     const { server, orders } = withAgents();
     const asked: URLSearchParams[] = [];
+    const today = dayOf(Date.now());
     server.areas.llm.usageIs((query) => {
       asked.push(query);
-      const by = query.get('by');
       return {
         totals: totalsOf({ cost: 12.5, calls: 40 }),
         groups:
-          by === 'model'
-            ? [{ key: 'gpt-6.2-sol', totals: totalsOf({ cost: 12.5, calls: 40 }) }]
-            : by === 'actor'
-              ? [{ key: idOf('act', 1), totals: totalsOf({ cost: 9, calls: 30 }) }]
-              : [],
+          query.get('by') === 'day'
+            ? [
+                {
+                  key: today,
+                  totals: totalsOf({ cost: 12.5, calls: 40 }),
+                  groups: [
+                    { key: idOf('act', 1), totals: totalsOf({ cost: 9, calls: 30 }) },
+                    { key: idOf('act', 2), totals: totalsOf({ cost: 3.5, calls: 10 }) },
+                  ],
+                },
+              ]
+            : [],
       };
     });
     open(`/agents/${orders.id}`, server);
     expect(await screen.findByRole('heading', { name: 'Overview' })).toBeTruthy();
-    expect(await screen.findByText('v2 active')).toBeTruthy();
     await waitFor(() =>
       expect(document.querySelector('.usage-tile__value')?.textContent).toBe('$12.50'),
     );
-    // Every read of usage is of this agent alone.
-    expect(asked.length).toBeGreaterThan(0);
+    // Every read of usage is of this agent alone, and the days are split by actor.
     expect(asked.every((query) => query.get('agent') === orders.id)).toBe(true);
-    // Its top actor by name, a way to its page.
-    const top = await within(screen.getByRole('list', { name: 'Spend by actor' })).findByRole(
-      'link',
-      { name: 'eu-desk' },
+    expect(asked.some((query) => query.get('by') === 'day' && query.get('split') === 'actor')).toBe(
+      true,
     );
-    expect(top.getAttribute('href')).toBe(`/agents/${orders.id}/actors/${idOf('act', 1)}`);
-    // One working, one idle, one archived.
-    const standing = screen.getByRole('list', { name: 'Actors by status' });
-    await waitFor(() =>
-      expect(
-        within(standing)
-          .getAllByRole('listitem')
-          .slice(0, 3)
-          .map((row) => row.textContent),
-      ).toEqual(['working1', 'idle1', 'archived1']),
+    // A day's tooltip names its actors, by name where they have one.
+    fireEvent.pointerEnter(
+      await screen.findByRole('listitem', { name: new RegExp(`${dayLabel(today)}: \\$12\\.50`) }),
     );
+    const tip = await screen.findByRole('status');
+    expect(tip.textContent).toContain('eu-desk');
+    // Nothing more than the totals, the days and the tokens.
+    expect(screen.queryByText('Top actors')).toBeNull();
+    expect(screen.queryByText('By model')).toBeNull();
   });
 });
 
