@@ -941,6 +941,120 @@
         }
       }
     },
+    "/v1/agents/{agent}/deployments/{deployment}/code": {
+      "get": {
+        "operationId": "deployments.code",
+        "summary": "Reads a deployment's code, as it was deployed: one ES module.",
+        "tags": [
+          "deployments"
+        ],
+        "x-acentric-auth": {
+          "on": "agent",
+          "permission": "agents:read",
+          "param": "agent"
+        },
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind agent, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^agt_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "agt_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "deployment",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind deployment, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^dep_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "dep_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentCode"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/agents/{agent}/secrets": {
       "get": {
         "operationId": "secrets.list",
@@ -12278,6 +12392,17 @@
           "createdBy",
           "createdAt",
           "definition"
+        ]
+      },
+      "DeploymentCode": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
         ]
       },
       "DeploymentPage": {

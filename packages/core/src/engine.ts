@@ -97,7 +97,7 @@ import { ACTOR_INSTRUCTIONS, makeInstructions, makesInstructions } from './instr
 import { instructionsOf } from './scaffold.ts';
 import { SecretsUnavailable, sealedFor } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
-import type { ActorsQuery, PageOf, Paged, Stopping, Store } from './store.ts';
+import type { ActorsQuery, PageOf, Paged, Stopping, Store, StoredDeployment } from './store.ts';
 import type { StoredCompaction } from './state.ts';
 import type { UsageCallsAsked, UsageFilter, UsageGrouping } from './usage.ts';
 
@@ -847,6 +847,13 @@ export class Engine {
   /** A deployment, with what its code said of itself. */
   async getDeployment(id: DeploymentId): Promise<Deployment> {
     return this.#deployment(id);
+  }
+
+  /** A deployment and its code, as it was deployed. Read whole each time: it is not kept. */
+  async getDeploymentCode(id: DeploymentId): Promise<StoredDeployment> {
+    const stored = await this.#store.loadDeployment(id);
+    if (stored === undefined) throw new Error(`There is no deployment ${id}`);
+    return stored;
   }
 
   /**

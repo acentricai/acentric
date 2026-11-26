@@ -345,6 +345,13 @@ export const handlers: Handlers = {
     }
     return deployment;
   },
+  'deployments.code': async (asked, { engine }) => {
+    const stored = await engine.getDeploymentCode(asked.params.deployment).catch(() => undefined);
+    if (stored === undefined || stored.deployment.agent !== agentOf(asked).id) {
+      throw new ApiFailure('not_found', `The agent has no deployment ${asked.params.deployment}`);
+    }
+    return { code: stored.code };
+  },
 
   // An agent's secrets
 
