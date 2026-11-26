@@ -118,22 +118,29 @@
 
 /* Its conversation, and beside it a sidebar of what it is: 65% and 35%, the sidebar sticking
    while the conversation scrolls. One column on a narrow screen, the sidebar first. */
+/* The page fills the window under the top bar: only its conversation scrolls. */
 .actor-page {
   display: grid;
   grid-template-columns: minmax(0, 65fr) minmax(260px, 35fr);
   gap: 32px;
-  align-items: start;
+  height: calc(100dvh - var(--bar-h) - 80px);
 }
 
 .actor-page__main {
   min-width: 0;
-  min-height: 1px;
+  min-height: 0;
+}
+
+.actor-page__main > .convo {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
 .actor-side {
-  position: sticky;
-  /* Under the top bar, which stays as the page scrolls. */
-  top: calc(var(--bar-h) + 24px);
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
   display: grid;
   gap: 20px;
   min-width: 0;
@@ -351,10 +358,16 @@
 @media (max-width: 900px) {
   .actor-page {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .actor-page__main > .convo {
+    height: auto;
+    overflow-y: visible;
   }
 
   .actor-side {
-    position: static;
+    overflow-y: visible;
     order: -1;
     padding-left: 0;
     border-left: 0;
