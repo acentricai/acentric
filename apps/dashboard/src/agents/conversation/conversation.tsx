@@ -38,7 +38,7 @@ const metaOf = (entry: ConversationEntry): Meta =>
 /** A tool call, with its result once it is in. */
 type Call = { readonly call: ToolCall; result: ConversationEntry | null };
 
-type Item =
+export type Item =
   | { readonly kind: 'entry'; readonly entry: ConversationEntry; readonly calls: readonly Call[] }
   | { readonly kind: 'compaction'; readonly compaction: Compaction; readonly to?: number };
 

@@ -544,13 +544,64 @@ describe('an actor’s page', () => {
     expect(fact('Model')).toBe('gpt-6.2-sol');
     expect(fact('Reasoning')).toBe('medium');
     expect(fact('Version')).toBe('v2 · follows the active');
+    // What it and the actors under it cost, as its other facts; broken down under Cost.
+    await waitFor(() => expect(fact('Cost')).toBe('$1.50'));
+    fireEvent.click(within(side).getByRole('tab', { name: 'Cost' }));
     await waitFor(() => expect(within(side).getByText('$1.50')).toBeTruthy());
-    expect(fact('Turns')).toBe('$1.00');
+    await waitFor(() => expect(fact('Turns')).toBe('$1.00'));
     expect(fact('Compaction')).toBe('$0.20');
     expect(fact('Subagents')).toBe('$0.30');
     // The breadcrumbs name its agent, that agent's Actors, and it by its ID.
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
     await waitFor(() => expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`));
+  });
+
+  it('lists each call to the model under Cost, in dollars or tokens, opened to what it sent back', async () => {
+    const { server, orders } = withAgents();
+    const actor = idOf('act', 1);
+    const at = 1_795_305_600_000;
+    area(server).conversation(actor, [
+      {
+        seq: 1,
+        createdAt: at,
+        message: {
+          role: 'assistant',
+          provider: 'openai',
+          api: 'openai-responses',
+          model: 'gpt-6.2-sol',
+          id: 'resp_1',
+          content: [{ type: 'message', content: [{ type: 'output_text', text: 'Hi.' }] }],
+        },
+        completion: {
+          stopReason: 'stop',
+          usage: {
+            totalInput: 1_200,
+            input: 1_200,
+            output: 30,
+            cost: {
+              source: 'estimated',
+              input: 0.006,
+              output: 0.00075,
+              cacheRead: 0,
+              cacheWrite: 0,
+              webSearch: 0,
+              total: 0.0068,
+            },
+          },
+        },
+      },
+    ]);
+    open(`/agents/${orders.id}/actors/${actor}`, server);
+    const side = await screen.findByRole('complementary', { name: 'About the actor' });
+    fireEvent.click(within(side).getByRole('tab', { name: 'Cost' }));
+    const requests = await within(side).findByRole('region', { name: 'LLM Requests' });
+    const row = await within(requests).findByRole('button', { name: /resp_1/ });
+    expect(row.closest('li')?.textContent).toContain('$0.0068');
+    fireEvent.click(within(side).getByRole('radio', { name: 'Tokens' }));
+    expect(row.closest('li')?.textContent).toContain('1.2k in · 30 out');
+    // Opened, what the model sent back, as it sent it.
+    fireEvent.click(row);
+    expect(within(requests).getByText(/"output_text"/)).toBeTruthy();
   });
 
   it('resizes its conversation and sidebar by the line between them, and keeps the size', async () => {
@@ -597,7 +648,7 @@ describe('an actor’s page', () => {
     expect(await within(convo).findByText('Compacted')).toBeTruthy();
     const side = screen.getByRole('complementary', { name: 'About the actor' });
     const context = () =>
-      within(side).getByText('Context', { selector: 'dt' }).nextElementSibling?.textContent;
+      within(side).getByText('Current Context', { selector: 'dt' }).nextElementSibling?.textContent;
     await waitFor(() => expect(context()).toBe('—'));
     // The next call says both: what it was sent, and with what it wrote back, how large it is.
     area(server).say(actor, {

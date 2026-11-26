@@ -16,7 +16,7 @@ import {
 
 import { JsonCode } from '../../code.tsx';
 
-import { count, duration, fullTime, version } from '../../format.ts';
+import { count, duration, fullTime, tokens, version } from '../../format.ts';
 import { dollars } from '../../llm/format.ts';
 import { useUsage } from '../../llm/queries.ts';
 import { displayText } from '../../machines/text.tsx';
@@ -31,6 +31,7 @@ import {
   type ConversationState,
 } from '../conversation/conversation.tsx';
 import { keys, useActor, useTask, useTasks } from '../queries.ts';
+import { CostTab } from './actor-cost.tsx';
 import '../agents.css';
 
 /** A line of the sidebar: what it is, and its value beside it. */
@@ -45,6 +46,7 @@ function Fact({ name, children }: { name: string; children: ReactNode }) {
 
 const TABS = [
   { id: 'overview', name: 'Overview' },
+  { id: 'cost', name: 'Cost' },
   { id: 'tasks', name: 'Tasks' },
 ] as const;
 
@@ -124,6 +126,8 @@ function ActorView({ id }: { id: string }) {
             </div>
           ) : tab === 'overview' ? (
             <Overview info={info} conversation={conversation} />
+          ) : tab === 'cost' ? (
+            <CostTab info={info} conversation={conversation} />
           ) : (
             <Tasks info={info} />
           )}
@@ -194,7 +198,7 @@ function useSplit() {
   return { page, share, dragging, style, onPointerDown, onKeyDown, reset: () => set(SPLIT) };
 }
 
-/** What it is, and what it and the actors under it cost. */
+/** What it is. */
 function Overview({ info, conversation }: { info: Actor; conversation: ConversationState }) {
   const me = useMe();
   // An account by its name, for one who may list them; by its ID, for anyone else.
@@ -203,18 +207,13 @@ function Overview({ info, conversation }: { info: Actor; conversation: Conversat
     queryFn: () => engine.accounts(),
     enabled: me.data !== undefined && may(me.data, 'accounts:manage'),
   });
-  // What it and the actors under it spent; and what it spent itself, by kind of call.
-  const tree = useUsage({ root: info.id, by: 'actor' });
-  const own = useUsage({ actor: info.id, by: 'kind' });
   const account =
     info.account === null
       ? null
       : (accounts.data?.items.find((one) => one.id === info.account)?.name ?? info.account);
   const context = contextOf(conversation.items);
-  const total = tree.data?.total.cost;
-  const itself = own.data?.total.cost;
-  const ofKind = (kind: string) => own.data?.groups?.find((group) => group.key === kind)?.cost;
-  const below = total === undefined || itself === undefined ? undefined : total - itself;
+  // What it and the actors under it came to.
+  const spent = useUsage({ root: info.id }).data?.total;
   return (
     <>
       <section className="actor-side__group" aria-labelledby="actor-details">
@@ -229,7 +228,6 @@ function Overview({ info, conversation }: { info: Actor; conversation: Conversat
             <span className="mono">{info.modelId}</span>
           </Fact>
           <Fact name="Reasoning">{info.reasoning}</Fact>
-          <Fact name="Context">{context === undefined ? '—' : `${count(context)} tokens`}</Fact>
           <Fact name="Account">
             {account === null ? (
               <span className="actor-fact__none">Its provider’s default</span>
@@ -246,17 +244,13 @@ function Overview({ info, conversation }: { info: Actor; conversation: Conversat
             </span>
           </Fact>
           <Fact name="Created">{fullTime(info.createdAt)}</Fact>
-        </dl>
-      </section>
-      <section className="actor-side__group" aria-labelledby="actor-cost">
-        <h2 className="actor-side__title" id="actor-cost">
-          Cost
-        </h2>
-        <p className="actor-cost__total">{total === undefined ? '—' : dollars(total)}</p>
-        <dl className="actor-facts">
-          <Fact name="Turns">{dollarsOf(ofKind('turn'), own.data !== undefined)}</Fact>
-          <Fact name="Compaction">{dollarsOf(ofKind('compaction'), own.data !== undefined)}</Fact>
-          <Fact name="Subagents">{below === undefined ? '—' : dollars(below)}</Fact>
+          <Fact name="Cost">{spent === undefined ? '—' : dollars(spent.cost)}</Fact>
+          <Fact name="Tokens">
+            {spent === undefined ? '—' : tokens(spent.totalInput, spent.output)}
+          </Fact>
+          <Fact name="Current Context">
+            {context === undefined ? '—' : `${count(context)} tokens`}
+          </Fact>
         </dl>
       </section>
     </>
@@ -373,10 +367,4 @@ function TaskRow({ actor, task }: { actor: string; task: Task }) {
       <FormError error={stop.error ?? detail.error} />
     </li>
   );
-}
-
-/** What was spent on a kind of call: nothing, once it is read and there was none. */
-function dollarsOf(cost: number | undefined, read: boolean): string {
-  if (cost !== undefined) return dollars(cost);
-  return read ? dollars(0) : '—';
 }
