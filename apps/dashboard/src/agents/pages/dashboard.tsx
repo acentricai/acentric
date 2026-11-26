@@ -89,5 +89,4 @@ export function AgentDashboard() {
 
 export const OverviewPage = () => <PageHeader title="Overview" spaced />;
 export const ActorsPage = () => <PageHeader title="Actors" spaced />;
-export const DeploymentsPage = () => <PageHeader title="Deployments" spaced />;
 export const SettingsPage = () => <PageHeader title="Settings" spaced />;
