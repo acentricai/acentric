@@ -624,6 +624,9 @@ describe('an actor’s page', () => {
     open(`/agents/${orders.id}/actors/${actor}`, server);
     const convo = await screen.findByLabelText('Conversation');
     expect(await within(convo).findByText('Where is A-1042?')).toBeTruthy();
+    // Under what it was sent: that it is an input, and a copy of it.
+    expect(within(convo).getByText('Input')).toBeTruthy();
+    expect(within(convo).getByRole('button', { name: 'Copy the input' })).toBeTruthy();
     expect(within(convo).getByText('check').tagName).toBe('STRONG');
     // A tool's result is in the card of the call that asked for it, not on its own.
     const call = within(convo).getByRole('button', { name: /lookup_order/ });

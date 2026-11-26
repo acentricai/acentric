@@ -18,6 +18,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { JsonCode } from '../../code.tsx';
 import { clock, count, longTime, tokens } from '../../format.ts';
 import { displayText } from '../../machines/text.tsx';
+import { CopyButton } from '../../machines/ui.tsx';
 import { Markdown } from '../../markdown.tsx';
 import { blobUrl, engine } from '../api.ts';
 import {
@@ -264,12 +265,6 @@ function Said({
   const type = entry.input?.type;
   return (
     <div className="convo__said">
-      <div className="convo__head">
-        <span className="convo__who">Input</span>
-        {type !== undefined && type !== 'message' && <span className="convo__muted">{type}</span>}
-        {entry.leftOut === true && <span className="convo__tag">left out</span>}
-        <When at={entry.createdAt} />
-      </div>
       <div className="convo__bubble">
         {text !== '' && <p className="convo__text">{displayText(text, true)}</p>}
         {images.length > 0 && (
@@ -287,6 +282,12 @@ function Said({
         {text === '' && images.length === 0 && files === 0 && (
           <span className="convo__muted">Nothing in it</span>
         )}
+      </div>
+      <div className="convo__actions">
+        {entry.leftOut === true && <span className="convo__tag">left out</span>}
+        <When at={entry.createdAt} />
+        <span>{type === undefined || type === 'message' ? 'Input' : `Input · ${type}`}</span>
+        {text !== '' && <CopyButton value={text} what="the input" />}
       </div>
     </div>
   );
