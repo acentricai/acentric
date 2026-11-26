@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 
 import { actorPath } from '../links.tsx';
 import { useActor } from '../queries.ts';
-import { ActorPage } from './actor.tsx';
+import { ActorPage } from './actor-page.tsx';
 
 export function ActorRedirect() {
   const { actor } = useParams({ strict: false }) as { actor: string };

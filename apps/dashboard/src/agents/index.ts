@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 
 import { may } from '../me.ts';
 import type { Section } from '../sections.ts';
-import { ActorPage } from './pages/actor.tsx';
+import { ActorPage } from './pages/actor-page.tsx';
 import { ActorRedirect } from './pages/actor-redirect.tsx';
 import { AgentsPage } from './pages/agents.tsx';
 import { ActorsPage } from './pages/actors.tsx';

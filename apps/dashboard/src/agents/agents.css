@@ -114,6 +114,99 @@
   overflow: auto;
 }
 
+/* ---------- An actor's page ---------- */
+
+/* Its conversation, and beside it a sidebar of what it is: 65% and 35%, the sidebar sticking
+   while the conversation scrolls. One column on a narrow screen, the sidebar first. */
+.actor-page {
+  display: grid;
+  grid-template-columns: minmax(0, 65fr) minmax(260px, 35fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.actor-page__main {
+  min-width: 0;
+  min-height: 1px;
+}
+
+.actor-side {
+  position: sticky;
+  top: 24px;
+  display: grid;
+  gap: 28px;
+  min-width: 0;
+  padding-left: 24px;
+  border-left: 1px solid var(--divider);
+}
+
+.actor-side__group {
+  display: grid;
+  gap: 10px;
+}
+
+.actor-side__title {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.actor-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.actor-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.actor-fact dt {
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.actor-fact dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.actor-fact__none {
+  color: var(--ink-muted);
+}
+
+.actor-cost__total {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .actor-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .actor-side {
+    position: static;
+    order: -1;
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
 /* ---------- Actors ---------- */
 
 /* An actor's name, a link without a line under it, and what spawned it beside it. */
