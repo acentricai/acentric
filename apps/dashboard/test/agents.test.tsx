@@ -637,8 +637,8 @@ describe('an actor’s page', () => {
     expect(within(convo).getByRole('button', { name: 'Copy the result' })).toBeTruthy();
     // What it thought is not shown.
     expect(within(convo).queryByText('Look it up first.')).toBeNull();
-    // The engine's own line, named for what it is about.
-    expect(within(convo).getByText('Task b2 · done')).toBeTruthy();
+    // The engine's own line: Notice, and the task it tells of.
+    expect(within(convo).getByText('Notice · b2')).toBeTruthy();
     // All it says is shown, not folded, inside the tag it is wrapped in, with a copy of it.
     expect(within(convo).getByText('ok')).toBeTruthy();
     expect(within(convo).queryByText(/<task id="b2"/)).toBeNull();
