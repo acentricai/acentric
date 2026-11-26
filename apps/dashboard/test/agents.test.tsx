@@ -639,8 +639,9 @@ describe('an actor’s page', () => {
     expect(within(convo).queryByText('Look it up first.')).toBeNull();
     // The engine's own line, named for what it is about.
     expect(within(convo).getByText('Task b2 · done')).toBeTruthy();
-    // All it says is shown, not folded, with a copy of it.
-    expect(within(convo).getByText(/^<task id="b2"/)).toBeTruthy();
+    // All it says is shown, not folded, inside the tag it is wrapped in, with a copy of it.
+    expect(within(convo).getByText('ok')).toBeTruthy();
+    expect(within(convo).queryByText(/<task id="b2"/)).toBeNull();
     expect(within(convo).getByRole('button', { name: 'Copy the notice' })).toBeTruthy();
     // A message that joins is drawn.
     area(server).say(actor, {
