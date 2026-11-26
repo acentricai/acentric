@@ -493,10 +493,13 @@ describe('an actor’s page', () => {
     expect(screen.getByText('Where is A-1042?')).toBeTruthy();
     expect(screen.getByText('$0.42 spent')).toBeTruthy();
     expect(screen.getByText('1 turn')).toBeTruthy();
-    // The breadcrumbs name its agent and it.
-    const crumbs = within(screen.getByRole('navigation', { name: 'Breadcrumb' }));
-    expect(crumbs.getByText('orders')).toBeTruthy();
-    expect(crumbs.getByText('eu-desk')).toBeTruthy();
+    // The breadcrumbs name its agent, that agent's Actors, and it by its ID.
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    await waitFor(() => expect(within(crumbs).getByText('orders')).toBeTruthy());
+    expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`);
+    expect(within(crumbs).getByRole('link', { name: 'Actors' }).getAttribute('href')).toBe(
+      `/agents/${idOf('agt', 1)}/actors`,
+    );
     // A message that joins is drawn, whole.
     area(server).say(actor, user(3, 'And A-1043?'));
     expect(await screen.findByText('And A-1043?')).toBeTruthy();
