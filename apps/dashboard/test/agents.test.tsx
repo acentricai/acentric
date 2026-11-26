@@ -556,7 +556,7 @@ describe('an actor’s page', () => {
     await waitFor(() => expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`));
   });
 
-  it('lists each call to the model under Cost, in dollars or tokens, opened to what it sent back', async () => {
+  it('breaks down its calls under Cost, and lists each, opened to what the model sent back', async () => {
     const { server, orders } = withAgents();
     const actor = idOf('act', 1);
     const at = 1_795_305_600_000;
@@ -596,9 +596,12 @@ describe('an actor’s page', () => {
     fireEvent.click(within(side).getByRole('tab', { name: 'Cost' }));
     const requests = await within(side).findByRole('region', { name: 'LLM Requests' });
     const row = await within(requests).findByRole('button', { name: /resp_1/ });
-    expect(row.closest('li')?.textContent).toContain('$0.0068');
-    fireEvent.click(within(side).getByRole('radio', { name: 'Tokens' }));
     expect(row.closest('li')?.textContent).toContain('1.2k in · 30 out');
+    expect(row.closest('li')?.textContent).toContain('$0.0068');
+    // Its calls' tokens and cost, part by part.
+    expect(within(side).getByText('Input').closest('.actor-fact')?.textContent).toBe(
+      'Input1.2k · $0.0060',
+    );
     // Opened, what the model sent back, as it sent it.
     fireEvent.click(row);
     expect(within(requests).getByText(/"output_text"/)).toBeTruthy();
