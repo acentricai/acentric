@@ -5,10 +5,10 @@
 
 import type { Actor, ConversationEntry, Usage } from '@acentric/protocol';
 import { IconChevronRight } from '@tabler/icons-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { JsonCode } from '../../code.tsx';
-import { count } from '../../format.ts';
+import { count, fullTime } from '../../format.ts';
 import { dollars, percent } from '../../llm/format.ts';
 import { useUsage } from '../../llm/queries.ts';
 import type { ConversationState } from '../conversation/conversation.tsx';
@@ -51,7 +51,16 @@ function partsOf(calls: readonly ConversationEntry[]) {
   return sums;
 }
 
-export function CostTab({ info, conversation }: { info: Actor; conversation: ConversationState }) {
+export function CostTab({
+  info,
+  conversation,
+  reveal,
+}: {
+  info: Actor;
+  conversation: ConversationState;
+  /** A call to show: scrolled to, and opened. */
+  reveal: { seq: number; at: number } | null;
+}) {
   // What it and the actors under it spent; and what it spent itself, by kind of call.
   const tree = useUsage({ root: info.id, by: 'actor' });
   const own = useUsage({ actor: info.id, by: 'kind' });
@@ -123,7 +132,11 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
         ) : (
           <ul className="actor-tasks">
             {calls.map((entry) => (
-              <RequestRow key={entry.seq} entry={entry} />
+              <RequestRow
+                key={entry.seq}
+                entry={entry}
+                reveal={reveal?.seq === entry.seq ? reveal.at : undefined}
+              />
             ))}
           </ul>
         )}
@@ -136,8 +149,15 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
  * A call to the model: its response's ID, how much of what it was sent was read from cache, and
  * its cost; opened, each part of its tokens, and all it sent back.
  */
-function RequestRow({ entry }: { entry: ConversationEntry }) {
-  const [open, setOpen] = useState(false);
+function RequestRow({ entry, reveal }: { entry: ConversationEntry; reveal: number | undefined }) {
+  const [open, setOpen] = useState(reveal !== undefined);
+  const row = useRef<HTMLLIElement>(null);
+  // Asked to be shown: opened, and brought into view.
+  useEffect(() => {
+    if (reveal === undefined) return;
+    setOpen(true);
+    requestAnimationFrame(() => row.current?.scrollIntoView?.({ block: 'nearest' }));
+  }, [reveal]);
   const message = entry.message;
   const id = message.id ?? `#${String(entry.seq)}`;
   const usage = entry.completion?.usage;
@@ -146,7 +166,7 @@ function RequestRow({ entry }: { entry: ConversationEntry }) {
       ? undefined
       : (usage.totalInput ?? (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0));
   return (
-    <li className="actor-task" data-open={open || undefined}>
+    <li className="actor-task" data-open={open || undefined} ref={row}>
       <div className="actor-task__head">
         <button
           type="button"
@@ -172,6 +192,7 @@ function RequestRow({ entry }: { entry: ConversationEntry }) {
         <div className="actor-task__detail actor-request__block">
           {usage !== undefined && (
             <dl className="actor-facts actor-request__parts" aria-label="Tokens by kind">
+              <Fact name="Time">{fullTime(entry.createdAt)}</Fact>
               {PARTS.map(({ part, name, hue }) => (
                 <Fact
                   key={part}
