@@ -35,7 +35,8 @@
 
 .machines-page td,
 .sandboxes-page td,
-.secrets-page td {
+.secrets-page td,
+.actors-page td {
   white-space: nowrap;
 }
 
@@ -55,7 +56,8 @@
 .sandboxes-page .ac-table .ac-table__actions,
 .agents-page .ac-table .ac-table__actions,
 .secrets-page .ac-table .ac-table__actions,
-.deployments-page .ac-table .ac-table__actions {
+.deployments-page .ac-table .ac-table__actions,
+.actors-page .ac-table .ac-table__actions {
   position: relative;
   width: 1%;
   text-align: right;
@@ -65,7 +67,8 @@
 .sandboxes-page .ac-table__actions .more-menu,
 .agents-page .ac-table__actions .more-menu,
 .secrets-page .ac-table__actions .more-menu,
-.deployments-page .ac-table__actions .more-menu {
+.deployments-page .ac-table__actions .more-menu,
+.actors-page .ac-table__actions .more-menu {
   display: inline-flex;
   vertical-align: middle;
 }

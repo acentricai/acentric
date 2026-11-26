@@ -114,6 +114,19 @@
   overflow: auto;
 }
 
+/* ---------- Actors ---------- */
+
+/* An actor's name, a link without a line under it, and what spawned it beside it. */
+.actor-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.actor-cell a.ac-table__name {
+  text-decoration: none;
+}
+
 /* ---------- Settings ---------- */
 
 .agent-settings__id {

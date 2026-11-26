@@ -1,13 +1,13 @@
 // The Agents pages, from a person's side, against a stand-in for the server: the agents, an
 // agent's actors, deployments and secrets, and an actor's page with its conversation.
 
-import type { Role } from '@acentric/protocol';
+import type { Account, Actor, Role } from '@acentric/protocol';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { actorFor, definitionOf, idOf } from './fake/agents.ts';
 import { open } from './render.tsx';
-import { fakeServer } from './server.ts';
+import { fakeServer, machineOf } from './server.ts';
 
 const signedIn = (role: Role = 'owner') => {
   const server = fakeServer();
@@ -125,6 +125,121 @@ describe('an agent’s own dashboard', () => {
     fireEvent.click(within(side).getByRole('link', { name: 'Back to Dashboard' }));
     await waitFor(() => expect(page.where()).toBe('/agents'));
     expect(await within(side).findByRole('link', { name: 'Machines' })).toBeTruthy();
+  });
+});
+
+describe('an agent’s Actors', () => {
+  const accountOf = (n: number, provider: string, more: Partial<Account> = {}): Account => ({
+    id: `acc_${String(n).padStart(26, '0')}` as Account['id'],
+    provider,
+    name: `account ${String(n)}`,
+    credential: 'api_key',
+    default: false,
+    owner: null,
+    actors: 0,
+    createdBy: { type: 'user', id: 'usr_1' as never },
+    createdAt: 1_795_305_600_000,
+    ...more,
+  });
+
+  it('lists them with how they stand and the account each is called with, by status', async () => {
+    const { server, orders } = withAgents();
+    const main = accountOf(1, orders.provider, { name: 'main', default: true });
+    server.areas.llm.accounts.push(main);
+    server.actors[0] = { ...(server.actors[0] as Actor), account: main.id };
+    const page = open(`/agents/${orders.id}/actors`, server);
+    await screen.findByText('eu-desk');
+    const row = screen.getByText('eu-desk').closest('tr') as HTMLElement;
+    expect(within(row).getByText('working')).toBeTruthy();
+    expect(within(row).getByText('main')).toBeTruthy();
+    expect(screen.getByText('old-desk')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Status/ }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'archived' }));
+    await waitFor(() => expect(page.where()).toBe(`/agents/${orders.id}/actors?status=archived`));
+    await waitFor(() => expect(screen.queryByText('eu-desk')).toBeNull());
+    expect(screen.getByText('old-desk')).toBeTruthy();
+  });
+
+  it('makes one with the account chosen, on a machine where its agent says so, and opens it', async () => {
+    const server = signedIn();
+    const worker = area(server).agent('worker', 3, [definitionOf({ features: ['machine'] })]);
+    server.areas.llm.accounts.push(
+      accountOf(1, worker.provider, { name: 'main', default: true }),
+      accountOf(2, worker.provider, { name: 'team' }),
+      accountOf(3, 'not-its-provider', { name: 'other' }),
+    );
+    server.machines.push(machineOf('box', { agents: '*', online: true }));
+    const page = open(`/agents/${worker.id}/actors`, server);
+    fireEvent.click(await screen.findByRole('button', { name: 'New actor' }));
+    const form = dialog();
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'night-shift' } });
+    fireEvent.click(await within(form).findByRole('button', { name: /Account/ }));
+    expect(screen.getByRole('menuitemradio', { name: 'Default: main' })).toBeTruthy();
+    expect(screen.queryByRole('menuitemradio', { name: 'other' })).toBeNull();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'team' }));
+    fireEvent.click(within(form).getByRole('button', { name: /Machine/ }));
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'box' }));
+    fireEvent.change(within(form).getByLabelText('Working directory'), {
+      target: { value: '~/work' },
+    });
+    fireEvent.click(within(form).getByRole('button', { name: 'New actor' }));
+    await waitFor(() => expect(page.where()).toMatch(/^\/actors\/act_/));
+    const created = server.calls.find(
+      (call) => call.method === 'POST' && call.path === `/v1/agents/${worker.id}/actors`,
+    );
+    expect(created?.body).toEqual({
+      name: 'night-shift',
+      account: accountOf(2, worker.provider).id,
+      reasoning: 'medium',
+      machine: { id: machineOf('box').id, cwd: '~/work' },
+    });
+  });
+
+  it('leaves the account to the provider’s default when none is chosen', async () => {
+    const { server, orders } = withAgents();
+    server.areas.llm.accounts.push(accountOf(1, orders.provider, { name: 'main', default: true }));
+    open(`/agents/${orders.id}/actors`, server);
+    fireEvent.click(await screen.findByRole('button', { name: 'New actor' }));
+    expect(await within(dialog()).findByText('Default: main')).toBeTruthy();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'New actor' }));
+    await waitFor(() =>
+      expect(
+        server.calls.find(
+          (call) => call.method === 'POST' && call.path === `/v1/agents/${orders.id}/actors`,
+        )?.body,
+      ).toEqual({ reasoning: 'medium' }),
+    );
+  });
+
+  it('archives one after asking, and offers an archived one back, or deleted', async () => {
+    const { server, orders } = withAgents();
+    open(`/agents/${orders.id}/actors`, server);
+    await screen.findByRole('button', { name: 'Actions for eu-desk' });
+    press('Actions for eu-desk');
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Archive' }));
+    await waitFor(() =>
+      expect(
+        server.calls.some(
+          (call) =>
+            call.method === 'POST' &&
+            call.path === `/v1/actors/${(server.actors[0] as Actor).id}/archive`,
+        ),
+      ).toBe(true),
+    );
+    press('Actions for old-desk');
+    expect(await screen.findByRole('menuitem', { name: 'Unarchive' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeTruthy();
+  });
+
+  it('has nothing to make or change for one who may only read', async () => {
+    const { server, orders } = withAgents('viewer');
+    open(`/agents/${orders.id}/actors`, server);
+    await screen.findByText('eu-desk');
+    expect(screen.queryByRole('button', { name: 'New actor' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Actions for eu-desk' })).toBeNull();
   });
 });
 
