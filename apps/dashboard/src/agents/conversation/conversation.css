@@ -86,7 +86,9 @@
 }
 
 .convo__said:hover > .convo__actions,
-.convo__said:focus-within > .convo__actions {
+.convo__said:focus-within > .convo__actions,
+.convo__notice:hover > .convo__actions,
+.convo__notice:focus-within > .convo__actions {
   opacity: 1;
 }
 
@@ -179,45 +181,16 @@
   font-size: 13px;
 }
 
-/* A fold: what it thought, or a notice, opened by its line. */
-.convo__toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink-muted);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.convo__toggle:hover {
-  color: var(--ink);
-}
-
-.convo__toggle > svg {
-  flex: none;
-}
-
-.convo__toggle:focus-visible,
 .convo__call-head:focus-visible {
   border-radius: 4px;
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
-.convo__toggle > svg:first-child,
 .convo__chevron {
   transition: transform 150ms ease;
 }
 
-[data-open] > .convo__toggle > svg:first-child,
 [data-open] > .convo__call-head > .convo__chevron {
   transform: rotate(90deg);
 }
@@ -307,38 +280,23 @@
   color: color-mix(in srgb, var(--danger) 65%, var(--ink-muted));
 }
 
-.convo__out {
-  max-height: 320px;
-  margin: 0;
-  padding: 10px 12px;
-  overflow: auto;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  background: var(--raised);
+/* The engine's notices: what they say in a bubble in the middle, and under it, shown on hover,
+   when and what. */
+.convo__notice {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.convo__notice .convo__text {
   color: var(--ink-secondary);
-  font: 12.5px/19px var(--font-mono);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.convo__out[data-error] {
-  color: var(--danger);
-}
-
-/* The engine's notices: a quiet line, opened to all they say. */
-.convo__notice .convo__out {
-  margin-top: 8px;
-}
-
-.convo__notice[data-problem] > .convo__toggle {
-  color: var(--danger);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .convo__problem {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: color-mix(in srgb, var(--danger) 65%, var(--ink-muted));
 }
 
 .convo__quiet {
