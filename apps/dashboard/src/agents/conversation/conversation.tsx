@@ -361,7 +361,7 @@ function CallRow({ call, result }: { call: ToolCall; result: ConversationEntry |
         aria-expanded={open}
         onClick={() => setOpen((was) => !was)}
       >
-        <span className="convo__call-name mono">{call.toolName}</span>
+        <span className="convo__call-name">{call.toolName}</span>
         {about !== '' && <span className="convo__call-about mono">{about}</span>}
         <IconChevronRight size={13} stroke={1.75} aria-hidden="true" className="convo__chevron" />
         {state !== 'done' && <span className="convo__call-state">{state}</span>}
@@ -485,6 +485,16 @@ function NativeLine({
   );
 }
 
+/**
+ * What a notice says inside the tag it is wrapped in, `<task …>` or `<message …>`: the tag is what
+ * its title already names. The copy is of all of it.
+ */
+function noticeBody(text: string): string {
+  const wrapped = /^\s*<([a-z-]+)(?:\s[^>]*)?>\n?([\s\S]*?)\n?<\/\1>\s*$/.exec(text);
+  const inside = wrapped?.[2]?.trim();
+  return inside === undefined || inside === '' ? text : inside;
+}
+
 /** A line of the engine's: all it says, in the middle, and under it on hover, when and what. */
 function Notice({
   title,
@@ -500,7 +510,7 @@ function Notice({
   return (
     <div className="convo__notice" data-problem={problem !== undefined || undefined}>
       <div className="convo__bubble">
-        <p className="convo__text">{displayText(text, true)}</p>
+        <p className="convo__text">{displayText(noticeBody(text), true)}</p>
       </div>
       <div className="convo__actions">
         <When at={at} />

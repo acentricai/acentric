@@ -1,11 +1,12 @@
-/* An actor's conversation: each message a block under a small head of who and when, what it was
-   sent in a soft panel, the model's answer as text, its tool calls as cards that open, and the
-   engine's notices as quiet lines. */
+/* An actor's conversation, one rhythm down it: what it was sent in a filled bubble to the right,
+   the model's answer as text with its tool calls in a faint box, and the engine's notices in the
+   same bubble in the middle. A bubble's actions show in the gap under it on
+   hover, and take no room of their own. */
 
 .convo {
   position: relative;
   display: grid;
-  gap: 22px;
+  gap: 32px;
   min-width: 0;
   padding-bottom: 48px;
 }
@@ -20,7 +21,10 @@
   font-size: 14px;
 }
 
-.convo__entry {
+/* One column down the middle of the pane, as wide as reads well. */
+.convo > * {
+  justify-self: center;
+  width: min(100%, 760px);
   min-width: 0;
 }
 
@@ -54,27 +58,30 @@
 /* What it was sent: a soft bubble to the right, and under it, shown on hover, when, what, and
    a copy of it. */
 .convo__said {
+  position: relative;
   display: grid;
   justify-items: end;
-  gap: 4px;
   min-width: 0;
 }
 
 .convo__bubble {
   display: grid;
   gap: 10px;
-  max-width: min(85%, 640px);
+  max-width: min(85%, 600px);
   min-width: 0;
-  padding: 10px 14px;
-  border-radius: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   background: var(--wash);
 }
 
 .convo__actions {
+  position: absolute;
+  top: calc(100% + 2px);
   display: flex;
   align-items: center;
   gap: 8px;
   height: 26px;
+  white-space: nowrap;
   color: var(--ink-muted);
   font-size: 12px;
   opacity: 0;
@@ -83,6 +90,15 @@
 
 .convo__actions .convo__time {
   margin-left: 0;
+}
+
+.convo__said > .convo__actions {
+  right: 0;
+}
+
+.convo__notice > .convo__actions {
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .convo__said:hover > .convo__actions,
@@ -125,7 +141,7 @@
 /* The model's answer: its text as it wrote it. */
 .convo__answer {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -213,7 +229,7 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
-  height: 36px;
+  height: 34px;
   padding: 0 12px;
   border: 0;
   background: none;
@@ -231,14 +247,14 @@
 .convo__call-name {
   flex: none;
   color: var(--ink-secondary);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .convo__call-about {
   min-width: 0;
   overflow: hidden;
   color: var(--ink-muted);
-  font-size: 12.5px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -283,20 +299,17 @@
 /* The engine's notices: what they say in a bubble in the middle, and under it, shown on hover,
    when and what. */
 .convo__notice {
+  position: relative;
   display: grid;
   justify-items: center;
-  gap: 4px;
   min-width: 0;
 }
 
-.convo__notice .convo__text {
-  color: var(--ink-secondary);
-  font-size: 13px;
-  line-height: 20px;
-}
-
 .convo__problem {
+  max-width: 320px;
+  overflow: hidden;
   color: color-mix(in srgb, var(--danger) 65%, var(--ink-muted));
+  text-overflow: ellipsis;
 }
 
 .convo__quiet {

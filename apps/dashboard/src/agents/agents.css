@@ -139,7 +139,7 @@
 .actor-page__main > .convo__loading {
   height: 100%;
   overflow-y: auto;
-  padding: 40px 32px 48px 40px;
+  padding: 24px 24px 48px;
 }
 
 /* Their scrollbars: thin, a faint thumb, and no track. */
@@ -180,7 +180,7 @@
   display: grid;
   gap: 20px;
   min-width: 0;
-  padding: 40px 24px;
+  padding: 24px 22px;
 }
 
 /* Its tabs, across the top of the sidebar: the chosen one underlined. */
