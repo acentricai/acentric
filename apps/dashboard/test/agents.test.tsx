@@ -1,7 +1,7 @@
 // The Agents pages, from a person's side, against a stand-in for the server: the agents, an
 // agent's actors, deployments and secrets, and an actor's page with its conversation.
 
-import type { Account, Actor, Role } from '@acentric/protocol';
+import type { Account, Actor, Role, TaskDetail } from '@acentric/protocol';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -551,6 +551,46 @@ describe('an actor’s page', () => {
     // The breadcrumbs name its agent, that agent's Actors, and it by its ID.
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
     await waitFor(() => expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`));
+  });
+
+  it('lists its tasks under way and those that ended, each opened, and stops one', async () => {
+    const { server, orders } = withAgents();
+    const actor = idOf('act', 1);
+    const task = (n: number, more: Partial<TaskDetail>): TaskDetail => ({
+      id: `task_${String(n)}` as never,
+      kind: 'bash',
+      status: 'done',
+      attached: false,
+      startedAt: 1_795_305_600_000,
+      endedAt: 1_795_305_603_000,
+      input: { command: `echo ${String(n)}` },
+      result: `out ${String(n)}`,
+      ...more,
+    });
+    area(server).tasks(actor, [
+      task(1, { status: 'running', endedAt: undefined, result: null }),
+      task(2, {}),
+    ]);
+    open(`/agents/${orders.id}/actors/${actor}`, server);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Tasks' }));
+    const panel = await screen.findByRole('tabpanel');
+    const active = await within(panel).findByRole('region', { name: 'Active' });
+    const earlier = within(panel).getByRole('region', { name: 'Earlier' });
+    expect(within(active).getByText('running')).toBeTruthy();
+    expect(within(earlier).getByText('done')).toBeTruthy();
+    expect(within(earlier).getByText('3.0s')).toBeTruthy();
+
+    fireEvent.click(within(earlier).getByRole('button', { name: 'bash' }));
+    expect(await within(earlier).findByText('out 2')).toBeTruthy();
+
+    fireEvent.click(within(active).getByRole('button', { name: 'Stop' }));
+    await waitFor(() =>
+      expect(
+        server.calls.some(
+          (call) => call.method === 'POST' && call.path === `/v1/actors/${actor}/tasks/task_1/stop`,
+        ),
+      ).toBe(true),
+    );
   });
 
   it('has its agent’s sidebar, with Actors the tab it is on', async () => {

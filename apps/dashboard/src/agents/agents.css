@@ -134,10 +134,57 @@
   position: sticky;
   top: 24px;
   display: grid;
-  gap: 28px;
+  gap: 20px;
   min-width: 0;
   padding-left: 24px;
   border-left: 1px solid var(--divider);
+}
+
+/* Its tabs, across the top of the sidebar: the chosen one underlined. */
+.actor-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.actor-tabs__tab {
+  position: relative;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: 500 13px/18px var(--font-sans);
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.actor-tabs__tab:hover,
+.actor-tabs__tab[aria-selected='true'] {
+  color: var(--ink);
+}
+
+.actor-tabs__tab[aria-selected='true']::after {
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ink);
+  content: '';
+}
+
+.actor-tabs__tab:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: -4px;
+}
+
+.actor-side__panel {
+  display: grid;
+  gap: 28px;
+  min-width: 0;
 }
 
 .actor-side__group {
@@ -183,6 +230,99 @@
 
 .actor-fact__none {
   color: var(--ink-muted);
+}
+
+/* Its tasks: a row each of its kind, how it stands and when, opened to what it was given. */
+.actor-tasks {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actor-tasks__none {
+  margin: 0;
+  font-size: 13px;
+}
+
+.actor-task {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.actor-task:last-child {
+  border-bottom: 0;
+}
+
+.actor-task__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  font-size: 13px;
+}
+
+.actor-task__open {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.actor-task__open > svg {
+  flex: none;
+  color: var(--ink-muted);
+  transition: transform 150ms ease;
+}
+
+.actor-task[data-open] .actor-task__open > svg {
+  transform: rotate(90deg);
+}
+
+.actor-task__open:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.actor-task__when {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.actor-task__detail {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.actor-task__detail .json__code {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.actor-task__result {
+  max-height: 240px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--ink-secondary);
+  font: 12px/18px var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .actor-cost__total {
