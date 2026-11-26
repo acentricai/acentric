@@ -144,6 +144,52 @@ describe('an agent’s Deployments', () => {
   });
 });
 
+describe('a deployment’s menu', () => {
+  it('shows its code, as it was deployed', async () => {
+    const { server, orders } = withAgents();
+    open(`/agents/${orders.id}/deployments`, server);
+    await screen.findByRole('button', { name: 'Actions for v1' });
+    press('Actions for v1');
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View source' }));
+    const source = await screen.findByRole('dialog');
+    expect(within(source).getByRole('heading', { name: 'v1 source' })).toBeTruthy();
+    expect(await within(source).findByText("export default 'v1';")).toBeTruthy();
+  });
+
+  it('makes an older version active, after asking, and offers it for none but those', async () => {
+    const { server, orders } = withAgents();
+    open(`/agents/${orders.id}/deployments`, server);
+    // The active version is not made active again.
+    await screen.findByRole('button', { name: 'Actions for v2' });
+    press('Actions for v2');
+    await screen.findByRole('menuitem', { name: 'View source' });
+    expect(screen.queryByRole('menuitem', { name: 'Make active' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    press('Actions for v1');
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Make active' }));
+    expect(await screen.findByRole('heading', { name: 'Make v1 active?' })).toBeTruthy();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Make active' }));
+    await waitFor(() =>
+      expect(
+        server.calls.find(
+          (call) => call.method === 'PATCH' && call.path === `/v1/agents/${orders.id}`,
+        )?.body,
+      ).toEqual({ activeVersion: 1 }),
+    );
+    const v1 = (await screen.findByRole('button', { name: 'v1' })).closest('tr') as HTMLElement;
+    expect(await within(v1).findByText('active')).toBeTruthy();
+  });
+
+  it('offers no Make active to one who does not deploy agents', async () => {
+    const { server, orders } = withAgents('viewer');
+    open(`/agents/${orders.id}/deployments`, server);
+    await screen.findByRole('button', { name: 'Actions for v1' });
+    press('Actions for v1');
+    await screen.findByRole('menuitem', { name: 'View source' });
+    expect(screen.queryByRole('menuitem', { name: 'Make active' })).toBeNull();
+  });
+});
+
 describe('an agent’s Secrets', () => {
   const putOf = (server: ReturnType<typeof fakeServer>, agent: string, name: string) =>
     server.calls.find(

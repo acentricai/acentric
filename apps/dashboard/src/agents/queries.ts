@@ -32,6 +32,7 @@ export const keys = {
   agent: (agent: string) => ['agent', agent] as const,
   deployments: (agent: string) => ['deployments', agent] as const,
   deployment: (agent: string, deployment: string) => ['deployment', agent, deployment] as const,
+  code: (agent: string, deployment: string) => ['deployment-code', agent, deployment] as const,
   secrets: (agent: string) => ['secrets', agent] as const,
   actors: (agent: string, status: string, cursor?: string) =>
     ['actors', agent, status, cursor ?? ''] as const,
@@ -68,6 +69,15 @@ export function useDeployments(agent: string) {
     queryKey: keys.deployments(agent),
     queryFn: ({ signal }) => engine.deployments(agent, signal),
     ...list,
+  });
+}
+
+/** A deployment's code, as it was deployed. It never changes. */
+export function useDeploymentCode(agent: string, deployment: string) {
+  return useQuery({
+    queryKey: keys.code(agent, deployment),
+    queryFn: ({ signal }) => engine.deploymentCode(agent, deployment, signal),
+    staleTime: Infinity,
   });
 }
 

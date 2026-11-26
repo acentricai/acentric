@@ -29,6 +29,9 @@ export const engine = {
   agent: (id: string, signal?: AbortSignal) =>
     api.call('agents.get', { params: { agent: agentId(id) }, ...signalOf(signal) }),
   deleteAgent: (id: string) => api.call('agents.delete', { params: { agent: agentId(id) } }),
+  /** Makes one of an agent's versions the active one: what new actors start on, and follow. */
+  activate: (id: string, version: number) =>
+    api.call('agents.update', { params: { agent: agentId(id) }, body: { activeVersion: version } }),
   deployments: (id: string, signal?: AbortSignal) =>
     api.call('deployments.list', {
       params: { agent: agentId(id) },
@@ -37,6 +40,11 @@ export const engine = {
     }),
   deployment: (id: string, deployment: string, signal?: AbortSignal) =>
     api.call('deployments.get', {
+      params: { agent: agentId(id), deployment: deployment as DeploymentId },
+      ...signalOf(signal),
+    }),
+  deploymentCode: (id: string, deployment: string, signal?: AbortSignal) =>
+    api.call('deployments.code', {
       params: { agent: agentId(id), deployment: deployment as DeploymentId },
       ...signalOf(signal),
     }),
