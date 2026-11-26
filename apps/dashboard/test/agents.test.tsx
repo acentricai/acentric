@@ -596,14 +596,18 @@ describe('an actor’s page', () => {
     fireEvent.click(within(side).getByRole('tab', { name: 'Cost' }));
     const requests = await within(side).findByRole('region', { name: 'LLM Requests' });
     const row = await within(requests).findByRole('button', { name: /resp_1/ });
-    expect(row.closest('li')?.textContent).toContain('1.2k in · 30 out');
-    expect(row.closest('li')?.textContent).toContain('$0.0068');
+    // Folded: how much of what it was sent was read from cache, and its cost.
+    expect(row.closest('li')?.textContent).toBe('resp_10% cached$0.0068');
     // Its calls' tokens and cost, part by part.
     expect(within(side).getByText('Input').closest('.actor-fact')?.textContent).toBe(
       'Input1.2k · $0.0060',
     );
-    // Opened, what the model sent back, as it sent it.
+    // Opened, each part of its tokens with its cost, then what the model sent back, as it sent it.
     fireEvent.click(row);
+    const parts = within(requests).getByLabelText('Tokens by kind');
+    expect(within(parts).getByText('Input').closest('.actor-fact')?.textContent).toBe(
+      'Input1.2k · $0.0060',
+    );
     expect(within(requests).getByText(/"output_text"/)).toBeTruthy();
   });
 

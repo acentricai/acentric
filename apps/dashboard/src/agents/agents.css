@@ -393,6 +393,36 @@
   gap: 8px;
 }
 
+/* An opened call: one box, each part of its tokens at its top, and under a line, what it sent. */
+.actor-request__block {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.actor-request__parts {
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.actor-request__parts .actor-fact {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.actor-request__parts dd {
+  white-space: nowrap;
+}
+
+.actor-request__block .json {
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
 .actor-request__cost {
   min-width: 52px;
   color: var(--ink-secondary);

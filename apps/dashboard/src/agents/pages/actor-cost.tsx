@@ -8,8 +8,8 @@ import { IconChevronRight } from '@tabler/icons-react';
 import { useState, type ReactNode } from 'react';
 
 import { JsonCode } from '../../code.tsx';
-import { count, tokens } from '../../format.ts';
-import { dollars } from '../../llm/format.ts';
+import { count } from '../../format.ts';
+import { dollars, percent } from '../../llm/format.ts';
 import { useUsage } from '../../llm/queries.ts';
 import type { ConversationState } from '../conversation/conversation.tsx';
 import '../../llm/llm.css';
@@ -122,7 +122,7 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
           <p className="actor-fact__none actor-tasks__none">No requests yet</p>
         ) : (
           <ul className="actor-tasks">
-            {calls.toReversed().map((entry) => (
+            {calls.map((entry) => (
               <RequestRow key={entry.seq} entry={entry} />
             ))}
           </ul>
@@ -132,7 +132,10 @@ export function CostTab({ info, conversation }: { info: Actor; conversation: Con
   );
 }
 
-/** A call to the model: its response's ID, its tokens and cost; opened, all it sent back. */
+/**
+ * A call to the model: its response's ID, how much of what it was sent was read from cache, and
+ * its cost; opened, each part of its tokens, and all it sent back.
+ */
 function RequestRow({ entry }: { entry: ConversationEntry }) {
   const [open, setOpen] = useState(false);
   const message = entry.message;
@@ -157,14 +160,38 @@ function RequestRow({ entry }: { entry: ConversationEntry }) {
           </span>
         </button>
         <span className="actor-task__when">
-          {usage === undefined ? '—' : tokens(sent, usage.output)}
+          {sent === undefined || sent === 0
+            ? '—'
+            : `${percent((usage?.cacheRead ?? 0) / sent)} cached`}
         </span>
         <span className="actor-request__cost">
           {usage?.cost === undefined ? '—' : dollars(usage.cost.total)}
         </span>
       </div>
       {open && message.role === 'assistant' && (
-        <div className="actor-task__detail">
+        <div className="actor-task__detail actor-request__block">
+          {usage !== undefined && (
+            <dl className="actor-facts actor-request__parts" aria-label="Tokens by kind">
+              {PARTS.map(({ part, name, hue }) => (
+                <Fact
+                  key={part}
+                  name={
+                    <span className="actor-part">
+                      <span
+                        className="usage-swatch"
+                        style={{ background: hue }}
+                        aria-hidden="true"
+                      />
+                      {name}
+                    </span>
+                  }
+                >
+                  <span className="actor-fact__none">{count(usage[part] ?? 0)} · </span>
+                  {dollars(usage.cost?.[part] ?? 0)}
+                </Fact>
+              ))}
+            </dl>
+          )}
           <JsonCode value={message.content} what="what the model sent back" />
         </div>
       )}
