@@ -3,6 +3,7 @@
    engine's notices as quiet lines. */
 
 .convo {
+  position: relative;
   display: grid;
   gap: 22px;
   min-width: 0;
@@ -70,14 +71,49 @@
   line-height: 18px;
 }
 
-/* What it was sent: a soft panel. */
+/* What it was sent: a soft bubble to the right, and under it, shown on hover, when, what, and
+   a copy of it. */
+.convo__said {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  min-width: 0;
+}
+
 .convo__bubble {
   display: grid;
   gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  background: var(--panel);
+  max-width: min(85%, 640px);
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--wash);
+}
+
+.convo__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  color: var(--ink-muted);
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.convo__actions .convo__time {
+  margin-left: 0;
+}
+
+.convo__said:hover > .convo__actions,
+.convo__said:focus-within > .convo__actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .convo__actions {
+    opacity: 1;
+  }
 }
 
 .convo__text {
