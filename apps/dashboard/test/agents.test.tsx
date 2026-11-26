@@ -635,8 +635,6 @@ describe('an actor’s page', () => {
     fireEvent.click(call);
     expect(await within(convo).findByText('Shipped today.')).toBeTruthy();
     expect(within(convo).getByRole('button', { name: 'Copy the result' })).toBeTruthy();
-    // Under the answer: a copy of it.
-    expect(within(convo).getByRole('button', { name: 'Copy the answer' })).toBeTruthy();
     // What it thought is not shown.
     expect(within(convo).queryByText('Look it up first.')).toBeNull();
     // The engine's own line, named for what it is about.

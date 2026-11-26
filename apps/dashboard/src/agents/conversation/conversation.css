@@ -86,9 +86,7 @@
 }
 
 .convo__said:hover > .convo__actions,
-.convo__said:focus-within > .convo__actions,
-.convo__answer:hover > .convo__actions,
-.convo__answer:focus-within > .convo__actions {
+.convo__said:focus-within > .convo__actions {
   opacity: 1;
 }
 
@@ -129,8 +127,8 @@
   min-width: 0;
 }
 
-.convo__answer > .convo__actions {
-  margin-top: -6px;
+.convo__left-out {
+  justify-self: start;
 }
 
 .convo__markdown {

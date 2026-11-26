@@ -330,11 +330,7 @@ function Answer({
               : `Stopped: ${entry.completion.stopReason}`}
           </p>
         )}
-      <div className="convo__actions">
-        {entry.leftOut === true && <span className="convo__tag">left out</span>}
-        <When at={entry.createdAt} />
-        {said && <CopyButton value={view.text} what="the answer" />}
-      </div>
+      {entry.leftOut === true && <span className="convo__tag convo__left-out">left out</span>}
     </div>
   );
 }
