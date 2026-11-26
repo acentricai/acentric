@@ -488,7 +488,8 @@ describe('an actor’s page', () => {
     area(server).conversation(actor, [user(1, 'Where is A-1042?'), model(2, 'It ships today.')]);
     area(server).spent(actor, 0.42);
     open(`/actors/${actor}`, server);
-    expect(await screen.findByRole('link', { name: 'orders' })).toBeTruthy();
+    // Its agent, named and linked: in the page, and in the breadcrumbs.
+    expect((await screen.findAllByRole('link', { name: 'orders' })).length).toBeGreaterThan(0);
     expect(await screen.findByText('It ships today.')).toBeTruthy();
     expect(screen.getByText('Where is A-1042?')).toBeTruthy();
     expect(screen.getByText('$0.42 spent')).toBeTruthy();
@@ -504,6 +505,17 @@ describe('an actor’s page', () => {
     area(server).say(actor, user(3, 'And A-1043?'));
     expect(await screen.findByText('And A-1043?')).toBeTruthy();
     expect(screen.getByText('2 turns')).toBeTruthy();
+  });
+
+  it('has its agent’s sidebar, with Actors the tab it is on', async () => {
+    const { server, orders } = withAgents();
+    open(`/actors/${idOf('act', 1)}`, server);
+    const side = await screen.findByRole('complementary', { name: 'Sidebar' });
+    const actors = await within(side).findByRole('link', { name: 'Actors' });
+    expect(actors.getAttribute('href')).toBe(`/agents/${orders.id}/actors`);
+    expect(actors.getAttribute('aria-current')).toBe('page');
+    expect(within(side).getByRole('link', { name: 'Back to Dashboard' })).toBeTruthy();
+    expect(within(side).queryByRole('link', { name: 'Machines' })).toBeNull();
   });
 
   it('sends an input of its agent’s types, once, with an ID of its own', async () => {

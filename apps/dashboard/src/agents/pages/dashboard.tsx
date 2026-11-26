@@ -48,6 +48,8 @@ export function agentSection(agent: string): Section {
         icon: IconUser,
         activeIcon: IconUserFilled,
         shown: reads,
+        // An actor's own page is one of its agent's Actors.
+        also: (pathname) => pathname.startsWith('/actors/'),
       },
       {
         id: 'deployments',

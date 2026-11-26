@@ -19,6 +19,8 @@ export type Tab = {
   readonly shown: (me: Me) => boolean;
   /** Current on its own path only, not on the pages below it. */
   readonly exact?: boolean;
+  /** Pages elsewhere it is current on as well, as an actor's is on its agent's Actors. */
+  readonly also?: (pathname: string) => boolean;
 };
 
 export type Section = {
