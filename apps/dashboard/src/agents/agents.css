@@ -232,6 +232,17 @@
   color: var(--ink-muted);
 }
 
+/* Running, in the sidebar: a small, still blue dot, with no glow. */
+.actor-side .ac-status--active .ac-status__dot {
+  width: 6px;
+  height: 6px;
+  background: var(--chart-4);
+}
+
+.actor-side .ac-status--active .ac-status__dot::after {
+  content: none;
+}
+
 /* Its tasks: a row each of its kind, how it stands and when, opened to what it was given. */
 .actor-tasks {
   display: grid;
@@ -266,7 +277,8 @@
 
 .actor-task__open {
   display: inline-flex;
-  flex: 1;
+  flex: 0 1 auto;
+  margin-right: auto;
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -297,6 +309,7 @@
 
 .actor-task__when {
   color: var(--ink-muted);
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
