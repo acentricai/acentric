@@ -4,13 +4,7 @@
 // is there.
 
 import type { Compaction, ConversationEntry, Json, Message } from '@acentric/protocol';
-import {
-  IconAlertTriangle,
-  IconArrowsMinimize,
-  IconChevronRight,
-  IconInfoCircle,
-  IconSearch,
-} from '@tabler/icons-react';
+import { IconAlertTriangle, IconChevronRight, IconSearch } from '@tabler/icons-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { JsonCode } from '../../code.tsx';
@@ -196,7 +190,6 @@ function EntryView({
       case 'user':
         return metaOf(entry).compaction === 'summary' ? (
           <Notice
-            icon={<IconArrowsMinimize size={14} stroke={1.75} aria-hidden="true" />}
             title="Summary of the conversation before"
             text={messageText(message)}
             at={entry.createdAt}
@@ -225,7 +218,6 @@ function EntryView({
       case 'custom':
         return (
           <Notice
-            icon={<IconInfoCircle size={14} stroke={1.75} aria-hidden="true" />}
             title={message.tag}
             text={JSON.stringify(message.data, null, 2)}
             at={entry.createdAt}
@@ -430,7 +422,6 @@ function SystemLine({
   const problem = metaOf(entry).notice?.problem;
   return (
     <Notice
-      icon={<IconInfoCircle size={14} stroke={1.75} aria-hidden="true" />}
       title={title}
       text={text}
       at={entry.createdAt}
@@ -487,7 +478,6 @@ function NativeLine({
   }
   return (
     <Notice
-      icon={<IconInfoCircle size={14} stroke={1.75} aria-hidden="true" />}
       title={`An item of ${provider}’s own`}
       text={JSON.stringify(items, null, 2)}
       at={entry.createdAt}
@@ -495,40 +485,29 @@ function NativeLine({
   );
 }
 
-/** A line of the engine's, folded to its title: opened, all it says. */
+/** A line of the engine's: all it says, in the middle, and under it on hover, when and what. */
 function Notice({
-  icon,
   title,
   text,
   at,
   problem,
 }: {
-  icon: ReactNode;
   title: string;
   text: string;
   at: number;
   problem?: string;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div
-      className="convo__notice"
-      data-open={open || undefined}
-      data-problem={problem !== undefined || undefined}
-    >
-      <button
-        type="button"
-        className="convo__toggle"
-        aria-expanded={open}
-        onClick={() => setOpen((was) => !was)}
-      >
-        <IconChevronRight size={13} stroke={1.75} aria-hidden="true" className="convo__chevron" />
-        {icon}
+    <div className="convo__notice" data-problem={problem !== undefined || undefined}>
+      <div className="convo__bubble">
+        <p className="convo__text">{displayText(text, true)}</p>
+      </div>
+      <div className="convo__actions">
+        <When at={at} />
         <span>{title}</span>
         {problem !== undefined && <span className="convo__problem">{problem}</span>}
-        <When at={at} />
-      </button>
-      {open && <pre className="convo__out">{displayText(text, true)}</pre>}
+        <CopyButton value={text} what="the notice" />
+      </div>
     </div>
   );
 }
