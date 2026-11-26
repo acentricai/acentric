@@ -8,6 +8,7 @@ import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
+import { actorPath } from '../agents/links.tsx';
 import { actorName } from '../agents/pages/agent.tsx';
 import { useAgentNames } from '../machines/agents.tsx';
 import { LoadError, PageHeader } from '../machines/ui.tsx';
@@ -138,12 +139,7 @@ export function UsagePage() {
             groups={roots.data?.groups}
             total={roots.data?.total}
             name={(key) => (
-              <Link
-                to={'/actors/$actor' as never}
-                params={{ actor: key } as never}
-                className="title-link mono"
-                title={key}
-              >
+              <Link to={actorPath(key)} className="title-link mono" title={key}>
                 {actorName({ id: key, name: null }, 20)}
               </Link>
             )}

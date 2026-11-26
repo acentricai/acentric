@@ -267,7 +267,7 @@ export function ActorsTab() {
                 )}
               </>
             }
-            onRow={(actor) => void navigate({ to: actorPath(actor.id) })}
+            onRow={(actor) => void navigate({ to: actorPath(actor.id, actor.agent) })}
           />
           <Pager
             newer={pages.newer === null ? null : () => to({ cursor: pages.newer || undefined })}
@@ -407,7 +407,7 @@ function NewActor({ agent, onClose }: { agent: string; onClose: () => void }) {
     onSuccess: ({ actor }) => {
       void queryClient.invalidateQueries({ queryKey: ['actors', agent] });
       motion.close(() => {
-        void navigate({ to: actorPath(actor.id) });
+        void navigate({ to: actorPath(actor.id, actor.agent) });
       });
     },
   });

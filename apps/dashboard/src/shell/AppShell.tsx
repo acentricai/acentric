@@ -63,8 +63,11 @@ function useCrumbs(): Crumb[] {
     if (page !== undefined) crumbs.push({ label: page.name, link: { to: page.path } });
   }
   if (actor !== undefined) {
-    // An actor is one of its agent's Actors, and is named by its ID.
-    if (of !== undefined) crumbs.push({ label: 'Actors', link: { to: agentPath(of, 'actors') } });
+    // An actor is one of its agent's Actors, and is named by its ID. Its page is under them,
+    // which says so above: the address of its ID alone goes there.
+    if (agent === undefined && of !== undefined) {
+      crumbs.push({ label: 'Actors', link: { to: agentPath(of, 'actors') } });
+    }
     crumbs.push({ label: actor, mono: true, title: actor });
   }
   return crumbs;

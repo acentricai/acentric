@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { may } from '../me.ts';
 import type { Section } from '../sections.ts';
 import { ActorPage } from './pages/actor.tsx';
+import { ActorRedirect } from './pages/actor-redirect.tsx';
 import { AgentsPage } from './pages/agents.tsx';
 import { ActorsPage } from './pages/actors.tsx';
 import { AgentDashboard, OverviewPage } from './pages/dashboard.tsx';
@@ -17,8 +18,9 @@ import { SettingsPage } from './pages/settings.tsx';
 import { actorSearch, actorsSearch, deploymentsSearch } from './url.ts';
 
 /**
- * `/agents`; an agent's own dashboard, `/agents/$agent` (its overview), `actors`, `deployments`,
- * `secrets` and `settings`; and `/actors/$actor`.
+ * `/agents`; an agent's own dashboard, `/agents/$agent` (its overview), `actors` and each
+ * actor's page, `actors/$actor`, `deployments`, `secrets` and `settings`; and `/actors/$actor`,
+ * which goes to an actor's page from its ID alone.
  */
 function routes(parent: AnyRoute): AnyRoute[] {
   const agents = createRoute({
@@ -45,22 +47,30 @@ function routes(parent: AnyRoute): AnyRoute[] {
     validateSearch: deploymentsSearch,
     component: DeploymentsPage,
   });
+  // An actor's page is among its agent's Actors.
   const actor = createRoute({
-    getParentRoute: () => parent,
+    getParentRoute: () => agent,
     path: 'actors/$actor',
     validateSearch: actorSearch,
     component: ActorPage,
+  });
+  const byId = createRoute({
+    getParentRoute: () => parent,
+    path: 'actors/$actor',
+    validateSearch: actorSearch,
+    component: ActorRedirect,
   });
   return [
     agents,
     agent.addChildren([
       page('/', OverviewPage),
       actors,
+      actor,
       deployments,
       page('secrets', SecretsPage),
       page('settings', SettingsPage),
     ]),
-    actor,
+    byId,
   ];
 }
 

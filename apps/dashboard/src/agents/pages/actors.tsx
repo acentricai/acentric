@@ -90,6 +90,7 @@ export function ActorsPage() {
                 <span className="actor-cell">
                   <ActorLink
                     actor={actor.id}
+                    agent={actor.agent}
                     className="ac-table__name mono"
                     title={actor.name === null ? actor.id : undefined}
                   >
@@ -288,7 +289,7 @@ function NewActor({ agent, onClose }: { agent: string; onClose: () => void }) {
     onSuccess: ({ actor }) => {
       void queryClient.invalidateQueries();
       onClose();
-      void navigate({ to: actorPath(actor.id) });
+      void navigate({ to: actorPath(actor.id, actor.agent) });
     },
   });
 
