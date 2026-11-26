@@ -209,6 +209,10 @@
   animation: machine-pane-pop 160ms var(--ease-out) both;
 }
 
+.pop.more-menu__pop--above {
+  transform-origin: bottom right;
+}
+
 .more-menu__pop .pop__item {
   display: flex;
   align-items: center;
