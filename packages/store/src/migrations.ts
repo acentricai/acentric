@@ -5,7 +5,8 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 
-const MIGRATIONS: readonly string[] = [
+/** Each change of the database, in order: the one at an index brings it to version index + 1. */
+export const MIGRATIONS: readonly string[] = [
   `
   -- An agent: what was deployed under a name.
   CREATE TABLE agents (
@@ -458,6 +459,26 @@ const MIGRATIONS: readonly string[] = [
   -- An actor's own instructions, made by its agent's code when it was created or last moved
   -- to another version of its agent. NULL for an actor whose agent's instructions are text.
   ALTER TABLE actors ADD COLUMN instructions TEXT;
+  `,
+  // 6: a model account for each actor, and none for an agent.
+  `
+  -- The model account an actor's calls are made with, given when it was created. NULL only for
+  -- one made before, whose agent and provider had none: its provider's default is used.
+  ALTER TABLE actors ADD COLUMN account_id TEXT;
+
+  -- An actor made before is given what its calls were made with: its agent's account, or its
+  -- provider's default.
+  UPDATE actors SET account_id = COALESCE(
+    (SELECT agents.account_id FROM agents WHERE agents.id = actors.agent_id),
+    (SELECT accounts.id FROM accounts JOIN agents ON agents.id = actors.agent_id
+      WHERE json_extract(accounts.account, '$.provider') = agents.provider
+        AND json_extract(accounts.account, '$.default') = 1)
+  );
+
+  ALTER TABLE agents DROP COLUMN account_id;
+
+  -- Which actors an account was given: what keeps it from being removed.
+  CREATE INDEX actors_account ON actors (account_id) WHERE account_id IS NOT NULL;
   `,
 ];
 

@@ -26,7 +26,7 @@ describe('model accounts', () => {
       credential: 'api_key',
       default: true,
       owner: null,
-      agents: [],
+      actors: 0,
     });
     const spare = await admin.call('accounts.create', {
       body: { provider: 'fake', name: 'spare', apiKey: ` ${OTHER_MODEL_KEY} ` },
@@ -107,16 +107,19 @@ describe('model accounts', () => {
     ).toEqual({ code: 'not_found', status: 404 });
   });
 
-  it('are removed, unless an agent is given them', async () => {
+  it('are removed, unless an actor that is not archived is given them', async () => {
     const { admin, deploy, account } = await api();
     const main = account?.id ?? nobody;
     const { agent } = await deploy();
-    await admin.call('agents.update', { params: { agent: agent.id }, body: { account: main } });
+    const { actor } = await admin.call('actors.create', { params: { agent: agent.id }, body: {} });
+    expect((await admin.call('accounts.get', { params: { account: main } })).actors).toBe(1);
     expect(await refusal(admin.call('accounts.delete', { params: { account: main } }))).toEqual({
       code: 'conflict',
       status: 409,
     });
-    await admin.call('agents.update', { params: { agent: agent.id }, body: { account: null } });
+    // Archived, it holds the account no more.
+    await admin.call('actors.archive', { params: { actor: actor.id } });
+    expect((await admin.call('accounts.get', { params: { account: main } })).actors).toBe(0);
     expect(await admin.call('accounts.delete', { params: { account: main } })).toBeUndefined();
     expect(await refusal(admin.call('accounts.get', { params: { account: main } }))).toEqual({
       code: 'not_found',
@@ -168,7 +171,7 @@ describe('model accounts', () => {
   });
 
   it('are in the audit log with who changed them, and their keys are not', async () => {
-    const { admin, deploy } = await api([], { account: false });
+    const { admin } = await api([], { account: false });
     const main = await admin.call('accounts.create', {
       body: { provider: 'fake', name: 'main', apiKey: MODEL_KEY },
     });
@@ -176,9 +179,6 @@ describe('model accounts', () => {
       params: { account: main.id },
       body: { apiKey: OTHER_MODEL_KEY },
     });
-    const { agent } = await deploy();
-    await admin.call('agents.update', { params: { agent: agent.id }, body: { account: main.id } });
-    await admin.call('agents.update', { params: { agent: agent.id }, body: { account: null } });
     await admin.call('accounts.delete', { params: { account: main.id } });
 
     const { items } = await admin.call('audit.list', { query: { limit: 100 } });
@@ -186,8 +186,6 @@ describe('model accounts', () => {
     expect(of.map((event) => [event.action, event.by.type, event.target])).toEqual([
       ['account.create', 'key', { type: 'account', id: main.id }],
       ['account.update', 'key', { type: 'account', id: main.id }],
-      ['agent.account', 'key', { type: 'agent', id: agent.id }],
-      ['agent.account', 'key', { type: 'agent', id: agent.id }],
       ['account.delete', 'key', { type: 'account', id: main.id }],
     ]);
     const written = JSON.stringify(items);
@@ -196,36 +194,43 @@ describe('model accounts', () => {
   });
 });
 
-describe('an agent’s model', () => {
-  it('cannot be called while its provider has no account: the turn fails, with what to do', async () => {
-    const { admin, engine, deploy, say, failures } = await api([says('Hello.')], {
-      account: false,
-    });
+describe('an actor’s account', () => {
+  it('is its provider’s default when none is asked for, and none at all is refused', async () => {
+    const { admin, deploy, account } = await api([], { account: false });
     const { agent } = await deploy();
-    expect(agent.account).toBeNull();
-    const { actor } = await admin.call('actors.create', { params: { agent: agent.id }, body: {} });
-    await say(actor.id, 'Hello?');
-    expect(
-      (await admin.call('actors.get', { params: { actor: actor.id } })).lastTurn,
-    ).toMatchObject({
-      end: 'failed',
-      reason: 'There is no model account for Fake: add one before its models are called',
-    });
-    expect((await admin.call('usage.get')).totals.calls).toBe(0);
+    expect(agent).not.toHaveProperty('account');
+    const create = (body: { account?: typeof nobody } = {}) =>
+      admin.call('actors.create', { params: { agent: agent.id }, body });
+    expect(account).toBeUndefined();
+    expect(await refusal(create())).toEqual({ code: 'conflict', status: 409 });
+    expect(await admin.call('actors.list')).toMatchObject({ items: [] });
 
-    // With one added, the turn that failed is tried again.
-    await admin.call('accounts.create', {
+    const main = await admin.call('accounts.create', {
       body: { provider: 'fake', name: 'main', apiKey: MODEL_KEY },
     });
-    await admin.call('actors.retry', { params: { actor: actor.id } });
-    await engine.settled(actor.id);
-    expect((await admin.call('actors.get', { params: { actor: actor.id } })).lastTurn?.end).toBe(
-      'ok',
-    );
-    expect(failures).toEqual([]);
+    expect((await create()).actor.account).toBe(main.id);
   });
 
-  it('is called with the account the agent was given, and with the default again when it has none', async () => {
+  it('is the one asked for, and none that is not an account', async () => {
+    const { admin, deploy } = await api();
+    const own = await admin.call('accounts.create', {
+      body: { provider: 'fake', name: 'own', apiKey: OTHER_MODEL_KEY },
+    });
+    const { agent } = await deploy();
+    const { actor } = await admin.call('actors.create', {
+      params: { agent: agent.id },
+      body: { account: own.id },
+    });
+    expect(actor.account).toBe(own.id);
+    expect((await admin.call('actors.get', { params: { actor: actor.id } })).account).toBe(own.id);
+    expect(
+      await refusal(
+        admin.call('actors.create', { params: { agent: agent.id }, body: { account: nobody } }),
+      ),
+    ).toEqual({ code: 'invalid_request', status: 400 });
+  });
+
+  it('is what its calls are made with, whichever is the default since', async () => {
     const answer = { ...says('Hello.'), usage: used };
     const { admin, deploy, say, account } = await api([answer, answer, answer]);
     const main = account?.id ?? nobody;
@@ -233,72 +238,44 @@ describe('an agent’s model', () => {
       body: { provider: 'fake', name: 'own', apiKey: OTHER_MODEL_KEY },
     });
     const { agent } = await deploy();
-    const { actor } = await admin.call('actors.create', { params: { agent: agent.id }, body: {} });
     const byAccount = async () =>
       (await admin.call('usage.get', { query: { by: 'account' } })).groups?.map((group) => [
         group.key,
         group.totals.calls,
       ]);
-
-    await say(actor.id, 'One.');
-    expect(await byAccount()).toEqual([[main, 1]]);
-
-    const given = await admin.call('agents.update', {
-      params: { agent: agent.id },
-      body: { account: own.id },
-    });
-    expect(given.account).toBe(own.id);
-    expect((await admin.call('agents.get', { params: { agent: agent.id } })).account).toBe(own.id);
-    expect((await admin.call('accounts.get', { params: { account: own.id } })).agents).toEqual([
-      agent.id,
-    ]);
-    // An actor that is already running is called with it from its next call on.
-    await say(actor.id, 'Two.');
+    const first = (await admin.call('actors.create', { params: { agent: agent.id }, body: {} }))
+      .actor;
+    const second = (
+      await admin.call('actors.create', { params: { agent: agent.id }, body: { account: own.id } })
+    ).actor;
+    await say(first.id, 'One.');
+    await say(second.id, 'Two.');
     expect(await byAccount()).toEqual([
       [main, 1],
       [own.id, 1],
     ]);
-
-    const back = await admin.call('agents.update', {
-      params: { agent: agent.id },
-      body: { account: null },
-    });
-    expect(back.account).toBeNull();
-    await say(actor.id, 'Three.');
+    // Another default is given to actors made from then on, not to those there are.
+    await admin.call('accounts.update', { params: { account: own.id }, body: { default: true } });
+    await say(first.id, 'Three.');
     expect(await byAccount()).toEqual([
       [main, 2],
       [own.id, 1],
     ]);
   });
 
-  it('keeps its account when the agent is deployed again, or a version is made active', async () => {
+  it('is not changed when the agent is deployed again, or another version is made active', async () => {
     const { admin, deploy, account } = await api();
-    const main = account?.id ?? nobody;
     const { agent } = await deploy();
-    await admin.call('agents.update', { params: { agent: agent.id }, body: { account: main } });
-    expect((await deploy('orders', 'orders@2')).agent.account).toBe(main);
-    // A version and an account in one request are both done.
-    const both = await admin.call('agents.update', {
-      params: { agent: agent.id },
-      body: { activeVersion: 1, account: null },
-    });
-    expect(both).toMatchObject({ activeDeployment: { version: 1 }, account: null });
-  });
-
-  it('is not given what is no account of its provider, and a request that fails changes nothing', async () => {
-    const { admin, deploy, account } = await api();
-    const main = account?.id ?? nobody;
-    const { agent } = await deploy();
-    const update = (body: { activeVersion?: number; account?: typeof main | null }) =>
-      refusal(admin.call('agents.update', { params: { agent: agent.id }, body }));
-    expect(await update({ account: nobody })).toEqual({ code: 'not_found', status: 404 });
-    expect(await update({})).toEqual({ code: 'invalid_request', status: 400 });
-    // There is no version 9: the account is not given either.
-    expect(await update({ activeVersion: 9, account: main })).toEqual({
-      code: 'not_found',
-      status: 404,
-    });
-    expect((await admin.call('agents.get', { params: { agent: agent.id } })).account).toBeNull();
+    const { actor } = await admin.call('actors.create', { params: { agent: agent.id }, body: {} });
+    await deploy('orders', 'orders@2');
+    await admin.call('agents.update', { params: { agent: agent.id }, body: { activeVersion: 1 } });
+    expect((await admin.call('actors.get', { params: { actor: actor.id } })).account).toBe(
+      account?.id,
+    );
+    // An agent is given no account: only a version is made active.
+    expect(
+      await refusal(admin.call('agents.update', { params: { agent: agent.id }, body: {} })),
+    ).toEqual({ code: 'invalid_request', status: 400 });
   });
 });
 

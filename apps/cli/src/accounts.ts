@@ -34,10 +34,10 @@ export async function listAccounts(io: Io): Promise<void> {
     account.name,
     account.provider,
     account.default ? 'yes' : '',
-    String(account.agents.length),
+    String(account.actors),
     account.id,
   ]);
-  for (const line of table(['NAME', 'PROVIDER', 'DEFAULT', 'AGENTS', 'ID'], rows)) io.out(line);
+  for (const line of table(['NAME', 'PROVIDER', 'DEFAULT', 'ACTORS', 'ID'], rows)) io.out(line);
 }
 
 export async function addAccount(
@@ -67,14 +67,19 @@ export async function addAccount(
   );
 }
 
+/** An account, by its name or its ID. */
+export async function accountOf(client: Client, named: string): Promise<Account> {
+  const account =
+    parseId(named)?.kind === 'account'
+      ? await client.call('accounts.get', { params: { account: named as Account['id'] } })
+      : (await all(client)).find((one) => one.name === named);
+  if (account === undefined) throw new Fail(`the engine has no account ${named}`);
+  return account;
+}
+
 export async function removeAccount(io: Io, given: { readonly account: string }): Promise<void> {
   await withEngine(signedIn(io), async (client) => {
-    const named = given.account;
-    const account =
-      parseId(named)?.kind === 'account'
-        ? await client.call('accounts.get', { params: { account: named as Account['id'] } })
-        : (await all(client)).find((one) => one.name === named);
-    if (account === undefined) throw new Fail(`the engine has no account ${named}`);
+    const account = await accountOf(client, given.account);
     await client.call('accounts.delete', { params: { account: account.id } });
     io.out(`Removed the account ${account.name} of ${account.provider}.`);
   });

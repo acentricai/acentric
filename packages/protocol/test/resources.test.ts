@@ -64,6 +64,7 @@ const actor = () => ({
   deployment: { id: id('deployment'), version: 3 },
   pinned: false,
   behind: null,
+  account: null,
   modelId: 'claude-opus-5-5',
   reasoning: 'medium',
   configuration: { region: 'eu' },

@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { builtInProviders } from '@acentric/ai';
 import type { ModelRunner, Providers } from '@acentric/ai';
+import type { AccountId } from '@acentric/protocol';
 import {
   Accounts,
   Audit,
@@ -186,6 +187,11 @@ export async function start(
     // The bytes of images and files, in a folder beside the database.
     blobs: new FileBlobStore(join(settings.data, 'blobs')),
     runner: more.runner ?? accountRunners(accounts),
+    // Each actor is given an account of its agent's provider when it is created: what its
+    // calls are made with. A runner given in place of the accounts calls without one.
+    ...(more.runner === undefined
+      ? { accountOf: (provider: string, wanted?: AccountId) => accounts.choose(provider, wanted) }
+      : {}),
     // The computers actors' commands run on: their daemons connect to this server. A daemon
     // is asked to take the machine program this server hands out, by its digest.
     machines: { build: programs.build, ...more.machines },

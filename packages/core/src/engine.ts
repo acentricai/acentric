@@ -16,6 +16,7 @@ import {
 import type {
   AbortResponse,
   Actor,
+  AccountId,
   ActorId,
   ActorMachineRequest,
   Agent,
@@ -120,6 +121,13 @@ export type EngineOptions = {
    * its agent's provider (see `providerRunners`).
    */
   readonly runner: ModelRunner | RunnerSource;
+  /**
+   * Gives the model account a new actor of an agent of `provider` is to have: the one asked
+   * for, once it is found to be of that provider, or the provider's default (see
+   * `Accounts.choose`). It throws, with why, when there is none to give, and the actor is not
+   * made. Without it, an actor has the account asked for, or none, and nothing is checked.
+   */
+  readonly accountOf?: (provider: string, wanted?: AccountId) => Promise<AccountId>;
   readonly executor: Executor;
   /**
    * The providers an agent may name. Those there are, without it. An agent of a provider that
@@ -271,6 +279,7 @@ export class Engine {
   readonly #executor: Executor;
   readonly #clock: Clock;
   readonly #ids: IdSource;
+  readonly #accountOf: EngineOptions['accountOf'];
   readonly #timer: Timer;
   readonly #host: Host;
   /** The images and files of conversations, whose bytes are kept apart. */
@@ -312,6 +321,7 @@ export class Engine {
     this.#store = options.store;
     this.#executor = options.executor;
     this.#clock = options.clock ?? Date.now;
+    this.#accountOf = options.accountOf;
     this.#ids = new IdSource(options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10))));
     this.#timer = options.timer ?? wait;
     this.blobs = new Blobs({
@@ -728,7 +738,6 @@ export class Engine {
       provider: definition.provider,
       activeDeployment: activate || existing === undefined ? ref : existing.activeDeployment,
       latestDeployment: ref,
-      account: existing?.account ?? null,
       createdAt: existing?.createdAt ?? now,
     };
     try {
@@ -849,6 +858,8 @@ export class Engine {
   async createActor(given: {
     readonly agent: AgentId;
     readonly version?: number;
+    /** The model account it is given. Without it, its provider's default (see `accountOf`). */
+    readonly account?: AccountId;
     /** Without it, the default model of the agent's provider. */
     readonly modelId?: string;
     readonly reasoning?: Reasoning;
@@ -885,6 +896,7 @@ export class Engine {
       const refused = await this.machines?.refuses(given.machine.id, agent.id);
       if (refused !== undefined) throw new InvalidMachine(refused);
     }
+    const account = await this.#accountFor(agent, given.account, given.parent?.id);
     const now = this.#clock();
     const env = given.machine?.env ?? {};
     const actor: Actor = {
@@ -895,6 +907,7 @@ export class Engine {
       deployment,
       pinned: given.version !== undefined,
       behind: null,
+      account,
       modelId:
         given.modelId ??
         (this.#providers.has(definition.provider)
@@ -1436,6 +1449,25 @@ export class Engine {
     // One that was written while this was read is the newer.
     if (read !== undefined && !this.#agents.has(id)) this.#agents.set(id, read);
     return this.#agents.get(id);
+  }
+
+  /**
+   * The model account a new actor of `agent` is given: the one asked for, or, for a subagent of
+   * an actor whose agent is of the same provider, that actor's, or else the provider's default.
+   */
+  async #accountFor(
+    agent: Agent,
+    wanted: AccountId | undefined,
+    parent: ActorId | undefined,
+  ): Promise<AccountId | null> {
+    let asked = wanted;
+    if (asked === undefined && parent !== undefined) {
+      const spawner = (await this.#store.loadActor(parent))?.actor;
+      const of = spawner === undefined ? undefined : await this.#agent(spawner.agent);
+      if (spawner?.account != null && of?.provider === agent.provider) asked = spawner.account;
+    }
+    if (this.#accountOf === undefined) return asked ?? null;
+    return this.#accountOf(agent.provider, asked);
   }
 
   #deployment(id: DeploymentId): Promise<Deployment> {

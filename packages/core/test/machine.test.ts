@@ -24,6 +24,7 @@ function at(turn: Turn, said = 0, lastTurn: TurnEnd | null = null): ActorRecord 
       deployment: { id: makeId('deployment', source(3)), version: 1 },
       pinned: false,
       behind: null,
+      account: null,
       modelId: 'fake-1',
       reasoning: 'medium',
       configuration: null,

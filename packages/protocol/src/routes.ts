@@ -233,7 +233,7 @@ export const routes = defineRoutes({
   'agents.update': {
     method: 'PATCH',
     path: '/v1/agents/{agent}',
-    summary: "Makes one of an agent's deployments the active one, or gives it a model account.",
+    summary: "Makes one of an agent's deployments the active one.",
     auth: onAgent('agents:deploy'),
     params: agentParam,
     body: updateAgentRequestSchema,
@@ -327,7 +327,7 @@ export const routes = defineRoutes({
     response: createActorResponseSchema,
     status: 201,
     existing: 200,
-    errors: ['not_found', 'invalid_configuration', 'name_taken', 'unavailable'],
+    errors: ['not_found', 'invalid_configuration', 'conflict', 'name_taken', 'unavailable'],
   },
   'actors.list': {
     method: 'GET',

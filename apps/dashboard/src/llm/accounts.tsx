@@ -9,7 +9,6 @@ import { useId, useState } from 'react';
 
 import { queryClient } from '../api.ts';
 import { Dropdown } from '../ui.tsx';
-import { useAgentNames } from '../machines/agents.tsx';
 import { displayText, safeText } from '../machines/text.tsx';
 import {
   Ago,
@@ -37,13 +36,8 @@ type KeyProvider = (typeof KEY_PROVIDERS)[number];
 
 const refresh = () => void queryClient.invalidateQueries({ queryKey: keys.all });
 
-/** The agents an account was given, by name where it is known. */
-const agentsOf = (p: Account, names: ReadonlyMap<string, string>): string[] =>
-  p.agents.map((agent) => names.get(agent) ?? agent);
-
 export function AccountsPage() {
   const providers = useAccounts();
-  const names = useAgentNames();
   // What each spent in the last 30 days, beside it.
   const spent = useUsage({ by: 'account', from: rangeStart(30) });
   const costOf = new Map((spent.data?.groups ?? []).map((group) => [group.key, group.cost]));
@@ -167,7 +161,7 @@ export function AccountsPage() {
         />
       )}
       {action?.kind === 'remove' && (
-        <RemoveDialog provider={action.provider} names={names} onClose={() => setAction(null)} />
+        <RemoveDialog provider={action.provider} onClose={() => setAction(null)} />
       )}
     </div>
   );
@@ -391,15 +385,7 @@ function KeyDialog({ provider, onClose }: { provider: Account; onClose: () => vo
   );
 }
 
-function RemoveDialog({
-  provider,
-  names,
-  onClose,
-}: {
-  provider: Account;
-  names: ReadonlyMap<string, string>;
-  onClose: () => void;
-}) {
+function RemoveDialog({ provider, onClose }: { provider: Account; onClose: () => void }) {
   const remove = useMutation({
     mutationFn: () => engine.removeAccount(provider.id),
     onSuccess: () => {
@@ -407,14 +393,14 @@ function RemoveDialog({
       onClose();
     },
   });
-  const held = provider.agents.length > 0;
+  const held = provider.actors > 0;
   const secret = provider.credential === 'api_key' ? 'key' : 'sign-in';
   return (
     <Confirm
       title={`Remove ${provider.name}?`}
       sentence={
         held
-          ? `It is given to ${agentsOf(provider, names).join(', ')}: give them another account first.`
+          ? `${String(provider.actors)} ${provider.actors === 1 ? 'actor uses' : 'actors use'} it: archive or delete ${provider.actors === 1 ? 'it' : 'them'} first.`
           : provider.default
             ? `The engine forgets this account and its ${secret}. Another ${providerName(provider.provider)} account, if there is one, becomes the default. What was spent with it stays in Usage.`
             : `The engine forgets this account and its ${secret}. What was spent with it stays in Usage.`

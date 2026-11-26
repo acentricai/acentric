@@ -245,14 +245,11 @@ describe('the acentric command', () => {
 
     // A model account
     expect((await sh('acentric accounts', env)).out).toContain('The engine has no model account.');
-    // Without one, a turn fails, and the command that followed it says why and fails with it.
+    // Without one, no actor is made: it would have nothing to call its model with.
     const early = await sh('acentric actors create orders', env);
-    const [first1] = /act_\w+/.exec(early.out) ?? [];
-    const failing = await sh(`acentric actors send ${String(first1)} Hello? --follow`, env);
-    expect(failing.code).toBe(1);
-    expect(failing.out).toContain('#1 user: Hello?');
-    expect(failing.out).toContain(
-      'acentric: the turn ended failed: There is no model account for Fake: add one before its models are called',
+    expect(early.code).toBe(1);
+    expect(early.out).toContain(
+      'acentric: There is no model account for Fake: add one before creating an actor',
     );
     const refused = await sh('acentric accounts add fake main', env, 'not-a-key\n');
     expect(refused.code).toBe(1);
@@ -261,12 +258,12 @@ describe('the acentric command', () => {
     expect(account.out).toContain('Added the account main of fake, its default.');
     const accounts = await sh('acentric accounts', env);
     expect(accounts.out).toMatch(
-      /NAME\s+PROVIDER\s+DEFAULT\s+AGENTS\s+ID\nmain\s+fake\s+yes\s+0\s+acc_/,
+      /NAME\s+PROVIDER\s+DEFAULT\s+ACTORS\s+ID\nmain\s+fake\s+yes\s+0\s+acc_/,
     );
     expect(accounts.out).not.toContain(MODEL_KEY);
 
     // An actor
-    const made = await sh('acentric actors create orders --name desk', env);
+    const made = await sh('acentric actors create orders --name desk --account main', env);
     expect(made.out).toMatch(/Made the actor act_\w+ of orders v1, on fake-1\./);
     const [actor] = /act_\w+/.exec(made.out) ?? [];
     const talked = await sh('acentric actors send orders/desk Why two refunds? --follow', env);
@@ -288,9 +285,6 @@ describe('the acentric command', () => {
     expect(listed.out).toMatch(/^ID\s+AGENT\s+NAME\s+STATUS\s+LAST TURN\n/);
     expect(listed.out).toMatch(
       new RegExp(`\\n${String(actor)}\\s+orders\\s+desk\\s+idle\\s+ok\\n`),
-    );
-    expect(listed.out).toMatch(
-      new RegExp(`\\n${String(first1)}\\s+orders\\s+idle\\s+failed: There is no model account`),
     );
     expect((await sh('acentric actors --agent support', env)).out).toContain(
       'The agent support has no actors.',
@@ -318,6 +312,11 @@ describe('the acentric command', () => {
     expect((await sh('acentric secrets orders', env)).out).toContain(
       'The agent orders has no secrets.',
     );
+    // An account an actor is given is kept while the actor is.
+    const held = await sh('acentric accounts remove main', env);
+    expect(held.code).toBe(1);
+    expect(held.out).toContain('1 actor is given this account');
+    await sh(`acentric actors delete ${String(actor)} --yes`, env);
     expect((await sh('acentric accounts remove main', env)).out).toContain(
       'Removed the account main of fake.',
     );

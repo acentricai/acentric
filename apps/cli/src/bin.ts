@@ -31,7 +31,7 @@ const USAGE = `acentric: sign in to an engine, start a project of agents, deploy
   acentric accounts                       the model accounts of the engine
   acentric accounts add <provider> <name> [--key <key>] [--default]
                                           add one: a key of a model provider's
-  acentric accounts remove <name>         remove one that no agent is given
+  acentric accounts remove <name>         remove one that no live actor is given
 
   acentric secrets <agent>                the names of an agent's secrets
   acentric secrets set <agent> <NAME> [--value <value>]
@@ -40,7 +40,7 @@ const USAGE = `acentric: sign in to an engine, start a project of agents, deploy
 
   acentric actors [--agent <agent>]       the actors of the engine, or of one agent
   acentric actors create <agent> [--name <name>] [--external-id <id>] [--model <model>]
-                         [--reasoning <level>] [--configuration <json>]
+                         [--account <account>] [--reasoning <level>] [--configuration <json>]
                          [--machine <machine> [--cwd <dir>] [--env NAME=value]...]
                                           make an actor of an agent, on a machine when its
                                           agent's actors work on one
@@ -279,6 +279,7 @@ async function main(argv: readonly string[], signal: AbortSignal): Promise<void>
             name: { type: 'string' },
             'external-id': { type: 'string' },
             model: { type: 'string' },
+            account: { type: 'string' },
             reasoning: { type: 'string' },
             configuration: { type: 'string' },
             machine: { type: 'string' },
@@ -294,6 +295,7 @@ async function main(argv: readonly string[], signal: AbortSignal): Promise<void>
           name: text(values['name']),
           externalId: text(values['external-id']),
           model: text(values['model']),
+          account: text(values['account']),
           reasoning: text(values['reasoning']),
           configuration: text(values['configuration']),
           machine: text(values['machine']),

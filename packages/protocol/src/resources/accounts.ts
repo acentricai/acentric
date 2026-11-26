@@ -25,12 +25,12 @@ export const accountSchema = z
     name: nameSchema,
     /** What its calls are signed with: a key, or the token of someone signed in. Never which. */
     credential: z.enum(['api_key', 'access_token']),
-    /** Whether agents of its provider that were given no account use it. */
+    /** Whether an actor of its provider that is created without an account is given it. */
     default: z.boolean(),
-    /** Whose it is. Null for one that is the engine's, which any agent may be given. */
+    /** Whose it is. Null for one that is the engine's, which any actor may be given. */
     owner: userIdSchema.nullable(),
-    /** The agents that were given it. */
-    agents: z.array(agentIdSchema),
+    /** How many actors that are not archived were given it: while any are, it is kept. */
+    actors: z.number().int().nonnegative(),
     createdBy: principalRefSchema,
     createdAt: timestampSchema,
   })

@@ -12,7 +12,7 @@
 import { z } from 'zod';
 
 import { principalRefSchema } from '../auth.ts';
-import { accountIdSchema, agentIdSchema, deploymentIdSchema } from '../ids.ts';
+import { agentIdSchema, deploymentIdSchema } from '../ids.ts';
 import { agentDefinitionSchema, bundleManifestSchema, secretNameSchema } from '../manifest.ts';
 import { providerIdSchema } from '../messages.ts';
 import { nameSchema } from '../names.ts';
@@ -36,11 +36,6 @@ export const agentSchema = z
     activeDeployment: deploymentRefSchema,
     /** Its newest deployment. It is the active one unless another was made so. */
     latestDeployment: deploymentRefSchema,
-    /**
-     * The model account its calls are made with. Null for one that was given none: it uses
-     * its provider's default.
-     */
-    account: accountIdSchema.nullable(),
     createdAt: timestampSchema,
   })
   .meta({ id: 'Agent' });
@@ -101,15 +96,13 @@ export const deployResponseSchema = z
 export type DeployResponse = z.infer<typeof deployResponseSchema>;
 
 /**
- * What of an agent can be changed: which of its deployments is the active one, and which
- * model account its calls are made with.
+ * What of an agent can be changed: which of its deployments is the active one. The model
+ * account its calls are made with is each actor's own.
  */
 export const updateAgentRequestSchema = z
   .strictObject({
     /** The version of the deployment to make active. */
     activeVersion: z.number().int().positive().optional(),
-    /** An account of the agent's provider, or null for that provider's default. */
-    account: accountIdSchema.nullable().optional(),
   })
   .meta({ id: 'UpdateAgentRequest' });
 export type UpdateAgentRequest = z.infer<typeof updateAgentRequestSchema>;

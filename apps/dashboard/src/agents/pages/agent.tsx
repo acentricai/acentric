@@ -2,7 +2,6 @@
 
 import type {
   Actor,
-  Agent,
   CreateActorRequest,
   DeploymentSummary,
   Json,
@@ -10,28 +9,19 @@ import type {
   Secret,
 } from '@acentric/protocol';
 import { IconChevronDown, IconChevronRight, IconPlus } from '@tabler/icons-react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import {
-  Link,
-  Outlet,
-  useLocation,
-  useNavigate,
-  useParams,
-  useSearch,
-} from '@tanstack/react-router';
+import { useMutation } from '@tanstack/react-query';
+import { Outlet, useLocation, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { NOTHING, shortId, version } from '../../format.ts';
 import { useMachines } from '../../machines/queries.ts';
 import { may, useMe, type Me } from '../../me.ts';
 import {
-  ErrorToast,
   Ago,
   Button,
   Command,
   Confirm,
   Dialog,
-  Dropdown,
   Field,
   FormError,
   Label,
@@ -86,7 +76,6 @@ export function AgentLayout() {
             <div className="agent-head__facts">
               <span className="mono">{version(detail.data.latestDeployment.version)}</span>
               <span className="mono">{definition.provider}</span>
-              <AccountFact agent={detail.data} />
               <span className="chips">
                 {inputTypes(definition).map((type) => (
                   <Label key={type}>{type}</Label>
@@ -140,55 +129,6 @@ export function AgentLayout() {
       )}
     </div>
   );
-}
-
-/**
- * The model account the agent's calls are made with. A person who may give out accounts and
- * deploy agents chooses here; any other sees which it is.
- */
-function AccountFact({ agent }: { agent: Agent }) {
-  const me = useMe();
-  const manages = holds(me.data, 'accounts:manage') && holds(me.data, 'agents:deploy');
-  const accounts = useAccounts(manages);
-  const assign = useMutation({
-    mutationFn: (id: string | null) => engine.assignAccount(agent.id, id),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(keys.agent(agent.id), updated);
-      void queryClient.invalidateQueries({ queryKey: ['accounts'] });
-    },
-  });
-  if (!manages) {
-    return agent.account === null ? null : <span className="mono">{agent.account}</span>;
-  }
-  const own = (accounts.data?.items ?? []).filter((one) => one.provider === agent.provider);
-  const fallback = own.find((one) => one.default);
-  if (accounts.data === undefined) return null;
-  if (own.length === 0) {
-    return (
-      <Link to={'/llm-providers' as never} className="note--warn">
-        no {agent.provider} account: add one
-      </Link>
-    );
-  }
-  const options = [
-    { value: '', label: fallback === undefined ? 'Default: none' : `Default: ${fallback.name}` },
-    ...own.map((one) => ({ value: one.id as string, label: one.name })),
-  ];
-  return (
-    <span className="agent-llm">
-      <Dropdown
-        label="LLM provider"
-        value={agent.account ?? ''}
-        options={options}
-        onChange={(value) => assign.mutate(value === '' ? null : value)}
-      />
-      <ErrorToast error={assign.error} />
-    </span>
-  );
-}
-
-function useAccounts(enabled: boolean) {
-  return useQuery({ queryKey: ['accounts', 'list'], queryFn: () => engine.accounts(), enabled });
 }
 
 // Actors

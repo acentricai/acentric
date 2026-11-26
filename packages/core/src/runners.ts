@@ -36,8 +36,8 @@ export function providerRunners(
 
 /**
  * A source of runners from an engine's model accounts: an actor's model is called with the
- * account its agent was given, or with its provider's default.
+ * account it was given when it was created.
  */
 export function accountRunners(accounts: Accounts): RunnerSource {
-  return (actor) => accounts.access(actor.agent);
+  return (actor, definition) => accounts.access(actor, definition.provider);
 }

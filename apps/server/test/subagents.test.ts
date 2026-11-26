@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { calls, says } from '@acentric/ai/testing';
 
-import { api, refusal } from './api.ts';
+import { OTHER_MODEL_KEY, api, refusal } from './api.ts';
 
 /** A server with a lead that has spawned a worker, of another agent, and sent it a message. */
 async function withTree() {
@@ -46,6 +46,29 @@ describe('the actors an actor spawned', () => {
     const said = await admin.call('messages.list', { params: { actor: worker.id }, query: {} });
     expect(said.items).toHaveLength(2);
     expect(failures).toEqual([]);
+  });
+
+  it('are given the account of the actor that spawned them, of the same provider', async () => {
+    const one = await api([
+      calls({ id: 'c1', name: 'spawn_agent', arguments: { agent: 'billing', name: 'worker' } }),
+      says('Spawned.'),
+    ]);
+    const { admin, deploy, say, engine, account } = one;
+    const own = await admin.call('accounts.create', {
+      body: { provider: 'fake', name: 'own', apiKey: OTHER_MODEL_KEY },
+    });
+    const lead = await deploy('lead', 'lead@1');
+    await deploy('billing', 'billing@1');
+    const { actor } = await admin.call('actors.create', {
+      params: { agent: lead.agent.id },
+      body: { account: own.id },
+    });
+    await say(actor.id, 'Bill order 4411.');
+    await engine.settled();
+    const [worker] = (await admin.call('actors.subagents', { params: { actor: actor.id } })).items;
+    // Not the provider's default: the one its spawner was given.
+    expect(account?.id).not.toBe(own.id);
+    expect(worker?.account).toBe(own.id);
   });
 
   it('are stopped with it, and the answer says which', async () => {

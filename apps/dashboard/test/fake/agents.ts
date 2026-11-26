@@ -65,6 +65,7 @@ export function actorFor(agent: Agent, n: number, more: Partial<Actor> = {}): Ac
     deployment: agent.activeDeployment,
     pinned: false,
     behind: null,
+    account: null,
     modelId: 'gpt-6.2-sol',
     reasoning: 'medium',
     configuration: null,
@@ -330,7 +331,6 @@ export function agentsArea(shared: Shared) {
         provider: definitionOf().provider,
         activeDeployment: ref,
         latestDeployment: ref,
-        account: null,
         createdAt: NOW - 86_400_000,
       };
       agents.push(agent);

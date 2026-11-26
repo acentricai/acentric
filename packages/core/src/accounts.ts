@@ -1,15 +1,17 @@
 // Model accounts: what the calls of a provider's models are made with.
 //
 // An account is a key of a provider's, kept sealed. There can be several for a provider, and
-// one of them is that provider's default. An agent's calls are made with the account it was
-// given, or with its provider's default. An agent's own secrets never hold a model key.
+// one of them is that provider's default. An agent is of a provider, not of an account: each of
+// its actors is given an account of that provider when it is created, the one asked for or the
+// provider's default, and its calls are made with it for as long as it is. An agent's own
+// secrets never hold a model key.
 //
 // A key is checked with its provider when it is added or replaced: an account that is kept is
 // one its provider takes. Nothing gives a key back.
 
 import { ModelFailure } from '@acentric/ai';
 import type { Credential, ModelRunner, Providers } from '@acentric/ai';
-import type { Account, AccountId, Agent, AgentId, PrincipalRef } from '@acentric/protocol';
+import type { Account, AccountId, Actor, PrincipalRef } from '@acentric/protocol';
 
 import type { Audit } from './audit.ts';
 import { Conflict, EngineError } from './errors.ts';
@@ -174,15 +176,16 @@ export class Accounts {
   }
 
   /**
-   * Removes an account that no agent is given. When it was its provider's default, the oldest
-   * of that provider's other accounts is the default from then on.
+   * Removes an account that no actor that is not archived was given. An archived one that was
+   * keeps its ID, and uses its provider's default if it is unarchived. When it was its
+   * provider's default, the oldest of that provider's other accounts is the default from then on.
    */
   async remove(by: PrincipalRef, id: AccountId): Promise<void> {
     const stored = await this.#stored(id);
-    const agents = await this.#store.agentsOf(id);
-    if (agents.length > 0) {
+    const actors = await this.#store.actorsGiven(id);
+    if (actors > 0) {
       throw new Conflict(
-        `The agents ${agents.join(', ')} are given this account: give them another first`,
+        `${String(actors)} ${actors === 1 ? 'actor is' : 'actors are'} given this account: archive or delete ${actors === 1 ? 'it' : 'them'} first`,
       );
     }
     await this.#store.removeAccount(id);
@@ -204,47 +207,46 @@ export class Accounts {
   }
 
   /**
-   * Gives an agent an account of its provider, or with null none: its calls are then made
-   * with its provider's default.
+   * The account an actor of an agent of `provider` is to be given when it is created: the one
+   * asked for, which must be of that provider, or else the provider's default. Throws, with
+   * what to do about it, when the one asked for is none or another provider's, or the
+   * provider has no account at all.
    */
-  async give(by: PrincipalRef, agent: Agent, account: AccountId | null): Promise<Agent> {
-    if (account !== null) {
-      const stored = await this.#stored(account);
-      if (stored.account.provider !== agent.provider) {
-        throw new Conflict(
-          `The agent ${agent.name} is of the provider ${agent.provider}, and the account ${stored.account.name} of ${stored.account.provider}`,
+  async choose(provider: string, wanted?: AccountId): Promise<AccountId> {
+    const label = this.#providers.has(provider) ? this.#providers.get(provider).label : provider;
+    if (wanted !== undefined) {
+      const stored = await this.#store.loadAccount(wanted);
+      if (stored === undefined) throw new InvalidAccount(`There is no model account ${wanted}`);
+      if (stored.account.provider !== provider) {
+        throw new InvalidAccount(
+          `The account ${stored.account.name} is of ${stored.account.provider}, and the agent of ${provider}`,
         );
       }
+      return stored.account.id;
     }
-    const given = await this.#store.setAgentAccount(agent.id, account);
-    if (given === undefined) throw new Conflict(`There is no agent ${agent.id}`);
-    await this.#audit?.record({
-      by,
-      action: 'agent.account',
-      target: { type: 'agent', id: agent.id },
-      detail: { account },
-    });
-    return given;
+    const fallback = await this.#defaultOf(provider);
+    if (fallback === undefined) {
+      throw new Conflict(
+        `There is no model account for ${label}: add one before creating an actor`,
+      );
+    }
+    return fallback.account.id;
   }
 
   /**
-   * What an agent's model calls are made with: the account it was given, or its provider's
-   * default, and a runner made with that account's credential. Throws, with what to do about
-   * it, when its provider has no account.
+   * What an actor's model calls are made with: the account it was given, and a runner made with
+   * that account's credential. One that has none, made before actors were given accounts, or
+   * whose account was removed while it was archived, uses its provider's default. Throws, with
+   * what to do about it, when there is no account.
    */
-  async access(agent: AgentId): Promise<Access> {
-    const of = await this.#store.loadAgent(agent);
-    if (of === undefined) throw new Error(`There is no agent ${agent}`);
-    const provider = this.#providers.get(of.provider);
+  async access(actor: Actor, provider: string): Promise<Access> {
+    const of = this.#providers.get(provider);
     const stored =
-      of.account === null
-        ? (await this.#store.listAccounts()).find(
-            ({ account }) => account.provider === of.provider && account.default,
-          )
-        : await this.#store.loadAccount(of.account);
+      (actor.account === null ? undefined : await this.#store.loadAccount(actor.account)) ??
+      (await this.#defaultOf(provider));
     if (stored === undefined) {
       throw new Error(
-        `There is no model account for ${provider.label}: add one before its models are called`,
+        `There is no model account for ${of.label}: add one before its models are called`,
       );
     }
     const { id } = stored.account;
@@ -252,7 +254,7 @@ export class Accounts {
     if (made?.sealed !== stored.sealed) {
       const opened = this.#secrets.open(sealedFor.account(id), stored.sealed, `The account ${id}`);
       const credential = JSON.parse(opened) as Credential;
-      const runner = provider.runner({
+      const runner = of.runner({
         credential,
         ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
       });
@@ -262,6 +264,12 @@ export class Accounts {
     return { account: id, runner: made.runner };
   }
 
+  async #defaultOf(provider: string): Promise<StoredAccount | undefined> {
+    return (await this.#store.listAccounts()).find(
+      ({ account }) => account.provider === provider && account.default,
+    );
+  }
+
   async #stored(id: AccountId): Promise<StoredAccount> {
     const stored = await this.#store.loadAccount(id);
     if (stored === undefined) throw new AccountNotFound(id);
@@ -269,7 +277,7 @@ export class Accounts {
   }
 
   async #shown(stored: StoredAccount): Promise<Account> {
-    return { ...stored.account, agents: await this.#store.agentsOf(stored.account.id) };
+    return { ...stored.account, actors: await this.#store.actorsGiven(stored.account.id) };
   }
 
   #seal(id: AccountId, credential: Credential): string {

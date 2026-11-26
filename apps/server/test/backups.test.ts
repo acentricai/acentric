@@ -49,6 +49,7 @@ const actorOf = (more: Partial<Actor> = {}): Actor => ({
   deployment: { id: makeId('deployment', { now: NOW, random: randomBytes(10) }), version: 1 },
   pinned: false,
   behind: null,
+  account: null,
   modelId: 'fake-1',
   reasoning: 'medium',
   configuration: null,

@@ -336,14 +336,6 @@ export class MemoryStore implements Store {
     return [...this.#blobs.keys()];
   }
 
-  async setAgentAccount(agent: AgentId, account: AccountId | null): Promise<Agent | undefined> {
-    const there = this.#agents.get(agent);
-    if (there === undefined) return undefined;
-    const now = { ...there, account };
-    this.#agents.set(agent, now);
-    return copy(now);
-  }
-
   #accountNamed(name: string, but?: AccountId): boolean {
     return [...this.#accounts.values()].some(
       ({ account }) => account.name === name && account.id !== but,
@@ -388,10 +380,10 @@ export class MemoryStore implements Store {
     this.#accounts.delete(id);
   }
 
-  async agentsOf(account: AccountId): Promise<AgentId[]> {
-    return [...this.#agents.values()]
-      .filter((agent) => agent.account === account)
-      .map((agent) => agent.id);
+  async actorsGiven(account: AccountId): Promise<number> {
+    return [...this.#actors.values()].filter(
+      ({ actor }) => actor.account === account && actor.archivedAt === null,
+    ).length;
   }
 
   async usage(filter: UsageFilter = {}, grouping?: UsageGrouping): Promise<UsageReport> {
