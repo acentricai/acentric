@@ -253,10 +253,6 @@
   cursor: pointer;
 }
 
-.convo__call-head:hover {
-  background: var(--hover);
-}
-
 .convo__call-head > svg {
   flex: none;
 }
@@ -286,9 +282,9 @@
   color: var(--chart-4);
 }
 
-.convo__call[data-state='failed'] .convo__call-state,
-.convo__call[data-state='failed'] .convo__call-name {
-  color: var(--danger);
+/* A call that failed says so quietly: the word in a soft red, its name as any other's. */
+.convo__call[data-state='failed'] .convo__call-state {
+  color: color-mix(in srgb, var(--danger) 65%, var(--ink-muted));
 }
 
 .convo__call-body {
@@ -310,7 +306,7 @@
 }
 
 .convo__out-text[data-error] {
-  color: var(--danger);
+  color: color-mix(in srgb, var(--danger) 65%, var(--ink-muted));
 }
 
 .convo__out {
