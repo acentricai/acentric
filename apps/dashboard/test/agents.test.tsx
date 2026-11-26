@@ -209,26 +209,47 @@ describe('an agent’s Actors', () => {
     );
   });
 
-  it('archives one after asking, and offers an archived one back, or deleted', async () => {
+  it('archives one after asking, and not one that is archived already', async () => {
     const { server, orders } = withAgents();
+    const id = (server.actors[0] as Actor).id;
     open(`/agents/${orders.id}/actors`, server);
     await screen.findByRole('button', { name: 'Actions for eu-desk' });
     press('Actions for eu-desk');
-    expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+    expect(within(dialog()).getByRole('heading', { name: 'Archive actor?' })).toBeTruthy();
+    expect(dialog().textContent).toContain('eu-desk takes no input while it is archived');
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Archive' }));
     await waitFor(() =>
       expect(
         server.calls.some(
-          (call) =>
-            call.method === 'POST' &&
-            call.path === `/v1/actors/${(server.actors[0] as Actor).id}/archive`,
+          (call) => call.method === 'POST' && call.path === `/v1/actors/${id}/archive`,
         ),
       ).toBe(true),
     );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     press('Actions for old-desk');
-    expect(await screen.findByRole('menuitem', { name: 'Unarchive' })).toBeTruthy();
+    expect(
+      ((await screen.findByRole('menuitem', { name: 'Archive' })) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeTruthy();
+  });
+
+  it('deletes one after asking, archiving it first when it is not', async () => {
+    const { server, orders } = withAgents();
+    const id = (server.actors[0] as Actor).id;
+    open(`/agents/${orders.id}/actors`, server);
+    await screen.findByRole('button', { name: 'Actions for eu-desk' });
+    press('Actions for eu-desk');
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    expect(within(dialog()).getByRole('heading', { name: 'Delete actor?' })).toBeTruthy();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Delete' }));
+    await waitFor(() =>
+      expect(
+        server.calls
+          .filter((call) => call.path.startsWith(`/v1/actors/${id}`) && call.method !== 'GET')
+          .map((call) => `${call.method} ${call.path.slice(`/v1/actors/${id}`.length)}`),
+      ).toEqual(['POST /archive', 'DELETE ']),
+    );
   });
 
   it('has nothing to make or change for one who may only read', async () => {
