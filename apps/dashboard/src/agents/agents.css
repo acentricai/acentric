@@ -9,9 +9,12 @@
 
 /* ---------- Agents list ---------- */
 
-.agents-list td {
-  vertical-align: middle;
+.agents-page td {
   white-space: nowrap;
+}
+
+.agents-page a.ac-table__name {
+  text-decoration: none;
 }
 
 .agent-page .release-cell {
