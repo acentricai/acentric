@@ -14,9 +14,9 @@ import {
   AgentDashboard,
   DeploymentsPage,
   OverviewPage,
-  SecretsPage,
   SettingsPage,
 } from './pages/dashboard.tsx';
+import { SecretsPage } from './pages/secrets.tsx';
 import { actorSearch, actorsSearch, deploymentsSearch } from './url.ts';
 
 /**
