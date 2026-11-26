@@ -158,6 +158,25 @@ describe('an agent’s Deployments', () => {
     await waitFor(() => expect(page.where()).toBe(`/agents/${orders.id}/deployments`));
   });
 
+  it('links a subagent to its agent’s page, in a new tab', async () => {
+    const server = signedIn();
+    const billing = area(server).agent('billing', 1);
+    const orders = area(server).agent('orders', 2, [
+      definitionOf({
+        subagents: [
+          { agent: 'billing', description: 'Answers billing questions.', creates: false },
+        ],
+      }),
+    ]);
+    open(`/agents/${orders.id}/deployments?v=1&tab=subagents`, server);
+    const link = await within(await screen.findByRole('dialog')).findByRole('link', {
+      name: 'billing',
+    });
+    expect(link.getAttribute('href')).toBe(`/agents/${billing.id}`);
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener');
+  });
+
   it('shows the code, as it was deployed, in its Raw tab', async () => {
     const { server, orders } = withAgents();
     open(`/agents/${orders.id}/deployments`, server);
