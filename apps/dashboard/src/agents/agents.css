@@ -116,14 +116,18 @@
 
 /* ---------- An actor's page ---------- */
 
-/* Its conversation, and beside it a sidebar of what it is: 65% and 35%, the sidebar sticking
-   while the conversation scrolls. One column on a narrow screen, the sidebar first. */
-/* The page fills the window under the top bar: only its conversation scrolls. */
+/* Its conversation, and beside it a sidebar of what it is, split by a line the height of the
+   window that moves to resize them: each scrolls on its own, its scrollbar at its edge. One
+   column on a narrow screen, the sidebar first. */
+.page:has(.actor-page) {
+  width: 100%;
+  padding: 0;
+}
+
 .actor-page {
   display: grid;
-  grid-template-columns: minmax(0, 65fr) minmax(260px, 35fr);
-  gap: 32px;
-  height: calc(100dvh - var(--bar-h) - 80px);
+  grid-template-columns: minmax(360px, var(--split, 65%)) 1px minmax(260px, 1fr);
+  height: calc(100dvh - var(--bar-h));
 }
 
 .actor-page__main {
@@ -131,10 +135,35 @@
   min-height: 0;
 }
 
-.actor-page__main > .convo {
+.actor-page__main > .convo,
+.actor-page__main > .convo__loading {
   height: 100%;
   overflow-y: auto;
-  padding-right: 8px;
+  padding: 40px 32px 48px 40px;
+}
+
+.actor-split {
+  position: relative;
+  background: var(--divider);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* A wider place to take hold of it than the line. */
+.actor-split::before {
+  position: absolute;
+  inset: 0 -4px;
+  content: '';
+}
+
+.actor-split:hover,
+.actor-split[data-dragging] {
+  background: var(--focus);
+}
+
+.actor-split:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
 }
 
 .actor-side {
@@ -144,8 +173,7 @@
   display: grid;
   gap: 20px;
   min-width: 0;
-  padding-left: 24px;
-  border-left: 1px solid var(--divider);
+  padding: 40px 24px;
 }
 
 /* Its tabs, across the top of the sidebar: the chosen one underlined. */
@@ -361,16 +389,25 @@
     height: auto;
   }
 
-  .actor-page__main > .convo {
+  .page:has(.actor-page) {
+    padding: 24px;
+  }
+
+  .actor-page__main > .convo,
+  .actor-page__main > .convo__loading {
     height: auto;
     overflow-y: visible;
+    padding: 0;
+  }
+
+  .actor-split {
+    display: none;
   }
 
   .actor-side {
     overflow-y: visible;
     order: -1;
-    padding-left: 0;
-    border-left: 0;
+    padding: 0 0 24px;
   }
 }
 

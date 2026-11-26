@@ -5,7 +5,14 @@ import type { Actor, Task } from '@acentric/protocol';
 import { IconChevronRight } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
-import { useState, type ReactNode } from 'react';
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react';
 
 import { JsonCode } from '../../code.tsx';
 
@@ -42,16 +49,31 @@ export function ActorPage() {
   const { actor: id } = useParams({ strict: false }) as { actor: string };
   const actor = useActor(id);
   const [tab, setTab] = useState<SideTab>('overview');
+  const split = useSplit();
 
   if (isApiError(actor.error, 404)) {
     return <p className="table-empty">{NOT_FOUND}</p>;
   }
   const info = actor.data;
   return (
-    <div className="actor-page">
+    <div className="actor-page" ref={split.page} style={split.style}>
       <div className="actor-page__main">
         {info !== undefined && <Conversation key={id} actor={id} />}
       </div>
+      <div
+        className="actor-split"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the conversation"
+        aria-valuemin={MIN_SPLIT}
+        aria-valuemax={MAX_SPLIT}
+        aria-valuenow={Math.round(split.share)}
+        tabIndex={0}
+        data-dragging={split.dragging || undefined}
+        onPointerDown={split.onPointerDown}
+        onKeyDown={split.onKeyDown}
+        onDoubleClick={split.reset}
+      />
       <aside className="actor-side" aria-label="About the actor">
         <div className="actor-tabs" role="tablist" aria-label="About the actor">
           {TABS.map((one) => (
@@ -97,6 +119,67 @@ export function ActorPage() {
       </aside>
     </div>
   );
+}
+
+/** How much of the page, in percent, the conversation takes; the sidebar the rest. */
+const SPLIT = 65;
+const MIN_SPLIT = 35;
+const MAX_SPLIT = 80;
+const SPLIT_KEY = 'acentric.actor-split';
+
+function savedSplit(): number {
+  try {
+    const saved = Number(localStorage.getItem(SPLIT_KEY));
+    return saved >= MIN_SPLIT && saved <= MAX_SPLIT ? saved : SPLIT;
+  } catch {
+    return SPLIT;
+  }
+}
+
+/** The line between the conversation and the sidebar: dragged, or moved by the arrow keys. */
+function useSplit() {
+  const page = useRef<HTMLDivElement>(null);
+  const [share, setShare] = useState(savedSplit);
+  const [dragging, setDragging] = useState(false);
+  const set = (next: number) => {
+    const clamped = Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, next));
+    setShare(clamped);
+    try {
+      localStorage.setItem(SPLIT_KEY, String(clamped));
+    } catch {
+      // Kept for this page only.
+    }
+  };
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const box = page.current?.getBoundingClientRect();
+    if (box === undefined || event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    setDragging(true);
+    const move = (moved: globalThis.PointerEvent) =>
+      set(((moved.clientX - box.left) / box.width) * 100);
+    const up = () => {
+      setDragging(false);
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 10 : 2;
+    if (event.key === 'ArrowLeft') set(share - step);
+    else if (event.key === 'ArrowRight') set(share + step);
+    else if (event.key === 'Home') set(MIN_SPLIT);
+    else if (event.key === 'End') set(MAX_SPLIT);
+    else return;
+    event.preventDefault();
+  };
+  const style = { '--split': `${String(share)}%` } as CSSProperties;
+  return { page, share, dragging, style, onPointerDown, onKeyDown, reset: () => set(SPLIT) };
 }
 
 /** What it is, and what it and the actors under it cost. */
