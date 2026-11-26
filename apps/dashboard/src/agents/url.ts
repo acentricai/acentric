@@ -28,12 +28,13 @@ export function actorsSearch(raw: Raw): ActorsSearch {
   return { cursor: text(raw['cursor']), status: STATUSES.find((value) => value === status) };
 }
 
-export type DeploymentsSearch = { v?: number | undefined };
+/** The opened version, and which of its tabs (`?v=2&tab=tools`); its first without one. */
+export type DeploymentsSearch = { v?: number | undefined; tab?: string | undefined };
 
 export function deploymentsSearch(raw: Raw): DeploymentsSearch {
   const v = text(raw['v']);
   const n = v !== undefined && /^\d+$/.test(v) ? Number(v) : undefined;
-  return { v: n };
+  return { v: n, tab: n === undefined ? undefined : text(raw['tab']) };
 }
 
 export type ActorSearch = { all?: boolean | undefined };

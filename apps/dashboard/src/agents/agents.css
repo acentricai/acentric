@@ -53,12 +53,65 @@
   outline-offset: 2px;
 }
 
-/* A version's code: long, so it scrolls inside the dialog, its copy button staying put. */
-.deployment-source .json__code {
-  max-height: min(60vh, 640px);
+/* A deployment's parts: each thing declared, its name and marks, what it is for, its schema. */
+.decl-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.decl {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.decl:first-child {
+  padding-top: 0;
+}
+
+.decl:last-child {
+  border-bottom: 0;
+}
+
+.decl__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.decl__name {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.decl__text {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.decl-prose {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* A deployment's page: its heading, then what it declares, closer than Settings' groups. */
+.deployment-page {
+  gap: 16px;
+}
+
+/* The bundle is long: it scrolls inside the page, its copy button staying put. */
+.deployment-page .code .json__code {
+  max-height: calc(100dvh - 220px);
   overflow: auto;
-  font-variant-ligatures: none;
-  white-space: pre;
 }
 
 /* ---------- Agent page ---------- */
@@ -105,13 +158,13 @@
   text-align: left;
 }
 
-:is(.agent-page, .deployment-facts) .facts {
+.agent-page .facts {
   display: grid;
   gap: 12px;
   margin: 0;
 }
 
-:is(.agent-page, .deployment-facts) .facts > div {
+.agent-page .facts > div {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   gap: var(--space-3);
@@ -120,11 +173,11 @@
   line-height: 20px;
 }
 
-:is(.agent-page, .deployment-facts) .facts dt {
+.agent-page .facts dt {
   color: var(--ink-muted);
 }
 
-:is(.agent-page, .deployment-facts) .facts dd {
+.agent-page .facts dd {
   margin: 0;
   min-width: 0;
 }
@@ -307,7 +360,7 @@
     content: none;
   }
 
-  :is(.agent-page, .deployment-facts) .facts > div {
+  .agent-page .facts > div {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
   }
