@@ -145,7 +145,7 @@ export function ActorPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['actors'] });
       queryClient.removeQueries({ queryKey: keys.actor(id) });
-      void navigate({ to: info === undefined ? '/agents' : agentPath(info.agent) });
+      void navigate({ to: info === undefined ? '/agents' : agentPath(info.agent, 'actors') });
     },
   });
   const closeDialog = () => {
@@ -734,7 +734,7 @@ function Going({ info }: { info: Actor }) {
     {
       name: 'Actor',
       cell: (actor) => (
-        <ActorLink actor={actor.id} className="agent-actor-link mono">
+        <ActorLink actor={actor.id} agent={actor.agent} className="agent-actor-link mono">
           {actor.id}
         </ActorLink>
       ),

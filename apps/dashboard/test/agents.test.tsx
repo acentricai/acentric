@@ -181,7 +181,7 @@ describe('an agent’s Actors', () => {
       target: { value: '~/work' },
     });
     fireEvent.click(within(form).getByRole('button', { name: 'New actor' }));
-    await waitFor(() => expect(page.where()).toMatch(/^\/actors\/act_/));
+    await waitFor(() => expect(page.where()).toMatch(/^\/agents\/agt_\w+\/actors\/act_/));
     const created = server.calls.find(
       (call) => call.method === 'POST' && call.path === `/v1/agents/${worker.id}/actors`,
     );
@@ -638,6 +638,15 @@ describe('an actor’s page', () => {
         ),
       ).toBe(true),
     );
+  });
+
+  it('is among its agent’s Actors: its ID alone goes there, keeping what was asked', async () => {
+    const { server, orders } = withAgents();
+    const actor = idOf('act', 1);
+    const page = open(`/actors/${actor}?all=1`, server);
+    await waitFor(() => expect(page.where()).toBe(`/agents/${orders.id}/actors/${actor}?all=true`));
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    await waitFor(() => expect(crumbs.textContent).toBe(`Agents/orders/Actors/${actor}`));
   });
 
   it('says it is not there for an ID of none', async () => {
