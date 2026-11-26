@@ -14,6 +14,17 @@
   animation: rise 400ms var(--ease-reveal) both;
 }
 
+/* Online or running: a small, still green dot. */
+.ac-status--online {
+  color: var(--ink);
+}
+
+.ac-status--online .ac-status__dot {
+  width: 6px;
+  height: 6px;
+  background: var(--ok);
+}
+
 .machine-status,
 .machine-daemon {
   display: inline-flex;

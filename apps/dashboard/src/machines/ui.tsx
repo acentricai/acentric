@@ -247,7 +247,7 @@ type Tone = 'running' | 'idle';
 /** A dot and its word, never a dot alone. */
 export function Status({ word, tone }: { word: string; tone: Tone }) {
   return (
-    <span className={`ac-status ${tone === 'running' ? 'ac-status--active' : 'ac-status--idle'}`}>
+    <span className={`ac-status ${tone === 'running' ? 'ac-status--online' : 'ac-status--idle'}`}>
       <span className="ac-status__dot" aria-hidden="true" />
       {displayText(word)}
     </span>
