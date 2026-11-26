@@ -1,7 +1,7 @@
 // The Agents pages, from a person's side, against a stand-in for the server: the agents, an
 // agent's actors, deployments and secrets, and an actor's page with its conversation.
 
-import type { Role } from '@acentric/protocol';
+import type { Account, Role } from '@acentric/protocol';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -288,6 +288,71 @@ describe('an agent’s Secrets', () => {
     open(`/agents/${orders.id}`, server);
     await screen.findByRole('link', { name: 'Deployments' });
     expect(screen.queryByRole('link', { name: 'Secrets' })).toBeNull();
+  });
+});
+
+describe('an agent’s Settings', () => {
+  const accountOf = (id: number, provider: string, more: Partial<Account> = {}): Account => ({
+    id: `acc_${String(id).padStart(26, '0')}` as Account['id'],
+    provider,
+    name: `account ${String(id)}`,
+    credential: 'api_key',
+    default: false,
+    owner: null,
+    agents: [],
+    createdBy: { type: 'user', id: 'usr_1' as never },
+    createdAt: 1_795_305_600_000,
+    ...more,
+  });
+
+  it('says what it is, and gives it one of its provider’s accounts', async () => {
+    const { server, orders } = withAgents();
+    server.areas.llm.accounts.push(
+      accountOf(1, orders.provider, { name: 'main', default: true }),
+      accountOf(2, orders.provider, { name: 'team' }),
+      accountOf(3, 'not-its-provider', { name: 'other' }),
+    );
+    open(`/agents/${orders.id}/settings`, server);
+    await screen.findByRole('heading', { name: 'General' });
+    const main = screen.getByRole('main');
+    expect(within(main).getByText(orders.id)).toBeTruthy();
+    expect(within(main).getByText('orders')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /Account/ }));
+    expect(screen.getByRole('menuitemradio', { name: 'Default: main' })).toBeTruthy();
+    expect(screen.queryByRole('menuitemradio', { name: 'other' })).toBeNull();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'team' }));
+    await waitFor(() =>
+      expect(
+        server.calls.find(
+          (call) => call.method === 'PATCH' && call.path === `/v1/agents/${orders.id}`,
+        )?.body,
+      ).toEqual({ account: accountOf(2, orders.provider).id }),
+    );
+  });
+
+  it('deletes it once its name is typed, and goes back to the agents', async () => {
+    const { server, orders } = withAgents();
+    const page = open(`/agents/${orders.id}/settings`, server);
+    await screen.findByRole('button', { name: 'Delete agent' });
+    press('Delete agent');
+    fireEvent.change(within(dialog()).getByLabelText('Type orders to confirm'), {
+      target: { value: 'orders' },
+    });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Delete agent' }));
+    await waitFor(() => expect(page.where()).toBe('/agents'));
+    expect(
+      server.calls.some(
+        (call) => call.method === 'DELETE' && call.path === `/v1/agents/${orders.id}`,
+      ),
+    ).toBe(true);
+  });
+
+  it('has nothing to change for one who does not deploy agents', async () => {
+    const { server, orders } = withAgents('viewer');
+    open(`/agents/${orders.id}/settings`, server);
+    await screen.findByRole('heading', { name: 'General' });
+    expect(screen.getByText('Its provider’s default')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Delete agent' })).toBeNull();
   });
 });
 

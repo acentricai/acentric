@@ -114,6 +114,14 @@
   overflow: auto;
 }
 
+/* ---------- Settings ---------- */
+
+.agent-settings__id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ---------- Agent page ---------- */
 
 .agent-page .agent-head {

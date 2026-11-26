@@ -190,14 +190,23 @@ export function AgentsPage() {
 }
 
 /** Deletes an agent with its actors, once its name is typed. */
-function DeleteAgent({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+export function DeleteAgent({
+  agent,
+  onClose,
+  onDeleted = onClose,
+}: {
+  agent: Agent;
+  onClose: () => void;
+  /** Where to go once it is deleted: it closes, without it. */
+  onDeleted?: () => void;
+}) {
   const [confirmation, setConfirmation] = useState('');
   const remove = useMutation({
     mutationFn: () => engine.deleteAgent(agent.id),
     onSuccess: () => {
       // Its actors go from every list, and from the machines it was on.
       void queryClient.invalidateQueries();
-      onClose();
+      onDeleted();
     },
   });
   return (
