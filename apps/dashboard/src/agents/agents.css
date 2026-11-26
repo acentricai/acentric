@@ -408,15 +408,6 @@
   white-space: nowrap;
 }
 
-.actor-cost__total {
-  margin: 0;
-  color: var(--ink);
-  font-size: 22px;
-  font-weight: 500;
-  line-height: 28px;
-  font-variant-numeric: tabular-nums;
-}
-
 @media (max-width: 900px) {
   .actor-page {
     grid-template-columns: minmax(0, 1fr);
