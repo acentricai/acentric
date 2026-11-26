@@ -66,6 +66,10 @@ export const deploymentSchema = deploymentSummarySchema
   .meta({ id: 'Deployment' });
 export type Deployment = z.infer<typeof deploymentSchema>;
 
+/** A deployment's code, as it was deployed: the one ES module its bundle made. */
+export const deploymentCodeSchema = z.object({ code: z.string() }).meta({ id: 'DeploymentCode' });
+export type DeploymentCode = z.infer<typeof deploymentCodeSchema>;
+
 /** The most code a deploy sends, in characters. */
 export const MAX_BUNDLE_SIZE = 10 * 1024 * 1024;
 

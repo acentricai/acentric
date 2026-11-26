@@ -192,6 +192,20 @@ describe('agents and their versions', () => {
       params: { agent: first.agent.id, deployment: second.deployment.id },
     });
     expect(read.definition.instructions).toBe('You are kind.');
+    // Its code, as it was deployed, is read on its own.
+    const code = await admin.call('deployments.code', {
+      params: { agent: first.agent.id, deployment: second.deployment.id },
+    });
+    expect(code).toEqual({ code: 'orders@2' });
+    // Another agent's deployment is none of this one's.
+    const billing = (await deploy('billing', 'billing@1')).agent;
+    expect(
+      await refusal(
+        admin.call('deployments.code', {
+          params: { agent: billing.id, deployment: second.deployment.id },
+        }),
+      ),
+    ).toEqual({ code: 'not_found', status: 404 });
   });
 
   it('answer a deploy 201 when something was made, and 200 when nothing was', async () => {
