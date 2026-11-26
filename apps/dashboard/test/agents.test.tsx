@@ -142,23 +142,20 @@ describe('an agent’s Actors', () => {
     ...more,
   });
 
-  it('lists them with how they stand and the account each is called with, by status', async () => {
+  it('lists them with how they stand and the account each is called with', async () => {
     const { server, orders } = withAgents();
     const main = accountOf(1, orders.provider, { name: 'main', default: true });
     server.areas.llm.accounts.push(main);
     server.actors[0] = { ...(server.actors[0] as Actor), account: main.id };
-    const page = open(`/agents/${orders.id}/actors`, server);
+    open(`/agents/${orders.id}/actors`, server);
     await screen.findByText('eu-desk');
     const row = screen.getByText('eu-desk').closest('tr') as HTMLElement;
     expect(within(row).getByText('working')).toBeTruthy();
     expect(within(row).getByText('main')).toBeTruthy();
     expect(screen.getByText('old-desk')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Status/ }));
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'archived' }));
-    await waitFor(() => expect(page.where()).toBe(`/agents/${orders.id}/actors?status=archived`));
-    await waitFor(() => expect(screen.queryByText('eu-desk')).toBeNull());
-    expect(screen.getByText('old-desk')).toBeTruthy();
+    // No filter: every one, archived too.
+    expect(screen.queryByRole('button', { name: /Status/ })).toBeNull();
   });
 
   it('makes one with the account chosen, on a machine where its agent says so, and opens it', async () => {

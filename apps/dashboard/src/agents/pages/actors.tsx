@@ -1,4 +1,4 @@
-// An agent's actors, newest first: narrowed by status, a page at a time, each opened by its name,
+// An agent's actors, newest first: a page at a time, each opened by its name,
 // archived, unarchived or deleted from its menu, and a new one made with the model account it
 // is to be called with.
 
@@ -16,7 +16,6 @@ import {
   Confirm,
   Dialog,
   Field,
-  FilterChip,
   FormError,
   LoadError,
   Menu,
@@ -31,7 +30,7 @@ import { Dropdown, Pager, Status } from '../../ui.tsx';
 import { engine, queryClient } from '../api.ts';
 import { ActorLink, actorPath, agentPath } from '../links.tsx';
 import { pageCursors, useActors, useAgent, useDeployment } from '../queries.ts';
-import { STATUSES, type ActorsSearch } from '../url.ts';
+import type { ActorsSearch } from '../url.ts';
 import { actorName, lastTurnWord, parseEnv } from './agent.tsx';
 import '../../machines/machine-pane.css';
 import '../agents.css';
@@ -53,7 +52,7 @@ export function ActorsPage() {
   const me = useMe();
   const [creating, setCreating] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
-  const actors = useActors(agent, search.status, search.cursor);
+  const actors = useActors(agent, undefined, search.cursor);
   const pages = pageCursors(search.cursor, actors.data?.nextCursor);
   const rows = actors.data?.items;
   const writes = holds(me.data, 'actors:write');
@@ -75,21 +74,6 @@ export function ActorsPage() {
           </Button>
         )}
       </PageHeader>
-      <div className="filter-bar rise">
-        <FilterChip
-          name="Status"
-          choices={STATUSES.map((status) => ({ value: status, label: status }))}
-          chosen={search.status === undefined ? [] : [search.status]}
-          // One status at a time: choosing another replaces it, and choosing it again clears it.
-          onToggle={(status) =>
-            to({
-              status: search.status === status ? undefined : (status as ActorsSearch['status']),
-              cursor: undefined,
-            })
-          }
-          onClear={() => to({ status: undefined, cursor: undefined })}
-        />
-      </div>
       {actors.isError && (
         <LoadError things="actors" error={actors.error} onRetry={() => void actors.refetch()} />
       )}
@@ -212,13 +196,7 @@ export function ActorsPage() {
           ]}
         />
       )}
-      {rows?.length === 0 && (
-        <p className="table-empty">
-          {search.status === undefined && search.cursor === undefined
-            ? 'No actors yet'
-            : 'No actors match the filters.'}
-        </p>
-      )}
+      {rows?.length === 0 && <p className="table-empty">No actors yet</p>}
       <Pager
         newer={pages.newer === null ? null : () => to({ cursor: pages.newer || undefined })}
         older={
