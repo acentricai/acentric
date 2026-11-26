@@ -189,11 +189,7 @@ function EntryView({
     switch (message.role) {
       case 'user':
         return metaOf(entry).compaction === 'summary' ? (
-          <Notice
-            title="Summary of the conversation before"
-            text={messageText(message)}
-            at={entry.createdAt}
-          />
+          <Notice title="Notice" text={messageText(message)} at={entry.createdAt} />
         ) : (
           <Said entry={entry} message={message} actor={actor} />
         );
@@ -214,11 +210,11 @@ function EntryView({
           />
         );
       case 'native':
-        return <NativeLine entry={entry} items={message.content} provider={message.provider} />;
+        return <NativeLine entry={entry} items={message.content} />;
       case 'custom':
         return (
           <Notice
-            title={message.tag}
+            title="Notice"
             text={JSON.stringify(message.data, null, 2)}
             at={entry.createdAt}
           />
@@ -431,36 +427,18 @@ function SystemLine({
 }
 
 /**
- * What one of the engine's lines is about, from the tag it opens with: `<task id="b3"
- * status="done">` is a task that ended, `<message from="worker">` another actor's message.
+ * What a notice is called under it: Notice, and the task it tells of or the actor it is from, out
+ * of the tag it opens with: `<task id="b3">`, `<message from="worker">`.
  */
 function noticeTitle(text: string): string {
   const open = /^<([a-z-]+)([^>]*)>/.exec(text.trim());
-  const tag = open?.[1];
   const attribute = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(open?.[2] ?? '')?.[1];
-  if (tag === 'task') {
-    const id = attribute('id');
-    const status = attribute('status');
-    return [`Task${id === undefined ? '' : ` ${id}`}`, status].filter(Boolean).join(' · ');
-  }
-  if (tag === 'message' || tag === 'agent') {
-    const from = attribute('from') ?? attribute('name');
-    return from === undefined ? 'From another agent' : `Message from ${from}`;
-  }
-  if (tag === 'compacted') return 'The conversation was compacted';
-  return 'Notice';
+  const of = open?.[1] === 'task' ? attribute('id') : (attribute('from') ?? attribute('name'));
+  return of === undefined || of === '' ? 'Notice' : `Notice · ${of}`;
 }
 
 /** A provider's own item: a change of reasoning, or something only it reads. */
-function NativeLine({
-  entry,
-  items,
-  provider,
-}: {
-  entry: ConversationEntry;
-  items: readonly Json[];
-  provider: string;
-}) {
+function NativeLine({ entry, items }: { entry: ConversationEntry; items: readonly Json[] }) {
   const item = items.length === 1 ? items[0] : undefined;
   const reasoning =
     typeof item === 'object' &&
@@ -476,13 +454,7 @@ function NativeLine({
   if (typeof effort === 'string') {
     return <Quiet at={entry.createdAt}>Reasoning set to {effort}</Quiet>;
   }
-  return (
-    <Notice
-      title={`An item of ${provider}’s own`}
-      text={JSON.stringify(items, null, 2)}
-      at={entry.createdAt}
-    />
-  );
+  return <Notice title="Notice" text={JSON.stringify(items, null, 2)} at={entry.createdAt} />;
 }
 
 /**
