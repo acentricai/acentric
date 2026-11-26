@@ -592,8 +592,28 @@ describe('an actor’s page', () => {
     ]);
     open(`/agents/${orders.id}/actors/${actor}`, server);
     const convo = await screen.findByLabelText('Conversation');
-    // No call to the model since: how large it came to is not known yet.
+    // No call to the model since: how large it came to is not known yet, nor how large the
+    // conversation is now.
     expect(await within(convo).findByText('Compacted')).toBeTruthy();
+    const side = screen.getByRole('complementary', { name: 'About the actor' });
+    const context = () =>
+      within(side).getByText('Context', { selector: 'dt' }).nextElementSibling?.textContent;
+    await waitFor(() => expect(context()).toBe('—'));
+    // The next call says both: what it was sent, and with what it wrote back, how large it is.
+    area(server).say(actor, {
+      seq: 2,
+      createdAt: at + 2,
+      message: {
+        role: 'assistant',
+        provider: 'openai',
+        api: 'openai-responses',
+        model: 'gpt-6.2-sol',
+        content: [{ type: 'message', content: [{ type: 'output_text', text: 'Hi.' }] }],
+      },
+      completion: { stopReason: 'stop', usage: { totalInput: 5_600, output: 650 } },
+    });
+    expect(await within(convo).findByText('Compacted from 182k to 5.6k tokens')).toBeTruthy();
+    await waitFor(() => expect(context()).toBe('6.3k tokens'));
   });
 
   it('draws its conversation as it grows: what it was sent, what the model said and called, and notices', async () => {
