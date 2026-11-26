@@ -257,7 +257,15 @@ export function agentsArea(shared: Shared) {
       return json(204, null);
     }
     if (method === 'PATCH' && rest === '') {
-      Object.assign(agent, call.body);
+      const { activeVersion, ...changes } = call.body as { activeVersion?: number };
+      if (activeVersion !== undefined) {
+        const chosen = deployments.find(
+          (one) => one.agent === agent.id && one.version === activeVersion,
+        );
+        if (chosen === undefined) return refused(409, 'conflict', 'There is no such version');
+        agent.activeDeployment = { id: chosen.id, version: chosen.version };
+      }
+      Object.assign(agent, changes);
       return json(200, agent);
     }
     if (method === 'GET' && rest === '/deployments') {
@@ -273,6 +281,13 @@ export function agentsArea(shared: Shared) {
       return found === undefined
         ? refused(404, 'not_found', 'There is no such deployment')
         : json(200, found);
+    }
+    const code = /^\/deployments\/([^/]+)\/code$/.exec(rest);
+    if (method === 'GET' && code !== null) {
+      const found = deployments.find((one) => one.id === code[1]);
+      return found === undefined
+        ? refused(404, 'not_found', 'There is no such deployment')
+        : json(200, { code: `export default 'v${found.version}';` });
     }
     if (method === 'GET' && rest === '/secrets') {
       return json(200, { items: secrets.get(agent.id) ?? [] });

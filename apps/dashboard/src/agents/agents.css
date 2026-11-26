@@ -53,6 +53,14 @@
   outline-offset: 2px;
 }
 
+/* A version's code: long, so it scrolls inside the dialog, its copy button staying put. */
+.deployment-source .json__code {
+  max-height: min(60vh, 640px);
+  overflow: auto;
+  font-variant-ligatures: none;
+  white-space: pre;
+}
+
 /* ---------- Agent page ---------- */
 
 .agent-page .agent-head {
