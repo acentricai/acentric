@@ -128,6 +128,22 @@ describe('an agent’s own dashboard', () => {
   });
 });
 
+describe('an agent’s Deployments', () => {
+  it('lists them newest first, says which is active, and opens what one declares', async () => {
+    const { server, orders } = withAgents();
+    const page = open(`/agents/${orders.id}/deployments`, server);
+    await screen.findByText('active');
+    expect(cells('Deployments').map((text) => text?.replace('active', ''))).toEqual(['v2', 'v1']);
+    fireEvent.click(screen.getByRole('button', { name: 'v2' }));
+    expect(await within(await screen.findByRole('dialog')).findByText('lookup_order')).toBeTruthy();
+    expect(within(dialog()).getByText('code mode')).toBeTruthy();
+    expect(within(dialog()).getByText('You answer questions about orders.')).toBeTruthy();
+    expect(page.where()).toBe(`/agents/${orders.id}/deployments?v=2`);
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(page.where()).toBe(`/agents/${orders.id}/deployments`));
+  });
+});
+
 describe('an agent’s Secrets', () => {
   const putOf = (server: ReturnType<typeof fakeServer>, agent: string, name: string) =>
     server.calls.find(

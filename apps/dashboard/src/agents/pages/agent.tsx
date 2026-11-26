@@ -687,7 +687,7 @@ export function DeploymentsTab() {
 }
 
 /** What a version said of itself when it was deployed: data, descriptions included. */
-function Declares({ agent, deployment }: { agent: string; deployment: string }) {
+export function Declares({ agent, deployment }: { agent: string; deployment: string }) {
   const detail = useDeployment(agent, deployment);
   // A subagent is named by its agent's name: its page is found by that.
   const agents = useAgents();

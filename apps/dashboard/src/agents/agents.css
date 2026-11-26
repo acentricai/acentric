@@ -27,6 +27,32 @@
   white-space: nowrap;
 }
 
+/* ---------- Deployments ---------- */
+
+.deployments-page td {
+  white-space: nowrap;
+}
+
+.deployment-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A version opens what it declared: text, not a button's box. */
+.deployment-version__open {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.deployment-version__open:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* ---------- Agent page ---------- */
 
 .agent-page .agent-head {
@@ -71,13 +97,13 @@
   text-align: left;
 }
 
-.agent-page .facts {
+:is(.agent-page, .deployment-facts) .facts {
   display: grid;
   gap: 12px;
   margin: 0;
 }
 
-.agent-page .facts > div {
+:is(.agent-page, .deployment-facts) .facts > div {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   gap: var(--space-3);
@@ -86,11 +112,11 @@
   line-height: 20px;
 }
 
-.agent-page .facts dt {
+:is(.agent-page, .deployment-facts) .facts dt {
   color: var(--ink-muted);
 }
 
-.agent-page .facts dd {
+:is(.agent-page, .deployment-facts) .facts dd {
   margin: 0;
   min-width: 0;
 }
@@ -273,7 +299,7 @@
     content: none;
   }
 
-  .agent-page .facts > div {
+  :is(.agent-page, .deployment-facts) .facts > div {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
   }
