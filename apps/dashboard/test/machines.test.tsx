@@ -547,7 +547,87 @@ describe('the Sandboxes pages', () => {
     await screen.findByRole('link', { name: 'personal' });
     fireEvent.click(within(await menu('personal')).getByRole('menuitem', { name: 'Remove' }));
     press('Remove', await screen.findByRole('dialog'));
-    expect(await within(dialog()).findByText("Remove this account's sandboxes first")).toBeTruthy();
+    expect(
+      await within(dialog()).findByText("Remove this account's sandboxes and templates first"),
+    ).toBeTruthy();
+  });
+
+  it('build a template in a Boat account, show what its build printed, and make a sandbox from it', async () => {
+    const server = signedIn();
+    server.providers.push({
+      id: 'prv_1' as never,
+      kind: 'boat',
+      name: 'personal',
+      account: null,
+      sandboxes: 0,
+      createdAt: 0,
+    });
+    open('/sandboxes/prv_1', server);
+    await screen.findByText('No sandboxes');
+    fireEvent.click(screen.getByRole('tab', { name: 'Templates' }));
+    expect(await screen.findByText('No templates')).toBeTruthy();
+    press('Build template');
+    const form = dialog();
+    const build = within(form).getByRole('button', { name: 'Build template' }) as HTMLButtonElement;
+    expect(build.disabled).toBe(true);
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'with-jq' } });
+    fireEvent.change(within(form).getByLabelText('Script'), {
+      target: { value: 'sudo apt-get install -y jq\n' },
+    });
+    fireEvent.click(build);
+    // The build goes on at the server: the template opens as it is building.
+    const view = await screen.findByRole('dialog', { name: 'with-jq' });
+    expect(within(view).getByText('Building')).toBeTruthy();
+    expect(within(view).getByText('Starting…')).toBeTruthy();
+    expect(
+      server.calls.find(
+        (call) => call.path === '/v1/providers/prv_1/templates' && call.method === 'POST',
+      )?.body,
+    ).toEqual({
+      name: 'with-jq',
+      script: 'sudo apt-get install -y jq\n',
+    });
+    fireEvent.click(within(view).getByRole('button', { name: 'Close' }));
+
+    // Built: a sandbox can be made from it.
+    const built = server.templates[0];
+    if (built === undefined) throw new Error('No template was built');
+    Object.assign(built, { status: 'ready', output: 'acentric-machine 0.20.0\n', finishedAt: 1 });
+    await waitFor(() => expect(within(rowOf('with-jq')).getByText('Ready')).toBeTruthy(), {
+      timeout: 4000,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'with-jq' }));
+    expect(
+      within(await screen.findByRole('dialog', { name: 'with-jq' })).getByText(
+        'acentric-machine 0.20.0',
+      ),
+    ).toBeTruthy();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Close' }));
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Sandboxes' }));
+    press('Create sandbox');
+    const create = dialog();
+    fireEvent.change(within(create).getByLabelText('Template'), { target: { value: built.id } });
+    expect(within(create).getByText(/from with-jq\./)).toBeTruthy();
+    press('Create sandbox', create);
+    await waitFor(() =>
+      expect(server.calls.find((call) => call.path === '/v1/sandboxes')?.body).toMatchObject({
+        provider: 'prv_1',
+        template: built.id,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Templates' }));
+    fireEvent.click(within(await menu('with-jq')).getByRole('menuitem', { name: 'Delete' }));
+    const confirm = await screen.findByRole('dialog');
+    expect(
+      within(confirm).getByText(
+        'This deletes the template at Boat. Sandboxes made from it are kept.',
+      ),
+    ).toBeTruthy();
+    press('Delete', confirm);
+    expect(await screen.findByText('No templates')).toBeTruthy();
+    expect(server.templates).toEqual([]);
   });
 
   it('say a sandbox’s state when its daemon is not connected', async () => {

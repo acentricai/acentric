@@ -9,7 +9,14 @@ import { agentsArea } from './fake/agents.ts';
 import { json, refused, type Person } from './fake/area.ts';
 import { engineArea } from './fake/engine.ts';
 import { llmArea } from './fake/llm.ts';
-import type { Actor, Machine, Role, Sandbox, SandboxProviderAccount } from '@acentric/protocol';
+import type {
+  Actor,
+  Machine,
+  Role,
+  Sandbox,
+  SandboxProviderAccount,
+  SandboxTemplate,
+} from '@acentric/protocol';
 
 const NOW = 1_795_305_600_000;
 
@@ -73,6 +80,7 @@ export function fakeServer() {
   const agents: { id: string; name: string }[] = [];
   const providers: SandboxProviderAccount[] = [];
   const sandboxes: Sandbox[] = [];
+  const templates: SandboxTemplate[] = [];
   const actors: Actor[] = [];
   let made = 0;
   /** What /health says: a version, and whether it is upgrading, or is not reached at all. */
@@ -289,6 +297,43 @@ export function fakeServer() {
       providers.push(added);
       return json(201, added);
     }
+    const template = /^\/v1\/providers\/([^/]+)\/templates(?:\/([^/]+))?$/.exec(path);
+    if (template !== null) {
+      const found = providers.find((each) => each.id === template[1]);
+      if (found === undefined) return refused(404, 'not_found', 'There is no such account');
+      const own = templates.filter((each) => each.provider === found.id);
+      if (method === 'GET' && template[2] === undefined) return json(200, { items: own });
+      if (method === 'POST' && template[2] === undefined) {
+        if (own.some((each) => each.name === body['name'])) {
+          return refused(
+            409,
+            'name_taken',
+            `The account has a template named ${String(body['name'])} already`,
+          );
+        }
+        made += 1;
+        const added: SandboxTemplate = {
+          id: `tpl_${String(made).padStart(26, '0')}` as SandboxTemplate['id'],
+          provider: found.id,
+          name: String(body['name']) as SandboxTemplate['name'],
+          script: String(body['script']),
+          status: 'building',
+          output: '',
+          error: null,
+          createdAt: NOW,
+          finishedAt: null,
+        };
+        templates.push(added);
+        return json(202, added);
+      }
+      const asked = own.find((each) => each.id === template[2]);
+      if (asked === undefined) return refused(404, 'not_found', 'The account has no such template');
+      if (method === 'GET') return json(200, asked);
+      if (method === 'DELETE') {
+        templates.splice(templates.indexOf(asked), 1);
+        return json(204, null);
+      }
+    }
     const provider = /^\/v1\/providers\/([^/]+)(\/sandboxes)?$/.exec(path);
     if (provider !== null) {
       const found = providers.find((each) => each.id === provider[1]);
@@ -298,7 +343,7 @@ export function fakeServer() {
       }
       if (method === 'DELETE') {
         if (sandboxes.some((each) => each.provider === found.id)) {
-          return refused(409, 'conflict', "Remove this account's sandboxes first");
+          return refused(409, 'conflict', "Remove this account's sandboxes and templates first");
         }
         providers.splice(providers.indexOf(found), 1);
         return json(204, null);
@@ -379,6 +424,7 @@ export function fakeServer() {
     agents,
     actors,
     providers,
+    templates,
     /** Each area's own state, as its file in fake/ keeps it. */
     areas: areaOf,
     sandboxes,
