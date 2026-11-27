@@ -12,10 +12,20 @@ export type ResponsesProfile = {
   readonly id: string;
   readonly label: string;
   /**
-   * Whether it compacts a conversation itself: asked with an item that ends the input, it
-   * answers with one item that stands for all of it. One that does not has none.
+   * How it compacts a conversation itself, when it does. One that does not has none.
+   *
+   *   trigger    Asked with an item that ends the input, it answers with one item that stands
+   *              for all of it.
+   *   threshold  Asked with the least threshold of its compaction on the server, it compacts
+   *              the input before it answers: the first item of the answer stands for all of
+   *              the input, and what comes after it is not part of the conversation.
    */
-  readonly compacts?: boolean;
+  readonly compacts?: 'trigger' | 'threshold';
+  /**
+   * The header the conversation's name is sent in as well as the request's cache key: the
+   * provider keeps what it has read of a conversation only for calls that name it so.
+   */
+  readonly sessionHeader?: string;
   /** Its calls are a plan's, not paid by the token. */
   readonly plan?: true;
   /** Where a response is asked for. */

@@ -19,6 +19,9 @@ function refuse(profile: ResponsesProfile, message: string): never {
 /** What ends the input of a request that asks for a compaction. */
 export const COMPACTION_TRIGGER = { type: 'compaction_trigger' };
 
+/** The least threshold of compaction on the server: any conversation worth compacting is over it. */
+export const LEAST_COMPACT_THRESHOLD = 1000;
+
 export function buildBody(step: ModelStep, profile: ResponsesProfile): JsonObject {
   const input = step.messages.flatMap((message, index) =>
     items(message, `messages[${String(index)}]`, profile),
@@ -42,16 +45,22 @@ export function buildBody(step: ModelStep, profile: ResponsesProfile): JsonObjec
     role: 'developer',
     content: [{ type: 'input_text', text: instructions ?? '' }],
   };
+  const compacting = step.compact === true ? profile.compacts : undefined;
   return {
     ...profile.options(step),
     ...(profile.streams ? { stream: true } : {}),
+    ...(compacting === 'threshold'
+      ? {
+          context_management: [{ type: 'compaction', compact_threshold: LEAST_COMPACT_THRESHOLD }],
+        }
+      : {}),
     model: step.model,
     ...(instructions === undefined || inInput ? {} : { instructions }),
     // An item that ends the input asks for the conversation to be compacted, not answered.
     input: [
       ...(inInput ? [first] : []),
       ...input,
-      ...(step.compact === true && profile.compacts === true ? [COMPACTION_TRIGGER] : []),
+      ...(compacting === 'trigger' ? [COMPACTION_TRIGGER] : []),
     ],
     ...(tools.length > 0 ? { tools } : {}),
   };

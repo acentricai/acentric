@@ -46,12 +46,16 @@ describe.each(providers.list().map((provider) => provider.id))(
         expect(recorded.step.compact).toBe(true);
         expect(sent).toEqual([recorded.request]);
         expect(answer).toEqual((recorded.expected as { answer: ModelAnswer }).answer);
-        // It answered nothing: all there is in it is the one thing that stands for the conversation.
         expect(answer.toolCalls).toEqual([]);
-        expect(provider.read(answer.message).text).toBe('');
         const left = provider.compacted?.(answer.message);
         expect(left?.content).toHaveLength(1);
         expect(left?.content[0]?.['type']).toBe('compaction');
+        // Compacted on the server before it answered, a plan's answer has what stands for the
+        // conversation first, and an answer after it that is no part of what is kept. Elsewhere
+        // it answered nothing: all there is in it is what stands for the conversation.
+        const onServer = id === 'chatgpt';
+        expect(onServer ? answer.message.content[0] : left?.content[0]).toEqual(left?.content[0]);
+        expect(provider.read(answer.message).text === '').toBe(!onServer);
         // And it is exactly as it came: it is signed, or cannot be read at all.
         expect(answer.message.content).toContainEqual(left?.content[0]);
         // The call is paid for like any other.
@@ -202,10 +206,11 @@ describe.each(providers.list().map((provider) => provider.id))(
       const failed = provider
         .runner({ credential: credentialFor(id), fetch })
         .run(recorded.step, signal());
+      // A plan says so with 400, and what it says of the model.
       await expect(failed).rejects.toMatchObject({
         kind: 'not_found',
         retryable: false,
-        status: 404,
+        status: id === 'chatgpt' ? 400 : 404,
       });
     });
   },

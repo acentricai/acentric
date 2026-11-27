@@ -1,16 +1,24 @@
 // OpenAI, on an API key, and ChatGPT, on the plan of someone signed in with ChatGPT. The two
 // are OpenAI's models at the same address, in the same format: they differ in what signs a
 // call, in what pays for it, and in that ChatGPT answers only as a stream and keeps nothing.
+//
+// What a ChatGPT plan's calls may not have, as OpenAI's "Preview limitations" for Sign in with
+// ChatGPT lists it, none of these requests has: no `max_output_tokens`, `metadata`,
+// `temperature`, `truncation`, `prompt_cache_retention`, `previous_response_id` or system
+// messages, and no files by ID. Seen on a real plan (2026-11-27): it refuses `store: true` and
+// the `compaction_trigger` and `configuration_update` items, takes `context_management`, and
+// keeps its cache only for calls with a `session-id` header.
 
 import type { JsonObject, ProviderFields } from '@acentric/protocol';
 
 import type { ModelCost, ModelInfo, ModelPricing } from '../catalog.ts';
-import { isObject } from '../json.ts';
+import type { FailureKind } from '../failure.ts';
 import { effortOf, onlyOptions, readWebSearch } from '../provider.ts';
 import type { Credential, Provider, WebSearch } from '../provider.ts';
 import type { ErrorInput, ErrorReading, ResponsesProfile } from '../responses/profile.ts';
 import { responsesProvider } from '../responses/provider.ts';
 import type { ModelStep } from '../runner.ts';
+import { chatGptSignIn } from './chatgpt-sign-in.ts';
 
 // Standard prices in US dollars for a million tokens, and limits, from OpenAI's pricing and
 // model pages, as of November 2026. The long-context prices are for the whole request once the
@@ -129,12 +137,7 @@ const SHARED = {
   instructionsInInput: true,
   options,
   hostedTools,
-  compacts: true,
   searchPrice: 0.01,
-  reasoningChange: (_model: string, reasoning: string) => ({
-    type: 'configuration_update',
-    reasoning: { effort: effortOf(LEVELS, reasoning) },
-  }),
 } as const;
 
 export const openAiProfile: ResponsesProfile = {
@@ -143,6 +146,11 @@ export const openAiProfile: ResponsesProfile = {
   label: 'OpenAI',
   modelsUrl: 'https://api.openai.com/v1/models',
   streams: false,
+  compacts: 'trigger',
+  reasoningChange: (_model: string, reasoning: string) => ({
+    type: 'configuration_update',
+    reasoning: { effort: effortOf(LEVELS, reasoning) },
+  }),
   headers(credential: Credential) {
     if (credential.type !== 'api_key') throw new TypeError('OpenAI is called with an API key');
     return { authorization: `Bearer ${credential.apiKey}` };
@@ -173,6 +181,12 @@ export const chatGptProfile: ResponsesProfile = {
   label: 'ChatGPT',
   // A plan's calls answer only as a stream, and nothing of them is kept.
   streams: true,
+  // A plan's calls take neither a `compaction_trigger` item nor a `configuration_update`: its
+  // conversations are compacted on the server, and a new reasoning level is the request's.
+  compacts: 'threshold',
+  // As Codex and pi send it: without it, a plan keeps nothing of a conversation for its next
+  // call, whatever its `prompt_cache_key` (seen 2026-11-27). OpenAI's API on a key does.
+  sessionHeader: 'session-id',
   // There is no storage of the plan's to name a file in.
   fileIds: false,
   headers(credential: Credential) {
@@ -186,21 +200,44 @@ export const chatGptProfile: ResponsesProfile = {
   plan: true,
   priceMultiplier: () => 1,
   classify(failure) {
-    const kind = failure.code ?? failure.type;
-    if (kind === 'subscription_sharing_usage_limit_exceeded' || kind === 'usage_limit_reached') {
-      const resets = isObject(failure.detail) ? failure.detail['resets_at'] : undefined;
-      const when =
-        typeof resets === 'number' ? `: it resets at ${new Date(resets * 1000).toISOString()}` : '';
-      return { kind: 'quota_exceeded', message: `The ChatGPT plan's limit is reached${when}` };
-    }
-    if (kind === 'subscription_sharing_usage_unavailable' || kind === 'usage_not_included') {
-      return {
-        kind: 'quota_exceeded',
-        message: failure.message ?? 'The ChatGPT plan does not let this application use it',
-      };
+    const code = failure.code ?? failure.type;
+    const reading = code === undefined ? undefined : PLAN_FAILURES[code];
+    if (reading !== undefined) {
+      const said = failure.message === undefined ? '' : `: ${failure.message}`;
+      return { kind: reading.kind, message: reading.message ?? `ChatGPT refused the call${said}` };
     }
     return tooLong(failure);
   },
+};
+
+/** Where a person sees and changes what the plan lets each application use. */
+const USAGE_PAGE = 'https://chatgpt.com/settings/usage';
+
+/**
+ * What the plan's own failures mean, as OpenAI's Sign in with ChatGPT documents them. A
+ * message that is left out is the provider's own.
+ */
+const PLAN_FAILURES: {
+  readonly [code: string]: { readonly kind: FailureKind; readonly message?: string };
+} = {
+  // The plan's limit, or the one the person set for this application. When it resets is not
+  // said, and is not to be guessed.
+  subscription_sharing_usage_limit_exceeded: {
+    kind: 'quota_exceeded',
+    message: `The ChatGPT plan's limit for Acentric is reached: see ${USAGE_PAGE}`,
+  },
+  subscription_sharing_user_not_eligible: {
+    kind: 'quota_exceeded',
+    message: 'This ChatGPT account or workspace may not use its plan in Acentric',
+  },
+  // For a while only: the same call is made again later.
+  subscription_sharing_usage_unavailable: { kind: 'overloaded' },
+  subscription_sharing_user_unavailable: { kind: 'overloaded' },
+  subscription_sharing_unsupported_capability: { kind: 'invalid_request' },
+  subscription_sharing_route_not_supported: { kind: 'invalid_request' },
+  subscription_sharing_invalid_user: { kind: 'auth' },
+  chatpass_v2_scope_not_authorized: { kind: 'auth' },
+  chatpass_v2_invalid_authorization_context: { kind: 'auth' },
 };
 
 export const chatgpt: Provider = responsesProvider(chatGptProfile, {
@@ -208,4 +245,5 @@ export const chatgpt: Provider = responsesProvider(chatGptProfile, {
   defaultModel: 'gpt-6.2-sol',
   bindsReasoning: true,
   parseOptions: parseOptions('ChatGPT'),
+  signIn: chatGptSignIn,
 });

@@ -230,7 +230,91 @@ describe('ChatGPT', () => {
       error: { code: 'subscription_sharing_usage_limit_exceeded', message: 'limit' },
     });
     expect(failure).toMatchObject({ kind: 'quota_exceeded', retryable: false });
-    expect(failure.message).toMatch(/plan's limit is reached/);
+    expect(failure.message).toMatch(/plan's limit for Acentric is reached/);
+    expect(failure.message).toContain('https://chatgpt.com/settings/usage');
+  });
+
+  it('reads the plan’s failures as OpenAI documents them', async () => {
+    const of = async (status: number, code: string) =>
+      failureOf('chatgpt', status, { error: { code, message: 'said' } });
+    expect(await of(503, 'subscription_sharing_usage_unavailable')).toMatchObject({
+      kind: 'overloaded',
+      retryable: true,
+    });
+    expect(await of(503, 'subscription_sharing_user_unavailable')).toMatchObject({
+      kind: 'overloaded',
+      retryable: true,
+    });
+    expect(await of(401, 'subscription_sharing_invalid_user')).toMatchObject({ kind: 'auth' });
+    expect(await of(403, 'chatpass_v2_scope_not_authorized')).toMatchObject({ kind: 'auth' });
+    expect(await of(400, 'subscription_sharing_unsupported_capability')).toMatchObject({
+      kind: 'invalid_request',
+      retryable: false,
+    });
+    expect(await of(403, 'subscription_sharing_user_not_eligible')).toMatchObject({
+      kind: 'quota_exceeded',
+      retryable: false,
+    });
+    // Before a stream opens, the plan may answer with no code at all.
+    const admission = await failureOf('chatgpt', 503, { detail: 'Direct routing is unavailable' });
+    expect(admission).toMatchObject({ kind: 'overloaded', retryable: true });
+    expect(admission.message).toBe('Direct routing is unavailable');
+  });
+
+  it('sends nothing a plan’s call may not have', async () => {
+    const { body } = await sentBy('chatgpt', step({ session: 'act_1' }));
+    for (const field of [
+      'background',
+      'conversation',
+      'max_output_tokens',
+      'max_tool_calls',
+      'metadata',
+      'previous_response_id',
+      'prompt',
+      'prompt_cache_retention',
+      'safety_identifier',
+      'temperature',
+      'top_p',
+      'truncation',
+      'user',
+    ]) {
+      expect(body).not.toHaveProperty(field);
+    }
+    const input = (body as { input: { role?: string }[] }).input;
+    expect(input.some((item) => item.role === 'system')).toBe(false);
+  });
+
+  it('names its conversation in the session-id header, which a plan keeps its cache by', async () => {
+    const { headers, body } = await sentBy('chatgpt', step({ session: 'act_1' }));
+    expect(headers['session-id']).toBe('act_1');
+    expect(body['prompt_cache_key']).toBe('act_1');
+    expect((await sentBy('chatgpt', step())).headers['session-id']).toBeUndefined();
+    // OpenAI's API on a key keeps its cache by the key alone.
+    expect(
+      (await sentBy('openai', step({ session: 'act_1' }))).headers['session-id'],
+    ).toBeUndefined();
+  });
+
+  it('keeps only the first compaction of an answer it compacted on the server', () => {
+    const chatgpt = providers.get('chatgpt');
+    const message = (content: { type: string; id: string }[]) =>
+      ({
+        role: 'assistant',
+        provider: 'chatgpt',
+        api: 'openai-responses',
+        model: 'm',
+        content,
+      }) as never;
+    const first = { type: 'compaction', id: 'cmp_1' };
+    const said = { type: 'message', id: 'msg_1' };
+    const after = { type: 'compaction', id: 'cmp_2' };
+    expect(chatgpt.compacted?.(message([first, said, after]))?.content).toEqual([first]);
+    expect(chatgpt.compacted?.(message([said]))).toBeUndefined();
+  });
+
+  it('signs in at OpenAI, where OpenAI has no sign-in', () => {
+    expect(providers.get('chatgpt').signIn).toBeDefined();
+    expect(providers.get('openai').signIn).toBeUndefined();
   });
 });
 
@@ -499,15 +583,14 @@ describe('a reasoning level changed in the middle of a conversation', () => {
       content: [],
       providerOptions: { output_config: { effort: 'high' } },
     });
-    for (const id of ['openai', 'chatgpt']) {
-      expect(providers.get(id).reasoningChange?.('gpt-6.2-sol', 'low'), id).toEqual({
-        role: 'native',
-        provider: id,
-        api: 'openai-responses',
-        content: [{ type: 'configuration_update', reasoning: { effort: 'low' } }],
-      });
-    }
-    // It takes a level only with a call.
+    expect(providers.get('openai').reasoningChange?.('gpt-6.2-sol', 'low')).toEqual({
+      role: 'native',
+      provider: 'openai',
+      api: 'openai-responses',
+      content: [{ type: 'configuration_update', reasoning: { effort: 'low' } }],
+    });
+    // They take a level only with a call: a plan refuses a `configuration_update` item.
+    expect(providers.get('chatgpt').reasoningChange).toBeUndefined();
     expect(providers.get('fireworks').reasoningChange).toBeUndefined();
   });
 
@@ -903,11 +986,20 @@ describe('a step that asks for a compaction', () => {
     ).toBeUndefined();
   });
 
-  it('is an item that ends the input at OpenAI and on a ChatGPT plan, and nothing at a provider that has none', async () => {
+  it('is an item that ends the input at OpenAI, the least threshold on a plan, and nothing at a provider that has none', async () => {
+    const atOpenAi = await sentBy('openai', step({ compact: true }));
+    expect((atOpenAi.body['input'] as unknown[]).at(-1)).toEqual({ type: 'compaction_trigger' });
+    expect(atOpenAi.body['context_management']).toBeUndefined();
+    // A plan refuses the item: its conversation is compacted on the server, before it answers.
+    const onPlan = await sentBy('chatgpt', step({ compact: true }));
+    expect(JSON.stringify(onPlan.body['input'])).not.toContain('compaction_trigger');
+    expect(onPlan.body['context_management']).toEqual([
+      { type: 'compaction', compact_threshold: 1000 },
+    ]);
     for (const id of ['openai', 'chatgpt']) {
-      const asked = await sentBy(id, step({ compact: true }));
-      expect((asked.body['input'] as unknown[]).at(-1)).toEqual({ type: 'compaction_trigger' });
-      expect(JSON.stringify((await sentBy(id, step())).body)).not.toContain('compaction_trigger');
+      const body = JSON.stringify((await sentBy(id, step())).body);
+      expect(body).not.toContain('compaction_trigger');
+      expect(body).not.toContain('context_management');
       expect(providers.get(id).compacts).toBe('all');
     }
     expect(providers.get('anthropic').compacts).toBe('older');
