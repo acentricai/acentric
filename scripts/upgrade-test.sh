@@ -47,7 +47,8 @@ trap '[ -n "$daemon" ] && kill "$daemon" 2>/dev/null; docker stop --time 60 "$na
 serve() {
   docker run --detach --rm --name "$name" --publish "127.0.0.1:$port:4000" \
     --volume "$work/data:/data" --env ACENTRIC_PUBLIC_URL="$url" \
-    --env ACENTRIC_SECRET_KEY="$secret" --env ACENTRIC_ADMIN_KEY="$key" "$1" > /dev/null
+    --env ACENTRIC_SECRET_KEY="$secret" --env ACENTRIC_ADMIN_KEY="$key" \
+    --env ACENTRIC_ANTHROPIC_API_URL=http://127.0.0.1:9998 "$1" > /dev/null
   for attempt in $(seq 1 120); do
     health=$(curl --silent --fail "$url/health" 2>/dev/null) && break
     [ "$attempt" = 120 ] && fail "$1 did not answer at $url/health"
@@ -62,6 +63,7 @@ field() { node -e "let s='';process.stdin.on('data',(d)=>s+=d).on('end',()=>cons
 kept() {
   {
     api "$url/v1/agents" | field '.items.map((a) => a.id + " " + a.name).join("\n")'
+    api "$url/v1/accounts" | field '.items.map((a) => a.id + " " + a.name).join("\n")'
     api "$url/v1/actors?agent=$agent" | field '.items.map((a) => a.id).join("\n")'
     api "$url/v1/agents/$agent/secrets" | field '.items.map((s) => s.name).join("\n")'
     api "$url/v1/machines" | field '.items.map((m) => m.id + " " + m.name).join("\n")'
@@ -80,6 +82,16 @@ acentric="$work/home/.acentric/bin/acentric"
 (cd "$work" && "$acentric" init project --agent hello > /dev/null)
 (cd "$work/project" && "$acentric" deploy)
 agent=$(api "$url/v1/agents?name=hello" | field '.items[0].id')
+# Anthropic's API is a stand-in in the server's container, which takes any key: an actor is
+# made with a model account, whose key is checked when it is added, and no model is called.
+docker exec -d "$name" node -e "$(cat "$root/deploy/anthropic-stand-in.js")"
+for attempt in $(seq 1 10); do
+  api -X POST -H 'content-type: application/json' \
+    -d '{"provider":"anthropic","name":"main","apiKey":"a-key-for-the-stand-in"}' \
+    "$url/v1/accounts" > /dev/null 2>&1 && break
+  [ "$attempt" = 10 ] && fail "no model account was added"
+  sleep 1
+done
 api -X POST -H 'content-type: application/json' -d '{}' "$url/v1/agents/$agent/actors" > /dev/null
 api -X PUT -H 'content-type: application/json' -d '{"value":"sealed by the release"}' \
   "$url/v1/agents/$agent/secrets/HELLO_KEY" > /dev/null
