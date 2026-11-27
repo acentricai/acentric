@@ -841,6 +841,25 @@ describe('the providers an engine has', () => {
     expect(() => more.add(mine)).toThrow(/already/);
   });
 
+  it('call Anthropic where they are told its API is, for tests, and at its own without', async () => {
+    const asked: string[] = [];
+    const fetch: typeof globalThis.fetch = async (input) => {
+      asked.push(String(input));
+      return new Response('{"data":[]}', { status: 200 });
+    };
+    const credential = { type: 'api_key' as const, apiKey: 'a-test-key' };
+    const elsewhere = builtInProviders({ anthropicUrl: 'http://127.0.0.1:9998/' });
+    await elsewhere.get('anthropic').check?.({ credential, fetch });
+    await providers.get('anthropic').check?.({ credential, fetch });
+    expect(asked).toEqual([
+      'http://127.0.0.1:9998/v1/models?limit=1',
+      'https://api.anthropic.com/v1/models?limit=1',
+    ]);
+    const { fetch: answered, sent } = answering(fixture('anthropic', 'text').response);
+    await elsewhere.get('anthropic').runner({ credential, fetch: answered }).run(step(), signal());
+    expect(sent[0]?.url).toBe('http://127.0.0.1:9998/v1/messages');
+  });
+
   it('each have a default model that is one of its own', () => {
     for (const provider of providers.list()) {
       expect(

@@ -10,7 +10,8 @@ import { checkCredential, post } from '../http.ts';
 import { effortOf, onlyOptions, readWebSearch, withoutTypes } from '../provider.ts';
 import type { Provider } from '../provider.ts';
 
-const URL = 'https://api.anthropic.com/v1/messages';
+/** Where Anthropic's API is. */
+export const ANTHROPIC_API_URL = 'https://api.anthropic.com';
 const VERSION = '2023-06-01';
 
 // Standard prices in US dollars for a million tokens, from Anthropic's pricing and model
@@ -70,81 +71,91 @@ export const ANTHROPIC_MODELS: readonly ModelInfo[] = [
 /** Every level is sent as itself. */
 const EFFORTS = { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' };
 
-export const anthropic: Provider = {
-  id: PROVIDER,
-  label: LABEL,
-  credentials: ['api_key'],
-  models: ANTHROPIC_MODELS,
-  defaultModel: 'claude-opus-5-5',
-  // A model that is not known here is a newer one, and the newer ones all do.
-  bindsReasoning: true,
+/**
+ * Anthropic, its API at `base`: https://api.anthropic.com, or for tests, a stand-in that answers
+ * as it does.
+ */
+export function anthropicAt(base: string): Provider {
+  const api = base.replace(/\/+$/, '');
+  return {
+    id: PROVIDER,
+    label: LABEL,
+    credentials: ['api_key'],
+    models: ANTHROPIC_MODELS,
+    defaultModel: 'claude-opus-5-5',
+    // A model that is not known here is a newer one, and the newer ones all do.
+    bindsReasoning: true,
 
-  parseOptions(given) {
-    const asked = onlyOptions(given, ['webSearch'], LABEL);
-    const search = readWebSearch(asked['webSearch'], LABEL);
-    return search === undefined ? {} : { webSearch: search as never };
-  },
+    parseOptions(given) {
+      const asked = onlyOptions(given, ['webSearch'], LABEL);
+      const search = readWebSearch(asked['webSearch'], LABEL);
+      return search === undefined ? {} : { webSearch: search as never };
+    },
 
-  runner(settings) {
-    const { credential } = settings;
-    if (credential.type !== 'api_key') throw new TypeError('Anthropic is called with an API key');
-    return {
-      async run(step, signal) {
-        const body = buildBody(step, ANTHROPIC_MODELS);
-        const betas = betasOf(body);
-        const answer = await post({
-          label: LABEL,
-          provider: PROVIDER,
-          url: URL,
-          headers: {
-            'x-api-key': credential.apiKey,
-            'anthropic-version': VERSION,
-            ...(betas.length > 0 ? { 'anthropic-beta': betas.join(',') } : {}),
-          },
-          body,
-          signal,
-          streamed: true,
-          ...(settings.fetch === undefined ? {} : { fetch: settings.fetch }),
-        });
-        if (answer.status < 200 || answer.status >= 300) throw httpFailure(answer);
-        return readAnswer(step, assemble(answer.text), ANTHROPIC_MODELS);
-      },
-    };
-  },
+    runner(settings) {
+      const { credential } = settings;
+      if (credential.type !== 'api_key') throw new TypeError('Anthropic is called with an API key');
+      return {
+        async run(step, signal) {
+          const body = buildBody(step, ANTHROPIC_MODELS);
+          const betas = betasOf(body);
+          const answer = await post({
+            label: LABEL,
+            provider: PROVIDER,
+            url: `${api}/v1/messages`,
+            headers: {
+              'x-api-key': credential.apiKey,
+              'anthropic-version': VERSION,
+              ...(betas.length > 0 ? { 'anthropic-beta': betas.join(',') } : {}),
+            },
+            body,
+            signal,
+            streamed: true,
+            ...(settings.fetch === undefined ? {} : { fetch: settings.fetch }),
+          });
+          if (answer.status < 200 || answer.status >= 300) throw httpFailure(answer);
+          return readAnswer(step, assemble(answer.text), ANTHROPIC_MODELS);
+        },
+      };
+    },
 
-  check(settings) {
-    const { credential } = settings;
-    if (credential.type !== 'api_key') throw new TypeError('Anthropic is called with an API key');
-    return checkCredential({
-      label: LABEL,
-      provider: PROVIDER,
-      url: 'https://api.anthropic.com/v1/models?limit=1',
-      headers: { 'x-api-key': credential.apiKey, 'anthropic-version': VERSION },
-      ...(settings.fetch === undefined ? {} : { fetch: settings.fetch }),
-    });
-  },
+    check(settings) {
+      const { credential } = settings;
+      if (credential.type !== 'api_key') throw new TypeError('Anthropic is called with an API key');
+      return checkCredential({
+        label: LABEL,
+        provider: PROVIDER,
+        url: `${api}/v1/models?limit=1`,
+        headers: { 'x-api-key': credential.apiKey, 'anthropic-version': VERSION },
+        ...(settings.fetch === undefined ? {} : { fetch: settings.fetch }),
+      });
+    },
 
-  withoutReasoning: (message) => withoutTypes(message, ['thinking', 'redacted_thinking']),
+    withoutReasoning: (message) => withoutTypes(message, ['thinking', 'redacted_thinking']),
 
-  // It summarizes the older part, on request: one signed block, which the recent turns follow.
-  compacts: 'older',
-  compacted(message) {
-    const blocks = message.content.filter(
-      (block) => block['type'] === 'compaction' && typeof block['content'] === 'string',
-    );
-    return blocks.length === 1 ? { ...message, content: blocks } : undefined;
-  },
+    // It summarizes the older part, on request: one signed block, which the recent turns follow.
+    compacts: 'older',
+    compacted(message) {
+      const blocks = message.content.filter(
+        (block) => block['type'] === 'compaction' && typeof block['content'] === 'string',
+      );
+      return blocks.length === 1 ? { ...message, content: blocks } : undefined;
+    },
 
-  // A system message that says nothing, and sets the effort from where it is.
-  reasoningChange: (_model, reasoning) => ({
-    role: 'system',
-    content: [],
-    providerOptions: { output_config: { effort: effortOf(EFFORTS, reasoning) } },
-  }),
+    // A system message that says nothing, and sets the effort from where it is.
+    reasoningChange: (_model, reasoning) => ({
+      role: 'system',
+      content: [],
+      providerOptions: { output_config: { effort: effortOf(EFFORTS, reasoning) } },
+    }),
 
-  read: (message) => ({
-    text: outputText(message.content),
-    reasoning: reasoningSummary(message.content),
-    toolCalls: toolCalls(message.content),
-  }),
-};
+    read: (message) => ({
+      text: outputText(message.content),
+      reasoning: reasoningSummary(message.content),
+      toolCalls: toolCalls(message.content),
+    }),
+  };
+}
+
+/** Anthropic, at its own API. */
+export const anthropic: Provider = anthropicAt(ANTHROPIC_API_URL);
