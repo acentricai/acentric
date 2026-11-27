@@ -157,6 +157,92 @@
   }
 }
 
+/* ---------- An account's tabs: its sandboxes, and its templates ---------- */
+
+.provider-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 24px 0 24px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.provider-tabs__tab {
+  position: relative;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: 500 13px/18px var(--font-sans);
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.provider-tabs__tab:hover,
+.provider-tabs__tab[aria-selected='true'] {
+  color: var(--ink);
+}
+
+.provider-tabs__tab[aria-selected='true']::after {
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ink);
+  content: '';
+}
+
+.provider-tabs__tab:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: -4px;
+}
+
+/* A template's name opens it: a button that reads as the table's link. */
+.sandboxes-page .template-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.template-script {
+  min-height: 220px;
+  resize: vertical;
+}
+
+.template-view {
+  display: grid;
+  gap: 20px;
+}
+
+.template-view__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.template-view__error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.template-view h3.ac-field__label {
+  margin: 0;
+}
+
+.template-view .json__code {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- The org's signing secret, under the machines ---------- */
 
 .signing-secret {

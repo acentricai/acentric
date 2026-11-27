@@ -1,15 +1,22 @@
 // `/sandboxes`: the engine's accounts at sandbox providers; `/sandboxes/$provider`: the
-// sandboxes of one, made and deleted from here. A sandbox is a machine like any other.
+// sandboxes of one, made and deleted from here, and its templates. A sandbox is a machine like
+// any other.
 
-import { IconArrowLeft, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconFileText, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
-import type { Sandbox, SandboxProviderAccount as Provider, SandboxState } from '@acentric/protocol';
+import type {
+  Sandbox,
+  SandboxProviderAccount as Provider,
+  SandboxState,
+  SandboxTemplate as Template,
+  SandboxTemplateStatus,
+} from '@acentric/protocol';
 
 import { queryClient } from '../api.ts';
 import { engine } from './api.ts';
-import { keys, useProviders, useSandboxes } from './queries.ts';
+import { keys, useProviders, useSandboxes, useTemplates } from './queries.ts';
 import { displayText, safeText } from './text.tsx';
 import {
   Ago,
@@ -227,7 +234,8 @@ function AddAccountDialog({ onClose }: { onClose: () => void }) {
         </Field>
         <p className="note">
           Create one with <code>boat api-key create</code>. It needs to create, read, stop, resume
-          and delete sandboxes, and read snapshots.
+          and delete sandboxes, run commands and write files in them, and save, read and delete
+          snapshots.
         </p>
       </form>
       <FormError error={add.error} />
@@ -246,7 +254,7 @@ function RemoveAccount({ provider, onClose }: { provider: Provider; onClose: () 
   return (
     <Confirm
       title={`Remove ${provider.name}?`}
-      sentence="The engine forgets this account and its API key. An account with sandboxes cannot be removed."
+      sentence="The engine forgets this account and its API key. An account with sandboxes or templates cannot be removed."
       action="Remove"
       danger
       pending={remove.isPending}
@@ -287,13 +295,24 @@ function SandboxStatus({ sandbox }: { sandbox: Sandbox }) {
   );
 }
 
-/** `/sandboxes/$provider`: the sandboxes of one provider account. */
+/** The tabs of an account's page. Templates only for a provider the engine builds them at. */
+type ProviderTab = 'sandboxes' | 'templates';
+
+/** `/sandboxes/$provider`: the sandboxes of one provider account, and its templates. */
 export function ProviderPage({ providerId }: { providerId: string }) {
   const providers = useProviders();
-  const sandboxes = useSandboxes(providerId);
-  const [creating, setCreating] = useState(false);
-  const [removing, setRemoving] = useState<Sandbox | null>(null);
   const provider = providers.data?.items.find((p) => p.id === providerId);
+  const builds = provider?.kind === 'boat';
+  const [chosen, setTab] = useState<ProviderTab>('sandboxes');
+  const tab: ProviderTab = builds ? chosen : 'sandboxes';
+  const sandboxes = useSandboxes(providerId);
+  const templates = useTemplates(providerId, builds);
+  const [creating, setCreating] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [removing, setRemoving] = useState<Sandbox | null>(null);
+  const [viewing, setViewing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<Template | null>(null);
+  const viewed = templates.data?.items.find((t) => t.id === viewing);
   return (
     <div className="list-page sandboxes-page">
       <p className="page__back rise">
@@ -302,14 +321,108 @@ export function ProviderPage({ providerId }: { providerId: string }) {
           Accounts
         </PathLink>
       </p>
-      <PageHeader title={provider?.name ?? 'Sandboxes'} spaced>
-        {provider && (
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            <IconPlus size={15} />
-            Create sandbox
-          </Button>
-        )}
+      <PageHeader title={provider?.name ?? 'Sandboxes'} spaced={!builds}>
+        {provider &&
+          (tab === 'sandboxes' ? (
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              <IconPlus size={15} />
+              Create sandbox
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={() => setBuilding(true)}>
+              <IconPlus size={15} />
+              Build template
+            </Button>
+          ))}
       </PageHeader>
+      {builds && (
+        <div className="provider-tabs rise" role="tablist" aria-label={safeText(provider.name)}>
+          {(
+            [
+              ['sandboxes', 'Sandboxes'],
+              ['templates', 'Templates'],
+            ] as const
+          ).map(([id, name]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`provider-tab-${id}`}
+              aria-selected={tab === id}
+              aria-controls={`provider-panel-${id}`}
+              className="provider-tabs__tab"
+              onClick={() => setTab(id)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div
+        {...(builds
+          ? {
+              role: 'tabpanel',
+              id: `provider-panel-${tab}`,
+              'aria-labelledby': `provider-tab-${tab}`,
+            }
+          : {})}
+      >
+        {tab === 'sandboxes' ? (
+          <SandboxesTable sandboxes={sandboxes} provider={provider} onDelete={setRemoving} />
+        ) : (
+          <TemplatesTable
+            templates={templates}
+            onView={(t) => setViewing(t.id)}
+            onDelete={setDeleting}
+          />
+        )}
+      </div>
+      {creating && provider && (
+        <CreateSandboxDialog
+          provider={provider}
+          templates={builds ? (templates.data?.items ?? []) : []}
+          onClose={() => setCreating(false)}
+        />
+      )}
+      {building && provider && (
+        <BuildTemplateDialog
+          provider={provider}
+          onClose={() => setBuilding(false)}
+          onBuilt={(t) => setViewing(t.id)}
+        />
+      )}
+      {viewed && <TemplateDialog template={viewed} onClose={() => setViewing(null)} />}
+      {deleting && (
+        <DeleteTemplate
+          key={deleting.id}
+          template={deleting}
+          kind={provider?.kind}
+          onClose={() => setDeleting(null)}
+        />
+      )}
+      {removing && (
+        <DeleteSandboxDialog
+          key={removing.machine.id}
+          sandbox={removing}
+          kind={provider?.kind}
+          onClose={() => setRemoving(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function SandboxesTable({
+  sandboxes,
+  provider,
+  onDelete,
+}: {
+  sandboxes: ReturnType<typeof useSandboxes>;
+  provider: Provider | undefined;
+  onDelete: (sandbox: Sandbox) => void;
+}) {
+  return (
+    <>
       {(sandboxes.isError || sandboxes.failureReason !== null) && (
         <LoadError
           things="sandboxes"
@@ -360,7 +473,7 @@ export function ProviderPage({ providerId }: { providerId: string }) {
                       icon={<IconTrash size={16} stroke={1.75} aria-hidden="true" />}
                       onSelect={() => {
                         close();
-                        setRemoving(s);
+                        onDelete(s);
                       }}
                     >
                       Delete
@@ -373,18 +486,266 @@ export function ProviderPage({ providerId }: { providerId: string }) {
         />
       )}
       {sandboxes.data?.items.length === 0 && <p className="table-empty">No sandboxes</p>}
-      {creating && provider && (
-        <CreateSandboxDialog provider={provider} onClose={() => setCreating(false)} />
-      )}
-      {removing && (
-        <DeleteSandboxDialog
-          key={removing.machine.id}
-          sandbox={removing}
-          kind={provider?.kind}
-          onClose={() => setRemoving(null)}
+    </>
+  );
+}
+
+const TEMPLATE_STATES: Record<SandboxTemplateStatus, string> = {
+  building: 'Building',
+  ready: 'Ready',
+  failed: 'Failed',
+};
+
+function TemplateStatus({ template }: { template: Template }) {
+  return (
+    <Status
+      word={TEMPLATE_STATES[template.status]}
+      tone={template.status === 'ready' ? 'running' : 'idle'}
+    />
+  );
+}
+
+function TemplatesTable({
+  templates,
+  onView,
+  onDelete,
+}: {
+  templates: ReturnType<typeof useTemplates>;
+  onView: (template: Template) => void;
+  onDelete: (template: Template) => void;
+}) {
+  return (
+    <>
+      {(templates.isError || templates.failureReason !== null) && (
+        <LoadError
+          things="templates"
+          error={templates.error ?? templates.failureReason}
+          retrying={templates.isFetching && templates.failureCount > 0}
+          onRetry={() => void templates.refetch()}
         />
       )}
-    </div>
+      {!templates.isError && (
+        <Table
+          label="Templates"
+          loading={templates.isPending}
+          rows={templates.data?.items}
+          rowKey={(t) => t.id}
+          columns={[
+            {
+              name: 'Name',
+              cell: (t) => (
+                <button
+                  type="button"
+                  className="ac-table__name title-link template-name"
+                  onClick={() => onView(t)}
+                >
+                  {displayText(t.name)}
+                </button>
+              ),
+            },
+            { name: 'Status', cell: (t) => <TemplateStatus template={t} /> },
+            { name: 'Created', cell: (t) => <Ago at={t.createdAt} /> },
+            {
+              name: 'Actions',
+              hidden: true,
+              className: 'ac-table__actions',
+              cell: (t) => (
+                <Menu label={`Actions for ${safeText(t.name)}`}>
+                  {(close) => (
+                    <>
+                      <MenuItem
+                        icon={<IconFileText size={16} stroke={1.75} aria-hidden="true" />}
+                        onSelect={() => {
+                          close();
+                          onView(t);
+                        }}
+                      >
+                        View
+                      </MenuItem>
+                      <MenuItem
+                        danger
+                        icon={<IconTrash size={16} stroke={1.75} aria-hidden="true" />}
+                        onSelect={() => {
+                          close();
+                          onDelete(t);
+                        }}
+                      >
+                        Delete
+                      </MenuItem>
+                    </>
+                  )}
+                </Menu>
+              ),
+            },
+          ]}
+        />
+      )}
+      {templates.data?.items.length === 0 && <p className="table-empty">No templates</p>}
+    </>
+  );
+}
+
+/** `POST /v1/providers/:provider/templates`: answered at once, while it builds. */
+function BuildTemplateDialog({
+  provider,
+  onClose,
+  onBuilt,
+}: {
+  provider: Provider;
+  onClose: () => void;
+  onBuilt: (template: Template) => void;
+}) {
+  const [name, setName] = useState('');
+  const [script, setScript] = useState('');
+  const form = useId();
+  const build = useMutation({
+    mutationFn: () => engine.buildTemplate(provider.id, name.trim(), script),
+    onSuccess: (template) => {
+      void queryClient.invalidateQueries({ queryKey: keys.templates(provider.id) });
+      onClose();
+      onBuilt(template);
+    },
+  });
+  const ready = name.trim() !== '' && script.trim() !== '';
+  return (
+    <Dialog
+      title="Build template"
+      wide
+      pending={build.isPending}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="quiet" disabled={build.isPending} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form={form}
+            variant="primary"
+            busy={build.isPending}
+            disabled={!ready}
+          >
+            Build template
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={form}
+        className="dialog-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (ready && !build.isPending) build.mutate();
+        }}
+      >
+        <Field label="Name">
+          {(id) => (
+            <input
+              id={id}
+              className="ac-input mono"
+              required
+              maxLength={63}
+              spellCheck={false}
+              placeholder="with-node"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label="Script">
+          {(id) => (
+            <textarea
+              id={id}
+              className="ac-input mono template-script"
+              required
+              rows={12}
+              spellCheck={false}
+              placeholder={'sudo apt-get update\nsudo apt-get install -y jq'}
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+            />
+          )}
+        </Field>
+      </form>
+      <FormError error={build.error} />
+    </Dialog>
+  );
+}
+
+/** A template: how its build stands, its script, and what the build printed, read as it builds. */
+function TemplateDialog({ template, onClose }: { template: Template; onClose: () => void }) {
+  // Its newest output is kept in view: where a build is, or where it ended.
+  const output = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    const pre = output.current;
+    if (pre !== null) pre.scrollTop = pre.scrollHeight;
+  }, [template.output]);
+  return (
+    <Dialog title={template.name} wide onClose={onClose}>
+      <div className="template-view">
+        <p className="template-view__status">
+          <TemplateStatus template={template} />
+          {template.finishedAt !== null && (
+            <span className="note">
+              <Ago at={template.finishedAt} />
+            </span>
+          )}
+        </p>
+        {template.error !== null && (
+          <p className="template-view__error">{displayText(template.error)}</p>
+        )}
+        <section className="ac-field">
+          <h3 className="ac-field__label">Script</h3>
+          <div className="json">
+            <pre className="json__code" dir="ltr">
+              {displayText(template.script, true)}
+            </pre>
+          </div>
+        </section>
+        <section className="ac-field">
+          <h3 className="ac-field__label">Output</h3>
+          <div className="json">
+            <pre ref={output} className="json__code template-output" dir="ltr">
+              {template.output === ''
+                ? template.status === 'building'
+                  ? 'Starting…'
+                  : '—'
+                : displayText(template.output, true)}
+            </pre>
+          </div>
+        </section>
+      </div>
+    </Dialog>
+  );
+}
+
+function DeleteTemplate({
+  template,
+  kind,
+  onClose,
+}: {
+  template: Template;
+  kind: string | undefined;
+  onClose: () => void;
+}) {
+  const remove = useMutation({
+    mutationFn: () => engine.deleteTemplate(template.provider, template.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.templates(template.provider) });
+      onClose();
+    },
+  });
+  return (
+    <Confirm
+      title={`Delete ${template.name}?`}
+      sentence={`This deletes the template at ${kind === undefined ? 'its provider' : kindText(kind)}${template.status === 'building' ? ' and stops its build' : ''}. Sandboxes made from it are kept.`}
+      action="Delete"
+      danger
+      pending={remove.isPending}
+      onClose={onClose}
+      onConfirm={() => remove.mutate()}
+      {...(remove.error ? { error: remove.error.message } : {})}
+    />
   );
 }
 
@@ -392,10 +753,21 @@ export function ProviderPage({ providerId }: { providerId: string }) {
  * `POST /v1/sandboxes`: answered once the sandbox's daemon has connected, usually
  * within seconds, or after a minute with it still connecting.
  */
-function CreateSandboxDialog({ provider, onClose }: { provider: Provider; onClose: () => void }) {
+function CreateSandboxDialog({
+  provider,
+  templates,
+  onClose,
+}: {
+  provider: Provider;
+  templates: readonly Template[];
+  onClose: () => void;
+}) {
   const [size, setSize] = useState(1);
   const [idle, setIdle] = useState(3600);
   const [name, setName] = useState('');
+  const ready = templates.filter((t) => t.status === 'ready');
+  const [template, setTemplate] = useState('');
+  const from = ready.find((t) => t.id === template);
   const form = useId();
   const create = useMutation({
     mutationFn: () =>
@@ -406,6 +778,7 @@ function CreateSandboxDialog({ provider, onClose }: { provider: Provider; onClos
         // For every agent, and any deployed later.
         agents: '*',
         ...(name.trim() === '' ? {} : { name: name.trim() }),
+        ...(from === undefined ? {} : { template: from.id }),
       }),
     onSuccess: () => {
       // A sandbox is a machine: every list of them changes.
@@ -437,6 +810,28 @@ function CreateSandboxDialog({ provider, onClose }: { provider: Provider; onClos
           if (!create.isPending) create.mutate();
         }}
       >
+        {ready.length > 0 && (
+          <Field label="Template">
+            {(id) => (
+              <span className="select">
+                <select
+                  id={id}
+                  className="ac-input"
+                  value={template}
+                  disabled={create.isPending}
+                  onChange={(e) => setTemplate(e.target.value)}
+                >
+                  <option value="">The engine's template</option>
+                  {ready.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {safeText(t.name)}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            )}
+          </Field>
+        )}
         <Field label="Size">
           {(id) => (
             <span className="select">
@@ -494,8 +889,9 @@ function CreateSandboxDialog({ provider, onClose }: { provider: Provider; onClos
             'Creating the sandbox and waiting for its daemon to connect…'
           ) : (
             <>
-              Made in {displayText(provider.name)} from the engine's template. It becomes a machine
-              actors can work on; a command sent while it is stopped wakes it.
+              Made in {displayText(provider.name)} from{' '}
+              {from === undefined ? "the engine's template" : displayText(from.name)}. It becomes a
+              machine actors can work on; a command sent while it is stopped wakes it.
             </>
           )}
         </p>

@@ -57,6 +57,20 @@ export const engine = {
       params: { provider: provider as never },
       ...(signal === undefined ? {} : { signal }),
     }),
+  templates: (provider: string, signal?: AbortSignal) =>
+    api.call('sandboxTemplates.list', {
+      params: { provider: provider as never },
+      ...(signal === undefined ? {} : { signal }),
+    }),
+  buildTemplate: (provider: string, name: string, script: string) =>
+    api.call('sandboxTemplates.create', {
+      params: { provider: provider as never },
+      body: { name, script },
+    }),
+  deleteTemplate: (provider: string, template: string) =>
+    api.call('sandboxTemplates.delete', {
+      params: { provider: provider as never, template: template as never },
+    }),
   createSandbox: (body: CreateSandboxRequest) => api.call('sandboxes.create', { body }),
   deleteSandbox: (machine: string) =>
     api.call('sandboxes.delete', { params: { machine: machine as never } }),

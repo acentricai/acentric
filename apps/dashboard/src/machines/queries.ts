@@ -10,6 +10,7 @@ export const keys = {
   machines: ['machines', 'list'] as const,
   providers: ['machines', 'providers'] as const,
   sandboxes: (providerId: string) => ['machines', 'providers', providerId, 'sandboxes'] as const,
+  templates: (providerId: string) => ['machines', 'providers', providerId, 'templates'] as const,
   agents: ['agents', 'list'] as const,
   activeActors: (agent: string) => ['actors', 'active', agent] as const,
   actor: (actor: string) => ['actors', actor] as const,
@@ -53,6 +54,21 @@ export function useSandboxes(providerId: string) {
     queryKey: keys.sandboxes(providerId),
     queryFn: ({ signal }) => engine.sandboxes(providerId, signal),
     refetchInterval: (query) => readInterval(10_000, query),
+    refetchIntervalInBackground: false,
+  });
+}
+
+/** An account's templates: read often while one of them builds, for what it prints. */
+export function useTemplates(providerId: string, enabled = true) {
+  return useQuery({
+    queryKey: keys.templates(providerId),
+    queryFn: ({ signal }) => engine.templates(providerId, signal),
+    enabled,
+    refetchInterval: (query) =>
+      readInterval(
+        query.state.data?.items.some((one) => one.status === 'building') === true ? 2_000 : 10_000,
+        query,
+      ),
     refetchIntervalInBackground: false,
   });
 }

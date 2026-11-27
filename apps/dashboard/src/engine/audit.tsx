@@ -55,6 +55,8 @@ export const ACTIONS: readonly { readonly value: string; readonly label: string 
   { value: 'machine.delete', label: 'Machine removed' },
   { value: 'sandbox_provider.create', label: 'Sandbox account added' },
   { value: 'sandbox_provider.delete', label: 'Sandbox account removed' },
+  { value: 'sandbox_template.create', label: 'Template built' },
+  { value: 'sandbox_template.delete', label: 'Template deleted' },
   { value: 'sandbox.create', label: 'Sandbox made' },
   { value: 'sandbox.delete', label: 'Sandbox deleted' },
 ];
