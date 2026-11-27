@@ -2217,6 +2217,12 @@ export function operations(db: DatabaseSync) {
       ).map((row) => ({ actor: row.id, ...(JSON.parse(row.stopping) as Stopping) }));
     },
 
+    hostId(): string {
+      const row = get<{ host_id: string }>('SELECT host_id FROM host WHERE id = 1');
+      if (row === undefined) throw new Error('The database has no host ID');
+      return row.host_id;
+    },
+
     loadBackupSettings(): StoredBackupSettings | undefined {
       const row = get<BackupSettingsRow>('SELECT * FROM backup_settings WHERE id = 1');
       return row === undefined ? undefined : backupSettingsOf(row);

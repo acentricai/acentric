@@ -447,6 +447,10 @@ export class SqliteStore implements Store {
     return this.#write.ask('listStopping' satisfies Operation);
   }
 
+  hostId(): Promise<string> {
+    return this.#write.ask('hostId' satisfies Operation);
+  }
+
   loadBackupSettings(): Promise<StoredBackupSettings | undefined> {
     return this.#write.ask('loadBackupSettings' satisfies Operation);
   }
