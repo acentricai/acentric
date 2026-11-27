@@ -9,8 +9,16 @@
 // the engine is not there.
 
 import { ProviderFailed } from '@acentric/core';
-import type { NewSandbox, ProviderSandbox, SandboxAccount, SandboxProvider } from '@acentric/core';
+import type {
+  NewSandbox,
+  ProviderSandbox,
+  SandboxAccount,
+  SandboxProvider,
+  TemplateBuild,
+} from '@acentric/core';
 import type { SandboxState } from '@acentric/protocol';
+
+import { buildAtBoat } from './boat-template.ts';
 
 /** Boat's sizes: the only pairs of vCPU and memory it makes. */
 export const BOAT_SIZES = [
@@ -29,6 +37,12 @@ export type BoatOptions = {
   /** Boat's API, in place of https://boat.dev/api/v1. */
   readonly url?: string;
   readonly fetch?: typeof fetch;
+  /** How a template is built: between two looks at it, and how long it may take to start and be saved. For tests. */
+  readonly templateTimes?: {
+    readonly pollMs?: number;
+    readonly startMs?: number;
+    readonly saveMs?: number;
+  };
 };
 
 type BoatSandbox = {
@@ -159,7 +173,7 @@ function accountOf(options: BoatOptions, apiKey: string, requestMs: number): San
         'POST',
         '/sandboxes',
         {
-          from: options.template,
+          from: sandbox.template ?? options.template,
           type: size?.type,
           name: `acentric ${sandbox.machine}`,
           ttlSeconds: sandbox.idleSeconds,
@@ -203,6 +217,44 @@ function accountOf(options: BoatOptions, apiKey: string, requestMs: number): San
     async delete(id: string): Promise<void> {
       try {
         await call('DELETE', one(id), undefined, { 'x-ascii-confirm-delete': id });
+      } catch (error) {
+        if (error instanceof ProviderFailed && error.reason === 'gone') return;
+        throw error;
+      }
+    },
+
+    async buildTemplate(build: TemplateBuild): Promise<void> {
+      await buildAtBoat(
+        {
+          call,
+          async put(url, bytes) {
+            let response: Response;
+            try {
+              response = await send(url, {
+                method: 'PUT',
+                body: bytes,
+                signal: AbortSignal.timeout(Math.max(requestMs, 300_000)),
+              });
+            } catch {
+              throw new ProviderFailed('The machine program could not be put in the sandbox');
+            }
+            if (!response.ok) {
+              throw new ProviderFailed(
+                `The machine program could not be put in the sandbox: Boat answered ${String(response.status)}`,
+              );
+            }
+          },
+          pollMs: options.templateTimes?.pollMs ?? 3000,
+          startMs: options.templateTimes?.startMs ?? 300_000,
+          saveMs: options.templateTimes?.saveMs ?? 1_800_000,
+        },
+        build,
+      );
+    },
+
+    async deleteTemplate(name: string): Promise<void> {
+      try {
+        await call('DELETE', `/saved-snapshots/${encodeURIComponent(name)}`);
       } catch (error) {
         if (error instanceof ProviderFailed && error.reason === 'gone') return;
         throw error;
