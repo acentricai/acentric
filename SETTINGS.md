@@ -37,12 +37,13 @@ environment.
 
 ## Turns and agents' code
 
-| Setting                        | Without it | What it is                                                                                                                                                                                |
-| ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ACENTRIC_MAX_TURNS`           | 1000       | How many actors are in a turn at once, from 1 to 10,000. The rest wait their turn, in order. [LIMITS.md](LIMITS.md) says what a machine takes.                                            |
-| `ACENTRIC_CODE_PROCESSES`      | 2          | How many processes agents' code runs in, from 1 to 64. Each is replaced when it is past 1 GB.                                                                                             |
-| `ACENTRIC_AGENT_NETWORK`       | `public`   | What agents' code, and the MCP servers agents name, may reach: `public`, public addresses alone, or `any`, which is this machine, its private network and a cloud's metadata address too. |
-| `ACENTRIC_AGENT_NETWORK_ALLOW` | none       | With `public`: private addresses and ranges agents' code may reach as well, separated by commas, such as `10.0.0.0/8` or `10.1.2.3`.                                                      |
+| Setting                        | Without it                  | What it is                                                                                                                                                                                |
+| ------------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ACENTRIC_MAX_TURNS`           | 1000                        | How many actors are in a turn at once, from 1 to 10,000. The rest wait their turn, in order. [LIMITS.md](LIMITS.md) says what a machine takes.                                            |
+| `ACENTRIC_CODE_PROCESSES`      | 2                           | How many processes agents' code runs in, from 1 to 64. Each is replaced when it is past 1 GB.                                                                                             |
+| `ACENTRIC_AGENT_NETWORK`       | `public`                    | What agents' code, and the MCP servers agents name, may reach: `public`, public addresses alone, or `any`, which is this machine, its private network and a cloud's metadata address too. |
+| `ACENTRIC_AGENT_NETWORK_ALLOW` | none                        | With `public`: private addresses and ranges agents' code may reach as well, separated by commas, such as `10.0.0.0/8` or `10.1.2.3`.                                                      |
+| `ACENTRIC_ANTHROPIC_API_URL`   | `https://api.anthropic.com` | Anthropic's API somewhere else: its models' calls and the check of its keys go there. For tests.                                                                                          |
 
 ## Backups
 

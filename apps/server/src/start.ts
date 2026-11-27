@@ -169,7 +169,11 @@ export async function start(
     secrets: (agent, name) => secrets.get(agent, name),
     log: (line) => logger.warn(line, { from: 'workerd' }),
   });
-  const providers = more.providers ?? builtInProviders();
+  const providers =
+    more.providers ??
+    builtInProviders(
+      settings.anthropicUrl === undefined ? {} : { anthropicUrl: settings.anthropicUrl },
+    );
   const programs = machinePrograms(settings.downloads);
   const audit = new Audit({
     store,

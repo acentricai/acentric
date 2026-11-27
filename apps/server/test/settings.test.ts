@@ -222,6 +222,13 @@ describe('a server’s settings', () => {
     ).toEqual({ template: 'acentric', url: 'http://127.0.0.1:9999/api/v1' });
   });
 
+  it('say where Anthropic’s API is, for tests', () => {
+    expect(readSettings({}).anthropicUrl).toBeUndefined();
+    expect(readSettings({ ACENTRIC_ANTHROPIC_API_URL: 'http://127.0.0.1:9998' }).anthropicUrl).toBe(
+      'http://127.0.0.1:9998',
+    );
+  });
+
   it('say where sandboxes are made at Docker, and from which image', () => {
     expect(
       readSettings({
@@ -276,6 +283,10 @@ describe('a server’s settings', () => {
       ],
       [{ ACENTRIC_DOCKER_NETWORK: 'acentric' }, /is for a server that has ACENTRIC_DOCKER_HOST/],
       [{ ACENTRIC_BOAT_API_URL: 'boat.dev' }, /ACENTRIC_BOAT_API_URL is where Boat's API is/],
+      [
+        { ACENTRIC_ANTHROPIC_API_URL: 'api.anthropic.com' },
+        /ACENTRIC_ANTHROPIC_API_URL is where Anthropic's API is/,
+      ],
       [
         { ACENTRIC_DOCKER_HOST: 'ssh://box', ACENTRIC_DOCKER_IMAGE: 'acentric-sandbox' },
         /ACENTRIC_DOCKER_HOST: Docker is reached at unix:\/\/<socket> or http:\/\/<host>:<port>/,

@@ -65,6 +65,8 @@
 //                           has the machine program in it (see deploy/sandbox/boat-template.sh).
 //                           Without it, an account at Boat can be added, and no sandbox made
 //   ACENTRIC_BOAT_API_URL   Boat's API, in place of https://boat.dev/api/v1. For tests
+//   ACENTRIC_ANTHROPIC_API_URL  Anthropic's API, in place of https://api.anthropic.com: the
+//                           calls of its models and the check of its keys go there. For tests
 //   ACENTRIC_DOCKER_HOST    where Docker's API is, such as unix:///var/run/docker.sock: with it
 //                           the server makes sandboxes there, as containers. Whoever may make a
 //                           sandbox then has the computer Docker is on. Without it, it makes
@@ -116,6 +118,8 @@ export type Settings = {
   readonly downloads: string | undefined;
   /** The folder of the dashboard's build. */
   readonly dashboard: string | undefined;
+  /** Where Anthropic's API is, when it is not its own. For tests. */
+  readonly anthropicUrl: string | undefined;
   /** What sandboxes at Boat are made with: the snapshot they are made from, when one was given. */
   readonly boat: BoatOptions;
   /** The Docker sandboxes are made at, as containers. Undefined when none are. */
@@ -292,6 +296,13 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     );
   }
 
+  const anthropicUrl = given('ACENTRIC_ANTHROPIC_API_URL');
+  if (anthropicUrl !== undefined && !/^https?:\/\/[^/]+/.test(anthropicUrl)) {
+    throw new InvalidSettings(
+      `ACENTRIC_ANTHROPIC_API_URL is where Anthropic's API is, such as https://api.anthropic.com, and is ${anthropicUrl}`,
+    );
+  }
+
   const dockerHost = given('ACENTRIC_DOCKER_HOST');
   const dockerImage = given('ACENTRIC_DOCKER_IMAGE');
   const dockerNetwork = given('ACENTRIC_DOCKER_NETWORK');
@@ -392,6 +403,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
     maxTurns: wholeNumber('ACENTRIC_MAX_TURNS', 1000, 1, 10_000),
     downloads: downloads === undefined ? undefined : resolve(downloads),
     dashboard: dashboard === undefined ? undefined : resolve(dashboard),
+    anthropicUrl,
     boat: {
       ...(boatTemplate === undefined ? {} : { template: boatTemplate }),
       ...(boatUrl === undefined ? {} : { url: boatUrl }),
