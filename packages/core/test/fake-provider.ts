@@ -11,6 +11,7 @@ import type {
   ProviderSandbox,
   SandboxAccount,
   SandboxProvider,
+  TemplateBuild,
 } from '../src/sandbox.ts';
 import { FakeDaemon } from './fake-daemon.ts';
 
@@ -45,6 +46,12 @@ export class FakeProvider implements SandboxProvider {
   wait: (call: string, id: string) => Promise<void> = async () => {};
   /** Where its sandboxes reach a server. */
   serverFor?: (url: string) => string;
+  /** How a template's build goes, when it is asked for one: it prints, and it ends. */
+  build: (asked: TemplateBuild) => Promise<void> = async (asked) => {
+    asked.output('built\n');
+  };
+  /** The templates it has saved, by name. */
+  readonly saved = new Set<string>();
   #made = 0;
 
   constructor(
@@ -182,6 +189,15 @@ export class FakeProvider implements SandboxProvider {
         await said('delete', id);
         this.sandboxes.get(id)?.daemon.drop();
         this.sandboxes.delete(id);
+      },
+      buildTemplate: async (asked) => {
+        await said('buildTemplate', asked.name);
+        await this.build(asked);
+        this.saved.add(asked.name);
+      },
+      deleteTemplate: async (name) => {
+        await said('deleteTemplate', name);
+        this.saved.delete(name);
       },
       list: async (label, value) => {
         await said('list', `${label}=${value}`);

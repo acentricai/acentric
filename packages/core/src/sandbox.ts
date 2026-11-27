@@ -40,7 +40,40 @@ export type NewSandbox = {
   readonly provision: string;
   /** One of its own for each try: a provider that is asked twice with one makes one sandbox. */
   readonly key: string;
+  /** The provider's name for the template it is made from. Without it, the server's own. */
+  readonly template?: string;
 };
+
+/** The label a template's builder carries at its provider: the template it builds. */
+export const LABEL_TEMPLATE = 'acentric.template';
+
+/** What a provider is asked to build a template with. */
+export type TemplateBuild = {
+  /** The provider's name for what is saved. One saved under it before is replaced. */
+  readonly name: string;
+  /** What people call it. */
+  readonly label: string;
+  /** A shell script, run first, as the sandbox's user. */
+  readonly script: string;
+  /** The machine program for a processor, such as `x64` or `arm64`. Undefined for one there is none for. */
+  readonly program: (arch: string) => Uint8Array | undefined;
+  /** What the builder carries: the template, and the account. */
+  readonly labels: { readonly [name: string]: string };
+  /** One of its own for each build, as for a sandbox. */
+  readonly key: string;
+  /** The longest the script may run, in seconds. */
+  readonly scriptSeconds: number;
+  /** All the build has printed so far, each time it has printed more. */
+  readonly output: (text: string) => void;
+  /** Stops the build: the builder is deleted, and nothing is saved. */
+  readonly signal: AbortSignal;
+};
+
+/** A build that did not end in a template. What it printed is in its output. */
+export class TemplateFailed extends EngineError {
+  override readonly name = 'TemplateFailed';
+  readonly code = 'sandbox_provider_failed';
+}
 
 /** One account at a provider, with its credential: what the engine asks things of. */
 export interface SandboxAccount {
@@ -66,6 +99,15 @@ export interface SandboxAccount {
   delete(id: string): Promise<void>;
   /** Every sandbox that carries a label, whatever its state, by the provider's ID for it. */
   list(label: string, value: string): Promise<Map<string, ProviderSandbox>>;
+  /**
+   * Builds a template: in a sandbox of its own, the script, then the machine program and its
+   * start-up, and saves that sandbox's disk under the build's name. The builder is deleted
+   * however it ends. Rejects with `TemplateFailed` for a build that failed. Only a provider
+   * that builds templates has this.
+   */
+  buildTemplate?(build: TemplateBuild): Promise<void>;
+  /** Deletes a template it saved. One it no longer has is deleted already. */
+  deleteTemplate?(name: string): Promise<void>;
 }
 
 /** A provider of sandboxes, as an engine is set up with it. */
@@ -84,7 +126,10 @@ export interface SandboxProvider {
   readonly idle: 'provider' | 'engine';
   /** What is wrong with a size it does not make. Undefined for one it does. */
   sizeProblem(vcpu: number, memoryGB: number): string | undefined;
-  /** Why no sandbox can be made: what the server was not set up with. Undefined when one can. */
+  /**
+   * Why no sandbox can be made from the server's own template: what the server was not set up
+   * with. Undefined when one can.
+   */
   unavailable?(): string | undefined;
   /** Where a sandbox of it reaches a server that people reach at `url`, when that is elsewhere. */
   serverFor?(url: string): string;

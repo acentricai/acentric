@@ -5,12 +5,18 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { calls, says } from '@acentric/ai/testing';
-import type { MachineId, SandboxProviderId } from '@acentric/protocol';
+import type { MachineId, SandboxProviderId, SandboxTemplateId } from '@acentric/protocol';
 
 import { Conflict } from '../src/errors.ts';
 import { IdSource } from '../src/ids.ts';
 import { MachineNotFound, Machines } from '../src/machines.ts';
-import { LABEL_MACHINE, LABEL_PROVIDER, ProviderFailed } from '../src/sandbox.ts';
+import {
+  LABEL_MACHINE,
+  LABEL_PROVIDER,
+  LABEL_TEMPLATE,
+  ProviderFailed,
+  TemplateFailed,
+} from '../src/sandbox.ts';
 import {
   InvalidSandbox,
   NotASandbox,
@@ -18,6 +24,7 @@ import {
   SandboxAsleep,
   Sandboxes,
   SandboxesUnavailable,
+  TemplateNotFound,
 } from '../src/sandboxes.ts';
 import type { SandboxTimes, SandboxesOptions } from '../src/sandboxes.ts';
 import { Secrets, SecretsUnavailable } from '../src/secrets.ts';
@@ -37,7 +44,11 @@ const TIMES: Partial<SandboxTimes> = {
   wakeMs: 400,
   stoppingMs: 10,
   tickMs: 3_600_000,
+  templateOutputMs: 0,
 };
+
+/** What stands for the machine program the server hands out. */
+const PROGRAM = new Uint8Array([0x7f, 0x45, 0x4c, 0x46]);
 
 export function sandboxesSuite(name: string, open: () => Promise<Store>): void {
   describe(`sandboxes: ${name}`, () => {
@@ -76,6 +87,8 @@ export function sandboxesSuite(name: string, open: () => Promise<Store>): void {
         machines,
         providers: [provider],
         id: (at) => ids.make('sandboxProvider', at),
+        templateId: (at) => ids.make('sandboxTemplate', at),
+        program: (system) => (system === 'linux-x64' ? PROGRAM : undefined),
         clock: () => now,
         report: (error) => reported.push(error),
         times: TIMES,
@@ -197,7 +210,9 @@ export function sandboxesSuite(name: string, open: () => Promise<Store>): void {
         expect((await sandboxes.providers())[0]?.sandboxes).toBe(1);
         const refused = await sandboxes.removeProvider(account.id).catch((error: unknown) => error);
         expect(refused).toBeInstanceOf(Conflict);
-        expect(refused).toMatchObject({ message: "Remove this account's sandboxes first" });
+        expect(refused).toMatchObject({
+          message: "Remove this account's sandboxes and templates first",
+        });
         await sandboxes.remove(made.machine.id);
         await sandboxes.removeProvider(account.id);
         expect(await sandboxes.providers()).toEqual([]);
@@ -841,6 +856,182 @@ export function sandboxesSuite(name: string, open: () => Promise<Store>): void {
           'user',
           'assistant',
         ]);
+      });
+    });
+
+    describe('a template', () => {
+      /** A template once its build has ended. */
+      const settled = async (
+        sandboxes: Sandboxes,
+        provider: SandboxProviderId,
+        id: SandboxTemplateId,
+      ) => {
+        for (;;) {
+          const read = await sandboxes.template(provider, id);
+          if (read.status !== 'building') return read;
+          await sleep(2);
+        }
+      };
+
+      it('is built at the provider while the call that asked for it has answered, and a sandbox is made from it', async () => {
+        const { sandboxes, provider, account, create } = await withAccount();
+        let go = (): void => {};
+        provider.build = async (asked) => {
+          expect(asked).toMatchObject({
+            label: 'with-jq',
+            script: 'sudo apt-get install -y jq\n',
+            scriptSeconds: 3600,
+          });
+          expect(asked.program('x64')).toBe(PROGRAM);
+          expect(asked.program('arm64')).toBeUndefined();
+          asked.output('step 1\n');
+          await new Promise<void>((resolve) => {
+            go = resolve;
+          });
+          asked.output('step 1\nstep 2\n');
+        };
+        const added = await sandboxes.addTemplate(account.id, {
+          name: 'with-jq',
+          script: 'sudo apt-get install -y jq\n',
+        });
+        expect(added).toEqual({
+          id: expect.stringMatching(/^tpl_/) as string,
+          provider: account.id,
+          name: 'with-jq',
+          script: 'sudo apt-get install -y jq\n',
+          status: 'building',
+          output: '',
+          error: null,
+          createdAt: NOW,
+          finishedAt: null,
+        });
+        // What it has printed is there while it builds.
+        await sleep(20);
+        expect(await sandboxes.template(account.id, added.id)).toMatchObject({
+          status: 'building',
+          output: 'step 1\n',
+        });
+        go();
+        const ready = await settled(sandboxes, account.id, added.id);
+        expect(ready).toMatchObject({
+          status: 'ready',
+          output: 'step 1\nstep 2\n',
+          finishedAt: NOW,
+        });
+        const saved = `acentric-${added.id.replace('_', '-')}`;
+        expect(provider.calls.slice(1)).toEqual([
+          `buildTemplate ${saved}`,
+          `list ${LABEL_TEMPLATE}=${added.id}`,
+        ]);
+        expect(await sandboxes.templates(account.id)).toEqual([ready]);
+
+        const made = await create({ template: added.id });
+        expect(provider.sandboxes.get(made.providerSandboxId ?? '')?.asked.template).toBe(saved);
+        // The account's own sandboxes are made from the server's when none is said.
+        const plain = await create();
+        expect(
+          provider.sandboxes.get(plain.providerSandboxId ?? '')?.asked.template,
+        ).toBeUndefined();
+      });
+
+      it('is made from only once it is built, and a build that failed says why', async () => {
+        const { sandboxes, provider, account, create } = await withAccount();
+        provider.build = async (asked) => {
+          asked.output('E: no such package\n');
+          throw new TemplateFailed('The script ended with 100');
+        };
+        const added = await sandboxes.addTemplate(account.id, { name: 'bad', script: 'false\n' });
+        await expect(create({ template: added.id })).rejects.toThrow(Conflict);
+        expect(await settled(sandboxes, account.id, added.id)).toMatchObject({
+          status: 'failed',
+          error: 'The script ended with 100',
+          output: 'E: no such package\n',
+          finishedAt: NOW,
+        });
+        await expect(create({ template: added.id })).rejects.toThrow(
+          'The template bad failed to build: build it again',
+        );
+        await expect(
+          create({ template: 'tpl_01jd3m5kq8f4xv9t6w2rhb0c7n' as SandboxTemplateId }),
+        ).rejects.toThrow(TemplateNotFound);
+        await expect(
+          sandboxes.addTemplate(account.id, { name: 'bad', script: 'true\n' }),
+        ).rejects.toThrow('The account has a template named bad already');
+        // The account stays while it has a template.
+        await expect(sandboxes.removeProvider(account.id)).rejects.toThrow(
+          "Remove this account's sandboxes and templates first",
+        );
+      });
+
+      it('is stopped when it is deleted while it builds, and deleted at the provider', async () => {
+        const { sandboxes, provider, account } = await withAccount();
+        provider.build = (asked) =>
+          new Promise((_resolve, reject) => {
+            asked.signal.addEventListener('abort', () => {
+              reject(new TemplateFailed('The build was stopped'));
+            });
+          });
+        const added = await sandboxes.addTemplate(account.id, {
+          name: 'slow',
+          script: 'sleep 9\n',
+        });
+        await sleep(5);
+        await sandboxes.removeTemplate(account.id, added.id);
+        const saved = `acentric-${added.id.replace('_', '-')}`;
+        expect(provider.calls.slice(1)).toEqual([
+          `buildTemplate ${saved}`,
+          `list ${LABEL_TEMPLATE}=${added.id}`,
+          `deleteTemplate ${saved}`,
+        ]);
+        expect(await store.listSandboxTemplates()).toEqual([]);
+        await expect(sandboxes.template(account.id, added.id)).rejects.toThrow(TemplateNotFound);
+        await sandboxes.removeProvider(account.id);
+      });
+
+      it('that was building when the server stopped has failed, and what it left is deleted', async () => {
+        const { provider, account } = await withAccount();
+        const id = 'tpl_01jd3m5kq8f4xv9t6w2rhb0c7n' as SandboxTemplateId;
+        await store.addSandboxTemplate({
+          id,
+          provider: account.id,
+          name: 'cut-short',
+          script: 'true\n',
+          saved: 'acentric-tpl-01jd3m5kq8f4xv9t6w2rhb0c7n',
+          status: 'building',
+          output: 'half\n',
+          error: null,
+          createdAt: NOW - HOUR,
+          finishedAt: null,
+        });
+        provider.calls.length = 0;
+        // The server starts again.
+        setup({ provider });
+        for (let tries = 0; (await store.loadSandboxTemplate(id))?.status === 'building'; tries++) {
+          if (tries > 500) throw new Error('It was not taken up');
+          await sleep(2);
+        }
+        await sleep(10);
+        expect(await store.loadSandboxTemplate(id)).toMatchObject({
+          status: 'failed',
+          error: 'The server stopped while it was being built',
+          output: 'half\n',
+          finishedAt: NOW,
+        });
+        expect(provider.calls).toEqual([
+          `list ${LABEL_TEMPLATE}=${id}`,
+          'deleteTemplate acentric-tpl-01jd3m5kq8f4xv9t6w2rhb0c7n',
+        ]);
+      });
+
+      it('is not built by a server with no machine program to put in it', async () => {
+        const { sandboxes, provider, account } = await withAccount({
+          options: { program: () => undefined },
+        });
+        await expect(
+          sandboxes.addTemplate(account.id, { name: 'with-jq', script: 'true\n' }),
+        ).rejects.toThrow(SandboxesUnavailable);
+        expect(provider.calls).toEqual(['whoami']);
+        expect(await store.listSandboxTemplates()).toEqual([]);
       });
     });
   });
