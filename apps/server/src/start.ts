@@ -12,6 +12,7 @@ import type { ModelRunner, Providers } from '@acentric/ai';
 import type { AccountId } from '@acentric/protocol';
 import {
   Accounts,
+  SignIns,
   Audit,
   Engine,
   Keys,
@@ -183,6 +184,7 @@ export async function start(
   // A model is called with a model account, and with nothing else: no key is read from the
   // environment.
   const accounts = new Accounts({ store, secrets, providers, audit });
+  const signIns = new SignIns({ store, providers, accounts });
   const engine = new Engine({
     store,
     executor,
@@ -280,6 +282,7 @@ export async function start(
       audit,
       secrets,
       accounts,
+      signIns,
       backups,
       updates: new UpdateCheck({ version: more.version, enabled: settings.updateCheck }),
       ...(settings.updaterDir === undefined

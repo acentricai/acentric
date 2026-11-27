@@ -4,6 +4,7 @@
 import { AgentNotFound, MachineRefused, reaches, reportOf } from '@acentric/core';
 import type {
   Accounts,
+  SignIns,
   Audit,
   Engine,
   Keys,
@@ -49,6 +50,8 @@ export type Parts = {
   readonly audit: Audit;
   readonly secrets: Secrets;
   readonly accounts: Accounts;
+  /** Sign-ins at providers whose accounts have no key. */
+  readonly signIns: SignIns;
   readonly streams: Streams;
   /** The server's own backups, and how they are set. */
   readonly backups?: BackupControl;
@@ -763,6 +766,14 @@ export const handlers: Handlers = {
     accounts.update(refOf(asked), asked.params.account, defined(asked.body)),
   'accounts.delete': async (asked, { accounts }) => {
     await accounts.remove(refOf(asked), asked.params.account);
+    return undefined;
+  },
+  'chatgptSignIns.create': (asked, { signIns }) => signIns.start('chatgpt', defined(asked.body)),
+  'chatgptSignIns.get': ({ params }, { signIns }) => signIns.get(params.signIn),
+  'chatgptSignIns.finish': (asked, { signIns }) =>
+    signIns.finish(refOf(asked), asked.params.signIn, asked.body.url),
+  'chatgptSignIns.delete': ({ params }, { signIns }) => {
+    signIns.cancel(params.signIn);
     return undefined;
   },
   'usage.get': ({ query, scope }, { engine }) => {

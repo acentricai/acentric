@@ -5,7 +5,7 @@ import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { serve as listen } from '@hono/node-server';
-import type { Accounts, Audit, Engine, Keys, People, Secrets } from '@acentric/core';
+import type { Accounts, SignIns, Audit, Engine, Keys, People, Secrets } from '@acentric/core';
 import { WebSocketServer } from 'ws';
 
 import { createApp } from './app.ts';
@@ -24,6 +24,7 @@ export type ServerOptions = {
   readonly audit: Audit;
   readonly secrets: Secrets;
   readonly accounts: Accounts;
+  readonly signIns: SignIns;
   readonly backups?: BackupControl;
   readonly updates?: UpdateCheck;
   readonly updater?: UpdaterFolder;
