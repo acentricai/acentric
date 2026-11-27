@@ -188,6 +188,22 @@ describe('the store on SQLite', () => {
     await expect(SqliteStore.open(path)).rejects.toThrow(/made by a newer one/);
   });
 
+  it('has an ID as a host, a version 4 UUID made once with the database, and kept', async () => {
+    const path = database();
+    const first = await SqliteStore.open(path);
+    const host = await first.hostId();
+    expect(host).toMatch(
+      /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    await first.close();
+    const again = await SqliteStore.open(path);
+    expect(await again.hostId()).toBe(host);
+    await again.close();
+    const other = await SqliteStore.open(database());
+    expect(await other.hostId()).not.toBe(host);
+    await other.close();
+  });
+
   it('gives each actor of a database from before actors had accounts what its calls were made with', async () => {
     const path = database();
     const db = new DatabaseSync(path);

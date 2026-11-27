@@ -480,6 +480,22 @@ export const MIGRATIONS: readonly string[] = [
   -- Which actors an account was given: what keeps it from being removed.
   CREATE INDEX actors_account ON actors (account_id) WHERE account_id IS NOT NULL;
   `,
+  // 7: the engine's own ID as a host, for providers that ask for one.
+  `
+  -- One row: what the engine is known by to a provider that asks where its calls run from,
+  -- as ChatGPT's sign-in does. A random UUID (version 4), made once and never changed. It is
+  -- not a secret, and says nothing of whose the engine is.
+  CREATE TABLE host (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    host_id TEXT NOT NULL
+  ) STRICT;
+
+  INSERT INTO host (id, host_id) VALUES (1, 'urn:uuid:' || lower(
+    hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2)
+      || '-' || substr('89ab', 1 + abs(random() % 4), 1) || substr(hex(randomblob(2)), 2)
+      || '-' || hex(randomblob(6))
+  ));
+  `,
 ];
 
 /** The version a database is at when it has had every migration. */
