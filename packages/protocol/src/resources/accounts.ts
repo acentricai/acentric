@@ -12,7 +12,13 @@
 import { z } from 'zod';
 
 import { principalRefSchema } from '../auth.ts';
-import { accountIdSchema, actorIdSchema, agentIdSchema, userIdSchema } from '../ids.ts';
+import {
+  accountIdSchema,
+  actorIdSchema,
+  agentIdSchema,
+  signInIdSchema,
+  userIdSchema,
+} from '../ids.ts';
 import { modelIdSchema, providerIdSchema } from '../messages.ts';
 import { nameSchema } from '../names.ts';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, timestampSchema } from '../primitives.ts';
@@ -25,6 +31,18 @@ export const accountSchema = z
     name: nameSchema,
     /** What its calls are signed with: a key, or the token of someone signed in. Never which. */
     credential: z.enum(['api_key', 'access_token']),
+    /** For an account made by signing in: whose sign-in it is, and whether it has ended. */
+    signIn: z
+      .object({
+        /** The email of whoever signed in, when the provider said it. */
+        email: z.string().nullable(),
+        /**
+         * Why its calls cannot be made until it is signed in again, once its sign-in has ended
+         * at the provider. Left out while it holds.
+         */
+        signedOut: z.string().optional(),
+      })
+      .optional(),
     /** Whether an actor of its provider that is created without an account is given it. */
     default: z.boolean(),
     /** Whose it is. Null for one that is the engine's, which any actor may be given. */
@@ -65,6 +83,40 @@ export const updateAccountRequestSchema = z
   })
   .meta({ id: 'UpdateAccountRequest' });
 export type UpdateAccountRequest = z.infer<typeof updateAccountRequestSchema>;
+
+// Signing in
+
+/**
+ * A sign-in to start: for a new account, its name and whether it is its provider's default,
+ * as when an account is added with a key; or, to sign an account in again, the account.
+ */
+export const startSignInRequestSchema = z
+  .union([
+    z.strictObject({ name: nameSchema, default: z.boolean().optional() }),
+    z.strictObject({ account: accountIdSchema }),
+  ])
+  .meta({ id: 'StartSignInRequest' });
+export type StartSignInRequest = z.infer<typeof startSignInRequestSchema>;
+
+/** A sign-in that was started, and waits to be finished. */
+export const signInSchema = z
+  .object({
+    id: signInIdSchema,
+    /** The page the person signs in at, in their own browser. */
+    url: z.string(),
+    /** After this, it cannot be finished. */
+    expiresAt: timestampSchema,
+    /** The account it signs in again, for one that does. */
+    account: accountIdSchema.optional(),
+  })
+  .meta({ id: 'SignIn' });
+export type SignIn = z.infer<typeof signInSchema>;
+
+/** What finishes a sign-in: the address the person's browser was sent to once they had signed in. */
+export const finishSignInRequestSchema = z
+  .strictObject({ url: z.string().trim().min(1).max(16_384) })
+  .meta({ id: 'FinishSignInRequest' });
+export type FinishSignInRequest = z.infer<typeof finishSignInRequestSchema>;
 
 // Usage
 
