@@ -59,7 +59,10 @@ promises, how to check that an image is the one released, and what an upgrade ca
   `ACENTRIC_BOAT_TEMPLATE` to the name it prints. An
   account at the provider is added with `POST /v1/providers`, and a sandbox is made with
   `POST /v1/sandboxes`: it is stopped when nothing was run on it for its idle time, and started
-  again for the next command.
+  again for the next command. An account at Boat can have templates of its own, built from a
+  script with `POST /v1/providers/{provider}/templates`, for a server that hands out the machine
+  program (`ACENTRIC_DOWNLOADS`): a sandbox made with `template` is made from one in place of
+  the server's.
 - A provider's models are called with a model account: a key of the provider's, added with
   `acentric accounts add` and checked with the provider before it is kept. No key is read from
   the environment. A ChatGPT account has no key: it is signed in with ChatGPT from the

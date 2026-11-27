@@ -212,6 +212,8 @@ export async function start(
         boat(settings.boat),
       ],
       ...(settings.publicUrl === undefined ? {} : { publicUrl: settings.publicUrl }),
+      // What a template has put in: the machine program this server hands out.
+      program: programs.bytes,
       ...more.sandboxes,
     },
     maxConcurrentTurns: settings.maxTurns,
