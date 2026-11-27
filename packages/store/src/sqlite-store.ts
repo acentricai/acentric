@@ -21,6 +21,8 @@ import type {
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
+  StoredSandboxTemplate,
+  SandboxTemplatePatch,
   StoredBackupSettings,
   PageOf,
   Paged,
@@ -63,6 +65,8 @@ import type {
   KeyId,
   MachineId,
   SandboxProviderId,
+  SandboxTemplateId,
+  SandboxTemplateStatus,
   Session,
   SessionId,
   Page,
@@ -165,7 +169,8 @@ class Line {
         said === 'account' ||
         said === 'machine' ||
         said === 'provider account' ||
-        said === 'subagent'
+        said === 'subagent' ||
+        said === 'template'
           ? said
           : 'actor';
       waiting.reject(new NameTaken(String(refused.args[0]), of));
@@ -473,6 +478,30 @@ export class SqliteStore implements Store {
 
   removeSandboxProvider(id: SandboxProviderId): Promise<'removed' | 'in_use' | 'missing'> {
     return this.#write.ask('removeSandboxProvider' satisfies Operation, id);
+  }
+
+  addSandboxTemplate(template: StoredSandboxTemplate): Promise<boolean> {
+    return this.#write.ask('addSandboxTemplate' satisfies Operation, template);
+  }
+
+  loadSandboxTemplate(id: SandboxTemplateId): Promise<StoredSandboxTemplate | undefined> {
+    return this.#write.ask('loadSandboxTemplate' satisfies Operation, id);
+  }
+
+  listSandboxTemplates(provider?: SandboxProviderId): Promise<StoredSandboxTemplate[]> {
+    return this.#write.ask('listSandboxTemplates' satisfies Operation, provider);
+  }
+
+  changeSandboxTemplate(
+    id: SandboxTemplateId,
+    patch: SandboxTemplatePatch,
+    from?: readonly SandboxTemplateStatus[],
+  ): Promise<boolean> {
+    return this.#write.ask('changeSandboxTemplate' satisfies Operation, id, patch, from);
+  }
+
+  removeSandboxTemplate(id: SandboxTemplateId): Promise<boolean> {
+    return this.#write.ask('removeSandboxTemplate' satisfies Operation, id);
   }
 
   setSandbox(id: MachineId, sandbox: StoredSandbox): Promise<boolean> {

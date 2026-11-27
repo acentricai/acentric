@@ -18,6 +18,8 @@ import type {
   KeyId,
   MachineId,
   SandboxProviderId,
+  SandboxTemplateId,
+  SandboxTemplateStatus,
   Session,
   SessionId,
   Page,
@@ -41,6 +43,8 @@ import type {
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
+  StoredSandboxTemplate,
+  SandboxTemplatePatch,
   StoredBackupSettings,
   PageOf,
   Paged,
@@ -134,6 +138,7 @@ export class MemoryStore implements Store {
   /** Each actor's compactions, newest first. */
   readonly #compactions = new Map<ActorId, StoredCompaction[]>();
   readonly #sandboxProviders = new Map<SandboxProviderId, StoredSandboxProvider>();
+  readonly #sandboxTemplates = new Map<SandboxTemplateId, StoredSandboxTemplate>();
   #backupSettings: StoredBackupSettings | undefined;
   /** By `actor/task`. */
   readonly #commands = new Map<string, StoredCommand>();
@@ -1065,8 +1070,49 @@ export class MemoryStore implements Store {
   async removeSandboxProvider(id: SandboxProviderId): Promise<'removed' | 'in_use' | 'missing'> {
     if (!this.#sandboxProviders.has(id)) return 'missing';
     if ([...this.#machines.values()].some((one) => one.sandbox?.provider === id)) return 'in_use';
+    if ([...this.#sandboxTemplates.values()].some((one) => one.provider === id)) return 'in_use';
     this.#sandboxProviders.delete(id);
     return 'removed';
+  }
+
+  async addSandboxTemplate(template: StoredSandboxTemplate): Promise<boolean> {
+    if (!this.#sandboxProviders.has(template.provider)) return false;
+    if (
+      [...this.#sandboxTemplates.values()].some(
+        (one) => one.provider === template.provider && one.name === template.name,
+      )
+    ) {
+      throw new NameTaken(template.name, 'template');
+    }
+    this.#sandboxTemplates.set(template.id, copy(template));
+    return true;
+  }
+
+  async loadSandboxTemplate(id: SandboxTemplateId): Promise<StoredSandboxTemplate | undefined> {
+    return copy(this.#sandboxTemplates.get(id));
+  }
+
+  async listSandboxTemplates(provider?: SandboxProviderId): Promise<StoredSandboxTemplate[]> {
+    return copy(
+      [...this.#sandboxTemplates.values()].filter(
+        (one) => provider === undefined || one.provider === provider,
+      ),
+    );
+  }
+
+  async changeSandboxTemplate(
+    id: SandboxTemplateId,
+    patch: SandboxTemplatePatch,
+    from?: readonly SandboxTemplateStatus[],
+  ): Promise<boolean> {
+    const there = this.#sandboxTemplates.get(id);
+    if (there === undefined || (from !== undefined && !from.includes(there.status))) return false;
+    this.#sandboxTemplates.set(id, { ...there, ...copy(patch) });
+    return true;
+  }
+
+  async removeSandboxTemplate(id: SandboxTemplateId): Promise<boolean> {
+    return this.#sandboxTemplates.delete(id);
   }
 
   async setSandbox(id: MachineId, sandbox: StoredSandbox): Promise<boolean> {

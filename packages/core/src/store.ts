@@ -30,6 +30,8 @@ import type {
   MachineAgents,
   MachineId,
   SandboxProviderId,
+  SandboxTemplateId,
+  SandboxTemplateStatus,
   PrincipalRef,
   Role,
   Session,
@@ -189,6 +191,28 @@ export type StoredSandbox = {
   readonly deadline: number | null;
 };
 
+/** A template of an account at a provider of sandboxes, as a store keeps it (see `sandboxes.ts`). */
+export type StoredSandboxTemplate = {
+  readonly id: SandboxTemplateId;
+  /** The account it is built in. */
+  readonly provider: SandboxProviderId;
+  readonly name: string;
+  readonly script: string;
+  /** The provider's name for what is saved. */
+  readonly saved: string;
+  readonly status: SandboxTemplateStatus;
+  /** What its build printed, the end of it. */
+  readonly output: string;
+  readonly error: string | null;
+  readonly createdAt: number;
+  readonly finishedAt: number | null;
+};
+
+/** What changes of a template as it is built. */
+export type SandboxTemplatePatch = Partial<
+  Pick<StoredSandboxTemplate, 'status' | 'output' | 'error' | 'finishedAt'>
+>;
+
 /** An account at a provider of sandboxes, as a store keeps it. */
 export type StoredSandboxProvider = {
   readonly id: SandboxProviderId;
@@ -303,7 +327,8 @@ export type Stopping = {
 };
 
 /** What has a name that no other of its kind has. */
-export type Named = 'actor' | 'agent' | 'account' | 'machine' | 'provider account' | 'subagent';
+export type Named =
+  'actor' | 'agent' | 'account' | 'machine' | 'provider account' | 'subagent' | 'template';
 
 export class NameTaken extends Error {
   override readonly name = 'NameTaken';
@@ -314,7 +339,9 @@ export class NameTaken extends Error {
         ? `An actor of this agent is named ${name} already`
         : of === 'subagent'
           ? `The actor has a subagent ${name} already`
-          : `${of === 'agent' || of === 'account' ? 'An' : 'A'} ${of} is named ${name} already`,
+          : of === 'template'
+            ? `The account has a template named ${name} already`
+            : `${of === 'agent' || of === 'account' ? 'An' : 'A'} ${of} is named ${name} already`,
     );
   }
 }
@@ -818,10 +845,30 @@ export interface Store {
   /** Every account, in the order they were added. */
   listSandboxProviders(): Promise<StoredSandboxProvider[]>;
   /**
-   * Forgets an account that no machine was made in. `in_use`, and nothing is forgotten, while
-   * one was: looked at and forgotten in one step, so none is made in it meanwhile.
+   * Forgets an account that no machine was made in, and that has no template. `in_use`, and
+   * nothing is forgotten, while one was or it has: looked at and forgotten in one step, so
+   * none is made in it meanwhile.
    */
   removeSandboxProvider(id: SandboxProviderId): Promise<'removed' | 'in_use' | 'missing'>;
+  /**
+   * Keeps a new template of an account. False, and nothing is kept, when there is no such
+   * account. Rejects with `NameTaken` when its name is another of the account's.
+   */
+  addSandboxTemplate(template: StoredSandboxTemplate): Promise<boolean>;
+  loadSandboxTemplate(id: SandboxTemplateId): Promise<StoredSandboxTemplate | undefined>;
+  /** An account's templates, or every one, in the order they were added. */
+  listSandboxTemplates(provider?: SandboxProviderId): Promise<StoredSandboxTemplate[]>;
+  /**
+   * Changes what a patch names of a template, when its status is one of `from`, or whatever its
+   * status without that. False, and nothing is changed, otherwise.
+   */
+  changeSandboxTemplate(
+    id: SandboxTemplateId,
+    patch: SandboxTemplatePatch,
+    from?: readonly SandboxTemplateStatus[],
+  ): Promise<boolean>;
+  /** Forgets a template. False when there is none. */
+  removeSandboxTemplate(id: SandboxTemplateId): Promise<boolean>;
   /**
    * Says what a machine is as a sandbox, when the account it names is there. False, and
    * nothing is kept, when there is no such machine or no such account.

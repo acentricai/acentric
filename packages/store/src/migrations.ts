@@ -496,6 +496,27 @@ export const MIGRATIONS: readonly string[] = [
       || '-' || hex(randomblob(6))
   ));
   `,
+  // 8: templates, which an account's sandboxes can be made from.
+  `
+  -- A template of an account at a provider of sandboxes: built in a sandbox of the account from
+  -- a script, and saved at the provider under a name of the server's own.
+  CREATE TABLE sandbox_templates (
+    id TEXT PRIMARY KEY,
+    provider_id TEXT NOT NULL REFERENCES sandbox_providers (id),
+    name TEXT NOT NULL,
+    script TEXT NOT NULL,
+    -- The provider's name for what is saved.
+    saved TEXT NOT NULL,
+    -- building, ready or failed.
+    status TEXT NOT NULL,
+    -- What its build printed, the end of it.
+    output TEXT NOT NULL,
+    error TEXT,
+    created_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    UNIQUE (provider_id, name)
+  ) STRICT;
+  `,
 ];
 
 /** The version a database is at when it has had every migration. */

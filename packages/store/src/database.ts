@@ -18,6 +18,8 @@ import type {
   StoredMachine,
   StoredSandbox,
   StoredSandboxProvider,
+  StoredSandboxTemplate,
+  SandboxTemplatePatch,
   StoredBackupSettings,
   PageOf,
   Paged,
@@ -63,6 +65,8 @@ import type {
   MachineAgents,
   MachineId,
   SandboxProviderId,
+  SandboxTemplateId,
+  SandboxTemplateStatus,
   Session,
   SessionId,
   Page,
@@ -442,6 +446,34 @@ function sandboxProviderOf(row: SandboxProviderRow): StoredSandboxProvider {
   };
 }
 
+type SandboxTemplateRow = {
+  id: string;
+  provider_id: string;
+  name: string;
+  script: string;
+  saved: string;
+  status: string;
+  output: string;
+  error: string | null;
+  created_at: number;
+  finished_at: number | null;
+};
+
+function sandboxTemplateOf(row: SandboxTemplateRow): StoredSandboxTemplate {
+  return {
+    id: row.id as SandboxTemplateId,
+    provider: row.provider_id as SandboxProviderId,
+    name: row.name,
+    script: row.script,
+    saved: row.saved,
+    status: row.status as SandboxTemplateStatus,
+    output: row.output,
+    error: row.error,
+    createdAt: row.created_at,
+    finishedAt: row.finished_at,
+  };
+}
+
 function machineOf(row: MachineRow): StoredMachine {
   return {
     id: row.id,
@@ -750,6 +782,9 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'saveBackupSettings',
   'addSandboxProvider',
   'removeSandboxProvider',
+  'addSandboxTemplate',
+  'changeSandboxTemplate',
+  'removeSandboxTemplate',
   'setSandbox',
   'addCommand',
   'addOwnCommand',
@@ -2277,8 +2312,82 @@ export function operations(db: DatabaseSync) {
     removeSandboxProvider(id: SandboxProviderId): 'removed' | 'in_use' | 'missing' {
       if (get('SELECT 1 FROM sandbox_providers WHERE id = ?', id) === undefined) return 'missing';
       if (get('SELECT 1 FROM machines WHERE provider_id = ?', id) !== undefined) return 'in_use';
+      if (get('SELECT 1 FROM sandbox_templates WHERE provider_id = ?', id) !== undefined) {
+        return 'in_use';
+      }
       run('DELETE FROM sandbox_providers WHERE id = ?', id);
       return 'removed';
+    },
+
+    addSandboxTemplate(template: StoredSandboxTemplate): boolean {
+      if (get('SELECT 1 FROM sandbox_providers WHERE id = ?', template.provider) === undefined) {
+        return false;
+      }
+      if (
+        get(
+          'SELECT 1 FROM sandbox_templates WHERE provider_id = ? AND name = ?',
+          template.provider,
+          template.name,
+        ) !== undefined
+      ) {
+        throw new Refused('NameTaken', [template.name, 'template']);
+      }
+      run(
+        `INSERT INTO sandbox_templates
+           (id, provider_id, name, script, saved, status, output, error, created_at, finished_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        template.id,
+        template.provider,
+        template.name,
+        template.script,
+        template.saved,
+        template.status,
+        template.output,
+        template.error,
+        template.createdAt,
+        template.finishedAt,
+      );
+      return true;
+    },
+
+    loadSandboxTemplate(id: SandboxTemplateId): StoredSandboxTemplate | undefined {
+      const row = get<SandboxTemplateRow>('SELECT * FROM sandbox_templates WHERE id = ?', id);
+      return row === undefined ? undefined : sandboxTemplateOf(row);
+    },
+
+    listSandboxTemplates(provider?: SandboxProviderId): StoredSandboxTemplate[] {
+      const rows =
+        provider === undefined
+          ? all<SandboxTemplateRow>('SELECT * FROM sandbox_templates ORDER BY created_at, id')
+          : all<SandboxTemplateRow>(
+              'SELECT * FROM sandbox_templates WHERE provider_id = ? ORDER BY created_at, id',
+              provider,
+            );
+      return rows.map(sandboxTemplateOf);
+    },
+
+    changeSandboxTemplate(
+      id: SandboxTemplateId,
+      patch: SandboxTemplatePatch,
+      from?: readonly SandboxTemplateStatus[],
+    ): boolean {
+      const row = get<SandboxTemplateRow>('SELECT * FROM sandbox_templates WHERE id = ?', id);
+      if (row === undefined) return false;
+      if (from !== undefined && !from.includes(row.status as SandboxTemplateStatus)) return false;
+      const next = { ...sandboxTemplateOf(row), ...patch };
+      run(
+        'UPDATE sandbox_templates SET status = ?, output = ?, error = ?, finished_at = ? WHERE id = ?',
+        next.status,
+        next.output,
+        next.error,
+        next.finishedAt,
+        id,
+      );
+      return true;
+    },
+
+    removeSandboxTemplate(id: SandboxTemplateId): boolean {
+      return run('DELETE FROM sandbox_templates WHERE id = ?', id) === 1;
     },
 
     setSandbox(id: MachineId, sandbox: StoredSandbox): boolean {
