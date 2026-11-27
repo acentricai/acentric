@@ -47,6 +47,9 @@ configMapGenerator:
     behavior: merge
     literals:
       - ACENTRIC_PUBLIC_URL=$url
+      # Anthropic's API is a stand-in in the server's pod, which takes any key: an actor is
+      # made with a model account, whose key is checked when it is added, and no model is called.
+      - ACENTRIC_ANTHROPIC_API_URL=http://127.0.0.1:9998
 EOF
 
 step "The namespace, the secrets, and the server"
@@ -104,6 +107,19 @@ mkdir -p "$home"
   cd "$work" && "$home/.acentric/bin/acentric" init project --agent hello
   cd "$work/project" && "$home/.acentric/bin/acentric" deploy
 )
+step "A model account, its key taken by the stand-in for Anthropic's API"
+kubectl -n acentric exec acentric-0 -- sh -c 'nohup node -e "$0" > /dev/null 2>&1 &' \
+  "$(cat "$here/../anthropic-stand-in.js")"
+for attempt in $(seq 1 10); do
+  get -H 'content-type: application/json' \
+    -d '{"provider":"anthropic","name":"test","apiKey":"a-key-for-the-stand-in","default":true}' \
+    "$url/v1/accounts" > /dev/null && break
+  [ "$attempt" = 10 ] && fail "no model account was added"
+  sleep 1
+done
+echo "test is Anthropic's default"
+
+step "An actor, and its events"
 agent=$(get "$url/v1/agents?name=hello" | json '.items[0].id')
 actor=$(get -H 'content-type: application/json' -d '{}' "$url/v1/agents/$agent/actors" | json '.actor.id')
 echo "agent $agent, actor $actor"

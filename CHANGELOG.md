@@ -28,6 +28,8 @@ account must give it to each actor instead:
   archived actor whose account is removed uses its provider's default.
 - **Added:** `GET /v1/agents/{agent}/deployments/{deployment}/code` reads a deployment's code,
   as it was deployed, with `agents:read`.
+- **Added:** `ACENTRIC_ANTHROPIC_API_URL` puts Anthropic's API somewhere else, for tests: the
+  calls of its models and the checks of its keys go there.
 - **Changed:** the dashboard's Agents section is new. An agent opens its own dashboard: its
   spend by day split by actor, its actors, archived or deleted from their menu, its
   deployments, each opened to what it declared and its code, made active from its menu, its

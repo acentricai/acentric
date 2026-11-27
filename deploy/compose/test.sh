@@ -22,6 +22,10 @@ work=${WORK:-${TMPDIR:-/tmp}/acentric-recipe-test}
 project=acentric-recipe-test
 mkdir -p "$work"
 cp "$here/compose.yaml" "$here/Caddyfile" "$here/updater.sh" "$work/"
+# Anthropic's API is a stand-in in the server's container, which takes any key: an actor is
+# made with a model account, whose key is checked when it is added, and no model is called.
+printf 'services:\n  server:\n    environment:\n      ACENTRIC_ANTHROPIC_API_URL: http://127.0.0.1:9998\n' \
+  > "$work/compose.override.yaml"
 
 # The settings of a test server, from the recipe's example, as its README has them made.
 sed -e "s|^ACENTRIC_PUBLIC_URL=.*|ACENTRIC_PUBLIC_URL=$url|" "$here/.env.example" > "$work/.env"
@@ -104,6 +108,17 @@ acentric="$home/.acentric/bin/acentric"
 rm -rf "$work/project"
 (cd "$work" && "$acentric" init project --agent hello)
 (cd "$work/project" && "$acentric" deploy)
+
+step "A model account, its key taken by the stand-in for Anthropic's API"
+compose exec -d -T server node -e "$(cat "$here/../anthropic-stand-in.js")"
+for attempt in $(seq 1 10); do
+  get -H "authorization: Bearer $key" -H 'content-type: application/json' \
+    -d "{\"provider\":\"anthropic\",\"name\":\"test-$run\",\"apiKey\":\"a-key-for-the-stand-in\",\"default\":true}" \
+    "$url/v1/accounts" > /dev/null && break
+  [ "$attempt" = 10 ] && fail "no model account was added"
+  sleep 1
+done
+echo "test-$run is Anthropic's default"
 
 step "An actor, and its events as they come through Caddy"
 agent=$(get -H "authorization: Bearer $key" "$url/v1/agents?name=hello" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>console.log(JSON.parse(s).items[0].id))')
