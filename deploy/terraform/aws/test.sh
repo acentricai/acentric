@@ -13,7 +13,7 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 terraform=${TERRAFORM:-terraform}
 region=${AWS_REGION:?the region to test in, such as eu-west-1}
-version=${ACENTRIC_VERSION:-0.19.0}
+version=${ACENTRIC_VERSION:-0.20.0}
 run=$(date +%s)
 name=acentric-test-$run
 work=${WORK:-${TMPDIR:-/tmp}/acentric-terraform-test-$run}
