@@ -30,17 +30,26 @@ import type {
   SandboxProviderAccount,
   SandboxProviderId,
   SandboxState,
+  SandboxTemplate,
+  SandboxTemplateId,
 } from '@acentric/protocol';
 
 import { Conflict, EngineError } from './errors.ts';
 import { MachineNotFound } from './machines.ts';
 import type { Machines } from './machines.ts';
-import { LABEL_MACHINE, LABEL_PROVIDER, ProviderFailed } from './sandbox.ts';
+import { LABEL_MACHINE, LABEL_PROVIDER, LABEL_TEMPLATE, ProviderFailed } from './sandbox.ts';
 import type { ProviderSandbox, SandboxAccount, SandboxProvider } from './sandbox.ts';
 import { SecretsUnavailable, sealedFor } from './secrets.ts';
 import type { Secrets } from './secrets.ts';
 import { NameTaken } from './store.ts';
-import type { Store, StoredMachine, StoredSandbox, StoredSandboxProvider } from './store.ts';
+import type {
+  SandboxTemplatePatch,
+  Store,
+  StoredMachine,
+  StoredSandbox,
+  StoredSandboxProvider,
+  StoredSandboxTemplate,
+} from './store.ts';
 
 export type SandboxTimes = {
   /** How long a create waits for the new sandbox's daemon, when the call does not say. */
@@ -62,6 +71,10 @@ export type SandboxTimes = {
   readonly retryMs: number;
   /** How long between two tries to start a sandbox that is still stopping. */
   readonly stoppingMs: number;
+  /** The longest a template's script may run. */
+  readonly templateScriptMs: number;
+  /** How often what a template's build has printed is written down while it builds. */
+  readonly templateOutputMs: number;
 };
 
 export const DEFAULT_SANDBOX_TIMES: SandboxTimes = {
@@ -75,6 +88,8 @@ export const DEFAULT_SANDBOX_TIMES: SandboxTimes = {
   debounceMs: 30_000,
   retryMs: 60_000,
   stoppingMs: 2_000,
+  templateScriptMs: 3_600_000,
+  templateOutputMs: 2_000,
 };
 
 export class ProviderNotFound extends EngineError {
@@ -105,6 +120,14 @@ export class NotASandbox extends EngineError {
   }
 }
 
+export class TemplateNotFound extends EngineError {
+  override readonly name = 'TemplateNotFound';
+  readonly code = 'not_found';
+  constructor(id: string) {
+    super(`The account has no template ${id}`);
+  }
+}
+
 /** A sandbox that a command needs is not there to run it. */
 export class SandboxAsleep extends EngineError {
   override readonly name = 'SandboxAsleep';
@@ -123,6 +146,8 @@ export type CreateSandbox = {
   readonly idleTimeoutSeconds?: number;
   /** Seconds the call waits for its daemon to connect. */
   readonly wait?: number;
+  /** A ready template of the account, that it is made from. Without it, the server's own. */
+  readonly template?: SandboxTemplateId;
 };
 
 /** What the engine remembers of a sandbox between two looks at it. It is not kept across a restart. */
@@ -153,6 +178,12 @@ export type SandboxesOptions = {
   /** Seals an account's key. Without it, an account that has a key is not taken. */
   readonly secrets?: Secrets;
   readonly id: (now: number) => SandboxProviderId;
+  readonly templateId: (now: number) => SandboxTemplateId;
+  /**
+   * The machine program this server hands out, for a system such as `linux-x64`: what a
+   * template has put in. Without it, no template is built.
+   */
+  readonly program?: (system: string) => Uint8Array | undefined;
   /** Where a sandbox's daemon reaches this engine, when it is not where the request came to. */
   readonly publicUrl?: string;
   readonly times?: Partial<SandboxTimes>;
@@ -166,6 +197,13 @@ export class Sandboxes {
   readonly #providers: ReadonlyMap<string, SandboxProvider>;
   readonly #secrets: Secrets | undefined;
   readonly #id: (now: number) => SandboxProviderId;
+  readonly #templateId: (now: number) => SandboxTemplateId;
+  readonly #program: ((system: string) => Uint8Array | undefined) | undefined;
+  /** The builds under way, each with what stops it. */
+  readonly #building = new Map<
+    SandboxTemplateId,
+    { readonly stop: AbortController; readonly done: Promise<void> }
+  >();
   readonly #publicUrl: string | undefined;
   readonly #times: SandboxTimes;
   readonly #now: () => number;
@@ -189,6 +227,8 @@ export class Sandboxes {
     this.#providers = new Map(options.providers.map((provider) => [provider.kind, provider]));
     this.#secrets = options.secrets;
     this.#id = options.id;
+    this.#templateId = options.templateId;
+    this.#program = options.program;
     this.#publicUrl = options.publicUrl;
     this.#times = { ...DEFAULT_SANDBOX_TIMES, ...options.times };
     this.#now = options.clock ?? Date.now;
@@ -201,11 +241,17 @@ export class Sandboxes {
       void this.keepAwake();
     }, this.#times.tickMs);
     this.#tick.unref();
+    // Builds that were under way when the server last stopped: they are not taken up again.
+    const startedAt = this.#now();
+    void this.#recover(startedAt).catch((error: unknown) => {
+      if (!this.#closed) this.#report(error);
+    });
   }
 
   close(): void {
     this.#closed = true;
     clearInterval(this.#tick);
+    for (const { stop } of this.#building.values()) stop.abort();
   }
 
   /** The providers this engine was set up with, by what accounts of them say they are. */
@@ -326,11 +372,228 @@ export class Sandboxes {
     return Sandboxes.#view(row, []);
   }
 
-  /** Forgets an account and its key. Not while it has sandboxes. */
+  /** Forgets an account and its key. Not while it has sandboxes or templates. */
   async removeProvider(id: SandboxProviderId): Promise<void> {
     const removed = await this.#store.removeSandboxProvider(id);
     if (removed === 'missing') throw new ProviderNotFound(id);
-    if (removed === 'in_use') throw new Conflict("Remove this account's sandboxes first");
+    if (removed === 'in_use') {
+      throw new Conflict("Remove this account's sandboxes and templates first");
+    }
+  }
+
+  // Templates: what an account's sandboxes can be made from, in place of the server's own. One
+  // is built in a sandbox of the account, by the provider: the script, then the machine
+  // program, and the disk saved. The build goes on after the call that asked for it.
+
+  static #templateView(row: StoredSandboxTemplate): SandboxTemplate {
+    return {
+      id: row.id,
+      provider: row.provider,
+      name: row.name as SandboxTemplate['name'],
+      script: row.script,
+      status: row.status,
+      output: row.output,
+      error: row.error,
+      createdAt: row.createdAt,
+      finishedAt: row.finishedAt,
+    };
+  }
+
+  async #templateOf(
+    providerId: SandboxProviderId,
+    id: SandboxTemplateId,
+  ): Promise<StoredSandboxTemplate> {
+    const row = await this.#store.loadSandboxTemplate(id);
+    if (row === undefined || row.provider !== providerId) throw new TemplateNotFound(id);
+    return row;
+  }
+
+  /** An account's templates, the oldest first. */
+  async templates(providerId: SandboxProviderId): Promise<SandboxTemplate[]> {
+    await this.#provider(providerId);
+    return (await this.#store.listSandboxTemplates(providerId)).map(Sandboxes.#templateView);
+  }
+
+  async template(providerId: SandboxProviderId, id: SandboxTemplateId): Promise<SandboxTemplate> {
+    return Sandboxes.#templateView(await this.#templateOf(providerId, id));
+  }
+
+  /** Starts building a template, and answers with it as it is building. */
+  async addTemplate(
+    providerId: SandboxProviderId,
+    given: { readonly name: string; readonly script: string },
+  ): Promise<SandboxTemplate> {
+    const row = await this.#provider(providerId);
+    const { provider, account } = this.#account(row);
+    if (account.buildTemplate === undefined || account.deleteTemplate === undefined) {
+      throw new InvalidSandbox(`This server builds no templates at ${provider.label}`);
+    }
+    // A program for some Linux: which one the builder needs is known once it is up.
+    if (
+      this.#program === undefined ||
+      (this.#program('linux-x64') === undefined && this.#program('linux-arm64') === undefined)
+    ) {
+      throw new SandboxesUnavailable(
+        'This server hands out no machine program for Linux, which a template has put in',
+      );
+    }
+    const now = this.#now();
+    const id = this.#templateId(now);
+    const stored: StoredSandboxTemplate = {
+      id,
+      provider: row.id,
+      name: given.name,
+      script: given.script,
+      // A name of the server's own: a snapshot of the account's under one it chose is never replaced.
+      saved: `acentric-${id.replace('_', '-')}`,
+      status: 'building',
+      output: '',
+      error: null,
+      createdAt: now,
+      finishedAt: null,
+    };
+    if (!(await this.#store.addSandboxTemplate(stored))) throw new ProviderNotFound(row.id);
+    const stop = new AbortController();
+    const done = this.#build(row, stored, stop.signal)
+      .catch((error: unknown) => {
+        if (!this.#closed) this.#report(error);
+      })
+      .finally(() => {
+        this.#building.delete(id);
+      });
+    this.#building.set(id, { stop, done });
+    return Sandboxes.#templateView(stored);
+  }
+
+  /** Builds a template, and writes down how it ended. */
+  async #build(
+    row: StoredSandboxProvider,
+    template: StoredSandboxTemplate,
+    signal: AbortSignal,
+  ): Promise<void> {
+    let output = '';
+    let writtenAt = 0;
+    let writing: Promise<unknown> = Promise.resolve();
+    const write = (patch: SandboxTemplatePatch): Promise<unknown> => {
+      writing = writing
+        .then(() => this.#store.changeSandboxTemplate(template.id, patch, ['building']))
+        .catch((error: unknown) => {
+          if (!this.#closed) this.#report(error);
+        });
+      return writing;
+    };
+    let ended: SandboxTemplatePatch;
+    let account: SandboxAccount | undefined;
+    try {
+      ({ account } = this.#account(row));
+      if (account.buildTemplate === undefined) throw new Error('The provider builds no templates');
+      await account.buildTemplate({
+        name: template.saved,
+        label: template.name,
+        script: template.script,
+        program: (arch) => this.#program?.(`linux-${arch}`),
+        labels: { [LABEL_TEMPLATE]: template.id, [LABEL_PROVIDER]: row.id },
+        key: `${template.id}-${randomBytes(8).toString('hex')}`,
+        scriptSeconds: Math.ceil(this.#times.templateScriptMs / 1000),
+        output: (text) => {
+          output = text;
+          // Not at every change: often enough to be followed.
+          if (this.#now() - writtenAt >= this.#times.templateOutputMs) {
+            writtenAt = this.#now();
+            void write({ output });
+          }
+        },
+        signal,
+      });
+      ended = { status: 'ready', output, error: null, finishedAt: this.#now() };
+    } catch (error) {
+      ended = { status: 'failed', output, error: messageOf(error), finishedAt: this.#now() };
+    }
+    // A builder the provider could not delete, or whose answer was lost, is found by its label.
+    if (account !== undefined) await this.#leftovers(account, template.id);
+    await write(ended);
+  }
+
+  /** Deletes what is left at the provider of a template's builds. */
+  async #leftovers(account: SandboxAccount, template: SandboxTemplateId): Promise<void> {
+    try {
+      const found = await account.list(LABEL_TEMPLATE, template);
+      for (const one of found.values()) {
+        if (one.labels === undefined || one.labels[LABEL_TEMPLATE] === template) {
+          await account.delete(one.id);
+        }
+      }
+    } catch (error) {
+      if (!this.#closed) {
+        this.#report(
+          new Error(`What the build of the template ${template} left could not be deleted`, {
+            cause: error,
+          }),
+        );
+      }
+    }
+  }
+
+  /**
+   * The templates that were building when the server last stopped, before `before`: each has
+   * failed, and what its build left at the provider is deleted.
+   */
+  async #recover(before: number): Promise<void> {
+    for (const template of await this.#store.listSandboxTemplates()) {
+      if (this.#closed) return;
+      if (template.status !== 'building' || template.createdAt >= before) continue;
+      if (this.#building.has(template.id)) continue;
+      await this.#store.changeSandboxTemplate(
+        template.id,
+        {
+          status: 'failed',
+          error: 'The server stopped while it was being built',
+          finishedAt: this.#now(),
+        },
+        ['building'],
+      );
+      const row = await this.#store.loadSandboxProvider(template.provider);
+      if (row === undefined || !this.#providers.has(row.kind)) continue;
+      try {
+        const { account } = this.#account(row);
+        await this.#leftovers(account, template.id);
+        // Its disk may have been being saved: it is not kept.
+        await account.deleteTemplate?.(template.saved);
+      } catch (error) {
+        if (!this.#closed) this.#report(error);
+      }
+    }
+  }
+
+  /**
+   * Deletes a template at its provider, and forgets it. A build under way is stopped first.
+   * When the provider cannot be asked it is kept, and the call is made again. One whose
+   * account's credential the provider refuses is forgotten, and left at the provider.
+   */
+  async removeTemplate(providerId: SandboxProviderId, id: SandboxTemplateId): Promise<void> {
+    const template = await this.#templateOf(providerId, id);
+    const building = this.#building.get(id);
+    if (building !== undefined) {
+      building.stop.abort();
+      await building.done;
+    }
+    const { provider, account } = this.#account(await this.#provider(providerId));
+    try {
+      await account.deleteTemplate?.(template.saved);
+    } catch (error) {
+      if (!(error instanceof ProviderFailed) || error.reason !== 'credential') {
+        throw new ProviderFailed(
+          `The template could not be deleted at ${provider.label}, and was kept: try again (${messageOf(error)})`,
+          error instanceof ProviderFailed ? { status: error.status } : {},
+        );
+      }
+      this.#report(
+        new Error(
+          `The template ${template.name} was left at ${provider.label}: it refused the account's credential`,
+        ),
+      );
+    }
+    await this.#store.removeSandboxTemplate(id);
   }
 
   // Sandboxes
@@ -410,8 +673,21 @@ export class Sandboxes {
     if (!(waitMs >= 0 && waitMs <= SANDBOX_WAIT_MAX_S * 1000)) {
       throw new InvalidSandbox(`\`wait\` is from 0 to ${String(SANDBOX_WAIT_MAX_S)} seconds`);
     }
-    const unavailable = provider.unavailable?.();
-    if (unavailable !== undefined) throw new SandboxesUnavailable(unavailable);
+    let template: string | undefined;
+    if (given.template === undefined) {
+      const unavailable = provider.unavailable?.();
+      if (unavailable !== undefined) throw new SandboxesUnavailable(unavailable);
+    } else {
+      const chosen = await this.#templateOf(row.id, given.template);
+      if (chosen.status !== 'ready') {
+        throw new Conflict(
+          chosen.status === 'building'
+            ? `The template ${chosen.name} is still being built`
+            : `The template ${chosen.name} failed to build: build it again`,
+        );
+      }
+      template = chosen.saved;
+    }
 
     const { machine, token } = await this.#machines.add({
       name: given.name ?? `sandbox-${randomBytes(4).toString('hex')}`,
@@ -445,6 +721,7 @@ export class Sandboxes {
         }),
         // One of its own for each try: nothing of a try that failed is taken for this one.
         key: `${machine.id}-${randomBytes(8).toString('hex')}`,
+        ...(template === undefined ? {} : { template }),
       });
     } catch (error) {
       // The machine never had a sandbox. If the provider made one all the same, and its

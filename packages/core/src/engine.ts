@@ -179,6 +179,8 @@ export type EngineOptions = {
     /** Where a sandbox's daemon reaches this engine, when it is not where a request came to. */
     readonly publicUrl?: string;
     readonly times?: Partial<SandboxTimes>;
+    /** The machine program for a system, such as `linux-x64`, that a template has put in. */
+    readonly program?: (system: string) => Uint8Array | undefined;
   };
   /** Without it, a bus of this process. */
   readonly bus?: EventBus;
@@ -363,6 +365,7 @@ export class Engine {
             machines: this.machines,
             providers: options.sandboxes?.providers ?? [],
             id: (now) => this.#ids.make('sandboxProvider', now),
+            templateId: (now) => this.#ids.make('sandboxTemplate', now),
             clock: this.#clock,
             report,
             ...(options.secrets === undefined ? {} : { secrets: options.secrets }),
@@ -370,6 +373,9 @@ export class Engine {
               ? {}
               : { publicUrl: options.sandboxes.publicUrl }),
             ...(options.sandboxes?.times === undefined ? {} : { times: options.sandboxes.times }),
+            ...(options.sandboxes?.program === undefined
+              ? {}
+              : { program: options.sandboxes.program }),
           });
     // Before anything is asked of a machine: one that is a sandbox, and sleeps, is started again.
     const wake = async (machine: MachineId): Promise<void> => this.sandboxes?.wake(machine);
