@@ -3,6 +3,41 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## 0.19.0
+
+**Upgrading from 0.18.** Take this version's image, or take it from the dashboard where an
+updater runs. **The database changes**, for model accounts: the new version backs it up first,
+then changes it, and its port answers that it is updating meanwhile. Each actor is given the
+model account its calls were made with: its agent's, or else its provider's default, so it goes
+on calling as it did. Deployed agents carry over, and nothing is deployed again.
+
+**The API changes, where model accounts are set and read.** A client that gave an agent its
+account must give it to each actor instead:
+
+- `Agent.account` is gone, and `PATCH /v1/agents/{agent}` takes only `activeVersion`.
+- `POST /v1/agents/{agent}/actors` takes `account`, and an actor says its own as `account`.
+- `Account.agents` is replaced by `actors`: how many actors that are not archived are given it.
+
+- **Changed:** a model account is an actor's, not an agent's. An agent is of a provider, and
+  each actor is given an account of that provider when it is created: the one asked for, or the
+  provider's default. One of another provider is refused, and so is creating an actor when its
+  provider has no account. A subagent of the same provider takes its spawner's. An actor keeps
+  its account: nothing changes it. `acentric actors create --account` gives one, and
+  `acentric accounts` counts each account's actors.
+- **Changed:** an account is removed only while no actor that is not archived is given it. An
+  archived actor whose account is removed uses its provider's default.
+- **Added:** `GET /v1/agents/{agent}/deployments/{deployment}/code` reads a deployment's code,
+  as it was deployed, with `agents:read`.
+- **Changed:** the dashboard's Agents section is new. An agent opens its own dashboard: its
+  spend by day split by actor, its actors, archived or deleted from their menu, its
+  deployments, each opened to what it declared and its code, made active from its menu, its
+  secrets, and its settings. **Deleting an agent, from its settings or from the Agents table,
+  deletes its deployments and its actors with all they hold, and cannot be undone:** an agent
+  has no archive.
+- **Changed:** an actor's page in the dashboard is new: its conversation, live, beside what it
+  is, what it and its subagents cost, each of its calls to the model, and its tasks. A model's
+  answer clicked with Ctrl, or ⌘, opens the call it came of.
+
 ## 0.18.0
 
 **Upgrading from 0.17.** Take this version's image, or take it from the dashboard where an
