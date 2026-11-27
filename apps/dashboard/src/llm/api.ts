@@ -3,6 +3,7 @@
 
 import type {
   CreateAccountRequest,
+  StartSignInRequest,
   UpdateAccountRequest,
   UsageQuery,
   UsageReport,
@@ -46,6 +47,13 @@ export const engine = {
     api.call('accounts.update', { params: { account: account as never }, body }),
   removeAccount: (account: string) =>
     api.call('accounts.delete', { params: { account: account as never } }),
+  startChatGptSignIn: (body: StartSignInRequest) => api.call('chatgptSignIns.create', { body }),
+  chatGptSignIn: (signIn: string) =>
+    api.call('chatgptSignIns.get', { params: { signIn: signIn as never } }),
+  finishChatGptSignIn: (signIn: string, url: string) =>
+    api.call('chatgptSignIns.finish', { params: { signIn: signIn as never }, body: { url } }),
+  cancelChatGptSignIn: (signIn: string) =>
+    api.call('chatgptSignIns.delete', { params: { signIn: signIn as never } }),
   usage: (query: UsageQuery, signal?: AbortSignal) =>
     usageOf(api.call('usage.get', { query, ...withSignal(signal) })),
   actorUsage: (actor: string, signal?: AbortSignal) =>

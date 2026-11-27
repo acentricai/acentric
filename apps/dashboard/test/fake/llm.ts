@@ -135,6 +135,10 @@ export function llmArea(_shared: Shared) {
     ...(query.get('by') === null ? {} : { groups: [] }),
   });
   let made = 0;
+  /** The ChatGPT sign-ins that wait, by ID: what each is for, and the state its address carries. */
+  const signIns = new Map<string, { name?: string; account?: string; state: string }>();
+  /** What was asked of them, in order. */
+  const signInCalls: { method: string; path: string; body: unknown }[] = [];
 
   const one = (id: string | undefined) => accounts.find((account) => account.id === id);
 
@@ -178,6 +182,72 @@ export function llmArea(_shared: Shared) {
       accounts.push(added);
       return json(201, added);
     }
+    if (path.startsWith('/v1/chatgpt-sign-ins')) {
+      signInCalls.push({ method, path, body });
+      if (method === 'POST' && path === '/v1/chatgpt-sign-ins') {
+        if (typeof body['name'] === 'string' && accounts.some((a) => a.name === body['name'])) {
+          return refused(409, 'name_taken', `An account is named ${body['name']} already`);
+        }
+        const id = `sgn_${String(signIns.size + 1).padStart(26, '0')}`;
+        const state = `state-${String(signIns.size + 1)}`;
+        signIns.set(id, {
+          state,
+          ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
+          ...(typeof body['account'] === 'string' ? { account: body['account'] } : {}),
+        });
+        return json(201, {
+          id,
+          url: `https://auth.openai.com/api/accounts/authorize?state=${state}`,
+          expiresAt: NOW + 600_000,
+          ...(typeof body['account'] === 'string' ? { account: body['account'] } : {}),
+        });
+      }
+      const signIn = /^\/v1\/chatgpt-sign-ins\/([^/]+)(\/callback)?$/.exec(path);
+      const waiting = signIn === null ? undefined : signIns.get(signIn[1] ?? '');
+      if (signIn === null || waiting === undefined) {
+        return refused(404, 'not_found', 'There is no sign-in waiting: start another');
+      }
+      const shown = () => ({
+        id: signIn[1],
+        url: `https://auth.openai.com/api/accounts/authorize?state=${waiting.state}`,
+        expiresAt: NOW + 600_000,
+        ...(waiting.account === undefined ? {} : { account: waiting.account }),
+      });
+      if (method === 'GET') return json(200, shown());
+      if (method === 'DELETE') {
+        signIns.delete(signIn[1] ?? '');
+        return json(204, null);
+      }
+      // OpenAI refused its code: it waits again, on a new page.
+      if (String(body['url']).includes('refused')) {
+        waiting.state = `${waiting.state}-again`;
+        return refused(400, 'invalid_request', 'ChatGPT did not take that sign-in’s code');
+      }
+      if (!String(body['url']).includes(`state=${waiting.state}`)) {
+        return refused(400, 'invalid_request', 'That is not the address of this sign-in');
+      }
+      signIns.delete(signIn[1] ?? '');
+      const again = one(waiting.account);
+      if (again !== undefined) {
+        again.signIn = { email: 'ada@example.test' };
+        return json(200, again);
+      }
+      made += 1;
+      const added: Account = {
+        id: `acc_${String(made).padStart(26, '0')}` as Account['id'],
+        provider: 'chatgpt',
+        name: waiting.name ?? '',
+        credential: 'access_token',
+        signIn: { email: 'ada@example.test' },
+        default: !accounts.some((account) => account.provider === 'chatgpt'),
+        owner: null,
+        actors: 0,
+        createdBy: { type: 'user', id: person.id as never },
+        createdAt: NOW,
+      };
+      accounts.push(added);
+      return json(200, added);
+    }
     const match = /^\/v1\/accounts\/([^/]+)$/.exec(path);
     if (match !== null) {
       const found = one(match[1]);
@@ -215,6 +285,7 @@ export function llmArea(_shared: Shared) {
   return {
     answer,
     accounts,
+    signInCalls,
     /** Answers usage with this from now on. */
     usageIs(report: (query: URLSearchParams) => UsageReport) {
       usage = report;

@@ -97,10 +97,10 @@ describe('the Accounts page', () => {
     open('/llm-providers', server);
     fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Provider: Anthropic' }));
-    // ChatGPT is signed in, not given a key: it is not offered here.
     expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
       'Anthropic',
       'OpenAI',
+      'ChatGPT',
       'Fireworks',
     ]);
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'OpenAI' }));
@@ -133,6 +133,148 @@ describe('the Accounts page', () => {
     );
     // The key is sent once, and kept nowhere on the page.
     expect(document.body.innerHTML).not.toContain('sk-test');
+  });
+
+  it('adds a ChatGPT account by signing in with ChatGPT, with the address it ends at', async () => {
+    const server = signedIn();
+    let opened = 0;
+    const tab = { opener: {}, closed: false, close() {}, location: { href: '' } };
+    const before = window.open;
+    window.open = (() => {
+      opened += 1;
+      return tab;
+    }) as unknown as typeof window.open;
+    try {
+      open('/llm-providers', server);
+      fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
+      fireEvent.click(within(dialog()).getByRole('button', { name: 'Provider: Anthropic' }));
+      fireEvent.click(screen.getByRole('menuitemradio', { name: 'ChatGPT' }));
+      // Signed in, not given a key.
+      expect(within(dialog()).queryByLabelText('API key')).toBeNull();
+      expect(within(dialog()).queryByRole('button', { name: 'Add account' })).toBeNull();
+      const signIn = within(dialog()).getByRole('button', { name: 'Sign in with ChatGPT' });
+      expect(signIn.hasAttribute('disabled')).toBe(true);
+      expect(signIn.hasAttribute('data-oai-siwc-button')).toBe(true);
+      fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'plan' } });
+      fireEvent.click(signIn);
+
+      // OpenAI's page opens, in a tab of its own that is not given this one.
+      const link = await within(dialog()).findByRole('link', { name: /Open auth\.openai\.com/ });
+      const url = 'https://auth.openai.com/api/accounts/authorize?state=state-1';
+      expect(link.getAttribute('href')).toBe(url);
+      expect(opened).toBe(1);
+      expect(tab.location.href).toBe(url);
+      expect(tab.opener).toBeNull();
+      expect(server.areas.llm.signInCalls[0]).toMatchObject({ body: { name: 'plan' } });
+      // The name it was started with stays while it waits.
+      expect(within(dialog()).getByLabelText('Name').hasAttribute('disabled')).toBe(true);
+
+      const address = within(dialog()).getByLabelText('Address');
+      fireEvent.change(address, {
+        target: { value: 'http://127.0.0.1:1455/auth/callback?state=x' },
+      });
+      fireEvent.click(within(dialog()).getByRole('button', { name: 'Sign in' }));
+      expect(
+        await within(dialog()).findByText('That is not the address of this sign-in'),
+      ).toBeTruthy();
+      fireEvent.change(address, {
+        target: { value: 'http://127.0.0.1:1455/auth/callback?code=c&state=state-1' },
+      });
+      fireEvent.keyDown(address, { key: 'Enter' });
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(
+        cells(await screen.findByText('plan').then((n) => n.closest('tr') as HTMLElement)).slice(
+          0,
+          2,
+        ),
+      ).toEqual(['plandefault', 'ChatGPT']);
+      expect(server.areas.llm.accounts).toMatchObject([
+        { provider: 'chatgpt', name: 'plan', credential: 'access_token' },
+      ]);
+    } finally {
+      window.open = before;
+    }
+  });
+
+  it('sends a pasted address at once, and opens the new page of a sign-in that was refused', async () => {
+    const server = signedIn();
+    open('/llm-providers', server);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Provider: Anthropic' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'ChatGPT' }));
+    fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'plan' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Sign in with ChatGPT' }));
+    const address = await within(dialog()).findByLabelText('Address');
+    const paste = (text: string) =>
+      fireEvent.paste(address, { clipboardData: { getData: () => text } });
+    // Pasted, and sent with no click.
+    paste('http://127.0.0.1:1455/auth/callback?code=c&state=state-1&refused=1');
+    expect(
+      await within(dialog()).findByText('ChatGPT did not take that sign-in’s code'),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        within(dialog())
+          .getByRole('link', { name: /Open auth\.openai\.com/ })
+          .getAttribute('href'),
+      ).toBe('https://auth.openai.com/api/accounts/authorize?state=state-1-again'),
+    );
+    expect((within(dialog()).getByLabelText('Address') as HTMLInputElement).value).toBe('');
+    paste('http://127.0.0.1:1455/auth/callback?code=c2&state=state-1-again');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(server.areas.llm.accounts).toMatchObject([{ provider: 'chatgpt', name: 'plan' }]);
+    expect(
+      server.areas.llm.signInCalls.filter((call) => call.path.endsWith('/callback')),
+    ).toHaveLength(2);
+  });
+
+  it('gives up a ChatGPT sign-in that the dialog was closed on', async () => {
+    const server = signedIn();
+    open('/llm-providers', server);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Provider: Anthropic' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'ChatGPT' }));
+    fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'plan' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Sign in with ChatGPT' }));
+    await within(dialog()).findByLabelText('Address');
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(server.areas.llm.signInCalls.map((call) => call.method)).toEqual(['POST', 'DELETE']),
+    );
+  });
+
+  it('signs a ChatGPT account in again, and says one that was signed out', async () => {
+    const server = signedIn();
+    server.areas.llm.accounts.push(
+      accountOf(1, {
+        name: 'plan',
+        provider: 'chatgpt',
+        credential: 'access_token',
+        default: true,
+        signIn: { email: 'ada@example.test', signedOut: 'The ChatGPT sign-in has ended' },
+      }),
+    );
+    open('/llm-providers', server);
+    await screen.findByText('plan');
+    expect(within(rowOf('plan')).getByText('signed out')).toBeTruthy();
+    expect(within(rowOf('plan')).getByText('ChatGPT').getAttribute('title')).toBe(
+      'ada@example.test',
+    );
+    const items = within(await menu('plan')).getAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).not.toContain('Replace key');
+    fireEvent.click(
+      within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Sign in again' }),
+    );
+    expect(within(dialog()).getByText('The ChatGPT sign-in has ended')).toBeTruthy();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Sign in with ChatGPT' }));
+    const address = await within(dialog()).findByLabelText('Address');
+    expect(server.areas.llm.signInCalls[0]).toMatchObject({ body: { account: accountOf(1).id } });
+    fireEvent.change(address, {
+      target: { value: 'http://127.0.0.1:1455/auth/callback?state=state-1' },
+    });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(within(rowOf('plan')).queryByText('signed out')).toBeNull());
   });
 
   it('adds another of a provider as it is, not its default', async () => {
