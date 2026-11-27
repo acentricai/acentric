@@ -3,6 +3,27 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## 0.20.0
+
+**Upgrading from 0.19.** Take this version's image, or take it from the dashboard where an
+updater runs. **The database changes**: the new version backs it up first, then gives the engine
+an ID of its own as a host, which ChatGPT's sign-in names it by. Nothing else in it changes, and
+deployed agents carry over. The API only adds.
+
+- **Added:** ChatGPT accounts, whose calls are made on a ChatGPT plan. In the dashboard, Add
+  account → ChatGPT → **Sign in with ChatGPT** opens OpenAI's page. The page it sends you to
+  once you have signed in does not load: paste its address in the dialog, and the account is
+  made. It is OpenAI's Sign in with ChatGPT for open-source apps: the calls go to OpenAI's API,
+  and count against the plan's limits, and the plan's usage is at chatgpt.com/settings/usage.
+- **Added:** the server renews a ChatGPT account's token before it lapses. When OpenAI says a
+  sign-in has ended, the account says it is signed out and its calls fail until it is signed in
+  again, from its menu. Removing an account ends its sign-in at OpenAI.
+- **Added:** `POST /v1/chatgpt-sign-ins` starts a sign-in, for a new account (`{ name }`) or to
+  sign one in again (`{ account }`). `POST /v1/chatgpt-sign-ins/{signIn}/callback` finishes it
+  with the address the browser was sent to, `GET` reads it, and `DELETE` gives it up. An account
+  made by signing in says whose it is as `signIn.email`, and why it has to be signed in again as
+  `signIn.signedOut`.
+
 ## 0.19.0
 
 **Upgrading from 0.18.** Take this version's image, or take it from the dashboard where an
