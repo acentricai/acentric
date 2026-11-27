@@ -4,7 +4,7 @@ import type { AssistantMessage, ProviderFields } from '@acentric/protocol';
 
 import { checkCredential, post } from '../http.ts';
 import { withoutTypes } from '../provider.ts';
-import type { CredentialType, Provider, RunnerSettings } from '../provider.ts';
+import type { CredentialType, Provider, RunnerSettings, SignInFlow } from '../provider.ts';
 import type { ModelRunner } from '../runner.ts';
 import { httpFailure } from './errors.ts';
 import type { ResponsesProfile } from './profile.ts';
@@ -20,7 +20,12 @@ export function responsesRunner(profile: ResponsesProfile, settings: RunnerSetti
         label: profile.label,
         provider: profile.id,
         url: profile.url,
-        headers: profile.headers(settings.credential),
+        headers: {
+          ...profile.headers(settings.credential),
+          ...(profile.sessionHeader === undefined || step.session === undefined
+            ? {}
+            : { [profile.sessionHeader]: step.session }),
+        },
         body: buildBody(step, profile),
         signal,
         streamed: profile.streams,
@@ -42,6 +47,8 @@ export function responsesProvider(
     readonly defaultModel: string;
     readonly bindsReasoning: boolean;
     parseOptions(given: unknown): ProviderFields;
+    /** How its accounts are signed in, for a provider whose accounts are not made with a key. */
+    readonly signIn?: SignInFlow;
   },
 ): Provider {
   const change = profile.reasoningChange?.bind(profile);
@@ -55,16 +62,23 @@ export function responsesProvider(
     bindsReasoning: more.bindsReasoning,
     withoutReasoning: (message) => withoutTypes(message, ['reasoning']),
     ...(profile.plan === true ? { plan: true as const } : {}),
-    ...(profile.compacts === true
-      ? {
+    ...(more.signIn === undefined ? {} : { signIn: more.signIn }),
+    ...(profile.compacts === undefined
+      ? {}
+      : {
           // It compacts all it is sent: one opaque item, which carries what the model knew.
           compacts: 'all' as const,
           compacted(message: AssistantMessage): AssistantMessage | undefined {
             const items = message.content.filter((item) => item['type'] === 'compaction');
+            // Compacted on the server before it answered: the first stands for all it was
+            // sent, and any after it for that and the answer, which is no part of it.
+            const [first] = items;
+            if (profile.compacts === 'threshold') {
+              return first === undefined ? undefined : { ...message, content: [first] };
+            }
             return items.length === 1 ? { ...message, content: items } : undefined;
           },
-        }
-      : {}),
+        }),
     ...(modelsUrl === undefined
       ? {}
       : {

@@ -4,7 +4,13 @@
 //
 // So a provider is added by writing one, and nothing here or in the engine changes for it.
 
-import type { AssistantMessage, Message, ProviderFields, Reasoning } from '@acentric/protocol';
+import type {
+  AssistantMessage,
+  JsonObject,
+  Message,
+  ProviderFields,
+  Reasoning,
+} from '@acentric/protocol';
 
 import type { ModelInfo } from './catalog.ts';
 import type { ModelRunner, ToolCall } from './runner.ts';
@@ -12,7 +18,17 @@ import type { ModelRunner, ToolCall } from './runner.ts';
 /** What a call is made with: a key of the provider's, or the token of someone signed in to it. */
 export type Credential =
   | { readonly type: 'api_key'; readonly apiKey: string }
-  | { readonly type: 'access_token'; readonly accessToken: string };
+  | {
+      readonly type: 'access_token';
+      readonly accessToken: string;
+      /** When the token stops being taken, in milliseconds since 1970. Left out: it does not. */
+      readonly expiresAt?: number;
+      /**
+       * What the provider renews the token with and ends the sign-in by. It is the provider's
+       * own: nothing else reads it.
+       */
+      readonly session?: JsonObject;
+    };
 
 export type CredentialType = Credential['type'];
 
@@ -93,6 +109,79 @@ export interface Provider {
    * conversation stays good. A provider without it takes a level only with the request.
    */
   reasoningChange?(model: string, reasoning: Reasoning): Message;
+  /**
+   * For a provider whose accounts are made by someone signing in at the provider, in a
+   * browser: how. A provider without it has its accounts made with a key.
+   */
+  readonly signIn?: SignInFlow;
+}
+
+/** What a sign-in's calls to the provider are made with. */
+export type SignInSettings = {
+  /** In place of the world's `fetch`: how a test answers for the provider. */
+  readonly fetch?: typeof fetch;
+};
+
+/**
+ * Signing in at a provider in a browser, to make an account of it, or to sign one in again.
+ * The engine starts one, the person signs in at the page it gives, and the address their
+ * browser is sent back to finishes it.
+ */
+export interface SignInFlow {
+  /** How long a sign-in that was started may wait to be finished, in milliseconds. */
+  readonly waitsMs: number;
+  /**
+   * Starts a sign-in. `host` is the engine's own ID as a host, the same for all of its
+   * sign-ins. `again` is the credential of the account that is being signed in again.
+   * `client` is what the provider registered for a sign-in that did not finish, as its
+   * `SignInRefused` said: it is started again with that.
+   */
+  start(given: {
+    readonly host: string;
+    readonly again?: Credential;
+    readonly client?: string;
+  }): Promise<SignInStart>;
+  /**
+   * Finishes a sign-in from the address the person's browser was sent back to. Rejects with a
+   * `SignInRefused` when that address does not make an account, and with a `ModelFailure` when
+   * the provider could not be asked.
+   */
+  finish(pending: JsonObject, returned: string, settings: SignInSettings): Promise<SignedIn>;
+  /**
+   * A token that is about to stop being taken, renewed. Rejects with a `ModelFailure`: of kind
+   * `auth` when the sign-in has ended and the account has to be signed in again, and of
+   * another kind when the provider could not be asked.
+   */
+  renew(credential: Credential, settings: SignInSettings): Promise<Credential>;
+  /** Ends a sign-in at the provider. Rejects when the provider did not say it has. */
+  end(credential: Credential, settings: SignInSettings): Promise<void>;
+}
+
+export type SignInStart = {
+  /** The page the person signs in at. */
+  readonly url: string;
+  /** What the sign-in keeps until it is finished. It is the provider's own, and never shown. */
+  readonly pending: JsonObject;
+};
+
+export type SignedIn = {
+  readonly credential: Credential;
+  /** Whose sign-in it is, when the provider said. */
+  readonly email: string | null;
+};
+
+/** The address a sign-in was finished with does not make an account: what is wrong, for a person. */
+export class SignInRefused extends Error {
+  override readonly name = 'SignInRefused';
+  /**
+   * What the provider registered for this sign-in before it was refused, when it is to be
+   * started again with that, and not registered once more.
+   */
+  readonly client: string | undefined;
+  constructor(message: string, more: { readonly client?: string } = {}) {
+    super(message);
+    this.client = more.client;
+  }
 }
 
 /**

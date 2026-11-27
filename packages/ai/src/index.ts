@@ -6,6 +6,7 @@ export * from './failure.ts';
 export * from './provider.ts';
 export * from './catalog.ts';
 export { openai, chatgpt, OPENAI_MODELS } from './providers/openai.ts';
+export { chatGptSignIn } from './providers/chatgpt-sign-in.ts';
 export { fireworks, FIREWORKS_MODELS } from './providers/fireworks.ts';
 export {
   anthropic,

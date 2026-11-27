@@ -9,9 +9,8 @@
 // A provider whose key is not given is left out. What is written holds no key: the headers
 // that sign a call are written as `<redacted>`, and a file is refused if a key is found in it.
 //
-// ChatGPT is recorded with OpenAI's API key standing in for the token of someone signed in.
-// The request and the stream it answers with are the real ones; that a real token is taken is
-// not shown by it.
+// ChatGPT is recorded with the access token of someone signed in with ChatGPT, in
+// CHATGPT_ACCESS_TOKEN: a plan's calls differ from the API's on a key in what they take.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -78,7 +77,7 @@ const TARGETS: {
   { provider: 'openai', env: 'OPENAI_API_KEY', model: 'gpt-6-luna', type: 'api_key', search: true },
   {
     provider: 'chatgpt',
-    env: 'OPENAI_API_KEY',
+    env: 'CHATGPT_ACCESS_TOKEN',
     model: 'gpt-6-luna',
     type: 'access_token',
     search: true,
@@ -293,7 +292,17 @@ for (const target of TARGETS) {
     const signal = new AbortController().signal;
     const said = (text: string): Message => ({ role: 'user', content: [{ type: 'text', text }] });
     // Thought about harder than the rest, so that the turns that are kept have reasoning in them.
-    const thinking = { ...asking, reasoning: 'high' } as const;
+    // Long enough instructions that every provider compacts it: a plan's least threshold is
+    // 1000 tokens.
+    const rules = Array.from(
+      { length: 120 },
+      (_, index) => `Rule ${String(index + 1)}: an order is looked up before it is spoken of.`,
+    ).join('\n');
+    const thinking = {
+      ...asking,
+      instructions: `${asking.instructions}\n${rules}`,
+      reasoning: 'high',
+    } as const;
     /** One exchange: a question, the call it leads to, the tool's result and the answer. */
     const exchange = async (
       before: readonly Message[],

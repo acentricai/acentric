@@ -24,7 +24,8 @@
     "headers": {
       "content-type": "application/json",
       "authorization": "<redacted>",
-      "accept": "text/event-stream"
+      "accept": "text/event-stream",
+      "session-id": "a-recorded-conversation"
     },
     "body": {
       "reasoning": {
