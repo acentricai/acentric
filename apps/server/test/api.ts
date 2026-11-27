@@ -1,13 +1,14 @@
 // What the API's tests stand on: the whole API over an engine in memory, with a model that
 // says what a test wrote, called through the client a program would call it with.
 
-import { Providers } from '@acentric/ai';
+import { Providers, chatgpt } from '@acentric/ai';
 import { ScriptedRunner, fakeProvider } from '@acentric/ai/testing';
 import type { Scripted } from '@acentric/ai/testing';
 import { createClient } from '@acentric/client';
 import type { Client } from '@acentric/client';
 import {
   Accounts,
+  SignIns,
   Audit,
   Engine,
   Keys,
@@ -106,6 +107,11 @@ export async function api(
     readonly sandboxes?: NonNullable<EngineOptions['sandboxes']>;
     /** The folder of a dashboard's build, which the server then serves. */
     readonly dashboard?: string;
+    /**
+     * For an engine that has ChatGPT as well: what answers for OpenAI, its sign-in and its
+     * models' calls.
+     */
+    readonly chatgpt?: typeof fetch;
   } = {},
 ) {
   const store = new MemoryStore();
@@ -116,9 +122,13 @@ export async function api(
     store,
     ...(sealing ? { keys: { current: 'k1', keys: { k1: new Uint8Array(32).fill(1) } } } : {}),
   });
-  const providers = new Providers([fakeProvider(runner, { keys: [MODEL_KEY, OTHER_MODEL_KEY] })]);
+  const providers = new Providers([
+    fakeProvider(runner, { keys: [MODEL_KEY, OTHER_MODEL_KEY] }),
+    ...(options.chatgpt === undefined ? [] : [chatgpt]),
+  ]);
   const audit = new Audit({ store });
-  const accounts = new Accounts({ store, secrets, providers, audit });
+  const outside = options.chatgpt === undefined ? {} : { fetch: options.chatgpt };
+  const accounts = new Accounts({ store, secrets, providers, audit, ...outside });
   // The account every agent's model is called with, unless a test is of an engine with none.
   // It is added as an engine that was set up before the test would have it: by nobody the
   // audit log of the test names.
@@ -161,6 +171,7 @@ export async function api(
     audit,
     secrets,
     accounts,
+    signIns: new SignIns({ store, providers, accounts, ...outside }),
     streams,
     version: 'test',
     // Every answer is held to its route's schema.
