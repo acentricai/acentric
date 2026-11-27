@@ -5639,7 +5639,7 @@
     "/v1/providers/{provider}": {
       "delete": {
         "operationId": "sandboxProviders.delete",
-        "summary": "Forgets an account and its key. Not while it has sandboxes.",
+        "summary": "Forgets an account and its key. Not while it has sandboxes or templates.",
         "tags": [
           "sandboxProviders"
         ],
@@ -5839,6 +5839,461 @@
         }
       }
     },
+    "/v1/providers/{provider}/templates": {
+      "get": {
+        "operationId": "sandboxTemplates.list",
+        "summary": "Lists an account's templates, the oldest first, with how each one's build stands.",
+        "tags": [
+          "sandboxTemplates"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxTemplateList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "sandboxTemplates.create",
+        "summary": "Builds a template in the account: its script is run in a new sandbox, the machine program is put in after it, and the disk is saved. Answers at once, while it builds.",
+        "tags": [
+          "sandboxTemplates"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSandboxTemplateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxTemplate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: name_taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Failed: unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/providers/{provider}/templates/{template}": {
+      "get": {
+        "operationId": "sandboxTemplates.get",
+        "summary": "A template, with how its build stands and what it printed.",
+        "tags": [
+          "sandboxTemplates"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "template",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind sandboxTemplate, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^tpl_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "tpl_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxTemplate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "sandboxTemplates.delete",
+        "summary": "Deletes a template at its provider, and forgets it. A build under way is stopped. Sandboxes made from it are kept.",
+        "tags": [
+          "sandboxTemplates"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "machines:manage"
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          },
+          {
+            "name": "template",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind sandboxTemplate, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^tpl_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "tpl_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Failed: sandbox_provider_failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sandboxes": {
       "post": {
         "operationId": "sandboxes.create",
@@ -5913,7 +6368,7 @@
             }
           },
           "409": {
-            "description": "Failed: name_taken.",
+            "description": "Failed: name_taken, conflict.",
             "content": {
               "application/json": {
                 "schema": {
@@ -12729,12 +13184,42 @@
             "type": "number",
             "minimum": 0,
             "maximum": 120
+          },
+          "template": {
+            "type": "string",
+            "pattern": "^tpl_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind sandboxTemplate, made by the engine.",
+            "examples": [
+              "tpl_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
           }
         },
         "required": [
           "provider",
           "vcpu",
           "memoryGB"
+        ],
+        "additionalProperties": false
+      },
+      "CreateSandboxTemplateRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "What people call it. Unique among its kind, and can be changed.",
+            "examples": [
+              "support"
+            ]
+          },
+          "script": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "script"
         ],
         "additionalProperties": false
       },
@@ -14775,6 +15260,105 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SandboxProvider"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "SandboxTemplate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^tpl_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind sandboxTemplate, made by the engine.",
+            "examples": [
+              "tpl_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "pattern": "^prv_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind sandboxProvider, made by the engine.",
+            "examples": [
+              "prv_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "What people call it. Unique among its kind, and can be changed.",
+            "examples": [
+              "support"
+            ]
+          },
+          "script": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "building",
+              "ready",
+              "failed"
+            ]
+          },
+          "output": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch.",
+            "examples": [
+              1795305600000
+            ]
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch.",
+                "examples": [
+                  1795305600000
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "name",
+          "script",
+          "status",
+          "output",
+          "error",
+          "createdAt",
+          "finishedAt"
+        ]
+      },
+      "SandboxTemplateList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SandboxTemplate"
             }
           }
         },

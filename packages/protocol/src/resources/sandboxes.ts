@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 
-import { machineIdSchema, sandboxProviderIdSchema } from '../ids.ts';
+import { machineIdSchema, sandboxProviderIdSchema, sandboxTemplateIdSchema } from '../ids.ts';
 import { nameSchema } from '../names.ts';
 import { timestampSchema } from '../primitives.ts';
 import { machineAgentsSchema, machineSchema } from './machines.ts';
@@ -94,9 +94,75 @@ export const createSandboxRequestSchema = z
     idleTimeoutSeconds: z.number().int().min(MIN_SANDBOX_IDLE_S).max(MAX_SANDBOX_IDLE_S).optional(),
     /** Seconds the call waits for its daemon to connect: 60 without it. It answers when they run out. */
     wait: z.number().min(0).max(SANDBOX_WAIT_MAX_S).optional(),
+    /**
+     * The template it is made from: a ready one of the same account. Without it, the one the
+     * server was started with.
+     */
+    template: sandboxTemplateIdSchema.optional(),
   })
   .meta({ id: 'CreateSandboxRequest' });
 export type CreateSandboxRequest = z.infer<typeof createSandboxRequestSchema>;
 
+// Templates: what an account's sandboxes can be made from, in place of the server's own. One is
+// built in a sandbox of the account: its script is run there, the machine program is put in
+// after it, and the sandbox's disk is saved at the provider. The builder is then deleted.
+
+/** The longest script a template is built with, in bytes. */
+export const TEMPLATE_SCRIPT_MAX_BYTES = 65_536;
+/** How much of a build's output is kept, in bytes: its end. */
+export const TEMPLATE_OUTPUT_MAX_BYTES = 65_536;
+
+/** How many bytes a text is in UTF-8. */
+function utf8Bytes(text: string): number {
+  let bytes = 0;
+  for (const character of text) {
+    const point = character.codePointAt(0) ?? 0;
+    bytes += point < 0x80 ? 1 : point < 0x800 ? 2 : point < 0x10000 ? 3 : 4;
+  }
+  return bytes;
+}
+
+/** How a template's build stands. */
+export const sandboxTemplateStatusSchema = z.enum(['building', 'ready', 'failed']);
+export type SandboxTemplateStatus = z.infer<typeof sandboxTemplateStatusSchema>;
+
+export const sandboxTemplateSchema = z
+  .object({
+    id: sandboxTemplateIdSchema,
+    /** The account it was built in, and is used in. */
+    provider: sandboxProviderIdSchema,
+    name: nameSchema,
+    /** What it was built with: a shell script, run with bash. */
+    script: z.string(),
+    status: sandboxTemplateStatusSchema,
+    /** What the build printed, its end: the script's output, then the machine program's install. */
+    output: z.string(),
+    /** Why it failed. Null unless it did. */
+    error: z.string().nullable(),
+    createdAt: timestampSchema,
+    /** When its build ended. Null while it is building. */
+    finishedAt: timestampSchema.nullable(),
+  })
+  .meta({ id: 'SandboxTemplate' });
+export type SandboxTemplate = z.infer<typeof sandboxTemplateSchema>;
+
+export const createSandboxTemplateRequestSchema = z
+  .strictObject({
+    name: nameSchema,
+    /** A shell script, run with bash as the sandbox's user, who may use sudo. */
+    script: z
+      .string()
+      .min(1)
+      .refine((script) => utf8Bytes(script) <= TEMPLATE_SCRIPT_MAX_BYTES, {
+        message: `A script is at most ${String(TEMPLATE_SCRIPT_MAX_BYTES)} bytes`,
+      }),
+  })
+  .meta({ id: 'CreateSandboxTemplateRequest' });
+export type CreateSandboxTemplateRequest = z.infer<typeof createSandboxTemplateRequestSchema>;
+
 export const sandboxProviderParam = z.object({ provider: sandboxProviderIdSchema });
+export const sandboxTemplateParam = z.object({
+  provider: sandboxProviderIdSchema,
+  template: sandboxTemplateIdSchema,
+});
 export const sandboxParam = z.object({ machine: machineIdSchema });

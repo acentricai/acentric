@@ -18,6 +18,7 @@ export const ID_PREFIXES = {
   input: 'inp',
   machine: 'mch',
   sandboxProvider: 'prv',
+  sandboxTemplate: 'tpl',
   account: 'acc',
   user: 'usr',
   session: 'ses',
@@ -41,6 +42,7 @@ export type ActorId = Id<'actor'>;
 export type InputId = Id<'input'>;
 export type MachineId = Id<'machine'>;
 export type SandboxProviderId = Id<'sandboxProvider'>;
+export type SandboxTemplateId = Id<'sandboxTemplate'>;
 export type AccountId = Id<'account'>;
 export type UserId = Id<'user'>;
 export type SessionId = Id<'session'>;
@@ -172,6 +174,7 @@ export const actorIdSchema = idSchema('actor');
 export const inputIdSchema = idSchema('input');
 export const machineIdSchema = idSchema('machine');
 export const sandboxProviderIdSchema = idSchema('sandboxProvider');
+export const sandboxTemplateIdSchema = idSchema('sandboxTemplate');
 export const accountIdSchema = idSchema('account');
 export const signInIdSchema = idSchema('signIn');
 export const userIdSchema = idSchema('user');

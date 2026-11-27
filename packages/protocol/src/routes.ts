@@ -81,10 +81,13 @@ import { compactResponseSchema, compactionSchema } from './resources/compactions
 import {
   createSandboxProviderRequestSchema,
   createSandboxRequestSchema,
+  createSandboxTemplateRequestSchema,
   sandboxParam,
   sandboxProviderParam,
   sandboxProviderSchema,
   sandboxSchema,
+  sandboxTemplateParam,
+  sandboxTemplateSchema,
 } from './resources/sandboxes.ts';
 import {
   abortResponseSchema,
@@ -759,7 +762,7 @@ export const routes = defineRoutes({
   'sandboxProviders.delete': {
     method: 'DELETE',
     path: '/v1/providers/{provider}',
-    summary: 'Forgets an account and its key. Not while it has sandboxes.',
+    summary: 'Forgets an account and its key. Not while it has sandboxes or templates.',
     auth: { on: 'engine', permission: 'machines:manage' },
     params: sandboxProviderParam,
     status: 204,
@@ -775,6 +778,50 @@ export const routes = defineRoutes({
     status: 200,
     errors: ['not_found'],
   },
+  'sandboxTemplates.list': {
+    method: 'GET',
+    path: '/v1/providers/{provider}/templates',
+    summary: "Lists an account's templates, the oldest first, with how each one's build stands.",
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: sandboxProviderParam,
+    response: z
+      .object({ items: z.array(sandboxTemplateSchema) })
+      .meta({ id: 'SandboxTemplateList' }),
+    status: 200,
+    errors: ['not_found'],
+  },
+  'sandboxTemplates.create': {
+    method: 'POST',
+    path: '/v1/providers/{provider}/templates',
+    summary:
+      'Builds a template in the account: its script is run in a new sandbox, the machine program is put in after it, and the disk is saved. Answers at once, while it builds.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: sandboxProviderParam,
+    body: createSandboxTemplateRequestSchema,
+    response: sandboxTemplateSchema,
+    status: 202,
+    errors: ['not_found', 'name_taken', 'unavailable'],
+  },
+  'sandboxTemplates.get': {
+    method: 'GET',
+    path: '/v1/providers/{provider}/templates/{template}',
+    summary: 'A template, with how its build stands and what it printed.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: sandboxTemplateParam,
+    response: sandboxTemplateSchema,
+    status: 200,
+    errors: ['not_found'],
+  },
+  'sandboxTemplates.delete': {
+    method: 'DELETE',
+    path: '/v1/providers/{provider}/templates/{template}',
+    summary:
+      'Deletes a template at its provider, and forgets it. A build under way is stopped. Sandboxes made from it are kept.',
+    auth: { on: 'engine', permission: 'machines:manage' },
+    params: sandboxTemplateParam,
+    status: 204,
+    errors: ['not_found', 'sandbox_provider_failed'],
+  },
   'sandboxes.create': {
     method: 'POST',
     path: '/v1/sandboxes',
@@ -784,7 +831,7 @@ export const routes = defineRoutes({
     body: createSandboxRequestSchema,
     response: sandboxSchema,
     status: 201,
-    errors: ['not_found', 'name_taken', 'sandbox_provider_failed', 'unavailable'],
+    errors: ['not_found', 'name_taken', 'conflict', 'sandbox_provider_failed', 'unavailable'],
   },
   'sandboxes.delete': {
     method: 'DELETE',
