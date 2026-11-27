@@ -17,7 +17,21 @@ export type FakeSandbox = {
   readonly files: readonly { readonly path: string; readonly content: string }[];
   /** What it was made from. */
   readonly from: string;
+  /** The files put in it since, by their path: text, or the bytes put at an upload's address. */
+  readonly written: Map<string, string | Uint8Array>;
+  /** The commands run in it, in order. */
+  readonly commands: string[];
 };
+
+/** What a command ends with, as a test says. */
+export type FakeRun = {
+  readonly exitCode: number;
+  readonly stdout?: string;
+  readonly stderr?: string;
+};
+
+/** A snapshot saved in this Boat. */
+export type FakeSaved = { readonly name: string; readonly sandboxId: string; status: string };
 
 /** One call of the API, as this Boat received it. */
 export type BoatCall = {
@@ -44,12 +58,51 @@ export type FakeBoat = {
   archive(id: string): void;
   /** How many sandboxes a page of a list has. */
   pageSize: number;
+  /** The saved snapshots, by name. */
+  readonly saved: Map<string, FakeSaved>;
+  /** What the processor of a new sandbox is, as `uname -m` says. */
+  arch: string;
+  /**
+   * How a command that is not detached ends. Without one of the test's, the build's own are
+   * answered as a sandbox would: its processor, the end of a file, and an install that works.
+   */
+  onCommand: (sandbox: FakeSandbox, command: string) => FakeRun | undefined;
+  /** How a detached command ends, and how many looks at it see it running first. */
+  onDetached: (sandbox: FakeSandbox, command: string) => FakeRun & { readonly looks?: number };
+  /** How many looks at a snapshot being saved see it saving, and how it ends. */
+  saving: { looks: number; ends: 'ready' | 'failed' };
 };
+
+/** A command of a build, as a sandbox of Boat's answers it. */
+function ownRun(box: FakeSandbox, command: string): FakeRun {
+  if (command === 'uname -m') return { exitCode: 0, stdout: `${fakeArch(box)}\n` };
+  const tail = /^tail -c \d+ (\S+)$/.exec(command);
+  if (tail !== null) {
+    const text = box.written.get(tail[1] ?? '');
+    return { exitCode: 0, stdout: typeof text === 'string' ? text : '' };
+  }
+  if (command.includes('acentric-machine --version')) {
+    return { exitCode: 0, stdout: 'acentric-machine 0.0.0\n' };
+  }
+  return { exitCode: 0 };
+}
+
+const archOf = new WeakMap<FakeSandbox, string>();
+const fakeArch = (box: FakeSandbox): string => archOf.get(box) ?? 'x86_64';
 
 export function fakeBoat(): FakeBoat {
   const calls: BoatCall[] = [];
   const sandboxes = new Map<string, FakeSandbox>();
   const keys = new Set(['boat-key-1']);
+  const saved = new Map<string, FakeSaved>();
+  /** How many more looks each snapshot being saved is seen saving, and how it ends. */
+  const saving = new Map<string, { looks: number; ends: 'ready' | 'failed' }>();
+  /** The detached commands, by their process ID. */
+  const processes = new Map<
+    number,
+    { sandbox: FakeSandbox; run: FakeRun; looks: number; log?: string; killed: boolean }
+  >();
+  let pid = 100;
   const failures: { method: string; path: RegExp; status: number; body: Json }[] = [];
   let next = 1;
 
@@ -64,6 +117,11 @@ export function fakeBoat(): FakeBoat {
     keys,
     onStart: () => undefined,
     pageSize: 200,
+    saved,
+    arch: 'x86_64',
+    onCommand: () => undefined,
+    onDetached: () => ({ exitCode: 0, stdout: 'the script ran\n' }),
+    saving: { looks: 1, ends: 'ready' },
     callsOf: (method, path) =>
       calls.filter((call) => call.method === method && path.test(call.path)),
     failNext: (
@@ -83,6 +141,15 @@ export function fakeBoat(): FakeBoat {
       const method = init?.method ?? 'GET';
       const path = url.pathname.replace(/^\/api\/v1/, '') + url.search;
       const headers = new Headers(init?.headers);
+      // An upload's address is signed: it is put to with no key.
+      if (url.host === 'uploads.boat.test') {
+        calls.push({ method, path, headers, body: undefined });
+        const [, id, ...rest] = url.pathname.split('/');
+        const into = sandboxes.get(id ?? '');
+        if (method !== 'PUT' || into === undefined) return failed(404, 'not_found', 'No upload');
+        into.written.set(`/${rest.join('/')}`, new Uint8Array(init?.body as Uint8Array));
+        return new Response(null, { status: 200 });
+      }
       const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as Json) : undefined;
       calls.push({ method, path, headers, body });
 
@@ -108,8 +175,11 @@ export function fakeBoat(): FakeBoat {
           ttlSeconds: Number(body?.['ttlSeconds']),
           files: (body?.['files'] ?? []) as { path: string; content: string }[],
           from: String(body?.['from']),
+          written: new Map(),
+          commands: [],
         };
         sandboxes.set(sandbox.id, sandbox);
+        archOf.set(sandbox, boat.arch);
         // It starts after the call is answered, as a real one does.
         setTimeout(() => {
           if (sandboxes.get(sandbox.id) !== sandbox) return;
@@ -142,6 +212,100 @@ export function fakeBoat(): FakeBoat {
           })),
           pageInfo: { hasMore: more, nextCursor: more ? String(from + boat.pageSize) : null },
         });
+      }
+
+      if (path === '/saved-snapshots' && method === 'POST') {
+        const name = String(body?.['name']);
+        const from = sandboxes.get(String(body?.['sandboxId']));
+        if (from === undefined) return failed(404, 'sandbox_not_found', 'There is no such sandbox');
+        saved.set(name, { name, sandboxId: from.id, status: 'saving' });
+        saving.set(name, { ...boat.saving });
+        return answer(202, { status: 'saving', snapshot: { name, status: 'saving' } });
+      }
+      const snapshot = /^\/saved-snapshots\/([^/?]+)$/.exec(path);
+      if (snapshot !== null) {
+        const name = decodeURIComponent(snapshot[1] ?? '');
+        const one = saved.get(name);
+        if (one === undefined) return failed(404, 'not_found', 'not_found');
+        if (method === 'GET') {
+          const until = saving.get(name);
+          if (until !== undefined && until.looks-- <= 0) {
+            one.status = until.ends;
+            saving.delete(name);
+          }
+          return answer(200, {
+            snapshot: {
+              name,
+              status: one.status,
+              error: one.status === 'failed' ? 'the disk could not be read' : null,
+            },
+          });
+        }
+        if (method === 'DELETE') {
+          saved.delete(name);
+          return answer(200, { name, status: 'deleted' });
+        }
+      }
+
+      const inside = /^\/sandboxes\/([^/?]+)\/(commands|files)(?:\/([^/?]+))?$/.exec(path);
+      if (inside !== null) {
+        const box = sandboxes.get(decodeURIComponent(inside[1] ?? ''));
+        if (box === undefined) return failed(404, 'sandbox_not_found', 'There is no such sandbox');
+        if (inside[2] === 'files' && method === 'PUT' && inside[3] === undefined) {
+          box.written.set(String(body?.['path']), String(body?.['content']));
+          return answer(200, { success: true, path: body?.['path'] });
+        }
+        if (inside[2] === 'files' && method === 'POST' && inside[3] === 'upload-url') {
+          return answer(200, {
+            method: 'PUT',
+            url: `https://uploads.boat.test/${box.id}${String(body?.['path'])}`,
+          });
+        }
+        if (inside[2] === 'commands' && method === 'POST' && inside[3] === undefined) {
+          const command = String(body?.['command']);
+          box.commands.push(command);
+          if (body?.['detached'] === true) {
+            const run = boat.onDetached(box, command);
+            const id = pid++;
+            const log = /> (\S+) 2>&1/.exec(command)?.[1];
+            processes.set(id, {
+              sandbox: box,
+              run,
+              looks: run.looks ?? 0,
+              killed: false,
+              ...(log === undefined ? {} : { log }),
+            });
+            return answer(200, { type: 'command.started', processId: id, pid: id });
+          }
+          const run = boat.onCommand(box, command) ?? ownRun(box, command);
+          return answer(200, {
+            type: 'command.finished',
+            exitCode: run.exitCode,
+            stdout: run.stdout ?? '',
+            stderr: run.stderr ?? '',
+            timedOut: false,
+          });
+        }
+        const process = processes.get(Number(inside[3]));
+        if (inside[2] === 'commands' && process !== undefined && process.sandbox === box) {
+          if (method === 'DELETE') {
+            process.killed = true;
+            return answer(200, { stopped: true });
+          }
+          if (method === 'GET') {
+            const running = !process.killed && process.looks-- > 0;
+            // What it printed is in its log once it has ended.
+            if (!running && process.log !== undefined) {
+              box.written.set(process.log, process.run.stdout ?? '');
+            }
+            return answer(200, {
+              type: 'command.status',
+              running,
+              exitCode: running ? null : process.killed ? null : process.run.exitCode,
+            });
+          }
+        }
+        return failed(404, 'not_found', 'There is no such route');
       }
 
       const match = /^\/sandboxes\/([^/?]+)(\/resume)?$/.exec(path);

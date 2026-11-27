@@ -1,10 +1,19 @@
 // Boat as a provider, against what stands for Boat's API (see `fake-boat.ts`): what it asks
 // of Boat, and what it makes of Boat's answers. It has not been run against Boat itself.
 
+import { readFileSync } from 'node:fs';
+
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { BOAT_PROVISION_PATH, ProviderFailed, boat, boatState } from '../src/index.ts';
-import type { NewSandbox } from '../src/index.ts';
+import {
+  BOAT_BOOT,
+  BOAT_PROVISION_PATH,
+  BOAT_UNIT,
+  ProviderFailed,
+  boat,
+  boatState,
+} from '../src/index.ts';
+import type { NewSandbox, TemplateBuild } from '../src/index.ts';
 import { fakeBoat } from './fake-boat.ts';
 import type { FakeBoat } from './fake-boat.ts';
 
@@ -210,5 +219,206 @@ describe('Boat, as a provider of sandboxes', () => {
       status: 0,
       message: 'Boat could not be reached',
     });
+  });
+});
+
+describe('a template at Boat', () => {
+  const program = new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 1, 2, 3]);
+  const builder = () =>
+    boat({ fetch: api.fetch, templateTimes: { pollMs: 5, startMs: 2000, saveMs: 2000 } }).account(
+      'boat-key-1',
+      { requestMs: 2000 },
+    );
+  const build = (given: Partial<TemplateBuild> = {}): TemplateBuild & { printed: string[] } => {
+    const printed: string[] = [];
+    return {
+      name: 'acentric-tpl-1',
+      label: 'with-jq',
+      script: 'sudo apt-get install -y jq\n',
+      program: (arch) => (arch === 'x64' ? program : undefined),
+      labels: { 'acentric.template': 'tpl_1', 'acentric.provider': 'prv_1' },
+      key: 'tpl_1-0011',
+      scriptSeconds: 60,
+      output: (text) => printed.push(text),
+      signal: new AbortController().signal,
+      printed,
+      ...given,
+    };
+  };
+
+  it('is built in a sandbox of its own: the script, then the machine program, and the disk saved', async () => {
+    const asked = build();
+    await builder().buildTemplate?.(asked);
+
+    const [made] = api.callsOf('POST', /^\/sandboxes$/);
+    expect(made?.body).toMatchObject({
+      type: 'small',
+      noEnv: true,
+      name: 'acentric template with-jq',
+      labels: asked.labels,
+    });
+    expect(made?.headers.get('idempotency-key')).toBe('tpl_1-0011');
+    // The builder is gone, and the disk was saved under the build's name.
+    expect(api.sandboxes.size).toBe(0);
+    expect(api.saved.get('acentric-tpl-1')).toEqual({
+      name: 'acentric-tpl-1',
+      sandboxId: 'sbx_1',
+      status: 'ready',
+    });
+
+    const order = api.calls
+      .filter((call) => call.method !== 'GET')
+      .map((call) => `${call.method} ${call.path.replace(/\/commands\/\d+$/, '/commands/:p')}`);
+    expect(order).toEqual([
+      'POST /sandboxes',
+      'PUT /sandboxes/sbx_1/files',
+      'POST /sandboxes/sbx_1/commands',
+      'POST /sandboxes/sbx_1/commands',
+      'POST /sandboxes/sbx_1/commands',
+      'POST /sandboxes/sbx_1/files/upload-url',
+      'PUT /sbx_1/tmp/acentric-template/acentric-machine',
+      'PUT /sandboxes/sbx_1/files',
+      'PUT /sandboxes/sbx_1/files',
+      'POST /sandboxes/sbx_1/commands',
+      'POST /saved-snapshots',
+      'DELETE /sandboxes/sbx_1',
+    ]);
+    // The script first, as it was given, run from the home folder with what it prints kept.
+    const files = api.callsOf('PUT', /\/files$/).map((call) => call.body);
+    expect(files[0]).toEqual({
+      path: '/tmp/acentric-template/script.sh',
+      content: 'sudo apt-get install -y jq\n',
+    });
+    const [script, tail, uname, install] = api
+      .callsOf('POST', /\/commands$/)
+      .map((call) => call.body);
+    expect(script).toEqual({
+      command:
+        'cd ~ && exec bash /tmp/acentric-template/script.sh > /tmp/acentric-template/output.log 2>&1 < /dev/null',
+      detached: true,
+    });
+    expect(tail?.['command']).toBe('tail -c 65536 /tmp/acentric-template/output.log');
+    expect(uname?.['command']).toBe('uname -m');
+    // Then the machine program for its processor, its start-up, and their install.
+    expect(
+      api.calls
+        .find((call) => call.path.endsWith('/acentric-machine'))
+        ?.headers.has('authorization'),
+    ).toBe(false);
+    expect(files[1]).toEqual({ path: '/tmp/acentric-template/boot', content: BOAT_BOOT });
+    expect(files[2]).toEqual({
+      path: '/tmp/acentric-template/acentric-machine.service',
+      content: BOAT_UNIT,
+    });
+    expect(String(install?.['command'])).toContain(
+      'sudo install -D -m 755 /tmp/acentric-template/acentric-machine /usr/local/bin/acentric-machine',
+    );
+    expect(String(install?.['command'])).toContain(
+      'sudo systemctl enable acentric-machine.service',
+    );
+    expect(String(install?.['command'])).toContain('rm -rf /tmp/acentric-template');
+    expect(api.callsOf('POST', /^\/saved-snapshots$/)[0]?.body).toEqual({
+      sandboxId: 'sbx_1',
+      name: 'acentric-tpl-1',
+    });
+    // What it printed: the script's, then the install's.
+    expect(asked.printed.at(-1)).toBe(
+      'the script ran\n\n--- the machine program is installed ---\nacentric-machine 0.0.0\n',
+    );
+  });
+
+  it('starts what it puts in from the same files as the sandbox image', () => {
+    const deploy = new URL('../../../deploy/sandbox/', import.meta.url);
+    expect(BOAT_BOOT).toBe(readFileSync(new URL('boot', deploy), 'utf8'));
+    expect(BOAT_UNIT).toBe(readFileSync(new URL('acentric-machine.service', deploy), 'utf8'));
+  });
+
+  it('fails when its script does, and saves nothing', async () => {
+    api.onDetached = () => ({ exitCode: 3, stdout: 'E: Unable to locate package jq\n', looks: 2 });
+    const asked = build();
+    await expect(builder().buildTemplate?.(asked)).rejects.toMatchObject({
+      name: 'TemplateFailed',
+      message: 'The script ended with 3',
+    });
+    expect(asked.printed.at(-1)).toBe('E: Unable to locate package jq\n');
+    expect(api.saved.size).toBe(0);
+    expect(api.sandboxes.size).toBe(0);
+  });
+
+  it('stops a script that runs for too long', async () => {
+    api.onDetached = () => ({ exitCode: 0, looks: 1_000_000 });
+    await expect(builder().buildTemplate?.(build({ scriptSeconds: 0.05 }))).rejects.toMatchObject({
+      message: 'The script ran for more than 0.05 seconds, and was stopped',
+    });
+    expect(api.callsOf('DELETE', /\/commands\/\d+$/)).toHaveLength(1);
+    expect(api.sandboxes.size).toBe(0);
+  });
+
+  it('is stopped when it is asked to be', async () => {
+    api.onDetached = () => ({ exitCode: 0, looks: 1_000_000 });
+    const stop = new AbortController();
+    const building = builder().buildTemplate?.(build({ signal: stop.signal }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    stop.abort();
+    await expect(building).rejects.toMatchObject({ message: 'The build was stopped' });
+    expect(api.callsOf('DELETE', /\/commands\/\d+$/)).toHaveLength(1);
+    expect(api.saved.size).toBe(0);
+    expect(api.sandboxes.size).toBe(0);
+  });
+
+  it('is stopped while its disk is being saved, and what is saved is left to be deleted', async () => {
+    api.saving = { looks: 1_000_000, ends: 'ready' };
+    const stop = new AbortController();
+    const building = builder().buildTemplate?.(build({ signal: stop.signal }));
+    for (let tries = 0; api.saved.size === 0; tries++) {
+      if (tries > 500) throw new Error('The disk was never being saved');
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    stop.abort();
+    await expect(building).rejects.toMatchObject({ message: 'The build was stopped' });
+    expect(api.sandboxes.size).toBe(0);
+  });
+
+  it('needs a machine program for the processor of its sandbox', async () => {
+    api.arch = 'aarch64';
+    await expect(builder().buildTemplate?.(build())).rejects.toMatchObject({
+      message: "This server hands out no machine program for the sandbox's processor, aarch64",
+    });
+    expect(api.callsOf('POST', /upload-url$/)).toHaveLength(0);
+    expect(api.sandboxes.size).toBe(0);
+  });
+
+  it('fails when the machine program cannot be installed, or the disk saved', async () => {
+    api.onCommand = (_box, command) =>
+      command.includes('--version')
+        ? {
+            exitCode: 1,
+            stderr:
+              '~/.acentric is there: a sandbox made from this one would not enrol as itself\n',
+          }
+        : undefined;
+    const asked = build();
+    await expect(builder().buildTemplate?.(asked)).rejects.toMatchObject({
+      message: 'The machine program could not be installed',
+    });
+    expect(asked.printed.at(-1)).toContain('~/.acentric is there');
+
+    api.onCommand = () => undefined;
+    api.saving = { looks: 2, ends: 'failed' };
+    await expect(builder().buildTemplate?.(build({ key: 'again' }))).rejects.toMatchObject({
+      message: 'Boat could not save the disk: the disk could not be read',
+    });
+    expect(api.sandboxes.size).toBe(0);
+  });
+
+  it('makes a sandbox from a template in place of the server’s own, and deletes a template', async () => {
+    await account().create({ ...sandbox, template: 'acentric-tpl-1' });
+    expect(api.sandboxes.get('sbx_1')?.from).toBe('acentric-tpl-1');
+
+    await builder().buildTemplate?.(build({ name: 'acentric-tpl-2' }));
+    await builder().deleteTemplate?.('acentric-tpl-2');
+    expect(api.saved.size).toBe(0);
+    // One it no longer has is deleted already.
+    await expect(builder().deleteTemplate?.('acentric-tpl-2')).resolves.toBeUndefined();
   });
 });
