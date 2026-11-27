@@ -141,4 +141,5 @@ alone.
 | A page of a list                      | 200                                                                  |
 | How long a command is waited for      | 300 seconds                                                          |
 | How long a sandbox is kept, idle      | 30 days                                                              |
+| A template's script                   | 64 KB, run for at most an hour; the last 64 KB of its output is kept |
 | Servers on one folder of data         | 1                                                                    |

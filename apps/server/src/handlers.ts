@@ -665,6 +665,37 @@ export const handlers: Handlers = {
   'sandboxProviders.sandboxes': async ({ params }, { engine }) => ({
     items: await sandboxesOf(engine).list(params.provider),
   }),
+  'sandboxTemplates.list': async ({ params }, { engine }) => ({
+    items: await sandboxesOf(engine).templates(params.provider),
+  }),
+  'sandboxTemplates.create': async (asked, { engine, audit }) => {
+    const template = await sandboxesOf(engine).addTemplate(
+      asked.params.provider,
+      defined(asked.body),
+    );
+    await audit.record({
+      by: refOf(asked),
+      action: 'sandbox_template.create',
+      target: { type: 'sandbox_template', id: template.id },
+      detail: { name: template.name, provider: template.provider },
+    });
+    return template;
+  },
+  'sandboxTemplates.get': async ({ params }, { engine }) =>
+    sandboxesOf(engine).template(params.provider, params.template),
+  'sandboxTemplates.delete': async (asked, { engine, audit }) => {
+    const sandboxes = sandboxesOf(engine);
+    const { provider, template } = asked.params;
+    const { name } = await sandboxes.template(provider, template);
+    await sandboxes.removeTemplate(provider, template);
+    await audit.record({
+      by: refOf(asked),
+      action: 'sandbox_template.delete',
+      target: { type: 'sandbox_template', id: template },
+      detail: { name, provider },
+    });
+    return undefined;
+  },
   'sandboxes.create': async (asked, { engine, audit }) => {
     // Where the request came to: where its daemon dials, for a server not told where it is reached.
     const origin = new URL(asked.request.url).origin;
@@ -673,7 +704,12 @@ export const handlers: Handlers = {
       by: refOf(asked),
       action: 'sandbox.create',
       target: { type: 'machine', id: made.machine.id },
-      detail: { name: made.machine.name, provider: made.provider, kind: made.kind },
+      detail: {
+        name: made.machine.name,
+        provider: made.provider,
+        kind: made.kind,
+        template: asked.body?.template ?? null,
+      },
     });
     return made;
   },
