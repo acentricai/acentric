@@ -8,9 +8,14 @@
 //
 // A key is checked with its provider when it is added or replaced: an account that is kept is
 // one its provider takes. Nothing gives a key back.
+//
+// An account of a provider that is signed in to, such as ChatGPT, has a token in place of a key
+// (see `sign-ins.ts`). The token lasts a while, and is renewed with what the sign-in left before
+// it stops being taken. When the provider says the sign-in has ended, the account says why, and
+// its calls fail until it is signed in again.
 
 import { ModelFailure } from '@acentric/ai';
-import type { Credential, ModelRunner, Providers } from '@acentric/ai';
+import type { Credential, ModelRunner, Provider, Providers, SignedIn } from '@acentric/ai';
 import type { Account, AccountId, Actor, PrincipalRef } from '@acentric/protocol';
 
 import type { Audit } from './audit.ts';
@@ -40,6 +45,9 @@ export class ProviderUnreachable extends EngineError {
   readonly code = 'provider_failed';
 }
 
+/** How long before its token stops being taken a signed-in account's token is renewed. */
+const RENEW_BEFORE_MS = 5 * 60 * 1000;
+
 /** What an agent's model calls are made with. */
 export type Access = {
   /** The account. Null for calls that no account says anything of. */
@@ -60,6 +68,14 @@ export class Accounts {
     AccountId,
     { readonly sealed: string; readonly runner: ModelRunner }
   >();
+  /** The runner of each signed-in account: it reads the account's token for each call. */
+  readonly #signedIn = new Map<AccountId, ModelRunner>();
+  /**
+   * What is being written of each account, so that one write waits for the other. A renewed
+   * token replaces one the provider will not take again: a write of the account as it was
+   * before would put that one back.
+   */
+  readonly #writing = new Map<AccountId, Promise<unknown>>();
 
   constructor(options: {
     readonly store: Store;
@@ -96,6 +112,64 @@ export class Accounts {
   ): Promise<Account> {
     const credential: Credential = { type: 'api_key', apiKey: given.apiKey.trim() };
     await this.#check(given.provider, credential);
+    return this.#insert(by, given, credential);
+  }
+
+  /** Adds an account that was made by signing in at its provider (see `sign-ins.ts`). */
+  async addSignedIn(
+    by: PrincipalRef,
+    given: { readonly provider: string; readonly name: string; readonly default?: boolean },
+    signedIn: SignedIn,
+  ): Promise<Account> {
+    return this.#insert(by, given, signedIn.credential, { email: signedIn.email });
+  }
+
+  /**
+   * Signs an account in again: its calls are made with this sign-in from now on, and one that
+   * had ended holds again.
+   */
+  async signInAgain(by: PrincipalRef, id: AccountId, signedIn: SignedIn): Promise<Account> {
+    return this.#locked(id, async () => {
+      const before = await this.#stored(id);
+      const stored: StoredAccount = {
+        account: { ...before.account, signIn: { email: signedIn.email } },
+        sealed: this.#seal(id, signedIn.credential),
+      };
+      await this.#store.saveAccount(stored);
+      this.#runners.delete(id);
+      await this.#audit?.record({
+        by,
+        action: 'account.update',
+        target: { type: 'account', id },
+        detail: { signIn: 'again' },
+      });
+      return this.#shown(stored);
+    });
+  }
+
+  /**
+   * The provider of an account made by signing in, and what it was signed in with: what
+   * signing it in again starts from. Throws when it is an account with a key.
+   */
+  async signedInWith(id: AccountId): Promise<{ provider: Provider; credential: Credential }> {
+    const stored = await this.#stored(id);
+    const provider = this.#providers.has(stored.account.provider)
+      ? this.#providers.get(stored.account.provider)
+      : undefined;
+    if (provider?.signIn === undefined || stored.account.credential !== 'access_token') {
+      throw new InvalidAccount(
+        `The account ${stored.account.name} is not signed in to: its key is replaced instead`,
+      );
+    }
+    return { provider, credential: this.#open(stored) };
+  }
+
+  async #insert(
+    by: PrincipalRef,
+    given: { readonly provider: string; readonly name: string; readonly default?: boolean },
+    credential: Credential,
+    signIn?: { readonly email: string | null },
+  ): Promise<Account> {
     const now = this.#clock();
     const id = this.#ids.make('account', now);
     const others = (await this.#store.listAccounts()).filter(
@@ -108,6 +182,7 @@ export class Accounts {
         provider: given.provider,
         name: given.name,
         credential: credential.type,
+        ...(signIn === undefined ? {} : { signIn }),
         default: isDefault,
         owner: null,
         createdBy: by,
@@ -140,6 +215,14 @@ export class Accounts {
    * checked with the provider first.
    */
   async update(
+    by: PrincipalRef,
+    id: AccountId,
+    changes: { readonly name?: string; readonly apiKey?: string; readonly default?: true },
+  ): Promise<Account> {
+    return this.#locked(id, () => this.#update(by, id, changes));
+  }
+
+  async #update(
     by: PrincipalRef,
     id: AccountId,
     changes: { readonly name?: string; readonly apiKey?: string; readonly default?: true },
@@ -181,29 +264,60 @@ export class Accounts {
    * provider's default, the oldest of that provider's other accounts is the default from then on.
    */
   async remove(by: PrincipalRef, id: AccountId): Promise<void> {
-    const stored = await this.#stored(id);
-    const actors = await this.#store.actorsGiven(id);
-    if (actors > 0) {
-      throw new Conflict(
-        `${String(actors)} ${actors === 1 ? 'actor is' : 'actors are'} given this account: archive or delete ${actors === 1 ? 'it' : 'them'} first`,
-      );
-    }
-    await this.#store.removeAccount(id);
-    this.#runners.delete(id);
+    const stored = await this.#locked(id, async () => {
+      const found = await this.#stored(id);
+      const actors = await this.#store.actorsGiven(id);
+      if (actors > 0) {
+        throw new Conflict(
+          `${String(actors)} ${actors === 1 ? 'actor is' : 'actors are'} given this account: archive or delete ${actors === 1 ? 'it' : 'them'} first`,
+        );
+      }
+      await this.#store.removeAccount(id);
+      this.#runners.delete(id);
+      this.#signedIn.delete(id);
+      return found;
+    });
+    // A sign-in is ended at its provider too, so that what it left stops working there. The
+    // account goes all the same when the provider cannot be asked.
+    const ended = await this.#end(stored);
     if (stored.account.default) {
       const [next] = (await this.#store.listAccounts()).filter(
         ({ account }) => account.provider === stored.account.provider,
       );
       if (next !== undefined) {
-        await this.#store.saveAccount({ ...next, account: { ...next.account, default: true } });
+        await this.#locked(next.account.id, async () => {
+          const now = await this.#store.loadAccount(next.account.id);
+          if (now === undefined) return;
+          await this.#store.saveAccount({ ...now, account: { ...now.account, default: true } });
+        });
       }
     }
     await this.#audit?.record({
       by,
       action: 'account.delete',
       target: { type: 'account', id },
-      detail: { provider: stored.account.provider, name: stored.account.name },
+      detail: {
+        provider: stored.account.provider,
+        name: stored.account.name,
+        ...(ended === undefined ? {} : { signInEnded: ended }),
+      },
     });
+  }
+
+  /**
+   * Ends an account's sign-in at its provider. Whether the provider said it has; undefined for
+   * an account that is not signed in to.
+   */
+  async #end(stored: StoredAccount): Promise<boolean | undefined> {
+    const { provider } = stored.account;
+    const flow = this.#providers.has(provider) ? this.#providers.get(provider).signIn : undefined;
+    if (flow === undefined || stored.account.credential !== 'access_token') return undefined;
+    try {
+      await flow.end(this.#open(stored), this.#signInSettings());
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -250,10 +364,17 @@ export class Accounts {
       );
     }
     const { id } = stored.account;
+    if (of.signIn !== undefined && stored.account.credential === 'access_token') {
+      let runner = this.#signedIn.get(id);
+      if (runner === undefined) {
+        runner = this.#signedInRunner(id, of);
+        this.#signedIn.set(id, runner);
+      }
+      return { account: id, runner };
+    }
     let made = this.#runners.get(id);
     if (made?.sealed !== stored.sealed) {
-      const opened = this.#secrets.open(sealedFor.account(id), stored.sealed, `The account ${id}`);
-      const credential = JSON.parse(opened) as Credential;
+      const credential = this.#open(stored);
       const runner = of.runner({
         credential,
         ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
@@ -262,6 +383,118 @@ export class Accounts {
       this.#runners.set(id, made);
     }
     return { account: id, runner: made.runner };
+  }
+
+  /**
+   * The runner of an account that was signed in to. Each call is made with the account's token
+   * as it is then, renewed first when it is about to stop being taken. A call the provider
+   * refuses for its credential is made once more with a token renewed for it: the provider may
+   * have stopped taking the one it gave before it said it would.
+   */
+  #signedInRunner(id: AccountId, provider: Provider): ModelRunner {
+    const runnerOf = (credential: Credential): ModelRunner =>
+      provider.runner({
+        credential,
+        ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
+      });
+    return {
+      run: async (step, signal) => {
+        const { credential, renewed } = await this.#token(id, provider, false);
+        try {
+          return await runnerOf(credential).run(step, signal);
+        } catch (error) {
+          if (!(error instanceof ModelFailure) || error.kind !== 'auth' || renewed) throw error;
+          const again = await this.#token(id, provider, true);
+          return runnerOf(again.credential).run(step, signal);
+        }
+      },
+    };
+  }
+
+  /**
+   * A signed-in account's credential, renewed when it is about to stop being taken, or when
+   * `force` says. `renewed` says whether it was renewed for this.
+   */
+  async #token(
+    id: AccountId,
+    provider: Provider,
+    force: boolean,
+  ): Promise<{ credential: Credential; renewed: boolean }> {
+    const stored = await this.#store.loadAccount(id);
+    if (stored === undefined) throw new AccountNotFound(id);
+    const credential = this.#open(stored);
+    const lasts =
+      credential.type === 'access_token' && credential.expiresAt !== undefined
+        ? credential.expiresAt - this.#clock()
+        : Infinity;
+    if (stored.account.signIn?.signedOut !== undefined) {
+      throw new ModelFailure(
+        `${stored.account.signIn.signedOut}: sign the account ${stored.account.name} in again`,
+        'auth',
+        { provider: provider.id },
+      );
+    }
+    if (!force && lasts > RENEW_BEFORE_MS) return { credential, renewed: false };
+    const renewed = await this.#locked(id, () => this.#renew(id, provider, stored.sealed));
+    return { credential: renewed, renewed: true };
+  }
+
+  /**
+   * Renews a signed-in account's token, with what the sign-in left, and keeps it. When the
+   * provider says the sign-in has ended, the account says so until it is signed in again.
+   */
+  async #renew(id: AccountId, provider: Provider, used: string): Promise<Credential> {
+    const flow = provider.signIn;
+    if (flow === undefined) throw new Error(`${provider.label} has no sign-in`);
+    // As it is now: a renewal that this one waited for may have kept a newer token already.
+    const stored = await this.#stored(id);
+    const before = this.#open(stored);
+    const lasts =
+      before.type === 'access_token' && before.expiresAt !== undefined
+        ? before.expiresAt - this.#clock()
+        : Infinity;
+    if (stored.sealed !== used && lasts > RENEW_BEFORE_MS) return before;
+    let renewed: Credential;
+    try {
+      renewed = await flow.renew(before, this.#signInSettings());
+    } catch (error) {
+      if (error instanceof ModelFailure && error.kind === 'auth') {
+        await this.#store.saveAccount({
+          ...stored,
+          account: {
+            ...stored.account,
+            signIn: { email: stored.account.signIn?.email ?? null, signedOut: error.message },
+          },
+        });
+      }
+      throw error;
+    }
+    await this.#store.saveAccount({ ...stored, sealed: this.#seal(id, renewed) });
+    return renewed;
+  }
+
+  #signInSettings(): { fetch?: typeof fetch } {
+    return this.#fetch === undefined ? {} : { fetch: this.#fetch };
+  }
+
+  /** Runs `write` once every write of the account that came before it has ended. */
+  async #locked<T>(id: AccountId, write: () => Promise<T>): Promise<T> {
+    const before = this.#writing.get(id) ?? Promise.resolve();
+    const done = before.then(write, write);
+    const settled = done.catch(() => undefined);
+    this.#writing.set(id, settled);
+    try {
+      return await done;
+    } finally {
+      if (this.#writing.get(id) === settled) this.#writing.delete(id);
+    }
+  }
+
+  #open(stored: StoredAccount): Credential {
+    const { id } = stored.account;
+    return JSON.parse(
+      this.#secrets.open(sealedFor.account(id), stored.sealed, `The account ${id}`),
+    ) as Credential;
   }
 
   async #defaultOf(provider: string): Promise<StoredAccount | undefined> {

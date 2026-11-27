@@ -1033,6 +1033,12 @@ export class MemoryStore implements Store {
     return [...this.#stopping].map(([actor, stopping]) => ({ actor, ...stopping }));
   }
 
+  readonly #hostId = `urn:uuid:${crypto.randomUUID()}`;
+
+  async hostId(): Promise<string> {
+    return this.#hostId;
+  }
+
   async loadBackupSettings(): Promise<StoredBackupSettings | undefined> {
     return copy(this.#backupSettings);
   }

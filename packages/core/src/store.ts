@@ -800,6 +800,12 @@ export interface Store {
   // How the server backs itself up, as set from the dashboard
 
   /** Undefined until they were set. */
+  /**
+   * The engine's own ID as a host, for a provider that asks where its calls run from: made
+   * once, with the store, and never changed.
+   */
+  hostId(): Promise<string>;
+
   loadBackupSettings(): Promise<StoredBackupSettings | undefined>;
   /** Keeps them in place of those there were. */
   saveBackupSettings(settings: StoredBackupSettings): Promise<void>;
