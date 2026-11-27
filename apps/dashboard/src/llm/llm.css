@@ -450,3 +450,64 @@
 .usage-bars__name .title-link:hover {
   background-size: 0 1px;
 }
+
+/* Signing in with ChatGPT: the button, then the steps that finish it. */
+.chatgpt-sign-in {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.chatgpt-sign-in__button {
+  justify-self: start;
+}
+
+.chatgpt-steps {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.chatgpt-steps > li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px var(--space-3);
+  counter-increment: step;
+}
+
+.chatgpt-steps > li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--wash);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chatgpt-steps > li > * {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.chatgpt-steps > li > .chatgpt-address {
+  justify-self: stretch;
+}
+
+.chatgpt-steps__text {
+  color: var(--ink);
+  line-height: 22px;
+}
+
+.chatgpt-address {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+}

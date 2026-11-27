@@ -14,6 +14,9 @@ export const PROVIDER_NAMES: { readonly [provider: string]: string } = {
 /** The providers an account is added to with an API key. A ChatGPT account is signed in, not given a key. */
 export const KEY_PROVIDERS = ['anthropic', 'openai', 'fireworks'] as const;
 
+/** The providers an account can be added to, as the add form lists them. */
+export const ADD_PROVIDERS = ['anthropic', 'openai', 'chatgpt', 'fireworks'] as const;
+
 /** A provider's name: its own, or its ID. */
 export const providerName = (provider: string): string => PROVIDER_NAMES[provider] ?? provider;
 

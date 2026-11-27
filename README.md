@@ -62,9 +62,11 @@ promises, how to check that an image is the one released, and what an upgrade ca
   again for the next command.
 - A provider's models are called with a model account: a key of the provider's, added with
   `acentric accounts add` and checked with the provider before it is kept. No key is read from
-  the environment. The first account of a provider is its default. An agent is of a provider;
-  each actor is given an account of that provider when it is created, the one asked for or the
-  default, and keeps it.
+  the environment. A ChatGPT account has no key: it is signed in with ChatGPT from the
+  dashboard's Add account, as OpenAI's Sign in with ChatGPT has it, and its calls are made on
+  that ChatGPT plan, its token renewed by the server. The first account of a provider is its
+  default. An agent is of a provider; each actor is given an account of that provider when it
+  is created, the one asked for or the default, and keeps it.
 - Every call of a model is written down with what it used, cost and took. `GET /v1/usage` adds
   it up, by agent, actor, account, provider, model, day or hour (in a time zone asked for),
   failure, kind or version, and each of those by another. `GET /v1/usage/calls` lists the calls.

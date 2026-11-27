@@ -1,8 +1,9 @@
 // `/llm-providers`: the accounts model calls are made with, several of each provider. Each agent
 // is given one of its provider's, or uses that provider's default. A key is checked with its
-// provider when it is added or replaced, and never shown again.
+// provider when it is added or replaced, and never shown again. A ChatGPT account has no key: it
+// is signed in with ChatGPT, and its calls are made on that ChatGPT plan.
 
-import { IconKey, IconPencil, IconPlus, IconStar, IconTrash } from '@tabler/icons-react';
+import { IconKey, IconLogin, IconPencil, IconPlus, IconStar, IconTrash } from '@tabler/icons-react';
 import type { Account } from '@acentric/protocol';
 import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
@@ -24,15 +25,16 @@ import {
   Table,
 } from '../machines/ui.tsx';
 import { engine } from './api.ts';
-import { dollars, KEY_PROVIDERS, providerName, rangeStart } from './format.ts';
+import { ChatGptSignInFlow, SignInAgainDialog } from './chatgpt.tsx';
+import { ADD_PROVIDERS, dollars, providerName, rangeStart } from './format.ts';
 import { keys, useAccounts, useUsage } from './queries.ts';
 
 import '../machines/machine-pane.css';
 import './llm.css';
 
-type Action = { kind: 'rename' | 'key' | 'remove'; provider: Account };
+type Action = { kind: 'rename' | 'key' | 'sign-in' | 'remove'; provider: Account };
 
-type KeyProvider = (typeof KEY_PROVIDERS)[number];
+type AddProvider = (typeof ADD_PROVIDERS)[number];
 
 const refresh = () => void queryClient.invalidateQueries({ queryKey: keys.all });
 
@@ -77,10 +79,22 @@ export function AccountsPage() {
               <span className="llm-name">
                 <span className="ac-table__name">{displayText(p.name)}</span>
                 {p.default && <span className="chip">default</span>}
+                {p.signIn?.signedOut !== undefined && (
+                  <span className="chip chip--warn" title={safeText(p.signIn.signedOut)}>
+                    signed out
+                  </span>
+                )}
               </span>
             ),
           },
-          { name: 'Provider', cell: (p) => <span>{providerName(p.provider)}</span> },
+          {
+            name: 'Provider',
+            cell: (p) => (
+              <span {...(p.signIn?.email == null ? {} : { title: safeText(p.signIn.email) })}>
+                {providerName(p.provider)}
+              </span>
+            ),
+          },
           {
             name: 'Last 30 days',
             className: 'ac-table__num',
@@ -115,7 +129,7 @@ export function AccountsPage() {
                     >
                       Rename
                     </MenuItem>
-                    {p.credential === 'api_key' && (
+                    {p.credential === 'api_key' ? (
                       <MenuItem
                         icon={<IconKey size={16} stroke={1.75} aria-hidden="true" />}
                         onSelect={() => {
@@ -124,6 +138,16 @@ export function AccountsPage() {
                         }}
                       >
                         Replace key
+                      </MenuItem>
+                    ) : (
+                      <MenuItem
+                        icon={<IconLogin size={16} stroke={1.75} aria-hidden="true" />}
+                        onSelect={() => {
+                          close();
+                          setAction({ kind: 'sign-in', provider: p });
+                        }}
+                      >
+                        Sign in again
                       </MenuItem>
                     )}
                     <MenuItem
@@ -160,6 +184,13 @@ export function AccountsPage() {
           onClose={() => setAction(null)}
         />
       )}
+      {action?.kind === 'sign-in' && (
+        <SignInAgainDialog
+          key={action.provider.id}
+          account={action.provider}
+          onClose={() => setAction(null)}
+        />
+      )}
       {action?.kind === 'remove' && (
         <RemoveDialog provider={action.provider} onClose={() => setAction(null)} />
       )}
@@ -168,11 +199,12 @@ export function AccountsPage() {
 }
 
 /**
- * `POST /v1/accounts`, the key checked with the provider first and not shown again. The first of
+ * `POST /v1/accounts`, the key checked with the provider first and not shown again. Or, for
+ * ChatGPT, a sign-in with ChatGPT in place of the key: `POST /v1/chatgpt-sign-ins`. The first of
  * a provider is its default; another is made it from the list.
  */
 function AddDialog({ onClose }: { onClose: () => void }) {
-  const [provider, setProvider] = useState<KeyProvider>('anthropic');
+  const [provider, setProvider] = useState<AddProvider>('anthropic');
   const [name, setName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const form = useId();
@@ -188,6 +220,10 @@ function AddDialog({ onClose }: { onClose: () => void }) {
       onClose();
     },
   });
+  // Signed in, not given a key.
+  const signsIn = provider === 'chatgpt';
+  // While a sign-in waits, the name it was started with stays.
+  const [signingIn, setSigningIn] = useState(false);
   const ready = name.trim() !== '' && apiKey.trim() !== '';
   return (
     <Dialog
@@ -199,15 +235,17 @@ function AddDialog({ onClose }: { onClose: () => void }) {
           <Button variant="quiet" disabled={add.isPending} onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            form={form}
-            variant="primary"
-            busy={add.isPending}
-            disabled={!ready}
-          >
-            Add account
-          </Button>
+          {!signsIn && (
+            <Button
+              type="submit"
+              form={form}
+              variant="primary"
+              busy={add.isPending}
+              disabled={!ready}
+            >
+              Add account
+            </Button>
+          )}
         </>
       }
     >
@@ -216,7 +254,7 @@ function AddDialog({ onClose }: { onClose: () => void }) {
         className="dialog-form"
         onSubmit={(e) => {
           e.preventDefault();
-          if (ready && !add.isPending) add.mutate();
+          if (!signsIn && ready && !add.isPending) add.mutate();
         }}
       >
         <div className="ac-field">
@@ -224,7 +262,7 @@ function AddDialog({ onClose }: { onClose: () => void }) {
           <Dropdown
             label="Provider"
             value={provider}
-            options={KEY_PROVIDERS.map((kind) => ({ value: kind, label: providerName(kind) }))}
+            options={ADD_PROVIDERS.map((kind) => ({ value: kind, label: providerName(kind) }))}
             onChange={setProvider}
           />
         </div>
@@ -236,27 +274,36 @@ function AddDialog({ onClose }: { onClose: () => void }) {
               required
               maxLength={64}
               placeholder={`${provider}-personal`}
-              disabled={add.isPending}
+              disabled={add.isPending || (signsIn && signingIn)}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           )}
         </Field>
-        <Field label="API key">
-          {(id) => (
-            <input
-              id={id}
-              className="ac-input"
-              required
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              disabled={add.isPending}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-          )}
-        </Field>
+        {signsIn ? (
+          <ChatGptSignInFlow
+            ask={() => ({ name: name.trim() })}
+            ready={name.trim() !== ''}
+            onActive={setSigningIn}
+            onDone={onClose}
+          />
+        ) : (
+          <Field label="API key">
+            {(id) => (
+              <input
+                id={id}
+                className="ac-input"
+                required
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={add.isPending}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+            )}
+          </Field>
+        )}
       </form>
       <FormError error={add.error} />
     </Dialog>
