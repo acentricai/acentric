@@ -25,6 +25,7 @@ export const ID_PREFIXES = {
   invite: 'inv',
   auditEvent: 'aud',
   usage: 'usg',
+  signIn: 'sgn',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;
@@ -47,6 +48,7 @@ export type KeyId = Id<'key'>;
 export type InviteId = Id<'invite'>;
 export type AuditEventId = Id<'auditEvent'>;
 export type UsageId = Id<'usage'>;
+export type SignInId = Id<'signIn'>;
 
 /** Crockford's base32: the digits, then the letters without i, l, o and u. */
 const ALPHABET = '0123456789abcdefghjkmnpqrstvwxyz';
@@ -171,6 +173,7 @@ export const inputIdSchema = idSchema('input');
 export const machineIdSchema = idSchema('machine');
 export const sandboxProviderIdSchema = idSchema('sandboxProvider');
 export const accountIdSchema = idSchema('account');
+export const signInIdSchema = idSchema('signIn');
 export const userIdSchema = idSchema('user');
 export const sessionIdSchema = idSchema('session');
 export const keyIdSchema = idSchema('key');

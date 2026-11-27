@@ -23,6 +23,7 @@ import {
   keyIdSchema,
   machineIdSchema,
   sessionIdSchema,
+  signInIdSchema,
   userIdSchema,
 } from './ids.ts';
 import { secretNameSchema } from './manifest.ts';
@@ -30,6 +31,9 @@ import { pageQuerySchema, pageSchema } from './primitives.ts';
 import {
   accountSchema,
   createAccountRequestSchema,
+  finishSignInRequestSchema,
+  signInSchema,
+  startSignInRequestSchema,
   updateAccountRequestSchema,
   usageCallSchema,
   usageCallsQuerySchema,
@@ -842,6 +846,49 @@ export const routes = defineRoutes({
     params: z.object({ account: accountIdSchema }),
     status: 204,
     errors: ['not_found', 'conflict'],
+  },
+  'chatgptSignIns.create': {
+    method: 'POST',
+    path: '/v1/chatgpt-sign-ins',
+    summary:
+      'Starts a sign-in with ChatGPT: for a new ChatGPT account, or to sign one in again. Answers the page to sign in at.',
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    body: startSignInRequestSchema,
+    response: signInSchema,
+    status: 201,
+    errors: ['not_found', 'name_taken', 'conflict', 'unavailable'],
+  },
+  'chatgptSignIns.get': {
+    method: 'GET',
+    path: '/v1/chatgpt-sign-ins/{signIn}',
+    summary:
+      'Reads a sign-in with ChatGPT that waits: the page to sign in at, which is new once it was started again.',
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    params: z.object({ signIn: signInIdSchema }),
+    response: signInSchema,
+    status: 200,
+    errors: ['not_found'],
+  },
+  'chatgptSignIns.finish': {
+    method: 'POST',
+    path: '/v1/chatgpt-sign-ins/{signIn}/callback',
+    summary:
+      'Finishes a sign-in with ChatGPT with the address the browser was sent to, and makes or signs in again its account. One that ChatGPT refused may wait again, on a new page (see `chatgptSignIns.get`).',
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    params: z.object({ signIn: signInIdSchema }),
+    body: finishSignInRequestSchema,
+    response: accountSchema,
+    status: 200,
+    errors: ['not_found', 'name_taken', 'conflict', 'provider_failed', 'unavailable'],
+  },
+  'chatgptSignIns.delete': {
+    method: 'DELETE',
+    path: '/v1/chatgpt-sign-ins/{signIn}',
+    summary: 'Gives up a sign-in with ChatGPT that was not finished.',
+    auth: { on: 'engine', permission: 'accounts:manage' },
+    params: z.object({ signIn: signInIdSchema }),
+    status: 204,
+    errors: ['not_found'],
   },
   'usage.get': {
     method: 'GET',

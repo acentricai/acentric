@@ -6618,6 +6618,453 @@
         }
       }
     },
+    "/v1/chatgpt-sign-ins": {
+      "post": {
+        "operationId": "chatgptSignIns.create",
+        "summary": "Starts a sign-in with ChatGPT: for a new ChatGPT account, or to sign one in again. Answers the page to sign in at.",
+        "tags": [
+          "chatgptSignIns"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "accounts:manage"
+        },
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSignInRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignIn"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: name_taken, conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Failed: unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chatgpt-sign-ins/{signIn}": {
+      "get": {
+        "operationId": "chatgptSignIns.get",
+        "summary": "Reads a sign-in with ChatGPT that waits: the page to sign in at, which is new once it was started again.",
+        "tags": [
+          "chatgptSignIns"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "accounts:manage"
+        },
+        "parameters": [
+          {
+            "name": "signIn",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind signIn, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^sgn_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "sgn_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignIn"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "chatgptSignIns.delete",
+        "summary": "Gives up a sign-in with ChatGPT that was not finished.",
+        "tags": [
+          "chatgptSignIns"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "accounts:manage"
+        },
+        "parameters": [
+          {
+            "name": "signIn",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind signIn, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^sgn_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "sgn_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chatgpt-sign-ins/{signIn}/callback": {
+      "post": {
+        "operationId": "chatgptSignIns.finish",
+        "summary": "Finishes a sign-in with ChatGPT with the address the browser was sent to, and makes or signs in again its account. One that ChatGPT refused may wait again, on a new page (see `chatgptSignIns.get`).",
+        "tags": [
+          "chatgptSignIns"
+        ],
+        "x-acentric-auth": {
+          "on": "engine",
+          "permission": "accounts:manage"
+        },
+        "parameters": [
+          {
+            "name": "signIn",
+            "in": "path",
+            "required": true,
+            "description": "An ID of kind signIn, made by the engine.",
+            "schema": {
+              "type": "string",
+              "pattern": "^sgn_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "examples": [
+                "sgn_01jd3m5kq8f4xv9t6w2rhb0c7n"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishSignInRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed: invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Failed: unauthenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Failed: forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Failed: not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Failed: name_taken, conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Failed: rate_limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed: internal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Failed: provider_failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Failed: unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/usage": {
       "get": {
         "operationId": "usage.get",
@@ -10168,6 +10615,23 @@
               "access_token"
             ]
           },
+          "signIn": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "signedOut": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "email"
+            ]
+          },
           "default": {
             "type": "boolean"
           },
@@ -12593,6 +13057,20 @@
         ],
         "description": "What every failed request is answered with."
       },
+      "FinishSignInRequest": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
       "Input": {
         "type": "object",
         "properties": {
@@ -14700,6 +15178,44 @@
         ],
         "additionalProperties": false
       },
+      "SignIn": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^sgn_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind signIn, made by the engine.",
+            "examples": [
+              "sgn_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch.",
+            "examples": [
+              1795305600000
+            ]
+          },
+          "account": {
+            "type": "string",
+            "pattern": "^acc_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "description": "An ID of kind account, made by the engine.",
+            "examples": [
+              "acc_01jd3m5kq8f4xv9t6w2rhb0c7n"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "expiresAt"
+        ]
+      },
       "SignInRequest": {
         "type": "object",
         "properties": {
@@ -14750,6 +15266,47 @@
         "required": [
           "user",
           "session"
+        ]
+      },
+      "StartSignInRequest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+                "description": "What people call it. Unique among its kind, and can be changed.",
+                "examples": [
+                  "support"
+                ]
+              },
+              "default": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "account": {
+                "type": "string",
+                "pattern": "^acc_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                "description": "An ID of kind account, made by the engine.",
+                "examples": [
+                  "acc_01jd3m5kq8f4xv9t6w2rhb0c7n"
+                ]
+              }
+            },
+            "required": [
+              "account"
+            ],
+            "additionalProperties": false
+          }
         ]
       },
       "SubagentList": {
