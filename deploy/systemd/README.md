@@ -9,7 +9,7 @@ listens on `127.0.0.1:4000` only, for a proxy on the same machine to end HTTPS i
 On the machine, this folder of the version you run, then the settings and the keys:
 
 ```sh
-git clone --depth 1 --branch v0.18.0 https://github.com/acentricai/acentric.git
+git clone --depth 1 --branch v0.19.0 https://github.com/acentricai/acentric.git
 cd acentric/deploy/systemd
 sudo install -d -m 700 /etc/acentric /etc/acentric/secrets
 sudo install -m 600 acentric.env.example /etc/acentric/acentric.env   # then put the address in it
@@ -68,7 +68,7 @@ sudo systemctl stop acentric
 sudo docker run --rm -i --env-file /etc/acentric/acentric.env --volume acentric-data:/data \
   --volume /etc/acentric/secrets/secret-key:/run/secrets/acentric/secret-key:ro \
   --volume /etc/acentric/secrets/admin-key:/run/secrets/acentric/admin-key:ro \
-  ghcr.io/acentricai/acentric-server:0.18.0 acentric-server restore < acentric-2026-11-23.tar
+  ghcr.io/acentricai/acentric-server:0.19.0 acentric-server restore < acentric-2026-11-23.tar
 sudo systemctl start acentric
 ```
 

@@ -14,7 +14,7 @@ resources:
   - service.yaml
 images:
   - name: ghcr.io/acentricai/acentric-server
-    newTag: 0.18.0
+    newTag: 0.19.0
 configMapGenerator:
   # What the server is run with that is not secret. ACENTRIC_PUBLIC_URL is where people, the
   # acentric command and machines reach it.
