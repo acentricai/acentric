@@ -3,9 +3,10 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
-## Unreleased
+## 0.22.0
 
-**Upgrading from 0.21.** **The database changes**: the new version backs it up first, then adds
+**Upgrading from 0.21.** Take this version's image, or take it from the dashboard where an
+updater runs. **The database changes**: the new version backs it up first, then adds
 where a model provider keeps what it has of a conversation besides the engine. Nothing in it
 changes, and deployed agents carry over. The API only adds.
 

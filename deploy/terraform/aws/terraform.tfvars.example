@@ -9,7 +9,7 @@ domain = "engine.example.com"
 # route53_zone_id = "Z0123456789ABCDEFGHIJ"
 
 # The version of the server: an exact one, changed on purpose. See VERSIONS.md.
-acentric_version = "0.21.0"
+acentric_version = "0.22.0"
 
 # instance_type  = "t4g.medium"
 # data_volume_gb = 40
