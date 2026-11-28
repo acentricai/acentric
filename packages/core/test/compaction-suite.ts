@@ -61,7 +61,11 @@ export function compactionSuite(name: string, open: () => Promise<Store>): void 
     let engines: ReturnType<World['engine']>[];
 
     /** An engine whose provider compacts as `compacts` says, and whose model does what `script` says, in order. */
-    const setup = async (script: Scripted[], compacts?: 'older' | 'all', modelId?: string) => {
+    const setup = async (
+      script: Scripted[],
+      compacts?: 'older' | 'all' | 'inside',
+      modelId?: string,
+    ) => {
       const steps: ModelStep[] = [];
       const runner = {
         run: async (step: ModelStep, signal: AbortSignal) => {
@@ -112,6 +116,51 @@ export function compactionSuite(name: string, open: () => Promise<Store>): void 
         expect(one.failures).toEqual([]);
       }
       await store.close();
+    });
+
+    describe('a conversation whose provider compacts inside', () => {
+      it('is never compacted by the engine: its provider is told where to compact what it keeps', async () => {
+        const { one, steps, actor, say } = await setup(
+          [used(says('It was refunded twice.'), 80, 30), used(says('Order 7 is fine.'), 150, 10)],
+          'inside',
+        );
+        await say('Why two refunds?');
+        // 110 tokens, of 100 at most: the next call is made all the same, with the whole of it.
+        await say('And order 7?');
+        await say('Thanks.');
+        expect(steps).toHaveLength(3);
+        expect(steps.every((step) => step.compact === undefined && step.compactAt === 100)).toBe(
+          true,
+        );
+        expect(sent(steps[2])).toEqual([
+          'user: Why two refunds?',
+          'assistant: It was refunded twice.',
+          'user: And order 7?',
+          'assistant: Order 7 is fine.',
+          'user: Thanks.',
+        ]);
+        expect(await one.it.compactions(actor.id)).toEqual([]);
+        // Nor when a person asks.
+        expect((await one.it.compact(actor.id)).compacted).toBeNull();
+      });
+
+      it('fails a call that was too long, with nothing for the engine to compact', async () => {
+        const { one, actor, say } = await setup(
+          [
+            used(says('It was refunded twice.'), 80, 30),
+            async () => {
+              throw new ModelFailure('The prompt is too long', 'context_overflow');
+            },
+          ],
+          'inside',
+        );
+        await say('Why two refunds?');
+        await say('And order 7?');
+        expect(await one.it.compactions(actor.id)).toEqual([]);
+        const { lastTurn } = await one.it.getActor(actor.id);
+        expect(lastTurn).toMatchObject({ end: 'failed' });
+        expect(JSON.stringify(lastTurn)).toContain('There was nothing in it to compact.');
+      });
     });
 
     describe('a conversation that has grown past its size', () => {

@@ -13,12 +13,25 @@
 // (see `sign-ins.ts`). The token lasts a while, and is renewed with what the sign-in left before
 // it stops being taken. When the provider says the sign-in has ended, the account says why, and
 // its calls fail until it is signed in again.
+//
+// An account of a provider whose own program keeps the sign-in, such as Claude Code, holds only
+// the name of that program's folder: the program renews the sign-in itself, and the engine
+// never reads it. When the program says it is signed out, the account says so.
 
 import { ModelFailure } from '@acentric/ai';
-import type { Credential, ModelRunner, Provider, Providers, SignedIn } from '@acentric/ai';
+import type {
+  Credential,
+  CredentialType,
+  ModelRunner,
+  Provider,
+  Providers,
+  SessionLogs,
+  SignedIn,
+} from '@acentric/ai';
 import type { Account, AccountId, Actor, PrincipalRef } from '@acentric/protocol';
 
 import type { Audit } from './audit.ts';
+import { sessionLogs } from './session-logs.ts';
 import { Conflict, EngineError } from './errors.ts';
 import { IdSource } from './ids.ts';
 import { sealedFor } from './secrets.ts';
@@ -48,6 +61,11 @@ export class ProviderUnreachable extends EngineError {
 /** How long before its token stops being taken a signed-in account's token is renewed. */
 const RENEW_BEFORE_MS = 5 * 60 * 1000;
 
+/** Whether an account with this credential was made by signing in at its provider. */
+function signedInWith(credential: CredentialType): boolean {
+  return credential === 'access_token' || credential === 'local_sign_in';
+}
+
 /** What an agent's model calls are made with. */
 export type Access = {
   /** The account. Null for calls that no account says anything of. */
@@ -63,6 +81,7 @@ export class Accounts {
   readonly #clock: () => number;
   readonly #ids: IdSource;
   readonly #fetch: typeof fetch | undefined;
+  readonly #logs: SessionLogs;
   /** The runner of each account, made from its credential as it was last sealed. */
   readonly #runners = new Map<
     AccountId,
@@ -95,6 +114,7 @@ export class Accounts {
     this.#clock = options.clock ?? Date.now;
     this.#ids = new IdSource(options.entropy ?? (() => crypto.getRandomValues(new Uint8Array(10))));
     this.#fetch = options.fetch;
+    this.#logs = sessionLogs(options.store);
   }
 
   /**
@@ -156,7 +176,7 @@ export class Accounts {
     const provider = this.#providers.has(stored.account.provider)
       ? this.#providers.get(stored.account.provider)
       : undefined;
-    if (provider?.signIn === undefined || stored.account.credential !== 'access_token') {
+    if (provider?.signIn === undefined || !signedInWith(stored.account.credential)) {
       throw new InvalidAccount(
         `The account ${stored.account.name} is not signed in to: its key is replaced instead`,
       );
@@ -311,7 +331,7 @@ export class Accounts {
   async #end(stored: StoredAccount): Promise<boolean | undefined> {
     const { provider } = stored.account;
     const flow = this.#providers.has(provider) ? this.#providers.get(provider).signIn : undefined;
-    if (flow === undefined || stored.account.credential !== 'access_token') return undefined;
+    if (flow === undefined || !signedInWith(stored.account.credential)) return undefined;
     try {
       await flow.end(this.#open(stored), this.#signInSettings());
       return true;
@@ -364,6 +384,14 @@ export class Accounts {
       );
     }
     const { id } = stored.account;
+    if (of.signIn !== undefined && stored.account.credential === 'local_sign_in') {
+      let runner = this.#signedIn.get(id);
+      if (runner === undefined) {
+        runner = this.#localRunner(id, of);
+        this.#signedIn.set(id, runner);
+      }
+      return { account: id, runner };
+    }
     if (of.signIn !== undefined && stored.account.credential === 'access_token') {
       let runner = this.#signedIn.get(id);
       if (runner === undefined) {
@@ -377,6 +405,7 @@ export class Accounts {
       const credential = this.#open(stored);
       const runner = of.runner({
         credential,
+        logs: this.#logs,
         ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
       });
       made = { sealed: stored.sealed, runner };
@@ -395,6 +424,7 @@ export class Accounts {
     const runnerOf = (credential: Credential): ModelRunner =>
       provider.runner({
         credential,
+        logs: this.#logs,
         ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
       });
     return {
@@ -406,6 +436,50 @@ export class Accounts {
           if (!(error instanceof ModelFailure) || error.kind !== 'auth' || renewed) throw error;
           const again = await this.#token(id, provider, true);
           return runnerOf(again.credential).run(step, signal);
+        }
+      },
+    };
+  }
+
+  /**
+   * The runner of an account whose sign-in a program of its provider keeps. Each call is made
+   * with the account as it is then, and refused while it is signed out. When the provider says
+   * the program is signed out, the account says so until it is signed in again.
+   */
+  #localRunner(id: AccountId, provider: Provider): ModelRunner {
+    return {
+      run: async (step, signal) => {
+        const stored = await this.#store.loadAccount(id);
+        if (stored === undefined) throw new AccountNotFound(id);
+        const { signIn, name } = stored.account;
+        if (signIn?.signedOut !== undefined) {
+          throw new ModelFailure(`${signIn.signedOut}: sign the account ${name} in again`, 'auth', {
+            provider: provider.id,
+          });
+        }
+        const runner = provider.runner({
+          credential: this.#open(stored),
+          logs: this.#logs,
+          ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
+        });
+        try {
+          return await runner.run(step, signal);
+        } catch (error) {
+          if (error instanceof ModelFailure && error.kind === 'auth') {
+            await this.#locked(id, async () => {
+              const now = await this.#store.loadAccount(id);
+              // Signed in again meanwhile: that sign-in was not refused.
+              if (now === undefined || now.sealed !== stored.sealed) return;
+              await this.#store.saveAccount({
+                ...now,
+                account: {
+                  ...now.account,
+                  signIn: { email: now.account.signIn?.email ?? null, signedOut: error.message },
+                },
+              });
+            });
+          }
+          throw error;
         }
       },
     };

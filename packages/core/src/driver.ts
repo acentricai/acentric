@@ -141,7 +141,7 @@ export type Host = {
     actor: Actor,
     definition: AgentDefinition,
   ): {
-    readonly compacts: 'older' | 'all' | undefined;
+    readonly compacts: 'older' | 'all' | 'inside' | undefined;
     readonly reader: Reader;
     readonly threshold: number;
     readonly reserve: number;
@@ -1143,6 +1143,7 @@ export class ActorDriver {
       // conversation by it.
       session: actor.id,
       ...(definition.providerOptions === undefined ? {} : { options: definition.providerOptions }),
+      ...this.#compactAt(actor, definition),
     };
     return {
       step,
@@ -1152,6 +1153,12 @@ export class ActorDriver {
       definition,
       entries: [...this.#view.entries],
     };
+  }
+
+  /** Where a provider that compacts inside compacts: at the actor's threshold. */
+  #compactAt(actor: Actor, definition: AgentDefinition): { compactAt?: number } {
+    const how = this.#host.compaction(actor, definition);
+    return how.compacts === 'inside' ? { compactAt: how.threshold } : {};
   }
 
   /** Reads the conversation, and its newest compaction, from the store, the first time they are needed. */
@@ -1191,7 +1198,10 @@ export class ActorDriver {
     const { actor } = this.record;
     const definition = await this.#host.definition(actor.deployment.id);
     await this.#read();
-    if (this.#size() < this.#host.compaction(actor, definition).threshold) return true;
+    const how = this.#host.compaction(actor, definition);
+    // A provider that compacts inside keeps the conversation it sends small itself.
+    if (how.compacts === 'inside') return true;
+    if (this.#size() < how.threshold) return true;
     try {
       await this.#compactNow('threshold', signal);
     } catch (error) {
@@ -1270,6 +1280,8 @@ export class ActorDriver {
     const { actor } = this.record;
     const { step, access, provider, definition, entries } = await this.#step();
     const how = this.#host.compaction(actor, definition);
+    // Its provider compacts what it keeps of the conversation itself: the engine's stays whole.
+    if (how.compacts === 'inside') return undefined;
     const { nextSeq } = this.record;
     // Nothing was said since the last one, but the line it left: there is nothing new to compact.
     if (this.#compaction?.atSeq === nextSeq - 1) return undefined;
