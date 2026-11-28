@@ -10,6 +10,8 @@ export interface KnownModels {
   openai: 'gpt-6.2-astra' | 'gpt-6.2-sol' | 'gpt-6.1-terra' | 'gpt-6-luna';
   chatgpt: 'gpt-6.2-astra' | 'gpt-6.2-sol' | 'gpt-6.1-terra' | 'gpt-6-luna';
   anthropic: 'claude-fable-5-2' | 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5';
+  /** On a Claude plan, through Claude Code: only a server started with Claude has it. */
+  claude: 'claude-fable-5-2' | 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5';
   fireworks:
     | 'accounts/fireworks/models/kimi-k3p1-pro'
     | 'accounts/fireworks/models/deepseek-v4p1-flash-1017'

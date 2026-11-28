@@ -19,6 +19,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./claude": {
+      "types": "./dist/providers/claude/index.d.ts",
+      "default": "./dist/providers/claude/index.js"
     }
   },
   "files": [
