@@ -16,7 +16,7 @@ Wants=network-online.target
 
 [Container]
 # The version, as VERSIONS.md says: an exact one, changed on purpose.
-Image=ghcr.io/acentricai/acentric-server:0.20.0
+Image=ghcr.io/acentricai/acentric-server:0.21.0
 ContainerName=acentric
 EnvironmentFile=/etc/acentric/acentric.env
 PublishPort=127.0.0.1:4000:4000
