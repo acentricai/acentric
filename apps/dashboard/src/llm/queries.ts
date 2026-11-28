@@ -9,6 +9,7 @@ import { engine } from './api.ts';
 export const keys = {
   all: ['llm'] as const,
   accounts: ['llm', 'accounts'] as const,
+  providers: ['llm', 'providers'] as const,
   usage: (query: UsageQuery) => ['llm', 'usage', query] as const,
   actorUsage: (actor: string) => ['llm', 'actor-usage', actor] as const,
 };
@@ -19,6 +20,15 @@ export function useAccounts(enabled = true) {
     queryKey: keys.accounts,
     queryFn: async ({ signal }) => (await engine.accounts(signal)).items,
     enabled,
+  });
+}
+
+/** The providers of models the server has. */
+export function useModelProviders() {
+  return useQuery({
+    queryKey: keys.providers,
+    queryFn: async ({ signal }) => (await engine.modelProviders(signal)).data,
+    staleTime: Infinity,
   });
 }
 

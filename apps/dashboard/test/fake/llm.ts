@@ -141,10 +141,76 @@ export function llmArea(_shared: Shared) {
   const signInCalls: { method: string; path: string; body: unknown }[] = [];
 
   const one = (id: string | undefined) => accounts.find((account) => account.id === id);
+  /** Whether the server has Claude: started with ACENTRIC_CLAUDE=on. */
+  let claude = false;
+  /** The Claude sign-ins that wait, by ID: what each is for. */
+  const claudeSignIns = new Map<string, { name?: string; account?: string }>();
+  const providerOf = (id: string, name: string, how: 'api_key' | 'sign_in') => ({
+    id,
+    name,
+    accounts: how,
+    models: [{ id: `${id}-model`, name: `${name} model` }],
+    defaultModel: `${id}-model`,
+  });
 
   const answer = ({ method, path, body, query, person }: Call): Response | undefined => {
     if (method === 'GET' && path === '/v1/accounts') {
       return json(200, { items: accounts, nextCursor: null });
+    }
+    if (method === 'GET' && path === '/v1/model-providers') {
+      return json(200, {
+        data: [
+          providerOf('openai', 'OpenAI', 'api_key'),
+          providerOf('chatgpt', 'ChatGPT', 'sign_in'),
+          providerOf('fireworks', 'Fireworks', 'api_key'),
+          providerOf('anthropic', 'Anthropic', 'api_key'),
+          ...(claude ? [providerOf('claude', 'Claude', 'sign_in')] : []),
+        ],
+      });
+    }
+    if (path.startsWith('/v1/claude-sign-ins')) {
+      signInCalls.push({ method, path, body });
+      if (!claude) return refused(404, 'not_found', 'There is no such route');
+      if (method === 'POST' && path === '/v1/claude-sign-ins') {
+        const id = `sgn_${String(claudeSignIns.size + 1).padStart(26, '0')}`;
+        claudeSignIns.set(id, {
+          ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
+          ...(typeof body['account'] === 'string' ? { account: body['account'] } : {}),
+        });
+        return json(201, {
+          id,
+          url: 'https://claude.com/cai/oauth/authorize?code=true&state=abc',
+          expiresAt: NOW + 600_000,
+        });
+      }
+      const signIn = /^\/v1\/claude-sign-ins\/([^/]+)(\/code)?$/.exec(path);
+      const waiting = signIn === null ? undefined : claudeSignIns.get(signIn[1] ?? '');
+      if (signIn === null || waiting === undefined) {
+        return refused(404, 'not_found', 'There is no sign-in waiting: start another');
+      }
+      if (method === 'DELETE') {
+        claudeSignIns.delete(signIn[1] ?? '');
+        return json(204, null);
+      }
+      if (body['code'] !== 'the-code-claude-showed#state') {
+        return refused(400, 'invalid_request', 'Claude did not take that code');
+      }
+      claudeSignIns.delete(signIn[1] ?? '');
+      made += 1;
+      const added: Account = {
+        id: `acc_${String(made).padStart(26, '0')}` as Account['id'],
+        provider: 'claude',
+        name: waiting.name ?? '',
+        credential: 'local_sign_in',
+        signIn: { email: 'ada@example.test' },
+        default: !accounts.some((account) => account.provider === 'claude'),
+        owner: null,
+        actors: 0,
+        createdBy: { type: 'user', id: person.id as never },
+        createdAt: NOW,
+      };
+      accounts.push(added);
+      return json(200, added);
     }
     if (method === 'POST' && path === '/v1/accounts') {
       const provider = String(body['provider']);
@@ -286,6 +352,10 @@ export function llmArea(_shared: Shared) {
     answer,
     accounts,
     signInCalls,
+    /** Has the server have Claude from now on. */
+    claudeOn() {
+      claude = true;
+    },
     /** Answers usage with this from now on. */
     usageIs(report: (query: URLSearchParams) => UsageReport) {
       usage = report;

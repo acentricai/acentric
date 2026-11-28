@@ -349,16 +349,16 @@
 }
 
 /* Signing in with ChatGPT: the button where a key would be, then the two steps and the wait. */
-.chatgpt-sign-in {
+.sign-in-flow {
   display: grid;
   gap: var(--space-3);
 }
 
-.chatgpt-sign-in__button {
+.sign-in-flow__button {
   justify-self: start;
 }
 
-.chatgpt-steps {
+.sign-in-steps {
   display: grid;
   gap: var(--space-4);
   margin: 0;
@@ -367,7 +367,7 @@
   counter-reset: step;
 }
 
-.chatgpt-steps > li {
+.sign-in-steps > li {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: start;
@@ -375,7 +375,7 @@
   counter-increment: step;
 }
 
-.chatgpt-steps > li::before {
+.sign-in-steps > li::before {
   content: counter(step);
   display: grid;
   place-items: center;
@@ -388,16 +388,16 @@
   font-variant-numeric: tabular-nums;
 }
 
-.chatgpt-steps > li > * {
+.sign-in-steps > li > * {
   grid-column: 2;
   justify-self: start;
 }
 
-.chatgpt-steps > li > .secret-once {
+.sign-in-steps > li > .secret-once {
   justify-self: stretch;
 }
 
-.chatgpt-steps__text {
+.sign-in-steps__text {
   color: var(--ink);
   line-height: 22px;
 }
@@ -452,16 +452,16 @@
 }
 
 /* Signing in with ChatGPT: the button, then the steps that finish it. */
-.chatgpt-sign-in {
+.sign-in-flow {
   display: grid;
   gap: var(--space-3);
 }
 
-.chatgpt-sign-in__button {
+.sign-in-flow__button {
   justify-self: start;
 }
 
-.chatgpt-steps {
+.sign-in-steps {
   display: grid;
   gap: var(--space-4);
   margin: 0;
@@ -470,7 +470,7 @@
   counter-reset: step;
 }
 
-.chatgpt-steps > li {
+.sign-in-steps > li {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: start;
@@ -478,7 +478,7 @@
   counter-increment: step;
 }
 
-.chatgpt-steps > li::before {
+.sign-in-steps > li::before {
   content: counter(step);
   display: grid;
   place-items: center;
@@ -491,21 +491,21 @@
   font-variant-numeric: tabular-nums;
 }
 
-.chatgpt-steps > li > * {
+.sign-in-steps > li > * {
   grid-column: 2;
   justify-self: start;
 }
 
-.chatgpt-steps > li > .chatgpt-address {
+.sign-in-steps > li > .sign-in-answer {
   justify-self: stretch;
 }
 
-.chatgpt-steps__text {
+.sign-in-steps__text {
   color: var(--ink);
   line-height: 22px;
 }
 
-.chatgpt-address {
+.sign-in-answer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;

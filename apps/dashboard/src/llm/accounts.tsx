@@ -1,7 +1,8 @@
 // `/llm-providers`: the accounts model calls are made with, several of each provider. Each agent
 // is given one of its provider's, or uses that provider's default. A key is checked with its
 // provider when it is added or replaced, and never shown again. A ChatGPT account has no key: it
-// is signed in with ChatGPT, and its calls are made on that ChatGPT plan.
+// is signed in with ChatGPT, and its calls are made on that ChatGPT plan. So is a Claude
+// account, on a server that has Claude: signed in with Claude Code, on that Claude plan.
 
 import { IconKey, IconLogin, IconPencil, IconPlus, IconStar, IconTrash } from '@tabler/icons-react';
 import type { Account } from '@acentric/protocol';
@@ -25,9 +26,16 @@ import {
   Table,
 } from '../machines/ui.tsx';
 import { engine } from './api.ts';
-import { ChatGptSignInFlow, SignInAgainDialog } from './chatgpt.tsx';
-import { ADD_PROVIDERS, dollars, providerName, rangeStart } from './format.ts';
-import { keys, useAccounts, useUsage } from './queries.ts';
+import { SignInAgainDialog, SignInFlow } from './sign-in.tsx';
+import {
+  ADD_PROVIDERS,
+  GATED_PROVIDERS,
+  dollars,
+  providerName,
+  rangeStart,
+  signsIn,
+} from './format.ts';
+import { keys, useAccounts, useModelProviders, useUsage } from './queries.ts';
 
 import '../machines/machine-pane.css';
 import './llm.css';
@@ -200,10 +208,17 @@ export function AccountsPage() {
 
 /**
  * `POST /v1/accounts`, the key checked with the provider first and not shown again. Or, for
- * ChatGPT, a sign-in with ChatGPT in place of the key: `POST /v1/chatgpt-sign-ins`. The first of
- * a provider is its default; another is made it from the list.
+ * ChatGPT and Claude, a sign-in in place of the key: `POST /v1/chatgpt-sign-ins` or
+ * `/v1/claude-sign-ins`. The first of a provider is its default; another is made it from the
+ * list. Only the providers the server has are offered.
  */
 function AddDialog({ onClose }: { onClose: () => void }) {
+  const had = useModelProviders();
+  const offered = ADD_PROVIDERS.filter((kind) =>
+    had.data === undefined
+      ? !GATED_PROVIDERS.includes(kind)
+      : had.data.some((one) => one.id === kind),
+  );
   const [provider, setProvider] = useState<AddProvider>('anthropic');
   const [name, setName] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -221,7 +236,7 @@ function AddDialog({ onClose }: { onClose: () => void }) {
     },
   });
   // Signed in, not given a key.
-  const signsIn = provider === 'chatgpt';
+  const signingInTo = signsIn(provider) ? provider : undefined;
   // While a sign-in waits, the name it was started with stays.
   const [signingIn, setSigningIn] = useState(false);
   const ready = name.trim() !== '' && apiKey.trim() !== '';
@@ -235,7 +250,7 @@ function AddDialog({ onClose }: { onClose: () => void }) {
           <Button variant="quiet" disabled={add.isPending} onClick={onClose}>
             Cancel
           </Button>
-          {!signsIn && (
+          {signingInTo === undefined && (
             <Button
               type="submit"
               form={form}
@@ -254,7 +269,7 @@ function AddDialog({ onClose }: { onClose: () => void }) {
         className="dialog-form"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!signsIn && ready && !add.isPending) add.mutate();
+          if (signingInTo === undefined && ready && !add.isPending) add.mutate();
         }}
       >
         <div className="ac-field">
@@ -262,7 +277,7 @@ function AddDialog({ onClose }: { onClose: () => void }) {
           <Dropdown
             label="Provider"
             value={provider}
-            options={ADD_PROVIDERS.map((kind) => ({ value: kind, label: providerName(kind) }))}
+            options={offered.map((kind) => ({ value: kind, label: providerName(kind) }))}
             onChange={setProvider}
           />
         </div>
@@ -274,14 +289,16 @@ function AddDialog({ onClose }: { onClose: () => void }) {
               required
               maxLength={64}
               placeholder={`${provider}-personal`}
-              disabled={add.isPending || (signsIn && signingIn)}
+              disabled={add.isPending || (signingInTo !== undefined && signingIn)}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           )}
         </Field>
-        {signsIn ? (
-          <ChatGptSignInFlow
+        {signingInTo !== undefined ? (
+          <SignInFlow
+            key={signingInTo}
+            provider={signingInTo}
             ask={() => ({ name: name.trim() })}
             ready={name.trim() !== ''}
             onActive={setSigningIn}
