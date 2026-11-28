@@ -104,7 +104,14 @@ export class SignIns {
       }
     }
     const host = await this.#store.hostId();
-    const { url, pending } = await flow.start({ host, ...(again === undefined ? {} : { again }) });
+    let started;
+    try {
+      started = await flow.start({ host, ...(again === undefined ? {} : { again }) });
+    } catch (error) {
+      if (error instanceof ModelFailure) throw new ProviderUnreachable(error.message);
+      throw error;
+    }
+    const { url, pending } = started;
     const id = this.#ids.make('signIn', now);
     const expiresAt = now + flow.waitsMs;
     this.#waiting.set(id, {
@@ -195,8 +202,9 @@ export class SignIns {
 
   /** Gives up a sign-in that waits: an address given for it later finishes nothing. */
   cancel(id: SignInId): void {
-    this.#waitingFor(id);
+    const waiting = this.#waitingFor(id);
     this.#waiting.delete(id);
+    waiting.flow.abandon?.(waiting.pending);
   }
 
   #waitingFor(id: SignInId): Waiting {
@@ -209,7 +217,10 @@ export class SignIns {
   /** Forgets the sign-ins that expired. */
   #forget(now: number): void {
     for (const [id, waiting] of this.#waiting) {
-      if (waiting.expiresAt <= now && !waiting.finishing) this.#waiting.delete(id);
+      if (waiting.expiresAt <= now && !waiting.finishing) {
+        this.#waiting.delete(id);
+        waiting.flow.abandon?.(waiting.pending);
+      }
     }
   }
 
