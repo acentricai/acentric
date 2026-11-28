@@ -1,0 +1,59 @@
+{
+  "version": "0.22.0",
+  "schema": 9,
+  "keys": [
+    {
+      "label": "for CI",
+      "token": "ak_01m8gtjdssf9hv20bw8xs9qjte_scHYawB4yKDW4G2piWLmxeVe0oBCW7-rMg9BxCXnrj4"
+    }
+  ],
+  "agents": [
+    {
+      "id": "agt_01m8gtjdvaeywr2c3e2a17bx8d",
+      "name": "orders",
+      "deployments": 1
+    },
+    {
+      "id": "agt_01m8gtjdy4f2s96we6jada66j6",
+      "name": "camera",
+      "deployments": 1
+    }
+  ],
+  "actors": [
+    {
+      "id": "act_01m8gtjdzfes1b6x2wczebr0f4",
+      "agent": "agt_01m8gtjdvaeywr2c3e2a17bx8d",
+      "messages": 4,
+      "lastText": "The tool said: Order 42 was refunded twice, one second apart. (asked with orders-api-key-sealed-at-the-release)",
+      "archived": false
+    },
+    {
+      "id": "act_01m8gtje2ae50927c0z401ky7a",
+      "agent": "agt_01m8gtjdy4f2s96we6jada66j6",
+      "messages": 4,
+      "lastText": "The tool said: Taken.",
+      "archived": false
+    },
+    {
+      "id": "act_01m8gtje51ebgvxr3zcx34daen",
+      "agent": "agt_01m8gtjdvaeywr2c3e2a17bx8d",
+      "messages": 4,
+      "lastText": "The tool said: Order 42 was refunded twice, one second apart. (asked with orders-api-key-sealed-at-the-release)",
+      "archived": true
+    }
+  ],
+  "blobs": [
+    {
+      "actor": "act_01m8gtje2ae50927c0z401ky7a",
+      "sha256": "fb9071f2be08e7233192cae2d5d412d32b428c1b53c0988a06df43997d23d1ac"
+    },
+    {
+      "actor": "act_01m8gtje2ae50927c0z401ky7a",
+      "sha256": "d28fe05a27ee94493d97354e92bd74f1ce84648ad0bfb8f744b038c40db4f5b6"
+    }
+  ],
+  "accounts": ["main"],
+  "machines": ["build-box"],
+  "invites": 1,
+  "audit": 8
+}
