@@ -88,6 +88,21 @@ Machines the server makes itself, at a provider ([README.md](README.md#running-t
 | `ACENTRIC_DOCKER_NETWORK`    | Docker's own                                                       | The Docker network a sandbox is attached to.                                                                                                                                      |
 | `ACENTRIC_DOCKER_SERVER_URL` | `ACENTRIC_PUBLIC_URL`, with `host.docker.internal` for `localhost` | Where a sandbox at Docker reaches the server, when that is not where people do.                                                                                                   |
 
+## Claude
+
+Accounts signed in to Claude plans, whose calls the Claude Agent SDK makes with Claude Code
+([README.md](README.md#running-the-server)). Off unless `ACENTRIC_CLAUDE` is `on`: then the
+first start installs the SDK, with Claude Code, from npm into `<ACENTRIC_DATA>/claude`, at the
+version this server was built with and as its lockfile has it. Each conversation that is in a
+turn has a Claude Code process, of a few hundred megabytes ([LIMITS.md](LIMITS.md)).
+
+| Setting                    | Without it                                    | What it is                                                                                                    |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `ACENTRIC_CLAUDE`          | `off`: nothing of Claude is installed or run  | `on` for a server that has Claude.                                                                            |
+| `ACENTRIC_CLAUDE_IDLE`     | `2m`                                          | How long a conversation's Claude Code is kept with nothing to do before it is stopped, such as `90s` or `5m`. |
+| `ACENTRIC_CLAUDE_SESSIONS` | one for each 600 MB of memory, and 2 at least | How many conversations' Claude Code are kept at once.                                                         |
+| `ACENTRIC_CLAUDE_SDK`      | installed by the server                       | A folder the SDK was installed in already, with npm, used in place of installing it.                          |
+
 ## Not settings
 
 - **Model providers' keys** are model accounts, added through the API (`acentric accounts

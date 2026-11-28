@@ -1,0 +1,8 @@
+{
+  "name": "acentric-claude-sdk",
+  "private": true,
+  "description": "The Claude Agent SDK a server with Claude installs, at the version it was built and tested with: package-lock.json holds every package's version and hash.",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.332"
+  }
+}

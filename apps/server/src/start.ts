@@ -27,6 +27,7 @@ import { boat, docker } from '@acentric/sandbox';
 import { FileBlobStore, readBackupSettings, SCHEMA_VERSION, SqliteStore } from '@acentric/store';
 
 import { DATABASE } from './backups/archive.ts';
+import { claude } from './claude.ts';
 import { lockData } from './backups/lock.ts';
 import { Bucket } from './backups/bucket.ts';
 import { Backups } from './backups/schedule.ts';
@@ -83,6 +84,11 @@ export type Started = {
   /** Stops everything. What is in the middle of a turn stays owed, and is picked up next time. */
   close(options?: { readonly graceMs?: number }): Promise<void>;
 };
+
+/** Stops what the providers run of their own, such as Claude Code's processes. */
+async function closeProviders(providers: Providers): Promise<void> {
+  for (const provider of providers.list()) await provider.close?.().catch(() => undefined);
+}
 
 export async function start(
   settings: Settings,
@@ -175,6 +181,14 @@ export async function start(
     builtInProviders(
       settings.anthropicUrl === undefined ? {} : { anthropicUrl: settings.anthropicUrl },
     );
+  // Claude only when the server was started with it, and only with the providers there are.
+  if (settings.claude !== undefined && more.providers === undefined) {
+    try {
+      providers.add(await claude(settings.claude, settings.data, logger));
+    } catch (error) {
+      logger.error('Claude is not on: its SDK could not be had', {}, error);
+    }
+  }
   const programs = machinePrograms(settings.downloads);
   const audit = new Audit({
     store,
@@ -285,6 +299,7 @@ export async function start(
       secrets,
       accounts,
       signIns,
+      providers,
       backups,
       updates: new UpdateCheck({ version: more.version, enabled: settings.updateCheck }),
       ...(settings.updaterDir === undefined
@@ -362,6 +377,7 @@ export async function start(
         await server.close(options);
         await metricsServer?.close();
         metrics?.close();
+        await closeProviders(providers);
         await executor.close();
         await store.close();
         lock.release();
@@ -374,6 +390,7 @@ export async function start(
     metrics?.close();
     await backups.close();
     await engine.close({ graceMs: 0 });
+    await closeProviders(providers);
     await executor.close();
     await store.close();
     lock.release();

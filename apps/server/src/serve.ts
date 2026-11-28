@@ -5,6 +5,7 @@ import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { serve as listen } from '@hono/node-server';
+import type { Providers } from '@acentric/ai';
 import type { Accounts, SignIns, Audit, Engine, Keys, People, Secrets } from '@acentric/core';
 import { WebSocketServer } from 'ws';
 
@@ -25,6 +26,7 @@ export type ServerOptions = {
   readonly secrets: Secrets;
   readonly accounts: Accounts;
   readonly signIns: SignIns;
+  readonly providers: Providers;
   readonly backups?: BackupControl;
   readonly updates?: UpdateCheck;
   readonly updater?: UpdaterFolder;

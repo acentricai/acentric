@@ -77,6 +77,19 @@
 //   ACENTRIC_DOCKER_SERVER_URL  where a sandbox at Docker reaches this server, when that is
 //                           not where people do. Without it, where people do, with
 //                           host.docker.internal in place of localhost
+//   ACENTRIC_CLAUDE         `on` for a server that has Claude: accounts signed in to Claude
+//                           plans, whose calls the Claude Agent SDK makes. The first time it
+//                           starts with it, the server installs the SDK, with Claude Code, from
+//                           npm into <ACENTRIC_DATA>/claude. Without it, nothing of Claude is
+//                           installed or run
+//   ACENTRIC_CLAUDE_IDLE    with Claude: how long a conversation's Claude Code is kept with
+//                           nothing to do before it is stopped, such as 2m (without it) or 90s.
+//                           Each holds some hundreds of megabytes
+//   ACENTRIC_CLAUDE_SESSIONS  with Claude: how many conversations' Claude Code are kept at
+//                           once. One for each 600 MB of the server's memory, and 2 at least,
+//                           without it
+//   ACENTRIC_CLAUDE_SDK     with Claude: a folder the SDK was installed in already, with npm,
+//                           which is used in place of installing it
 //
 // ACENTRIC_SECRET_KEY, ACENTRIC_SECRET_KEYS_OLD and ACENTRIC_ADMIN_KEY are each given in a file
 // in place of the environment, by its path in <name>_FILE, as Docker's and Kubernetes' secrets
@@ -138,7 +151,31 @@ export type Settings = {
   readonly metricsPort: number | undefined;
   /** How long what the server keeps is kept, by what it is. Undefined for each kept for ever. */
   readonly retention: RetentionSettings;
+  /** Claude, on Claude plans. Undefined for a server that has none. */
+  readonly claude: ClaudeSettings | undefined;
 };
+
+export type ClaudeSettings = {
+  /** How long a conversation's Claude Code is kept with nothing to do. */
+  readonly idleMs: number;
+  /** How many are kept at once. Undefined for as many as the server's memory holds. */
+  readonly maxSessions: number | undefined;
+  /** A folder the SDK was installed in already. Undefined for one the server installs. */
+  readonly sdk: string | undefined;
+};
+
+/** A short time such as 90s or 2m, in milliseconds: from ten seconds to a day. */
+function shortTimeOf(name: string, value: string): number {
+  const match = /^(\d+)(s|m|h)$/.exec(value);
+  const unit = { s: 1000, m: 60_000, h: 3_600_000 } as const;
+  const ms = match === null ? NaN : Number(match[1]) * unit[match[2] as keyof typeof unit];
+  if (!(ms >= 10_000 && ms <= 86_400_000)) {
+    throw new InvalidSettings(
+      `${name} is a time such as 90s, 2m or 1h, from 10s to a day, and is ${value}`,
+    );
+  }
+  return ms;
+}
 
 export type RetentionSettings = {
   readonly archivedMs: number | undefined;
@@ -357,6 +394,37 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
   }
 
   const data = resolve(given('ACENTRIC_DATA') ?? './data');
+
+  const claudeOn = given('ACENTRIC_CLAUDE');
+  if (claudeOn !== undefined && claudeOn !== 'on' && claudeOn !== 'off') {
+    throw new InvalidSettings(`ACENTRIC_CLAUDE is on or off, and is ${claudeOn}`);
+  }
+  if (claudeOn !== 'on') {
+    for (const name of [
+      'ACENTRIC_CLAUDE_IDLE',
+      'ACENTRIC_CLAUDE_SESSIONS',
+      'ACENTRIC_CLAUDE_SDK',
+    ]) {
+      if (given(name) !== undefined) {
+        throw new InvalidSettings(`${name} is for a server that has ACENTRIC_CLAUDE=on`);
+      }
+    }
+  }
+  const claudeIdle = given('ACENTRIC_CLAUDE_IDLE');
+  const claudeSdk = given('ACENTRIC_CLAUDE_SDK');
+  const claude: ClaudeSettings | undefined =
+    claudeOn === 'on'
+      ? {
+          idleMs:
+            claudeIdle === undefined ? 120_000 : shortTimeOf('ACENTRIC_CLAUDE_IDLE', claudeIdle),
+          maxSessions:
+            given('ACENTRIC_CLAUDE_SESSIONS') === undefined
+              ? undefined
+              : wholeNumber('ACENTRIC_CLAUDE_SESSIONS', 0, 1, 1000),
+          sdk: claudeSdk === undefined ? undefined : resolve(claudeSdk),
+        }
+      : undefined;
+
   const every = given('ACENTRIC_BACKUP_EVERY') ?? '24h';
   const url = given('ACENTRIC_BACKUP_URL');
   const bucket = url === undefined ? undefined : placeOf(url, env);
@@ -416,6 +484,7 @@ export function readSettings(env: { readonly [name: string]: string | undefined 
       usageMs: keptFor('ACENTRIC_RETAIN_USAGE', given('ACENTRIC_RETAIN_USAGE')),
     },
     metricsPort,
+    claude,
     docker:
       dockerHost === undefined || dockerImage === undefined
         ? undefined
