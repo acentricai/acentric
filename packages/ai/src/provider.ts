@@ -28,13 +28,21 @@ export type Credential =
        * own: nothing else reads it.
        */
       readonly session?: JsonObject;
-    };
+    }
+  /**
+   * A sign-in that a program of the provider's keeps itself, on the engine's host, in a folder
+   * of its own: `home` names the folder among the provider's. The engine never reads what is
+   * kept there, and the program renews it.
+   */
+  | { readonly type: 'local_sign_in'; readonly home: string };
 
 export type CredentialType = Credential['type'];
 
 /** What a runner is made with. */
 export type RunnerSettings = {
   readonly credential: Credential;
+  /** Where a provider that keeps a conversation of its own beside the engine's keeps it. */
+  readonly logs?: SessionLogs;
   /** In place of the world's `fetch`: how a test answers for the provider. */
   readonly fetch?: typeof fetch;
 };
@@ -80,8 +88,11 @@ export interface Provider {
    *          model's reasoning.
    *   all    It is sent the whole conversation, and answers with one item that stands for
    *          all of it, the model's reasoning included.
+   *   inside It keeps a conversation of its own, and compacts that itself when it grows past
+   *          a step's `compactAt`. The engine never compacts the conversation it keeps, and
+   *          never sends a step that says `compact`.
    */
-  readonly compacts?: 'older' | 'all';
+  readonly compacts?: 'older' | 'all' | 'inside';
   /**
    * An answer to a step that said `compact`, with only what stands for the conversation in
    * it, exactly as it came. Undefined when the answer has no such thing, or more than one.
@@ -114,7 +125,29 @@ export interface Provider {
    * browser: how. A provider without it has its accounts made with a key.
    */
   readonly signIn?: SignInFlow;
+  /** Stops what the provider runs of its own, such as processes, when the engine stops. */
+  close?(): Promise<void>;
 }
+
+/**
+ * What a provider keeps of one conversation beside the engine's, for a provider that keeps
+ * its own (see `RunnerSettings.logs`): entries of JSON in order, under streams it names. It
+ * goes when the conversation does.
+ */
+export interface SessionLog {
+  /** The entries of a stream, oldest first. Empty for one with none. */
+  read(stream: string): Promise<JsonObject[]>;
+  append(stream: string, entries: readonly JsonObject[]): Promise<void>;
+  /** Keeps these under a stream in place of what it had. */
+  replace(stream: string, entries: readonly JsonObject[]): Promise<void>;
+  /** The streams that have entries. */
+  streams(): Promise<string[]>;
+  /** Forgets every stream. */
+  clear(): Promise<void>;
+}
+
+/** The log of a conversation, by the `session` its steps name. */
+export type SessionLogs = (session: string) => SessionLog;
 
 /** What a sign-in's calls to the provider are made with. */
 export type SignInSettings = {
@@ -155,6 +188,11 @@ export interface SignInFlow {
   renew(credential: Credential, settings: SignInSettings): Promise<Credential>;
   /** Ends a sign-in at the provider. Rejects when the provider did not say it has. */
   end(credential: Credential, settings: SignInSettings): Promise<void>;
+  /**
+   * Gives up a sign-in that was started and will not be finished: it was cancelled, or it
+   * expired. A flow without it holds nothing for one.
+   */
+  abandon?(pending: JsonObject): void;
 }
 
 export type SignInStart = {

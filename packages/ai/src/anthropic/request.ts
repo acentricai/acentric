@@ -178,7 +178,8 @@ function messageOf(message: Message, where: string, model: string): JsonObject[]
   }
 }
 
-function parts(content: readonly ContentPart[], where: string): JsonObject[] {
+/** Parts of a message or a tool's result, as Anthropic's blocks. */
+export function parts(content: readonly ContentPart[], where: string): JsonObject[] {
   return content.map((part, index) => {
     const at = `${where}.content[${String(index)}]`;
     switch (part.type) {
