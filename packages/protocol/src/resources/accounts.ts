@@ -29,8 +29,11 @@ export const accountSchema = z
     id: accountIdSchema,
     provider: providerIdSchema,
     name: nameSchema,
-    /** What its calls are signed with: a key, or the token of someone signed in. Never which. */
-    credential: z.enum(['api_key', 'access_token']),
+    /**
+     * What its calls are signed with: a key, the token of someone signed in, or a sign-in a
+     * program of the provider's keeps on the server itself. Never which.
+     */
+    credential: z.enum(['api_key', 'access_token', 'local_sign_in']),
     /** For an account made by signing in: whose sign-in it is, and whether it has ended. */
     signIn: z
       .object({
@@ -117,6 +120,30 @@ export const finishSignInRequestSchema = z
   .strictObject({ url: z.string().trim().min(1).max(16_384) })
   .meta({ id: 'FinishSignInRequest' });
 export type FinishSignInRequest = z.infer<typeof finishSignInRequestSchema>;
+
+/** What finishes a sign-in with a code: the code the provider's page showed once the person signed in. */
+export const finishCodeSignInRequestSchema = z
+  .strictObject({ code: z.string().trim().min(1).max(4096) })
+  .meta({ id: 'FinishCodeSignInRequest' });
+export type FinishCodeSignInRequest = z.infer<typeof finishCodeSignInRequestSchema>;
+
+// Model providers
+
+/** A provider of models this server has, and how its accounts are made. */
+export const modelProviderSchema = z
+  .object({
+    id: providerIdSchema,
+    /** Its name, for a person. */
+    name: z.string(),
+    /** How its accounts are made: with a key of the provider's, or by signing in at it. */
+    accounts: z.enum(['api_key', 'sign_in']),
+    /** The models it is known to serve. Another ID is tried as it is. */
+    models: z.array(z.object({ id: z.string(), name: z.string() })),
+    /** The model an actor runs on when it is created without one. */
+    defaultModel: z.string(),
+  })
+  .meta({ id: 'ModelProvider' });
+export type ModelProvider = z.infer<typeof modelProviderSchema>;
 
 // Usage
 
