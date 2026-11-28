@@ -45,6 +45,11 @@ export type ModelStep = {
    * stands for the conversation from then on. Only for a provider that `compacts`.
    */
   readonly compact?: true;
+  /**
+   * For a provider that compacts inside: the size, in tokens, past which it compacts the
+   * conversation it keeps.
+   */
+  readonly compactAt?: number;
 };
 
 /** What one call of the model came to. */

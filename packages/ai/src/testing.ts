@@ -57,7 +57,7 @@ export function fakeProvider(
     /** The keys it takes when a key is checked. Every key, without it. */
     readonly keys?: readonly string[];
     /** How it compacts a conversation itself. It has no compaction of its own, without it. */
-    readonly compacts?: 'older' | 'all';
+    readonly compacts?: 'older' | 'all' | 'inside';
   } = {},
 ): Provider {
   return {
@@ -91,7 +91,12 @@ export function fakeProvider(
     defaultModel: 'fake-1',
     bindsReasoning: true,
     async check({ credential }) {
-      const key = credential.type === 'api_key' ? credential.apiKey : credential.accessToken;
+      const key =
+        credential.type === 'api_key'
+          ? credential.apiKey
+          : credential.type === 'access_token'
+            ? credential.accessToken
+            : credential.home;
       if (key === 'unreachable') {
         throw new ModelFailure('Fake could not be reached to check the key', 'network');
       }

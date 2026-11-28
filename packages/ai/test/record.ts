@@ -70,7 +70,7 @@ const TARGETS: {
   readonly provider: string;
   readonly env: string;
   readonly model: string;
-  readonly type: Credential['type'];
+  readonly type: 'api_key' | 'access_token';
   /** Whether it has a web search of its own. */
   readonly search?: boolean;
 }[] = [
@@ -97,7 +97,7 @@ const TARGETS: {
   },
 ];
 
-const credentialOf = (type: Credential['type'], secret: string): Credential =>
+const credentialOf = (type: 'api_key' | 'access_token', secret: string): Credential =>
   type === 'api_key' ? { type, apiKey: secret } : { type, accessToken: secret };
 
 async function record(
