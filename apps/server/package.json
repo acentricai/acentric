@@ -1,6 +1,6 @@
 {
   "name": "@acentric/server",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "private": true,
   "description": "The Acentric server: the API, sign-in, and the engine that runs actors.",
   "license": "Apache-2.0",

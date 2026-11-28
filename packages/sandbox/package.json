@@ -1,6 +1,6 @@
 {
   "name": "@acentric/sandbox",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "private": true,
   "description": "Makes machines at sandbox providers: the interface a provider implements, and the providers.",
   "license": "Apache-2.0",
