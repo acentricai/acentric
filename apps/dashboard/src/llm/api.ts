@@ -47,13 +47,30 @@ export const engine = {
     api.call('accounts.update', { params: { account: account as never }, body }),
   removeAccount: (account: string) =>
     api.call('accounts.delete', { params: { account: account as never } }),
-  startChatGptSignIn: (body: StartSignInRequest) => api.call('chatgptSignIns.create', { body }),
-  chatGptSignIn: (signIn: string) =>
-    api.call('chatgptSignIns.get', { params: { signIn: signIn as never } }),
-  finishChatGptSignIn: (signIn: string, url: string) =>
-    api.call('chatgptSignIns.finish', { params: { signIn: signIn as never }, body: { url } }),
-  cancelChatGptSignIn: (signIn: string) =>
-    api.call('chatgptSignIns.delete', { params: { signIn: signIn as never } }),
+  /** The providers of models the server has. */
+  modelProviders: (signal?: AbortSignal) =>
+    api.call('modelProviders.list', { ...withSignal(signal) }),
+  /** Sign-ins at the providers whose accounts have no key: what each ends with finishes it. */
+  signIns: {
+    chatgpt: {
+      start: (body: StartSignInRequest) => api.call('chatgptSignIns.create', { body }),
+      get: (signIn: string) =>
+        api.call('chatgptSignIns.get', { params: { signIn: signIn as never } }),
+      finish: (signIn: string, url: string) =>
+        api.call('chatgptSignIns.finish', { params: { signIn: signIn as never }, body: { url } }),
+      cancel: (signIn: string) =>
+        api.call('chatgptSignIns.delete', { params: { signIn: signIn as never } }),
+    },
+    claude: {
+      start: (body: StartSignInRequest) => api.call('claudeSignIns.create', { body }),
+      get: (signIn: string) =>
+        api.call('claudeSignIns.get', { params: { signIn: signIn as never } }),
+      finish: (signIn: string, code: string) =>
+        api.call('claudeSignIns.finish', { params: { signIn: signIn as never }, body: { code } }),
+      cancel: (signIn: string) =>
+        api.call('claudeSignIns.delete', { params: { signIn: signIn as never } }),
+    },
+  },
   usage: (query: UsageQuery, signal?: AbortSignal) =>
     usageOf(api.call('usage.get', { query, ...withSignal(signal) })),
   actorUsage: (actor: string, signal?: AbortSignal) =>

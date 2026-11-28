@@ -196,6 +196,54 @@ describe('the Accounts page', () => {
     }
   });
 
+  it('offers Claude only on a server that has it, and adds an account with the code Claude shows', async () => {
+    const server = signedIn();
+    server.areas.llm.claudeOn();
+    const tab = { opener: {}, closed: false, close() {}, location: { href: '' } };
+    const before = window.open;
+    window.open = (() => tab) as unknown as typeof window.open;
+    try {
+      open('/llm-providers', server);
+      fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
+      fireEvent.click(within(dialog()).getByRole('button', { name: 'Provider: Anthropic' }));
+      await waitFor(() =>
+        expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
+          'Anthropic',
+          'OpenAI',
+          'ChatGPT',
+          'Claude',
+          'Fireworks',
+        ]),
+      );
+      fireEvent.click(screen.getByRole('menuitemradio', { name: 'Claude' }));
+      expect(within(dialog()).queryByLabelText('API key')).toBeNull();
+      fireEvent.change(within(dialog()).getByLabelText('Name'), { target: { value: 'max' } });
+      fireEvent.click(within(dialog()).getByRole('button', { name: 'Sign in with Claude' }));
+
+      const link = await within(dialog()).findByRole('link', { name: /Open claude\.com/ });
+      expect(tab.location.href).toBe(link.getAttribute('href'));
+      const code = within(dialog()).getByLabelText('Code');
+      fireEvent.change(code, { target: { value: 'wrong' } });
+      fireEvent.click(within(dialog()).getByRole('button', { name: 'Sign in' }));
+      expect(await within(dialog()).findByText('Claude did not take that code')).toBeTruthy();
+      // The code Claude shows is sent as soon as it is pasted.
+      fireEvent.paste(code, {
+        clipboardData: { getData: () => 'the-code-claude-showed#state' },
+      });
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(server.areas.llm.accounts).toMatchObject([
+        { provider: 'claude', name: 'max', credential: 'local_sign_in' },
+      ]);
+      expect(
+        server.areas.llm.signInCalls
+          .filter((call) => call.path.endsWith('/code'))
+          .map((call) => call.body),
+      ).toEqual([{ code: 'wrong' }, { code: 'the-code-claude-showed#state' }]);
+    } finally {
+      window.open = before;
+    }
+  });
+
   it('sends a pasted address at once, and opens the new page of a sign-in that was refused', async () => {
     const server = signedIn();
     open('/llm-providers', server);

@@ -8,14 +8,29 @@ export const PROVIDER_NAMES: { readonly [provider: string]: string } = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
   chatgpt: 'ChatGPT',
+  claude: 'Claude',
   fireworks: 'Fireworks',
 };
 
 /** The providers an account is added to with an API key. A ChatGPT account is signed in, not given a key. */
 export const KEY_PROVIDERS = ['anthropic', 'openai', 'fireworks'] as const;
 
-/** The providers an account can be added to, as the add form lists them. */
-export const ADD_PROVIDERS = ['anthropic', 'openai', 'chatgpt', 'fireworks'] as const;
+/**
+ * The providers an account can be added to, as the add form lists them: those of them the
+ * server has. Claude only a server started with it has.
+ */
+export const ADD_PROVIDERS = ['anthropic', 'openai', 'chatgpt', 'claude', 'fireworks'] as const;
+
+/** The providers only some servers have: offered once the server says it has them. */
+export const GATED_PROVIDERS: readonly string[] = ['claude'];
+
+/** The providers an account is added to by signing in, not with a key. */
+export const SIGN_IN_PROVIDERS = ['chatgpt', 'claude'] as const;
+export type SignInProvider = (typeof SIGN_IN_PROVIDERS)[number];
+
+/** Whether accounts of a provider are signed in to. */
+export const signsIn = (provider: string): provider is SignInProvider =>
+  (SIGN_IN_PROVIDERS as readonly string[]).includes(provider);
 
 /** A provider's name: its own, or its ID. */
 export const providerName = (provider: string): string => PROVIDER_NAMES[provider] ?? provider;
