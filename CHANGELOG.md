@@ -3,6 +3,34 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## 0.21.0
+
+**Upgrading from 0.20.** Take this version's image, or take it from the dashboard where an
+updater runs. **The database changes**: the new version backs it up first, then adds where an
+account's templates are kept. Nothing in it changes, and deployed agents carry over. The API
+only adds.
+
+- **Added:** templates of a Boat account, which its sandboxes can be made from in place of the
+  server's own (`ACENTRIC_BOAT_TEMPLATE`). One is built from a script, in a sandbox of the
+  account: the script runs first, as `user`, who may use sudo, for up to an hour; then the
+  machine program this server hands out is put in with its start-up, and the disk is saved at
+  Boat under a name of the server's own, `acentric-tpl-…`, so no snapshot of the account's is
+  replaced. The sandbox it was built in is deleted however the build ends. A server builds
+  them when it hands out the machine program (`ACENTRIC_DOWNLOADS`), as the image does.
+- **Added:** `POST /v1/providers/{provider}/templates` starts a build (`{ name, script }`) and
+  answers at once, `building`. `GET` lists an account's templates or reads one, with what its
+  build printed, the last 64 KB of it; `DELETE` stops a build under way, and deletes the
+  template at Boat. `POST /v1/sandboxes` takes `template`: a ready one of the same account.
+- **Added:** in the dashboard, a Boat account's page has Sandboxes and Templates tabs. Build
+  template takes a name and a script, and a template shows its script and its output as it
+  builds. Create sandbox has a Template choice once one is ready.
+- **Changed:** an account at a provider is not removed while it has templates: delete them
+  first. A build under way when the server stops has failed when it starts again, and what it
+  left at Boat is deleted.
+- **Changed:** an API key that builds templates also runs commands and writes files in its
+  sandboxes, and saves, reads and deletes snapshots. Give a key you make for an account these
+  as well.
+
 ## 0.20.0
 
 **Upgrading from 0.19.** Take this version's image, or take it from the dashboard where an

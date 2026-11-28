@@ -38,10 +38,10 @@ of its environment. Keep a copy of the secrets key somewhere other than the clus
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/acentricai/acentric//deploy/kubernetes/gateway?ref=v0.20.0
+  - https://github.com/acentricai/acentric//deploy/kubernetes/gateway?ref=v0.21.0
 images:
   - name: ghcr.io/acentricai/acentric-server
-    newTag: 0.20.0
+    newTag: 0.21.0
 configMapGenerator:
   - name: acentric-settings
     behavior: merge
@@ -77,7 +77,7 @@ with the backup on its stdin.
 kubectl -n acentric scale statefulset/acentric --replicas=0
 kubectl -n acentric wait --for=delete pod/acentric-0
 kubectl -n acentric run acentric-restore --rm -i --restart=Never \
-  --image=ghcr.io/acentricai/acentric-server:0.20.0 --overrides='{
+  --image=ghcr.io/acentricai/acentric-server:0.21.0 --overrides='{
     "spec": {
       "enableServiceLinks": false,
       "securityContext": { "runAsNonRoot": true, "runAsUser": 1000, "fsGroup": 1000 },
@@ -86,7 +86,7 @@ kubectl -n acentric run acentric-restore --rm -i --restart=Never \
         { "name": "secrets", "secret": { "secretName": "acentric-secrets", "defaultMode": 288 } }
       ],
       "containers": [{
-        "name": "acentric-restore", "image": "ghcr.io/acentricai/acentric-server:0.20.0",
+        "name": "acentric-restore", "image": "ghcr.io/acentricai/acentric-server:0.21.0",
         "stdin": true, "stdinOnce": true, "command": ["acentric-server", "restore"],
         "env": [{ "name": "ACENTRIC_SECRET_KEY_FILE", "value": "/run/secrets/acentric/secret-key" }],
         "volumeMounts": [
