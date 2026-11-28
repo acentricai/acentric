@@ -517,6 +517,18 @@ export const MIGRATIONS: readonly string[] = [
     UNIQUE (provider_id, name)
   ) STRICT;
   `,
+  // 9: what a model provider keeps of an actor's conversation beside the engine's.
+  `
+  -- Entries of JSON, in order, under streams the provider names: such as the transcript the
+  -- Claude Agent SDK keeps of a session, which a session is resumed from. They go with the actor.
+  CREATE TABLE session_logs (
+    actor_id TEXT NOT NULL,
+    stream TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    entry TEXT NOT NULL,
+    PRIMARY KEY (actor_id, stream, seq)
+  ) STRICT;
+  `,
 ];
 
 /** The version a database is at when it has had every migration. */

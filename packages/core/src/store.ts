@@ -23,6 +23,7 @@ import type {
   Input,
   InputId,
   Json,
+  JsonObject,
   AuditEvent,
   InviteId,
   Key,
@@ -832,6 +833,18 @@ export interface Store {
    * once, with the store, and never changed.
    */
   hostId(): Promise<string>;
+
+  // What a model provider keeps of an actor's conversation beside the engine's (see
+  // `SessionLog` in @acentric/ai). It goes with the actor.
+
+  /** The entries of one of an actor's streams, oldest first. */
+  readSessionLog(actor: ActorId, stream: string): Promise<JsonObject[]>;
+  appendSessionLog(actor: ActorId, stream: string, entries: readonly JsonObject[]): Promise<void>;
+  /** Keeps these under the stream in place of what it had. */
+  replaceSessionLog(actor: ActorId, stream: string, entries: readonly JsonObject[]): Promise<void>;
+  /** The streams of an actor that have entries. */
+  sessionLogStreams(actor: ActorId): Promise<string[]>;
+  clearSessionLog(actor: ActorId): Promise<void>;
 
   loadBackupSettings(): Promise<StoredBackupSettings | undefined>;
   /** Keeps them in place of those there were. */

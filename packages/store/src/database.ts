@@ -60,6 +60,7 @@ import type {
   InputId,
   InviteId,
   Json,
+  JsonObject,
   Key,
   KeyId,
   MachineAgents,
@@ -734,6 +735,9 @@ export const WRITES: ReadonlySet<Operation> = new Set([
   'setActive',
   'deleteAgent',
   'deleteActor',
+  'appendSessionLog',
+  'replaceSessionLog',
+  'clearSessionLog',
   'freePages',
   'removeExpired',
   'pruneAudit',
@@ -884,6 +888,7 @@ export function operations(db: DatabaseSync) {
       'script_calls',
       'compactions',
       'commands',
+      'session_logs',
     ]) {
       run(`DELETE FROM ${table} WHERE actor_id IN (SELECT value FROM json_each(?))`, these);
     }
@@ -2256,6 +2261,57 @@ export function operations(db: DatabaseSync) {
       const row = get<{ host_id: string }>('SELECT host_id FROM host WHERE id = 1');
       if (row === undefined) throw new Error('The database has no host ID');
       return row.host_id;
+    },
+
+    readSessionLog(actor: ActorId, stream: string): JsonObject[] {
+      return all<{ entry: string }>(
+        'SELECT entry FROM session_logs WHERE actor_id = ? AND stream = ? ORDER BY seq',
+        actor,
+        stream,
+      ).map((row) => JSON.parse(row.entry) as JsonObject);
+    },
+
+    appendSessionLog(actor: ActorId, stream: string, entries: readonly JsonObject[]): void {
+      const top = get<{ seq: number | null }>(
+        'SELECT MAX(seq) AS seq FROM session_logs WHERE actor_id = ? AND stream = ?',
+        actor,
+        stream,
+      );
+      let seq = (top?.seq ?? -1) + 1;
+      for (const entry of entries) {
+        run(
+          'INSERT INTO session_logs (actor_id, stream, seq, entry) VALUES (?, ?, ?, ?)',
+          actor,
+          stream,
+          seq,
+          JSON.stringify(entry),
+        );
+        seq += 1;
+      }
+    },
+
+    replaceSessionLog(actor: ActorId, stream: string, entries: readonly JsonObject[]): void {
+      run('DELETE FROM session_logs WHERE actor_id = ? AND stream = ?', actor, stream);
+      entries.forEach((entry, seq) =>
+        run(
+          'INSERT INTO session_logs (actor_id, stream, seq, entry) VALUES (?, ?, ?, ?)',
+          actor,
+          stream,
+          seq,
+          JSON.stringify(entry),
+        ),
+      );
+    },
+
+    sessionLogStreams(actor: ActorId): string[] {
+      return all<{ stream: string }>(
+        'SELECT DISTINCT stream FROM session_logs WHERE actor_id = ? ORDER BY stream',
+        actor,
+      ).map((row) => row.stream);
+    },
+
+    clearSessionLog(actor: ActorId): void {
+      run('DELETE FROM session_logs WHERE actor_id = ?', actor);
     },
 
     loadBackupSettings(): StoredBackupSettings | undefined {

@@ -803,6 +803,44 @@ export function storeSuite(name: string, open: () => Promise<Store>): void {
       });
     });
 
+    describe("a provider's session logs", () => {
+      it('keeps entries in order under each stream, replaces and clears them, and lets them go with the actor', async () => {
+        const id = await stored('orders');
+        const lead = await create({}, id);
+        const child = await create({ parent: { id: lead.id, name: 'billing' } }, id);
+        const other = await create({}, id);
+        expect(await store.readSessionLog(lead.id, 'transcript/a/')).toEqual([]);
+        expect(await store.sessionLogStreams(lead.id)).toEqual([]);
+
+        await store.appendSessionLog(lead.id, 'transcript/a/', [{ n: 1 }, { n: 2 }]);
+        await store.appendSessionLog(lead.id, 'transcript/a/', [{ n: 3, nested: { ok: true } }]);
+        await store.replaceSessionLog(lead.id, 'session', [{ sessionId: 'a' }]);
+        await store.appendSessionLog(child.id, 'session', [{ sessionId: 'c' }]);
+        await store.appendSessionLog(other.id, 'session', [{ sessionId: 'o' }]);
+        expect(await store.readSessionLog(lead.id, 'transcript/a/')).toEqual([
+          { n: 1 },
+          { n: 2 },
+          { n: 3, nested: { ok: true } },
+        ]);
+        expect(await store.sessionLogStreams(lead.id)).toEqual(['session', 'transcript/a/']);
+
+        // Replaced: only what it is given is kept, in its order.
+        await store.replaceSessionLog(lead.id, 'transcript/a/', [{ n: 2 }]);
+        await store.appendSessionLog(lead.id, 'transcript/a/', [{ n: 4 }]);
+        expect(await store.readSessionLog(lead.id, 'transcript/a/')).toEqual([{ n: 2 }, { n: 4 }]);
+
+        await store.clearSessionLog(lead.id);
+        expect(await store.sessionLogStreams(lead.id)).toEqual([]);
+        expect(await store.readSessionLog(other.id, 'session')).toEqual([{ sessionId: 'o' }]);
+
+        await store.appendSessionLog(lead.id, 'session', [{ sessionId: 'b' }]);
+        await store.deleteActor(lead.id);
+        expect(await store.sessionLogStreams(lead.id)).toEqual([]);
+        expect(await store.sessionLogStreams(child.id)).toEqual([]);
+        expect(await store.sessionLogStreams(other.id)).toEqual(['session']);
+      });
+    });
+
     describe('API keys', () => {
       const keyOf = (parent: KeyId | null = null): StoredKey => {
         const id = makeId('key', { now: NOW, random: random() });
