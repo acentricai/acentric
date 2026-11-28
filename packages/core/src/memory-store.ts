@@ -15,6 +15,7 @@ import type {
   InputId,
   InviteId,
   Json,
+  JsonObject,
   KeyId,
   MachineId,
   SandboxProviderId,
@@ -144,6 +145,8 @@ export class MemoryStore implements Store {
   readonly #commands = new Map<string, StoredCommand>();
   readonly #inputs = new Map<ActorId, Input[]>();
   readonly #entries = new Map<ActorId, ConversationEntry[]>();
+  /** Each actor's session logs, by stream. */
+  readonly #sessionLogs = new Map<ActorId, Map<string, JsonObject[]>>();
   /** How many commits were stored, over every actor. */
   commits = 0;
 
@@ -246,6 +249,7 @@ export class MemoryStore implements Store {
       if (key.startsWith(`${actor}/`)) this.#scripts.delete(key);
     }
     this.#compactions.delete(actor);
+    this.#sessionLogs.delete(actor);
     this.#envs.delete(actor);
     for (const [key, command] of this.#commands) {
       if (command.actor === actor) this.#commands.delete(key);
@@ -1042,6 +1046,40 @@ export class MemoryStore implements Store {
 
   async hostId(): Promise<string> {
     return this.#hostId;
+  }
+
+  async readSessionLog(actor: ActorId, stream: string): Promise<JsonObject[]> {
+    return copy(this.#sessionLogs.get(actor)?.get(stream) ?? []);
+  }
+
+  async appendSessionLog(
+    actor: ActorId,
+    stream: string,
+    entries: readonly JsonObject[],
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    const streams = this.#sessionLogs.get(actor) ?? new Map<string, JsonObject[]>();
+    this.#sessionLogs.set(actor, streams);
+    streams.set(stream, [...(streams.get(stream) ?? []), ...copy(entries)]);
+  }
+
+  async replaceSessionLog(
+    actor: ActorId,
+    stream: string,
+    entries: readonly JsonObject[],
+  ): Promise<void> {
+    const streams = this.#sessionLogs.get(actor) ?? new Map<string, JsonObject[]>();
+    this.#sessionLogs.set(actor, streams);
+    if (entries.length === 0) streams.delete(stream);
+    else streams.set(stream, copy([...entries]));
+  }
+
+  async sessionLogStreams(actor: ActorId): Promise<string[]> {
+    return [...(this.#sessionLogs.get(actor)?.keys() ?? [])].toSorted();
+  }
+
+  async clearSessionLog(actor: ActorId): Promise<void> {
+    this.#sessionLogs.delete(actor);
   }
 
   async loadBackupSettings(): Promise<StoredBackupSettings | undefined> {

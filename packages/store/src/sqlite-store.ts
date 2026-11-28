@@ -62,6 +62,7 @@ import type {
   InputId,
   InviteId,
   Json,
+  JsonObject,
   KeyId,
   MachineId,
   SandboxProviderId,
@@ -454,6 +455,26 @@ export class SqliteStore implements Store {
 
   hostId(): Promise<string> {
     return this.#write.ask('hostId' satisfies Operation);
+  }
+
+  readSessionLog(actor: ActorId, stream: string): Promise<JsonObject[]> {
+    return this.#write.ask('readSessionLog' satisfies Operation, actor, stream);
+  }
+
+  appendSessionLog(actor: ActorId, stream: string, entries: readonly JsonObject[]): Promise<void> {
+    return this.#write.ask('appendSessionLog' satisfies Operation, actor, stream, entries);
+  }
+
+  replaceSessionLog(actor: ActorId, stream: string, entries: readonly JsonObject[]): Promise<void> {
+    return this.#write.ask('replaceSessionLog' satisfies Operation, actor, stream, entries);
+  }
+
+  sessionLogStreams(actor: ActorId): Promise<string[]> {
+    return this.#write.ask('sessionLogStreams' satisfies Operation, actor);
+  }
+
+  clearSessionLog(actor: ActorId): Promise<void> {
+    return this.#write.ask('clearSessionLog' satisfies Operation, actor);
   }
 
   loadBackupSettings(): Promise<StoredBackupSettings | undefined> {
