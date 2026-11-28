@@ -1,6 +1,7 @@
 // What each route does, once a request has been read and let through. A handler is given what
 // its route takes, checked, and answers with what its route answers.
 
+import type { Providers } from '@acentric/ai';
 import { AgentNotFound, MachineRefused, reaches, reportOf } from '@acentric/core';
 import type {
   Accounts,
@@ -52,6 +53,8 @@ export type Parts = {
   readonly accounts: Accounts;
   /** Sign-ins at providers whose accounts have no key. */
   readonly signIns: SignIns;
+  /** The providers of models the server has. */
+  readonly providers: Providers;
   readonly streams: Streams;
   /** The server's own backups, and how they are set. */
   readonly backups?: BackupControl;
@@ -812,6 +815,23 @@ export const handlers: Handlers = {
     signIns.cancel(params.signIn);
     return undefined;
   },
+  'claudeSignIns.create': (asked, { signIns }) => signIns.start('claude', defined(asked.body)),
+  'claudeSignIns.get': ({ params }, { signIns }) => signIns.get(params.signIn),
+  'claudeSignIns.finish': (asked, { signIns }) =>
+    signIns.finish(refOf(asked), asked.params.signIn, asked.body.code),
+  'claudeSignIns.delete': ({ params }, { signIns }) => {
+    signIns.cancel(params.signIn);
+    return undefined;
+  },
+  'modelProviders.list': (_asked, { providers }) => ({
+    data: providers.list().map((provider) => ({
+      id: provider.id,
+      name: provider.label,
+      accounts: provider.signIn === undefined ? 'api_key' : 'sign_in',
+      models: provider.models.map(({ id, name }) => ({ id, name })),
+      defaultModel: provider.defaultModel,
+    })),
+  }),
   'usage.get': ({ query, scope }, { engine }) => {
     const { by, split, tz, ...asked } = query;
     const grouping = defined({ by, split, tz });

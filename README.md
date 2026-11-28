@@ -67,7 +67,10 @@ promises, how to check that an image is the one released, and what an upgrade ca
   `acentric accounts add` and checked with the provider before it is kept. No key is read from
   the environment. A ChatGPT account has no key: it is signed in with ChatGPT from the
   dashboard's Add account, as OpenAI's Sign in with ChatGPT has it, and its calls are made on
-  that ChatGPT plan, its token renewed by the server. The first account of a provider is its
+  that ChatGPT plan, its token renewed by the server. A server started with
+  `ACENTRIC_CLAUDE=on` has Claude as well: an account signed in to a Claude plan with Claude
+  Code, whose calls the Claude Agent SDK makes. The server installs the SDK the first time it
+  starts with it, and nothing of it otherwise ([SETTINGS.md](SETTINGS.md#claude)). The first account of a provider is its
   default. An agent is of a provider; each actor is given an account of that provider when it
   is created, the one asked for or the default, and keeps it.
 - Every call of a model is written down with what it used, cost and took. `GET /v1/usage` adds

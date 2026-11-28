@@ -3,6 +3,35 @@
 What changed in each version, for the people who run a server. What a version promises is in
 [VERSIONS.md](VERSIONS.md).
 
+## Unreleased
+
+**Upgrading from 0.21.** **The database changes**: the new version backs it up first, then adds
+where a model provider keeps what it has of a conversation besides the engine. Nothing in it
+changes, and deployed agents carry over. The API only adds.
+
+- **Added:** Claude, on Claude plans, for a server started with `ACENTRIC_CLAUDE=on`: nothing of
+  it is installed or run otherwise. The first start installs the Claude Agent SDK, with Claude
+  Code, from npm into `<ACENTRIC_DATA>/claude`, exactly as this version's lockfile has it, each
+  package checked against its hash; a later version that has another installs that. An agent
+  of `provider: 'claude'` runs on Anthropic's models through Claude Code, with the engine's
+  tools and instructions only, and Claude Code's own web search for one with `webSearch: true`.
+- **Added:** an account of Claude is made from the dashboard's Add account, Sign in with
+  Claude: the server runs Claude Code's `claude auth login` in a folder of the account's own,
+  and the code Claude's page shows is pasted back. Claude Code keeps the sign-in there and
+  renews it; the server keeps none of it. One that Claude Code says is signed out says so, and
+  is signed in again from its menu. `POST /v1/claude-sign-ins`, `GET` and `DELETE
+/v1/claude-sign-ins/{signIn}`, and `POST /v1/claude-sign-ins/{signIn}/code`. An account's
+  `credential` is `local_sign_in`.
+- **Added:** each conversation on Claude has a Claude Code process, stopped after
+  `ACENTRIC_CLAUDE_IDLE` (2 minutes) with nothing to do, also while the engine runs its tools,
+  and resumed at its next call from what the server keeps of it, as after a restart. At most
+  `ACENTRIC_CLAUDE_SESSIONS` are kept at once ([LIMITS.md](LIMITS.md)).
+- **Added:** `GET /v1/model-providers` lists the model providers the server has, and how the
+  accounts of each are made. The dashboard offers only those.
+- **Known:** Claude Code adds to what the model is sent the email of the Claude account and a
+  section on the server it runs on; the model is told they are not its work. Claude Code
+  compacts a conversation by a summary of its own, and the reasoning before it is not kept.
+
 ## 0.21.0
 
 **Upgrading from 0.20.** Take this version's image, or take it from the dashboard where an

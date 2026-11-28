@@ -77,6 +77,11 @@ the 4-vCPU one. The disk, again.
   sent something). Each process of agents' code is about 50 MB, and each deployment it holds
   about 8 MB more (measured with the 766 KB agent: one with more code takes more). A process
   over 1 GB is replaced, when it has no call in it.
+- **Claude** (`ACENTRIC_CLAUDE=on`): each conversation on a Claude plan that is in a turn, or
+  was in the last `ACENTRIC_CLAUDE_IDLE`, has a process of Claude Code's of its own: about
+  250 MB, seen with a conversation of 40,000 tokens. The server keeps one for each 600 MB of its
+  memory, or `ACENTRIC_CLAUDE_SESSIONS`, and stops the one that waited longest to start
+  another. The SDK and Claude Code take about 450 MB of disk, in `<ACENTRIC_DATA>/claude`.
 - **Disk:** about 7 KB of database for each turn of two calls of a model and a tool, with an
   answer of 300 tokens: some 7 GB for a million such turns, and more for longer conversations,
   and for their images and files. [DATA.md](DATA.md) says how long it is kept, and how it is
@@ -133,6 +138,7 @@ alone.
 | Deployments' code held, for calls     | 300: past it, the one called longest ago is loaded again when called |
 | Emails whose failed sign-ins are kept | 10,000                                                               |
 | Processes of agents' code             | `ACENTRIC_CODE_PROCESSES`, 2 without it; each replaced past 1 GB     |
+| Processes of Claude Code, with Claude | `ACENTRIC_CLAUDE_SESSIONS`, one for each 600 MB of memory without it |
 | An agent's code                       | 10 MB                                                                |
 | A request that deploys                | 40 MB; any other, 1 MB                                               |
 | An image or file from a machine       | 8 MB                                                                 |

@@ -23,6 +23,8 @@ describe('a server’s settings', () => {
       // It makes sandboxes nowhere until it is told where, and from what.
       docker: undefined,
       boat: {},
+      // Nothing of Claude unless it is asked for.
+      claude: undefined,
     });
     expect(settings.data.endsWith('/data')).toBe(true);
     // It backs itself up every day, into a folder beside its data, keeping three of each kind.
@@ -251,6 +253,25 @@ describe('a server’s settings', () => {
     });
   });
 
+  it('say whether the server has Claude, and how many of its sessions it keeps for how long', () => {
+    expect(readSettings({ ACENTRIC_CLAUDE: 'off' }).claude).toBeUndefined();
+    expect(readSettings({ ACENTRIC_CLAUDE: 'on' }).claude).toEqual({
+      idleMs: 120_000,
+      maxSessions: undefined,
+      sdk: undefined,
+    });
+    const tuned = readSettings({
+      ACENTRIC_CLAUDE: 'on',
+      ACENTRIC_CLAUDE_IDLE: '90s',
+      ACENTRIC_CLAUDE_SESSIONS: '3',
+      ACENTRIC_CLAUDE_SDK: '/opt/claude-sdk',
+    }).claude;
+    expect(tuned).toEqual({ idleMs: 90_000, maxSessions: 3, sdk: '/opt/claude-sdk' });
+    expect(readSettings({ ACENTRIC_CLAUDE: 'on', ACENTRIC_CLAUDE_IDLE: '5m' }).claude?.idleMs).toBe(
+      300_000,
+    );
+  });
+
   it('are refused, with which and why, before anything is started', () => {
     const wrong: [{ [name: string]: string }, RegExp][] = [
       [{ ACENTRIC_PORT: 'eighty' }, /ACENTRIC_PORT is a whole number/],
@@ -299,6 +320,18 @@ describe('a server’s settings', () => {
         },
         /ACENTRIC_DOCKER_SERVER_URL is where a sandbox reaches the server/,
       ],
+      [{ ACENTRIC_CLAUDE: 'yes' }, /ACENTRIC_CLAUDE is on or off/],
+      [
+        { ACENTRIC_CLAUDE_IDLE: '2m' },
+        /ACENTRIC_CLAUDE_IDLE is for a server that has ACENTRIC_CLAUDE=on/,
+      ],
+      [{ ACENTRIC_CLAUDE_SESSIONS: '2' }, /is for a server that has ACENTRIC_CLAUDE=on/],
+      [
+        { ACENTRIC_CLAUDE: 'on', ACENTRIC_CLAUDE_IDLE: '5s' },
+        /ACENTRIC_CLAUDE_IDLE is a time such as 90s/,
+      ],
+      [{ ACENTRIC_CLAUDE: 'on', ACENTRIC_CLAUDE_IDLE: 'soon' }, /ACENTRIC_CLAUDE_IDLE/],
+      [{ ACENTRIC_CLAUDE: 'on', ACENTRIC_CLAUDE_SESSIONS: '0' }, /ACENTRIC_CLAUDE_SESSIONS/],
     ];
     for (const [env, message] of wrong) {
       expect(() => readSettings(env), JSON.stringify(env)).toThrow(message);

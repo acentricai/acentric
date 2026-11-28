@@ -2,6 +2,7 @@
 // says what a test wrote, called through the client a program would call it with.
 
 import { Providers, chatgpt } from '@acentric/ai';
+import type { Provider } from '@acentric/ai';
 import { ScriptedRunner, fakeProvider } from '@acentric/ai/testing';
 import type { Scripted } from '@acentric/ai/testing';
 import { createClient } from '@acentric/client';
@@ -112,6 +113,8 @@ export async function api(
      * models' calls.
      */
     readonly chatgpt?: typeof fetch;
+    /** For an engine that has Claude as well: its provider. */
+    readonly claude?: Provider;
   } = {},
 ) {
   const store = new MemoryStore();
@@ -125,6 +128,7 @@ export async function api(
   const providers = new Providers([
     fakeProvider(runner, { keys: [MODEL_KEY, OTHER_MODEL_KEY] }),
     ...(options.chatgpt === undefined ? [] : [chatgpt]),
+    ...(options.claude === undefined ? [] : [options.claude]),
   ]);
   const audit = new Audit({ store });
   const outside = options.chatgpt === undefined ? {} : { fetch: options.chatgpt };
@@ -172,6 +176,7 @@ export async function api(
     secrets,
     accounts,
     signIns: new SignIns({ store, providers, accounts, ...outside }),
+    providers,
     streams,
     version: 'test',
     // Every answer is held to its route's schema.
